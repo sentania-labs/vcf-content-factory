@@ -1,11 +1,26 @@
-"""Load and validate super metric YAML definitions."""
+"""Load and validate super metric YAML definitions (M2 row 3: the parse half).
+
+This module reads and validates; it never writes to its input and never
+looks at the working directory. Two behaviours the factory relied on are
+callbacks a caller may supply:
+
+- ``on_missing_id(path) -> str``: called when a YAML has no ``id``. The
+  factory (``vcfcf_supermetrics.loader``) mints a uuid4 into the file; with
+  no callback a missing id is a ``SuperMetricValidationError``.
+- ``provenance_of(path) -> str``: fills ``SuperMetricDef.provenance``. The
+  factory derives it from the repo layout; with no callback it is ``""``.
+
+``load_dir`` takes its directory as a required argument and ``sm_id_map``
+only ever loads the files it is handed (``None`` is an empty map, never a
+scan); the factory wrapper keeps the old ``"supermetrics"`` default and the
+cwd scan.
+"""
 from __future__ import annotations
 
 import re
-import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterable, List, Optional
+from typing import Callable, Iterable, List, Optional
 
 import yaml
 import yaml.constructor
@@ -156,21 +171,45 @@ _UUID_RE = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
 )
 
+IdMinter = Callable[[Path], str]
+ProvenanceFn = Callable[[Path], str]
 
-def _mint_id_into_file(path: Path) -> str:
-    """Generate a uuid4 and prepend `id: <uuid>` to the YAML file.
 
-    Called on first validate when a YAML lacks an `id`. Per
-    `knowledge/context/authoring/uuids_and_cross_references.md`, UUIDs are stable content
-    identifiers — generated once, never changed after.
+def _resolve_id(path: Path, data: dict, on_missing_id: Optional[IdMinter]) -> str:
+    """The super metric's ``id`` from ``data``, validated as a uuid4.
+
+    A missing ``id`` is handed to ``on_missing_id`` (the factory mints one
+    into the file and returns it); with no callback it is an error, because
+    this module never writes to its input. The callback's return gets the
+    same normalize-and-validate path as a YAML id.
     """
-    new_id = str(uuid.uuid4())
-    original = path.read_text()
-    path.write_text(f"id: {new_id}\n{original}")
-    return new_id
+    sm_id = str(data.get("id", "") or "").strip().lower()
+    source = "id"
+    if not sm_id:
+        if on_missing_id is None:
+            raise SuperMetricValidationError(
+                f"{path}: missing id (a uuid4); pass on_missing_id= to mint one"
+            )
+        sm_id = str(on_missing_id(path) or "").strip().lower()
+        source = f"on_missing_id ({getattr(on_missing_id, '__name__', on_missing_id)!s})"
+    if not _UUID_RE.match(sm_id):
+        if source == "id":
+            raise SuperMetricValidationError(
+                f"{path}: id '{sm_id}' is not a valid uuid4"
+            )
+        raise SuperMetricValidationError(
+            f"{path}: {source} gave '{sm_id}', which is not a valid uuid4"
+        )
+    return sm_id
 
 
-def load_file(path: str | Path, enforce_framework_prefix: bool = True) -> SuperMetricDef:
+def load_file(
+    path: str | Path,
+    enforce_framework_prefix: bool = True,
+    *,
+    on_missing_id: Optional[IdMinter] = None,
+    provenance_of: Optional[ProvenanceFn] = None,
+) -> SuperMetricDef:
     path = Path(path)
     try:
         data = _strict_load(path.read_text()) or {}
@@ -178,13 +217,7 @@ def load_file(path: str | Path, enforce_framework_prefix: bool = True) -> SuperM
         raise SuperMetricValidationError(f"{path}: {exc}") from exc
     if not isinstance(data, dict):
         raise SuperMetricValidationError(f"{path}: expected a YAML mapping")
-    sm_id = str(data.get("id", "") or "").strip().lower()
-    if not sm_id:
-        sm_id = _mint_id_into_file(path)
-    elif not _UUID_RE.match(sm_id):
-        raise SuperMetricValidationError(
-            f"{path}: id '{sm_id}' is not a valid uuid4"
-        )
+    sm_id = _resolve_id(path, data, on_missing_id)
     raw_rks = data.get("resource_kinds") or []
     rks: list = []
     for rk in raw_rks:
@@ -208,8 +241,6 @@ def load_file(path: str | Path, enforce_framework_prefix: bool = True) -> SuperM
     released = bool(released_raw) if isinstance(released_raw, bool) else False
     version = str(data.get("version", "1.0.0") or "1.0.0").strip() or "1.0.0"
 
-    from vcfcf_common.provenance import provenance_from_path
-
     sm = SuperMetricDef(
         id=sm_id,
         name=str(data.get("name", "")).strip(),
@@ -220,60 +251,70 @@ def load_file(path: str | Path, enforce_framework_prefix: bool = True) -> SuperM
         source_path=path,
         released=released,
         version=version,
-        provenance=provenance_from_path(path),
+        provenance=provenance_of(path) if provenance_of is not None else "",
     )
     sm.validate(enforce_framework_prefix=enforce_framework_prefix)
     return sm
 
 
-def sm_id_map(sm_scope: Optional[Iterable[Path]] = None, bundle_context: Optional[str] = None) -> dict[str, str]:
-    """Super metric name to uuid map for the view renderer (M2 row 2).
+def sm_id_map(
+    sm_scope: Optional[Iterable[Path]],
+    bundle_context: Optional[str] = None,
+    *,
+    on_missing_id: Optional[IdMinter] = None,
+    provenance_of: Optional[ProvenanceFn] = None,
+) -> dict[str, str]:
+    """Super metric name to uuid map for the view renderer, from exactly the
+    SM YAML files in ``sm_scope`` (M2 row 2 introduced the map, row 3 moved
+    the scoped half here).
 
     ``vcfcf_core.dashboards.render`` takes this map as an argument and never
-    looks for SM YAML itself; this is the factory side that finds it.
+    looks for SM YAML itself. Each listed file is loaded with
+    ``enforce_framework_prefix=False``; any load failure is re-raised as
+    ``ValueError`` naming ``bundle_context`` so a bundle build fails with a
+    clear message.
 
-    Scoped (``sm_scope`` is a list of SM YAML paths, possibly empty): load
-    exactly those files with ``enforce_framework_prefix=False``; any load
-    failure is re-raised as ``ValueError`` naming ``bundle_context`` so a
-    bundle build fails with a clear message.
-
-    Unscoped (``sm_scope`` is None): the pre-row-2 renderer's native mode,
-    kept verbatim. Scan ``content/supermetrics`` then ``supermetrics``
-    relative to the working directory (first that is a directory wins) and
-    swallow every error into an empty map. ``load_dir`` builds its list
-    before returning, so the result is all-or-nothing, as before.
+    ``sm_scope=None`` is an empty map: the library never scans a directory
+    for SM YAML. The factory wrapper (``vcfcf_supermetrics.loader.sm_id_map``)
+    keeps the pre-row-2 renderer's unscoped mode on top, scanning
+    ``content/supermetrics`` then ``supermetrics`` under the working
+    directory.
     """
     sm_map: dict[str, str] = {}
-    if sm_scope is not None:
-        try:
-            for sm_path in sm_scope:
-                sm = load_file(sm_path, enforce_framework_prefix=False)
-                sm_map[sm.name] = sm.id
-        except Exception as exc:
-            raise ValueError(
-                f"sm_id_map: failed to load scoped SM for "
-                f"bundle {bundle_context!r}: {exc}"
-            ) from exc
+    if sm_scope is None:
         return sm_map
     try:
-        for candidate in (Path("content/supermetrics"), Path("supermetrics")):
-            if candidate.is_dir():
-                for sm in load_dir(candidate):
-                    sm_map[sm.name] = sm.id
-                break
-    except Exception:
-        pass
+        for sm_path in sm_scope:
+            sm = load_file(
+                sm_path, enforce_framework_prefix=False,
+                on_missing_id=on_missing_id, provenance_of=provenance_of,
+            )
+            sm_map[sm.name] = sm.id
+    except Exception as exc:
+        raise ValueError(
+            f"sm_id_map: failed to load scoped SM for "
+            f"bundle {bundle_context!r}: {exc}"
+        ) from exc
     return sm_map
 
 
-def load_dir(directory: str | Path = "supermetrics", enforce_framework_prefix: bool = True) -> List[SuperMetricDef]:
+def load_dir(
+    directory: str | Path,
+    enforce_framework_prefix: bool = True,
+    *,
+    on_missing_id: Optional[IdMinter] = None,
+    provenance_of: Optional[ProvenanceFn] = None,
+) -> List[SuperMetricDef]:
     directory = Path(directory)
     if not directory.exists():
         return []
     out: List[SuperMetricDef] = []
     seen: dict[str, Path] = {}
     for p in sorted(directory.rglob("*.y*ml")):
-        sm = load_file(p, enforce_framework_prefix=enforce_framework_prefix)
+        sm = load_file(
+            p, enforce_framework_prefix=enforce_framework_prefix,
+            on_missing_id=on_missing_id, provenance_of=provenance_of,
+        )
         if sm.name in seen:
             raise SuperMetricValidationError(
                 f"duplicate super metric name '{sm.name}' "

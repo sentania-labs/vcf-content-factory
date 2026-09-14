@@ -13,16 +13,15 @@ Kit contents (assembled under a temp dir, then tarballed):
     sdk_builder.py             : copy of vcfcf_managementpacks/sdk_builder.py (paths relocated)
     sdk_project.py             : copy (no path changes needed)
     pak_compare.py             : copy (no path changes needed)
-    provenance.py              : copy of vcfcf_common/provenance.py (pure stdlib)
     dashboard_loader.py         : copy of vcfcf_core/dashboards/loader.py (imports patched)
     dashboard_render.py         : copy of vcfcf_core/dashboards/render.py (imports patched)
     dashboard_yaml_utils.py     : copy of vcfcf_core/dashboards/yaml_utils.py
-    sm_loader.py               : copy of vcfcf_supermetrics/loader.py
+    sm_loader.py               : copy of vcfcf_core/supermetrics/loader.py
     symptoms_loader.py          : copy of vcfcf_core/symptoms/loader.py
     alerts_loader.py            : copy of vcfcf_core/alerts/loader.py
     alerts_render.py            : copy of vcfcf_core/alerts/render.py (imports patched)
-    reports_loader.py          : copy of vcfcf_reports/loader.py
-    reports_render.py          : copy of vcfcf_reports/render.py (imports patched)
+    reports_loader.py          : copy of vcfcf_core/reports/loader.py
+    reports_render.py          : copy of vcfcf_core/reports/render.py (imports patched)
     adapter_framework/src/      : framework Java source (compiled at build-sdk time)
     adapter_runtime/            : empty directory (jar compiled into here on first use)
     templates/icons/            : SVG icon assets
@@ -55,16 +54,20 @@ repo_root handling:
   adapter's own directory.
 
 Bundled-content closure:
-  vcfcf_supermetrics.loader imports vcfcf_common.provenance.  vcfcf_common's
-  __init__.py imports requests (network client), which is NOT available in CI.
-  The kit ships provenance.py directly (pure stdlib) and patches the loader
-  import accordingly.  See provenance.py docstring for details.
+  Every loader and renderer in the kit is a vcfcf_core copy (the M2
+  carve-out, rows 1 to 3). vcfcf_core imports nothing from the factory, so
+  the kit needs no vcfcf_common and no requests; the pre-row-3 kit shipped
+  its own provenance.py only because the factory's SM loader imported
+  vcfcf_common.provenance, and that is gone.
 
-  Since M2 row 2 the kit's dashboard_loader.py is the vcfcf_core copy: it
-  takes the id-minting and provenance callbacks and gets neither here, so a
-  bundled view or dashboard YAML with no ``id:`` fails the build instead of
-  being minted into the adapter's source tree, and ``provenance`` is ``""``
-  (nothing in the kit reads it).
+  Since M2 row 2 (views, dashboards) and row 3 (super metrics, reports) the
+  core loaders take id-minting and provenance as callbacks and get neither
+  here, so a bundled YAML with no ``id:`` fails the build instead of being
+  minted into the adapter's source tree, and ``provenance`` is ``""``
+  (nothing in the kit reads it). Since row 3 the kit's ``sm_id_map(None)``
+  is an empty map: with no bundled super metrics a view column naming one
+  fails the build instead of resolving against whatever
+  ``content/supermetrics`` the working directory happens to hold.
 """
 from __future__ import annotations
 
@@ -102,17 +105,16 @@ _FACTORY_SOURCES = {
     "sdk_builder.py": _HERE / "sdk_builder.py",
     "sdk_project.py": _HERE / "sdk_project.py",
     "pak_compare.py": _HERE / "pak_compare.py",
-    "provenance.py": _SRC_ROOT / "vcfcf_common" / "provenance.py",
     "dashboard_loader.py": _CORE_ROOT / "dashboards" / "loader.py",
     "dashboard_render.py": _CORE_ROOT / "dashboards" / "render.py",
     "dashboard_yaml_utils.py": _CORE_ROOT / "dashboards" / "yaml_utils.py",
-    "sm_loader.py": _SRC_ROOT / "vcfcf_supermetrics" / "loader.py",
+    "sm_loader.py": _CORE_ROOT / "supermetrics" / "loader.py",
     "sm_crossref.py": _CORE_ROOT / "supermetrics" / "crossref.py",
     "symptoms_loader.py": _CORE_ROOT / "symptoms" / "loader.py",
     "alerts_loader.py": _CORE_ROOT / "alerts" / "loader.py",
     "alerts_render.py": _CORE_ROOT / "alerts" / "render.py",
-    "reports_loader.py": _SRC_ROOT / "vcfcf_reports" / "loader.py",
-    "reports_render.py": _SRC_ROOT / "vcfcf_reports" / "render.py",
+    "reports_loader.py": _CORE_ROOT / "reports" / "loader.py",
+    "reports_render.py": _CORE_ROOT / "reports" / "render.py",
     "docs_gen.py": _HERE / "docs_gen.py",
 }
 
@@ -238,19 +240,9 @@ _IMPORT_REWRITES: dict[str, list[tuple[str, str]]] = {
         # project_dir directly.  Dead rewrites are removed rather than kept as
         # silent no-ops (see assertion in _apply_rewrites below).
     ],
-    # sm_loader.py: rewrite vcfcf_common.provenance (inline import at load_file time).
-    # vcfcf_common is flattened to provenance.py in the kit; sm_loader.py line ~211
-    # executes `from vcfcf_common.provenance import provenance_from_path` at runtime
-    # (inside load_file, not at module import time), so the try/except in alerts_render
-    # does NOT guard it.  Without this rule any adapter bundling supermetrics raises
-    # ModuleNotFoundError on a clean CI runner where vcfcf_common is not on sys.path.
-    "sm_loader.py": [
-        # from vcfcf_common.provenance import provenance_from_path
-        (
-            r"from vcfcf_common\.provenance import provenance_from_path",
-            "from .provenance import provenance_from_path",
-        ),
-    ],
+    # sm_loader.py (vcfcf_core copy since row 3) imports nothing outside the
+    # module; the pre-row-3 rule that redirected its vcfcf_common.provenance
+    # import to a kit-local provenance.py is gone with that import.
     # dashboard_loader.py (vcfcf_core copy): rewrite the two relative imports
     # inside vcfcf_core.dashboards to the flat kit names.
     "dashboard_loader.py": [
@@ -295,8 +287,8 @@ _IMPORT_REWRITES: dict[str, list[tuple[str, str]]] = {
             "from .alerts_loader import AlertDef, Recommendation",
         ),
     ],
-    # reports_render.py: rewrite relative .loader import (vcfcf_reports package
-    # relative import → flat kit module name).
+    # reports_render.py (vcfcf_core copy since row 3): rewrite the relative
+    # .loader import to the flat kit module name.
     "reports_render.py": [
         # from .loader import ReportDef, Section, _STATIC_CONTENT_KEYS
         (

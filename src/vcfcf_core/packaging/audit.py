@@ -1,9 +1,12 @@
-"""Build-time dependency audit for bundle packages.
+"""Build-time dependency audit for bundle packages (M2 row 3: the offline
+half).
 
 Walks every content artifact in a bundle, resolves each built-in metric
 reference against the adapter describe-surface cache, and either auto-adds
 needed entries to ``builtin_metric_enables`` or fails the build when
-dependencies cannot be resolved.
+dependencies cannot be resolved. Everything here takes an already-built
+``DescribeCache``; ``run_dependency_audit`` (make the factory's cache,
+optionally live-refresh it, then audit) stays in ``vcfcf_packaging.audit``.
 
 Public API::
 
@@ -233,76 +236,6 @@ def audit_bundle_dependencies(
         needs_enable=needs_enable,
         auto_added=auto_added,
     )
-
-
-def run_dependency_audit(
-    bundle: "Bundle",
-    label: str,
-    *,
-    live_describe: bool,
-    audit_mode: "Literal['auto', 'strict', 'lax']" = "auto",
-    skip_audit: bool = False,
-) -> "AuditResult | None":
-    """Run the build-time dependency audit for ``bundle``, in place.
-
-    Shared implementation for the "make/refresh a describe cache, optionally
-    live-refresh the pairs this bundle references, run the audit, merge any
-    auto-added entries into bundle.builtin_metric_enables" sequence that used
-    to be duplicated near-verbatim in ``builder.build_bundle`` and
-    ``discrete_builder.build_discrete`` (issue #77).
-
-    Args:
-        bundle:        The (real or synthetic) Bundle to audit.
-        label:         Human-readable label for the --skip-audit warning
-                       message (e.g. a bundle path or "dashboard 'Foo'").
-        live_describe: If True and a live client is configured, refresh the
-                       describe cache for every adapter/resource kind pair
-                       this bundle references before auditing.
-        audit_mode:    "auto" (default), "strict", or "lax", see
-                       ``audit_bundle_dependencies``.
-        skip_audit:    If True, skip the audit entirely (returns None).
-
-    Returns:
-        The ``AuditResult``, or ``None`` if ``skip_audit`` is True. Callers
-        are responsible for calling ``print_audit_summary`` themselves (the
-        two call sites print it at slightly different points relative to the
-        zip build) and for handling ``AuditError`` raised by
-        ``audit_bundle_dependencies``.
-    """
-    if skip_audit:
-        print(
-            f"  WARN: --skip-audit is set; dependency audit skipped for {label}. "
-            "Metric references will NOT be validated.",
-            file=sys.stderr,
-        )
-        return None
-
-    from .describe import make_cache, DescribeCacheError
-
-    describe_cache = make_cache(live=live_describe)
-
-    if live_describe and describe_cache._client is not None:
-        from .deps import extract_metric_references
-
-        refs = extract_metric_references(bundle)
-        pairs_needed: set[tuple[str, str]] = {
-            (r.adapter_kind, r.resource_kind) for r in refs
-        }
-        for ak, rk in sorted(pairs_needed):
-            try:
-                describe_cache.refresh(ak, rk)
-            except DescribeCacheError as exc:
-                print(
-                    f"  WARN: could not refresh describe cache for {ak}/{rk}: {exc}",
-                    file=sys.stderr,
-                )
-
-    audit_result = audit_bundle_dependencies(bundle, describe_cache, mode=audit_mode)
-
-    if audit_result.auto_added:
-        bundle.builtin_metric_enables = list(bundle.builtin_metric_enables) + audit_result.auto_added
-
-    return audit_result
 
 
 def _check_cache_coverage(refs: list[MetricReference], cache: DescribeCache) -> None:

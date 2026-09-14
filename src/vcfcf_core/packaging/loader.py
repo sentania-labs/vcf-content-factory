@@ -1,8 +1,23 @@
-"""Load and validate bundle manifests from bundles/*.yaml.
+"""Load and validate bundle manifests (M2 row 3: the parse half).
 
 A bundle manifest lists the YAML files that make up a distributable
 package. The loader validates all referenced files exist, then loads each
-content object using the existing per-type loaders.
+content object using the core per-type loaders.
+
+This module never guesses a repo root, never scans the working directory,
+and never writes to its input. ``load_bundle`` takes the root that
+repo-relative references resolve against (``repo_root``), the directories
+report sections resolve view and dashboard names against
+(``report_views_dir`` / ``report_dashboards_dir``; default: ``views/`` and
+``dashboards/`` beside the manifest, the PROJECT.yaml layout), and the two
+callbacks the per-type loaders take (``on_missing_id`` mints an id for a
+YAML that has none, ``provenance_of`` classifies a file). With no callbacks
+a YAML with no ``id`` fails validation and ``provenance`` is ``""``.
+``load_all_bundles`` takes its directory as a required argument. The
+factory wrapper (``vcfcf_packaging.loader``) keeps the pre-row-3 signatures:
+it sniffs the repo root, resolves reports against ``content/views`` and
+``content/dashboards`` under the working directory, mints, derives
+provenance, and defaults the bundles directory to ``bundles``.
 
 Schema
 ------
@@ -61,19 +76,22 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional
+from typing import Callable, List, Optional
 
 import yaml
 
-from vcfcf_supermetrics.loader import SuperMetricDef, load_file as load_sm
-from vcfcf_dashboards.loader import ViewDef, Dashboard, load_view, load_dashboard
-from vcfcf_customgroups.loader import CustomGroupDef, load_file as load_cg
-from vcfcf_reports.loader import ReportDef, load_file as load_report
-from vcfcf_symptoms.loader import SymptomDef, load_file as load_symptom
-from vcfcf_alerts.loader import (
+from ..supermetrics.loader import SuperMetricDef, load_file as load_sm
+from ..dashboards.loader import ViewDef, Dashboard, load_view, load_dashboard
+from ..customgroups.loader import CustomGroupDef, load_file as load_cg
+from ..reports.loader import ReportDef, load_file as load_report
+from ..symptoms.loader import SymptomDef, load_file as load_symptom
+from ..alerts.loader import (
     AlertDef, load_file as load_alert,
     Recommendation, load_recommendation_file,
 )
+
+IdMinter = Callable[[Path], str]
+ProvenanceFn = Callable[[Path], str]
 
 
 class BundleValidationError(ValueError):
@@ -206,18 +224,34 @@ class Bundle:
     version: str = "1.0.0"  # internal semver for duplicate-version guard
 
 
-def load_bundle(path: str | Path) -> Bundle:
+def load_bundle(
+    path: str | Path,
+    *,
+    repo_root: Optional["str | Path"] = None,
+    report_views_dir: Optional["str | Path"] = None,
+    report_dashboards_dir: Optional["str | Path"] = None,
+    on_missing_id: Optional[IdMinter] = None,
+    provenance_of: Optional[ProvenanceFn] = None,
+) -> Bundle:
     """Load a bundle manifest YAML and resolve all referenced content objects.
 
     Validates that all referenced files exist and loads each using the
     appropriate per-type loader (which also validates the content).
 
-    For content types whose tooling package is not yet installed (symptoms,
-    alerts), the files are verified to exist on disk but are not parsed,
-    parsing is deferred to the handler at sync time.
-
     Args:
-        path: Path to a bundles/*.yaml manifest file.
+        path: Path to a bundle manifest file (``bundles/*.yaml`` or a
+            project's ``PROJECT.yaml``).
+        repo_root: Root that repo-relative file references resolve against,
+            tried before the manifest's own directory. None means only
+            manifest-relative references resolve.
+        report_views_dir, report_dashboards_dir: Directories report sections
+            resolve view and dashboard names against. Default: ``views/``
+            and ``dashboards/`` beside the manifest.
+        on_missing_id: Callback minting an id for a super metric, view,
+            dashboard or report YAML that has none; None means such a YAML
+            fails validation.
+        provenance_of: Callback classifying a file's provenance; None means
+            ``""`` on every loaded object.
 
     Returns:
         A populated Bundle dataclass.
@@ -254,36 +288,35 @@ def load_bundle(path: str | Path) -> Bundle:
     factory_native_raw = data.get("factory_native", True)
     factory_native = bool(factory_native_raw) if isinstance(factory_native_raw, bool) else True
 
-    # Resolve all file references relative to the manifest's directory.
-    # Manifests in bundles/ are one level under repo root.
-    # PROJECT.yaml files in third_party/<project>/ are two levels under repo root.
-    # Try walking up to find a plausible repo root (one containing vcfcf_common/).
-    def _find_repo_root(start: Path) -> Path:
-        current = start
-        for _ in range(5):
-            if (current / "vcfcf_common").exists() or (current / "src" / "vcfcf_common").exists():
-                return current
-            current = current.parent
-        return start.parent  # fallback: manifest's parent
-
-    repo_root = _find_repo_root(path.parent)
+    # Resolve file references: absolute, then relative to ``repo_root`` (the
+    # common case, "content/supermetrics/foo.yaml"), then relative to the
+    # manifest's own directory. The factory wrapper supplies the root; here
+    # nothing walks up looking for one.
+    root = Path(repo_root) if repo_root is not None else None
 
     def _resolve(ref: str) -> Path:
         p = Path(ref)
         if p.is_absolute() and p.exists():
             return p
-        # Try repo-relative (most common: "supermetrics/foo.yaml")
-        candidate = repo_root / p
-        if candidate.exists():
-            return candidate
-        # Try manifest-relative as fallback
+        tried: list[Path] = []
+        if root is not None:
+            candidate = root / p
+            tried.append(candidate)
+            if candidate.exists():
+                return candidate
         candidate2 = path.parent / p
+        tried.append(candidate2)
         if candidate2.exists():
             return candidate2
         raise BundleValidationError(
             f"{path}: referenced file not found: {ref!r} "
-            f"(tried {candidate} and {candidate2})"
+            f"(tried {' and '.join(str(t) for t in tried)})"
         )
+
+    views_dir_for_reports = Path(report_views_dir) if report_views_dir is not None else path.parent / "views"
+    dashboards_dir_for_reports = (
+        Path(report_dashboards_dir) if report_dashboards_dir is not None else path.parent / "dashboards"
+    )
 
     # PROJECT.yaml auto-discovery: when no explicit content lists are given,
     # scan the project's type subdirectories relative to PROJECT.yaml's parent.
@@ -327,12 +360,20 @@ def load_bundle(path: str | Path) -> Bundle:
     # to carry the "[VCF Content Factory]" prefix, they use the original author's
     # naming convention.  Skip prefix enforcement for those bundles.
     try:
-        supermetrics = [load_sm(p, enforce_framework_prefix=factory_native) for p in sm_paths]
+        supermetrics = [
+            load_sm(p, enforce_framework_prefix=factory_native,
+                    on_missing_id=on_missing_id, provenance_of=provenance_of)
+            for p in sm_paths
+        ]
     except Exception as e:
         raise BundleValidationError(f"{path}: super metric error: {e}") from e
 
     try:
-        views = [load_view(p, enforce_framework_prefix=factory_native) for p in view_paths]
+        views = [
+            load_view(p, enforce_framework_prefix=factory_native,
+                      on_missing_id=on_missing_id, provenance_of=provenance_of)
+            for p in view_paths
+        ]
     except Exception as e:
         raise BundleValidationError(f"{path}: view error: {e}") from e
 
@@ -341,7 +382,12 @@ def load_bundle(path: str | Path) -> Bundle:
     # so only an explicit name_path: field in the YAML places them in a folder.
     dash_default_name_path = "VCF Content Factory" if factory_native else ""
     try:
-        dashboards = [load_dashboard(p, enforce_framework_prefix=factory_native, default_name_path=dash_default_name_path) for p in dash_paths]
+        dashboards = [
+            load_dashboard(p, enforce_framework_prefix=factory_native,
+                           default_name_path=dash_default_name_path,
+                           on_missing_id=on_missing_id, provenance_of=provenance_of)
+            for p in dash_paths
+        ]
     except Exception as e:
         raise BundleValidationError(f"{path}: dashboard error: {e}") from e
 
@@ -356,12 +402,19 @@ def load_bundle(path: str | Path) -> Bundle:
             ) from e
 
     try:
-        customgroups = [load_cg(p, enforce_framework_prefix=factory_native) for p in cg_paths]
+        customgroups = [
+            load_cg(p, enforce_framework_prefix=factory_native, provenance_of=provenance_of)
+            for p in cg_paths
+        ]
     except Exception as e:
         raise BundleValidationError(f"{path}: custom group error: {e}") from e
 
     try:
-        reports = [load_report(p, enforce_framework_prefix=factory_native) for p in report_paths]
+        reports = [
+            load_report(p, views_dir=views_dir_for_reports, dashboards_dir=dashboards_dir_for_reports,
+                        enforce_framework_prefix=factory_native, on_missing_id=on_missing_id)
+            for p in report_paths
+        ]
     except Exception as e:
         raise BundleValidationError(f"{path}: report error: {e}") from e
 
@@ -441,12 +494,25 @@ def load_bundle(path: str | Path) -> Bundle:
     )
 
 
-def load_all_bundles(bundles_dir: str | Path = "bundles") -> List[Bundle]:
-    """Load all bundle manifests from a directory."""
+def load_all_bundles(
+    bundles_dir: str | Path,
+    *,
+    repo_root: Optional["str | Path"] = None,
+    report_views_dir: Optional["str | Path"] = None,
+    report_dashboards_dir: Optional["str | Path"] = None,
+    on_missing_id: Optional[IdMinter] = None,
+    provenance_of: Optional[ProvenanceFn] = None,
+) -> List[Bundle]:
+    """Load all bundle manifests from a directory (keyword arguments as
+    ``load_bundle``)."""
     bundles_dir = Path(bundles_dir)
     if not bundles_dir.exists():
         return []
     bundles = []
     for p in sorted(bundles_dir.rglob("*.y*ml")):
-        bundles.append(load_bundle(p))
+        bundles.append(load_bundle(
+            p, repo_root=repo_root,
+            report_views_dir=report_views_dir, report_dashboards_dir=report_dashboards_dir,
+            on_missing_id=on_missing_id, provenance_of=provenance_of,
+        ))
     return bundles

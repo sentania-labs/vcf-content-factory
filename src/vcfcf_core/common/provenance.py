@@ -1,65 +1,38 @@
-"""Provenance helpers for loaded content objects.
+"""Provenance of a loaded content file, given the repo root (M2 row 3).
 
-Every content object (SuperMetricDef, ViewDef, Dashboard, CustomGroupDef, …)
-gets a ``provenance`` string that records *where* in the repo the file was
-loaded from:
+Every content object (SuperMetricDef, ViewDef, Dashboard, CustomGroupDef, ...)
+carries a ``provenance`` string that records *where* in a repo layout the
+file was loaded from:
 
-  ``"factory"``          — lives under ``content/<type>/``
-  ``"<project_slug>"``   — lives under ``third_party/<slug>/<type>/``
-  ``""``                 — loaded via an explicit path outside both trees
-                           (e.g. a test fixture, a tmp_path, or a
-                           programmatically constructed object).
+  ``"factory"``          lives under ``<root>/content/``
+  ``"<project_slug>"``   lives under ``<root>/third_party/<slug>/``
+  ``""``                 outside both trees (a test fixture, a tmp_path, a
+                         programmatically constructed object)
 
-The empty-string case is the safe fallback: the walker treats it as "unknown
-provenance" and does NOT enforce any scope boundary on it.  This means test
-fixtures and programmatically constructed objects continue to work without
-needing to carry synthetic provenance.
+The empty-string case is the safe fallback: the dependency walker treats it
+as "unknown provenance" and does NOT enforce any scope boundary on it.
+
+This module takes the root as a required argument and never guesses one.
+The factory's ``vcfcf_common.provenance`` keeps the pre-row-3 signature
+(``repo_root=None`` walks up from the file looking for a ``content/`` or
+``third_party/`` sibling) and delegates here.
 
 Public API
 ----------
-  provenance_from_path(path, repo_root=None) -> str
-
-    Derive provenance from a file path.  ``repo_root`` defaults to the
-    directory containing the ``content/`` and ``third_party/`` directories.
-    When ``repo_root`` is None the function does a best-effort search up the
-    directory tree for the first ancestor that contains both ``content/`` and
-    ``third_party/`` (or either one), stopping at the filesystem root.
+  provenance_from_path(path, repo_root) -> str
 """
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
 
 
-def _find_repo_root(start: Path) -> Optional[Path]:
-    """Walk up from ``start`` to find the first directory that looks like a
-    repo root (contains a ``content/`` or ``third_party/`` child directory).
-
-    Returns None if no such ancestor is found.
-    """
-    candidate = start if start.is_dir() else start.parent
-    seen: set = set()
-    while candidate not in seen:
-        seen.add(candidate)
-        if (candidate / "content").is_dir() or (candidate / "third_party").is_dir():
-            return candidate
-        parent = candidate.parent
-        if parent == candidate:
-            break
-        candidate = parent
-    return None
-
-
-def provenance_from_path(
-    path: "str | Path",
-    repo_root: Optional["str | Path"] = None,
-) -> str:
+def provenance_from_path(path: "str | Path", repo_root: "str | Path") -> str:
     """Return the provenance string for a loaded content file.
 
     Args:
         path:      Absolute or relative path to the loaded YAML file.
-        repo_root: Explicit repo root.  When None, auto-detected by walking
-                   up from ``path``.
+        repo_root: The directory whose ``content/`` and ``third_party/``
+                   children define the two provenance trees. Required.
 
     Returns:
         ``"factory"`` if the file lives under ``<repo_root>/content/``.
@@ -68,14 +41,10 @@ def provenance_from_path(
     """
     if not path:
         return ""
+    if repo_root is None or str(repo_root) == "":
+        raise TypeError("provenance_from_path: repo_root is required")
     p = Path(path).resolve()
-
-    if repo_root is not None:
-        root = Path(repo_root).resolve()
-    else:
-        root = _find_repo_root(p)
-        if root is None:
-            return ""
+    root = Path(repo_root).resolve()
 
     content_root = (root / "content").resolve()
     third_party_root = (root / "third_party").resolve()
@@ -96,5 +65,5 @@ def provenance_from_path(
     except ValueError:
         pass
 
-    # Outside both trees — test fixture or explicit path
+    # Outside both trees: test fixture or explicit path
     return ""

@@ -1,8 +1,17 @@
-"""Load and validate report definition YAML into ReportDef dataclasses.
+"""Load and validate report definition YAML into ReportDef dataclasses
+(M2 row 3: the parse half).
 
-Report definitions are identified by UUID (not name) — the content-zip
-import path requires a stable id so re-imports update in place.  UUIDs
-are minted on first validate (same contract as views and dashboards).
+Report definitions are identified by UUID (not name): the content-zip
+import path requires a stable id so re-imports update in place. This
+module never writes to its input: a YAML with no ``id`` is handed to the
+optional ``on_missing_id(path) -> str`` callback (the factory wrapper,
+``vcfcf_reports.loader``, mints a uuid4 into the file, same contract as
+views and dashboards); with no callback it is a ``ReportValidationError``.
+
+View and dashboard name references resolve against the ``views_dir`` and
+``dashboards_dir`` a caller passes; both are required here. The factory
+wrapper keeps the old ``content/views`` / ``content/dashboards`` /
+``content/reports`` defaults.
 
 YAML schema (see .claude/agents/report-author.md for the canonical spec):
 
@@ -41,10 +50,9 @@ Cross-reference resolution:
 from __future__ import annotations
 
 import re
-import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional
+from typing import Callable, List, Optional
 
 import yaml
 import yaml.constructor
@@ -215,12 +223,35 @@ class ReportDef:
                 )
 
 
-def _mint_id_into_file(path: Path) -> str:
-    """Prepend ``id: <uuid4>`` to the YAML file, same contract as dashboards."""
-    new_id = str(uuid.uuid4())
-    original = path.read_text()
-    path.write_text(f"id: {new_id}\n{original}")
-    return new_id
+IdMinter = Callable[[Path], str]
+
+
+def _resolve_id(path: Path, data: dict, on_missing_id: Optional[IdMinter]) -> str:
+    """The report's ``id`` from ``data``, validated as a uuid4.
+
+    A missing ``id`` is handed to ``on_missing_id`` (the factory mints one
+    into the file and returns it); with no callback it is an error, because
+    this module never writes to its input. The callback's return gets the
+    same normalize-and-validate path as a YAML id.
+    """
+    report_id = str(data.get("id", "") or "").strip().lower()
+    source = "id"
+    if not report_id:
+        if on_missing_id is None:
+            raise ReportValidationError(
+                f"{path}: missing id (a uuid4); pass on_missing_id= to mint one"
+            )
+        report_id = str(on_missing_id(path) or "").strip().lower()
+        source = f"on_missing_id ({getattr(on_missing_id, '__name__', on_missing_id)!s})"
+    if not _UUID_RE.match(report_id):
+        if source == "id":
+            raise ReportValidationError(
+                f"{path}: id '{report_id}' is not a valid uuid4"
+            )
+        raise ReportValidationError(
+            f"{path}: {source} gave '{report_id}', which is not a valid uuid4"
+        )
+    return report_id
 
 
 def _build_view_index(views_dir: Path) -> dict[str, str]:
@@ -259,20 +290,23 @@ def _build_dashboard_index(dashboards_dir: Path) -> dict[str, str]:
 
 def load_file(
     path: str | Path,
-    views_dir: str | Path = "content/views",
-    dashboards_dir: str | Path = "content/dashboards",
+    views_dir: str | Path,
+    dashboards_dir: str | Path,
     enforce_framework_prefix: bool = True,
+    *,
+    on_missing_id: Optional[IdMinter] = None,
 ) -> "ReportDef":
     """Load and validate a single report definition YAML file.
 
-    Mints a UUID into the file on first validate (same contract as views and
-    dashboards).  Resolves view and dashboard name references to UUIDs by
-    scanning the respective directories.
+    Resolves view and dashboard name references to UUIDs by scanning the
+    respective directories. A missing ``id`` goes to ``on_missing_id`` (see
+    the module docstring); nothing is written here.
 
     Args:
         path:           Path to the report YAML file.
         views_dir:      Directory containing view definition YAMLs.
         dashboards_dir: Directory containing dashboard definition YAMLs.
+        on_missing_id:  Callback minting an id for a YAML that has none.
 
     Returns:
         A validated ReportDef.
@@ -292,14 +326,7 @@ def load_file(
     if not isinstance(data, dict):
         raise ReportValidationError(f"{path}: expected a YAML mapping")
 
-    # UUID minting — same pattern as dashboards/views loader
-    report_id = str(data.get("id", "") or "").strip().lower()
-    if not report_id:
-        report_id = _mint_id_into_file(path)
-    elif not _UUID_RE.match(report_id):
-        raise ReportValidationError(
-            f"{path}: id '{report_id}' is not a valid uuid4"
-        )
+    report_id = _resolve_id(path, data, on_missing_id)
 
     name = str(data.get("name", "")).strip()
     description = str(data.get("description", "") or "").strip()
@@ -385,10 +412,12 @@ def load_file(
 
 
 def load_dir(
-    directory: str | Path = "content/reports",
-    views_dir: str | Path = "content/views",
-    dashboards_dir: str | Path = "content/dashboards",
+    directory: str | Path,
+    views_dir: str | Path,
+    dashboards_dir: str | Path,
     enforce_framework_prefix: bool = True,
+    *,
+    on_missing_id: Optional[IdMinter] = None,
 ) -> List[ReportDef]:
     """Load all report definition YAML files from a directory.
 
@@ -401,7 +430,10 @@ def load_dir(
     out: List[ReportDef] = []
     seen: dict[str, Path] = {}
     for p in sorted(directory.rglob("*.y*ml")):
-        rd = load_file(p, views_dir=views_dir, dashboards_dir=dashboards_dir, enforce_framework_prefix=enforce_framework_prefix)
+        rd = load_file(
+            p, views_dir=views_dir, dashboards_dir=dashboards_dir,
+            enforce_framework_prefix=enforce_framework_prefix, on_missing_id=on_missing_id,
+        )
         if rd.name in seen:
             raise ReportValidationError(
                 f"duplicate report name '{rd.name}' "

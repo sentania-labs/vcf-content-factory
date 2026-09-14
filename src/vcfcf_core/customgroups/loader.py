@@ -1,4 +1,11 @@
-"""Load and validate custom group YAML definitions.
+"""Load and validate custom group YAML definitions (M2 row 3: the parse half).
+
+This module reads and validates; it never looks at the working directory.
+``provenance_of(path) -> str`` is an optional callback that fills
+``CustomGroupDef.provenance`` (the factory derives it from the repo layout;
+with no callback it is ``""``), and ``load_dir`` takes its directory as a
+required argument. The factory wrapper (``vcfcf_customgroups.loader``)
+keeps the old ``"customgroups"`` default and supplies the callback.
 
 Custom groups are an exception to the repo's UUID-stability contract.
 The VCF Ops `/api/resources/groups` endpoint assigns the `id` field
@@ -38,7 +45,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, List
+from typing import Any, Callable, List, Optional
 
 import yaml
 import yaml.constructor
@@ -422,7 +429,15 @@ def _relationship_condition_to_wire(c: dict) -> dict:
     return out
 
 
-def load_file(path: str | Path, enforce_framework_prefix: bool = True) -> CustomGroupDef:
+ProvenanceFn = Callable[[Path], str]
+
+
+def load_file(
+    path: str | Path,
+    enforce_framework_prefix: bool = True,
+    *,
+    provenance_of: Optional[ProvenanceFn] = None,
+) -> CustomGroupDef:
     path = Path(path)
     try:
         data = _strict_load(path.read_text()) or {}
@@ -436,8 +451,6 @@ def load_file(path: str | Path, enforce_framework_prefix: bool = True) -> Custom
     released = bool(released_raw) if isinstance(released_raw, bool) else False
     version = str(data.get("version", "1.0.0") or "1.0.0").strip() or "1.0.0"
 
-    from vcfcf_common.provenance import provenance_from_path
-
     cg = CustomGroupDef(
         name=str(data.get("name", "")).strip(),
         description=str(data.get("description", "") or "").strip(),
@@ -449,20 +462,25 @@ def load_file(path: str | Path, enforce_framework_prefix: bool = True) -> Custom
         source_path=path,
         released=released,
         version=version,
-        provenance=provenance_from_path(path),
+        provenance=provenance_of(path) if provenance_of is not None else "",
     )
     cg.validate(enforce_framework_prefix=enforce_framework_prefix)
     return cg
 
 
-def load_dir(directory: str | Path = "customgroups", enforce_framework_prefix: bool = True) -> List[CustomGroupDef]:
+def load_dir(
+    directory: str | Path,
+    enforce_framework_prefix: bool = True,
+    *,
+    provenance_of: Optional[ProvenanceFn] = None,
+) -> List[CustomGroupDef]:
     directory = Path(directory)
     if not directory.exists():
         return []
     out: List[CustomGroupDef] = []
     seen: dict[str, Path] = {}
     for p in sorted(directory.rglob("*.y*ml")):
-        cg = load_file(p, enforce_framework_prefix=enforce_framework_prefix)
+        cg = load_file(p, enforce_framework_prefix=enforce_framework_prefix, provenance_of=provenance_of)
         if cg.name in seen:
             raise CustomGroupValidationError(
                 f"duplicate custom group name '{cg.name}' in "
