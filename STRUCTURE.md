@@ -80,7 +80,7 @@ That framing was superseded on 2026-07-09 by
 `knowledge/designs/reorg-v2-landing-page.md`: against the **landing-page**
 goal (fewer top-level entries so a first-time visitor sees the README with
 at most one flick), the same move pays for itself. Sequencing per that
-design: phase 1 moved the ten `vcfcf_*` packages under `src/`; phase 2
+design: phase 1 moved the ten `vcfops_*` packages (now `vcfcf_*`) under `src/`; phase 2
 (this move) grouped `rules/`, `lessons/`, `context/`, `designs/`,
 `HOW_IT_WORKS.md`, `ROADMAP.md`, and `vcf_ops_concepts.md` under
 `knowledge/`, preceded by cross-repo pre-work — all 6 pak repos + the
