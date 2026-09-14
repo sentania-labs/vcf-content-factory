@@ -25,12 +25,14 @@ hidden by Python's default filters on the ``-m`` path) and forwards to
 the new package via ``runpy`` so ``python -m vcfops_x`` otherwise behaves
 exactly like ``python -m vcfcf_x``. Dotted runs (``python -m
 vcfops_x.sub``) go through the alias loader's ``get_code``, which prints
-the same notice and executes the real module's code.
+the same notice and executes the real module's code once, as
+``__main__``, without importing it under the new name first.
 
 Remove this module and the ten shim packages one release after M1 ships.
 """
 from __future__ import annotations
 
+import copy
 import importlib
 import importlib.abc
 import importlib.util
@@ -44,45 +46,88 @@ _ALIASES: Dict[str, str] = {}
 
 
 class _AliasLoader(importlib.abc.Loader):
-    """Loader that hands back an already-imported module object.
+    """Loader that hands back the real module object under an old name.
 
-    Also supports ``python -m old_pkg.sub``: runpy asks the loader for
-    ``get_code`` and executes it as ``__main__``. We forward to the real
-    module's loader so the same source runs, and print the one-line
-    deprecation notice (the ``-m`` path never sees the DeprecationWarning
-    under default filters).
+    Built from the real module's spec (found, not executed), so the finder
+    never imports library code just to answer ``find_spec``. Three paths:
+
+    * ``import old_pkg.sub``: ``create_module`` imports the real module
+      (once, under its real name) and returns that very object. Python's
+      ``_init_module_attrs`` then overwrites the object's ``__spec__`` with
+      the alias spec, so ``exec_module`` puts back a copy of the real spec
+      (real name, origin, cached, path) whose ``loader`` is this forwarder.
+      The real name is what ``importlib.reload`` re-finds, so reload
+      re-executes through the real loader; the forwarder is what runpy
+      needs when the old dotted name is run in-process after being
+      imported, since runpy reads the object's ``__spec__`` and the real
+      ``SourceFileLoader`` refuses a name it does not own.
+    * ``python -m old_pkg.sub``: runpy calls ``get_code``, which forwards to
+      the real loader captured at find time (never the alias, so no
+      recursion) and prints the one-line deprecation notice. The module
+      body executes exactly once, as ``__main__``.
+    * ``get_source`` / ``get_filename`` / ``get_data`` / ``is_package``:
+      forwarded to the real loader under the real name; any other loader
+      attribute is delegated as-is.
     """
 
-    def __init__(self, target, old_name: str) -> None:
-        self._target = target
+    def __init__(self, real_spec: ModuleSpec, old_name: str) -> None:
+        self._real_spec = real_spec
+        self._real_loader = real_spec.loader
+        self._new_name = real_spec.name
         self._old_name = old_name
+        self._orig_spec: Optional[ModuleSpec] = None
+
+    # -- import path -------------------------------------------------------
 
     def create_module(self, spec):  # noqa: D401
-        return self._target
+        module = importlib.import_module(self._new_name)
+        # Captured before _init_module_attrs clobbers it with the alias spec.
+        self._orig_spec = getattr(module, "__spec__", None)
+        return module
 
     def exec_module(self, module) -> None:
-        return None
+        base = self._orig_spec if self._orig_spec is not None else self._real_spec
+        restored = copy.copy(base)
+        restored.loader = self
+        module.__spec__ = restored
 
-    def get_code(self, fullname: str):
-        target_spec = getattr(self._target, "__spec__", None)
-        real_loader = getattr(target_spec, "loader", None)
-        if real_loader is None or not hasattr(real_loader, "get_code"):
-            raise ImportError(f"{self._target.__name__} has no runnable code")
-        print(
-            f"{self._old_name} is deprecated, use {self._target.__name__}; "
-            "removed next release",
-            file=sys.stderr,
-        )
-        return real_loader.get_code(self._target.__name__)
+    # -- runpy / introspection path ----------------------------------------
 
-    def get_source(self, fullname: str):
-        real_loader = getattr(getattr(self._target, "__spec__", None), "loader", None)
-        if real_loader is None or not hasattr(real_loader, "get_source"):
+    def get_code(self, fullname: Optional[str] = None):
+        if self._real_loader is None or not hasattr(self._real_loader, "get_code"):
+            raise ImportError(f"{self._new_name} has no runnable code")
+        print(_notice(self._old_name, self._new_name), file=sys.stderr)
+        return self._real_loader.get_code(self._new_name)
+
+    def get_source(self, fullname: Optional[str] = None):
+        if self._real_loader is None or not hasattr(self._real_loader, "get_source"):
             return None
-        return real_loader.get_source(self._target.__name__)
+        return self._real_loader.get_source(self._new_name)
 
-    def is_package(self, fullname: str) -> bool:
-        return hasattr(self._target, "__path__")
+    def get_filename(self, fullname: Optional[str] = None):
+        if self._real_loader is None or not hasattr(self._real_loader, "get_filename"):
+            raise ImportError(f"{self._new_name} has no file")
+        return self._real_loader.get_filename(self._new_name)
+
+    def get_data(self, path):
+        return self._real_loader.get_data(path)
+
+    def is_package(self, fullname: Optional[str] = None) -> bool:
+        return self._real_spec.submodule_search_locations is not None
+
+    def __getattr__(self, name: str):
+        # Anything else (get_resource_reader, ...) goes to the real loader.
+        if name.startswith("_") or self._real_loader is None:
+            raise AttributeError(name)
+        return getattr(self._real_loader, name)
+
+
+def _notice(old_name: str, new_name: str) -> str:
+    """One-line stderr notice for the ``-m`` path; ``-m pkg.sub`` reports ``pkg.sub``."""
+    suffix = ".__main__"
+    if old_name.endswith(suffix) and new_name.endswith(suffix):
+        old_name, new_name = old_name[: -len(suffix)], new_name[: -len(suffix)]
+    return f"{old_name} is deprecated, use {new_name}; removed next release"
 
 
 class _AliasFinder(importlib.abc.MetaPathFinder):
@@ -93,25 +138,30 @@ class _AliasFinder(importlib.abc.MetaPathFinder):
         if not sep or head not in _ALIASES:
             return None
         if tail == "__main__":
-            # Let the shim package's own __main__.py handle `python -m`.
+            # Let the shim package's own __main__.py handle `python -m old_pkg`.
             return None
         new_name = f"{_ALIASES[head]}.{tail}"
         try:
-            new_mod = importlib.import_module(new_name)
+            # find_spec imports parent packages (the real ones) but never
+            # executes the target module itself.
+            real_spec = importlib.util.find_spec(new_name)
         except ModuleNotFoundError as exc:
-            if exc.name in (new_name, _ALIASES[head]):
+            if exc.name and new_name.startswith(exc.name):
                 return None
             raise
-        target_spec = getattr(new_mod, "__spec__", None)
+        if real_spec is None:
+            return None
         spec = importlib.util.spec_from_loader(
             fullname,
-            _AliasLoader(new_mod, fullname),
-            origin=getattr(target_spec, "origin", None),
+            _AliasLoader(real_spec, fullname),
+            origin=real_spec.origin,
         )
         # Carry the real file location so a module run as __main__ through
         # the old name sees the same __file__ it would under the new one.
-        spec.has_location = bool(getattr(target_spec, "has_location", False))
-        spec.cached = getattr(target_spec, "cached", None)
+        spec.has_location = bool(real_spec.has_location)
+        spec.cached = real_spec.cached
+        if real_spec.submodule_search_locations is not None:
+            spec.submodule_search_locations = list(real_spec.submodule_search_locations)
         return spec
 
 

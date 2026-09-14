@@ -181,3 +181,152 @@ def test_old_dotted_subpackage_alias_is_a_package():
     leaf = importlib.util.find_spec("vcfops_packaging.defects")
     assert leaf.origin and leaf.origin.endswith("vcfcf_packaging/defects.py")
     assert leaf.has_location
+
+
+# ---------------------------------------------------------------------------
+# Round 3 (framework review of 698845a): the alias must not clobber the real
+# module's spec, must not execute a module body twice on the -m path, and
+# must handle subpackage __main__ once. A scratch old/new package pair with
+# an import-time side-effect log makes each of those observable.
+# ---------------------------------------------------------------------------
+
+_SIDE_MODULE = '''import os
+with open(os.environ["SIDE_LOG"], "a") as f:
+    f.write(f"EXEC side name={__name__}\\n")
+if __name__ == "__main__":
+    print("side main ran")
+'''
+_SUBPKG_MAIN = '''import os
+with open(os.environ["SIDE_LOG"], "a") as f:
+    f.write(f"EXEC subpkg.__main__ name={__name__}\\n")
+print("subpkg main ran")
+'''
+
+
+@pytest.fixture
+def scratch_pair(tmp_path, monkeypatch):
+    """Create ``<new>/side.py``, ``<new>/subpkg/__main__.py`` and a shim ``<old>``.
+
+    Names are unique per test so in-process imports never collide across
+    tests; sys.path/sys.modules are restored afterwards.
+    """
+    tag = tmp_path.name.replace("-", "_").lower()
+    new_name, old_name = f"cfnew_{tag}", f"cfold_{tag}"
+    new_pkg = tmp_path / new_name
+    (new_pkg / "subpkg").mkdir(parents=True)
+    (new_pkg / "__init__.py").write_text("")
+    (new_pkg / "side.py").write_text(_SIDE_MODULE)
+    (new_pkg / "subpkg" / "__init__.py").write_text("")
+    (new_pkg / "subpkg" / "__main__.py").write_text(_SUBPKG_MAIN)
+    old_pkg = tmp_path / old_name
+    old_pkg.mkdir()
+    (old_pkg / "__init__.py").write_text(
+        "from vcfcf_common.compat_shim import install as _install\n"
+        f"_install(__name__, {new_name!r}, globals())\n"
+    )
+    log = tmp_path / "side.log"
+    log.write_text("")
+    monkeypatch.setenv("SIDE_LOG", str(log))
+    monkeypatch.syspath_prepend(str(tmp_path))
+    yield {"old": old_name, "new": new_name, "log": log, "root": tmp_path}
+    for name in list(sys.modules):
+        if name.startswith((old_name, new_name)):
+            del sys.modules[name]
+
+
+def _log_lines(log: Path):
+    return [line for line in log.read_text().splitlines() if line]
+
+
+def _run_scratch(pair, module: str, *args: str) -> subprocess.CompletedProcess:
+    env = dict(os.environ)
+    env["PYTHONPATH"] = os.pathsep.join([str(SRC), str(pair["root"])])
+    env["SIDE_LOG"] = str(pair["log"])
+    env.pop("PYTHONWARNINGS", None)
+    return subprocess.run(
+        [sys.executable, "-m", module, *args],
+        cwd=str(REPO_ROOT), env=env, capture_output=True, text=True, timeout=120,
+    )
+
+
+def test_old_dotted_run_executes_module_body_once(scratch_pair):
+    """W1: `-m old.sub` must not import the module under the new name first."""
+    old, new, log = scratch_pair["old"], scratch_pair["new"], scratch_pair["log"]
+    result = _run_scratch(scratch_pair, f"{old}.side")
+    assert result.returncode == 0, result.stderr
+    assert _log_lines(log) == ["EXEC side name=__main__"]
+    assert result.stdout.strip() == "side main ran"
+    assert result.stderr.count(f"{old}.side is deprecated, use {new}.side; removed next release") == 1
+    log.write_text("")
+    result = _run_scratch(scratch_pair, f"{new}.side")
+    assert result.returncode == 0 and _log_lines(log) == ["EXEC side name=__main__"]
+    assert result.stderr == ""
+
+
+def test_old_dotted_subpackage_main_runs_once(scratch_pair):
+    """N1: `-m old.subpkg` runs subpkg/__main__.py exactly once and names the package."""
+    old, new, log = scratch_pair["old"], scratch_pair["new"], scratch_pair["log"]
+    result = _run_scratch(scratch_pair, f"{old}.subpkg")
+    assert result.returncode == 0, result.stderr
+    assert _log_lines(log) == ["EXEC subpkg.__main__ name=__main__"]
+    assert result.stdout.strip() == "subpkg main ran"
+    assert result.stderr.count(f"{old}.subpkg is deprecated, use {new}.subpkg; removed next release") == 1
+    assert "__main__ is deprecated" not in result.stderr
+
+
+def test_old_import_keeps_real_spec_name_and_reload_reexecutes(scratch_pair):
+    """B1: aliasing must not turn importlib.reload on the new name into a no-op."""
+    import importlib  # noqa: PLC0415
+
+    old, new, log = scratch_pair["old"], scratch_pair["new"], scratch_pair["log"]
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        old_side = importlib.import_module(f"{old}.side")
+    new_side = sys.modules[f"{new}.side"]
+    assert old_side is new_side
+    assert new_side.__spec__.name == f"{new}.side"
+    assert new_side.__name__ == f"{new}.side"
+    assert _log_lines(log) == [f"EXEC side name={new}.side"]
+    importlib.reload(new_side)
+    assert _log_lines(log) == [f"EXEC side name={new}.side"] * 2
+    assert new_side.__name__ == f"{new}.side"
+    assert sys.modules[f"{old}.side"] is sys.modules[f"{new}.side"]
+
+
+def test_real_package_spec_name_survives_old_import():
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        import vcfops_common.client  # noqa: F401,PLC0415
+        import vcfcf_common.client  # noqa: PLC0415
+    assert vcfcf_common.client.__spec__.name == "vcfcf_common.client"
+    assert vcfcf_common.client.__spec__.origin.endswith("vcfcf_common/client.py")
+
+
+def test_old_import_then_in_process_runpy_completes(scratch_pair, capsys):
+    """B1: runpy on an already-imported old dotted name must not recurse."""
+    import importlib  # noqa: PLC0415
+    import runpy  # noqa: PLC0415
+
+    old, new, log = scratch_pair["old"], scratch_pair["new"], scratch_pair["log"]
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        importlib.import_module(f"{old}.side")
+    runpy.run_module(f"{old}.side", run_name="__main__")
+    captured = capsys.readouterr()
+    assert captured.err.count(f"{old}.side is deprecated, use {new}.side; removed next release") == 1
+    assert "side main ran" in captured.out
+    assert _log_lines(log) == [f"EXEC side name={new}.side", "EXEC side name=__main__"]
+
+
+def test_alias_loader_forwards_source_without_recursion():
+    import importlib.util  # noqa: PLC0415
+    import inspect  # noqa: PLC0415
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        import vcfops_packaging.defects as old_defects  # noqa: PLC0415
+    spec = importlib.util.find_spec("vcfops_packaging.defects")
+    source = spec.loader.get_source("vcfops_packaging.defects")
+    assert source and "def gate_all(" in source
+    assert inspect.getsource(old_defects) == source
+    assert spec.loader.get_filename("vcfops_packaging.defects").endswith("vcfcf_packaging/defects.py")
