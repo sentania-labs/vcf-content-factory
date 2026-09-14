@@ -351,7 +351,7 @@ def cmd_refresh_describe(args) -> int:
         return 1
 
     try:
-        cache.refresh_all(kinds=kinds)
+        cache.refresh_all(kinds=kinds, prune=bool(getattr(args, "prune", False)))
     except DescribeCacheError as e:
         print(f"ERROR: {e}", file=sys.stderr)
         return 1
@@ -1586,6 +1586,16 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="NAME",
         default=None,
         help="credential profile to use (prod / qa / devel; default: 'prod')",
+    )
+    prd.add_argument(
+        "--prune",
+        action="store_true",
+        help="remove cached keys the live instance does not report. Default "
+             "is merge: live keys are added/updated, keys absent from the "
+             "live response are retained and listed in a WARN, so a cache "
+             "file grounded on more than one platform release keeps the "
+             "other release's keys (issue #143). --prune re-grounds the "
+             "file on this one instance.",
     )
     prd.set_defaults(func=cmd_refresh_describe)
 

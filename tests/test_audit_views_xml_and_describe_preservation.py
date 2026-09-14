@@ -186,7 +186,8 @@ class TestDescribeRefreshPropertiesPreservation:
         assert "HTTP 500" in err
 
     def test_success_path_writes_fresh_properties(self, tmp_path, capsys):
-        """Control: a 200 /properties response replaces the cached section."""
+        """Control: a 200 /properties response is merged into the cached
+        section (issue #143: merge, not replace; seed keys are retained)."""
         cache_dir = self._seed_cache(tmp_path)
 
         def _http_200():
@@ -208,7 +209,8 @@ class TestDescribeRefreshPropertiesPreservation:
         cache.refresh("VMWARE", "VirtualMachine")
 
         doc = self._read_cache_doc(cache_dir)
-        assert list(doc["properties"]) == ["config|fresh"]
+        assert set(doc["properties"]) == set(_SEED_PROPERTIES) | {"config|fresh"}
+        assert doc["properties"]["config|fresh"]["name"] == "Configuration|Fresh"
         assert "WARN: /properties fetch failed" not in capsys.readouterr().err
 
     def test_failure_with_no_prior_cache_writes_empty_properties(self, tmp_path, capsys):
