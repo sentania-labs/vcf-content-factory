@@ -72,3 +72,47 @@ All claims held: core pulled by URL, 19 passed, fixture 12 / corpus 83 matching 
 ## If shipped as-is
 
 `v0.0.1` would release three binaries that run `inspect` on the corpus zip (the M3 bar). An admin on an Intel Mac could not run the macOS one, any Mac admin would hit Gatekeeper with no README guidance, a future export carrying a format-version integer would be refused as "VCF Operations 1", and a visited web page could rewrite the ui's saved corpus directory.
+
+## Round 2 (2026-09-14, same day): fix commits 24d0201, 0d62232, 892768b, eab7612
+
+Branch now ten commits over `main` (6241b10 .. eab7612). Scratch venv
+`$CLAUDE_JOB_DIR/tmp/mig-venv-r2b` (fresh `pip install <clone> pytest`;
+migrator `0.0.1.dev11+geab7612cc`, core `0.1.0`).
+
+### Verdict
+
+APPROVE. 0 BLOCKING / 0 WARNING / 2 NIT. All six warnings and seven of
+eight nits from round 1 are closed for real (evidence below); N8 stays
+open on the factory side (no branch change can close it).
+
+### Re-run
+
+| Check | Result |
+|---|---|
+| `pytest -q`, PYTHONPATH unset | 39 passed (was 19) |
+| `inspect --json corpus/scott-8.18.7-2026-09-14.zip --source-version 8.18.7` | rc 0, 48 items: dashboard 5, view 19, supermetric 17, customgroup 2, recommendation 2, notificationrule 1, notificationtemplate 1, outboundsetting 1. Equals the manifest's content counts (dashboards 5, views 19, superMetrics 17, customGroups 2, recommendations 2, notificationRules 1, payloadTemplates 1, outboundSettings 1) and the spec's "Corpus on hand" paragraph. The nine non-content manifest kinds (policies, users, userGroups, userRoles, costDrivers, globalSettings, configFiles, authSources, integrations) are the 17 carried members. No duplicate uuids, no notes. |
+| `inspect --json corpus/devel-9x-2026-09-14.zip --source-version 9.0.2` | rc 0, 83 items: dashboard 12, view 28, supermetric 33, customgroup 3, symptom 4, alert 2, report 1; equals `configuration.json`. Nothing carried. |
+| Floor, both ways, on the real 9.x zip | `--source-version 8.9.0` rc 1 "refused: declared source version 8.9.0 is below the floor 8.10"; `--source-version 1` rc 2 "not major.minor[.patch]"; none declared rc 0 with "source version: not declared" and the note; `VCFCF_MIGRATOR_SOURCE_VERSION=8.18.7` picked up. |
+| Real 9.x zip with `configuration.json` gaining `"version": 1` (W1 reproduction) | rc 0, 83 items, `version=1` shown in the manifest line, not refused. Reader no longer sniffs any manifest key (`_VERSION_KEYS` and `_version_from_manifest` gone). |
+| Served ui, out of pytest, probed with `Origin: http://evil.example`, `Origin: http://127.0.0.1:<port+1>`, `Origin: null`, `Host: evil.example` (no Origin) on both `/settings` and `/inspect` | 403 on all eight; settings file absent after all of them. Own origin then 200 and the file appears with only that value. Below-floor `8.9` via the page: not saved. |
+| `tests/test_ui.py::test_foreign_origin_post_is_refused_with_403` | exercises the same four header sets, asserts 403 each and `not settings.json.exists()` after, then proves own-origin and bare same-host pass. Not tautological. |
+| `tests/test_cli.py` floor | refused `8.9.0`, `8.9`, `7.5.0` (rc 1); accepted `8.10`, `8.10.0`, `8.18.7`, `9.0.2` (rc 0); malformed `1`, `eight`, `8.`, `v8.10`, `8.10.1.2` rc 2; env and settings-file sources; `{"version": 1}` manifest rc 0. |
+| Fixture vs 9.x corpus member names | `<digits>L.v1`, `configuration.json`, `views.zip`, `usermappings.json`, `dashboards/<owner>`, `dashboardsharings/<owner>`, `supermetrics.json`, `symptomdefs.xml`, `alertdefs.xml`, `customgroups.json`, `reports.zip`: all eleven present under the real names; the 8.x-only members (`recommendationdefs.xml`, `notificationrules.json`, `payloadtemplates.json`, `outboundsettings.json`, `policies.xml`) use the 8.x corpus names. `AlertContent.xml` / `CustomGroup.json` / `Reports.zip` gone. |
+| Missing-member and not-an-export tests | `test_inspect_tolerates_missing_optional_members` drops three real member groups via `build_export_zip(without=...)`, asserts rc 0, no traceback and that each dropped kind is absent; `test_inspect_refuses_a_zip_that_is_not_a_content_export` proves empty zip rc 1, junk zip (readme + `supermetrics.json`, no marker/manifest) rc 1, marker-only rc 0. Real. |
+| `actionlint` 1.7.12 on both workflows | clean; `macos-15-intel` is in actionlint's built-in label list and in `actions/runner-images` README (macOS 15, x64: `macos-15-large` or `macos-15-intel`). `macos-latest` is arm64 (macOS 26). |
+| `permissions` in release.yml | `contents: read` at the top; `contents: write` only under `jobs.publish.permissions`. Publish uploads `-linux`, `-macos-arm64`, `-macos-x86_64`, `-windows.exe` and the wheel. |
+| Em-dash / en-dash grep over the tree | none |
+| Spec conformance | "8.x floor" row: floor on the declared value only, `--source-version` on every command (global option) with a page control, remembered in settings, undeclared inspect continues and says so, build refuses (M3 stub exits 2 either way; the refusal lands with M4). "Corpus on hand" counts reproduced exactly. |
+
+### Round 1 findings, status
+
+W1 closed (24d0201). W2 closed (0d62232). W3 closed (892768b). W4 closed (eab7612: chmod, Gatekeeper, SmartScreen). W5 closed (24d0201). W6: filed as factory issue #165. N1, N2, N7 closed (892768b). N3, N4 closed (eab7612). N5, N6 closed (24d0201, 0d62232). **N8 still open**: no factory issue exists and `knowledge/context/managed_paks.md` still has no migrator line; factory side, not this branch.
+
+### New findings
+
+- **N9** `src/vcfcf_migrator/ui.py:186` (`_same_origin`). `Origin: http://localhost:<port>` gets 403 with "only this page may post here". The tool prints and opens the `127.0.0.1` URL so the default path is fine, but an admin who runs `--port 8080` and types `localhost:8080` can load the page and then cannot save a setting, and the message tells them they are on the wrong page. → accept `http://localhost:<port>` alongside `http://127.0.0.1:<port>` (both are the same loopback socket), or have the 403 body name the URL to use.
+- **N10** `.github/workflows/ci.yml:55` `vcfcf-migrator --source-version 8.18.7 inspect fixture.zip | head -3`. The step has no `shell: bash`, so it runs under `bash -e` without `pipefail`; if the accept path ever regressed to a refusal, `head` would exit 0 and the step would pass. pytest covers the accept path, so this is a masked CI check, not a gap. → drop `| head -3` or add `set -o pipefail`.
+
+### If shipped as-is
+
+`v0.0.1` releases four binaries plus the wheel; `inspect` matches both corpus manifests exactly; a foreign page cannot touch settings or make the process read a path. An admin who reaches the page by `localhost` instead of `127.0.0.1` gets a confusing 403 on save (N9).
