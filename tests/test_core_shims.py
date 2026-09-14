@@ -30,6 +30,17 @@ module ``__getattr__`` (reads are identical objects; a write on the old
 path does NOT reach core, pinned below), and ``vcfcf_packaging.builder``
 re-exports the assembly helpers that moved to
 ``vcfcf_core.packaging.assembly``.
+
+Row 4 adds one alias (``vcfcf_extractor.reverse_local``, the offline
+export-to-YAML path, now whole in ``vcfcf_core.extractor.reverse_local``)
+and one wrapper: ``vcfcf_extractor.extractor`` keeps the live half (suite
+API and UI clients, content-export calls, the instance-backed SM name
+cache, the repo-root ``_scan_existing_ids`` scan, ``extract_dashboard``)
+and imports the pure parsers and YAML writers it calls by name from
+``vcfcf_core.extractor.extractor``; every other core name is served by
+``__getattr__``. No test in the tree monkeypatches an extractor name, so
+the read-only asymmetry costs nothing today; it is pinned below like the
+row 3 wrappers.
 """
 from __future__ import annotations
 
@@ -51,6 +62,8 @@ SHIMS = [
     ("vcfcf_supermetrics.reverse", "vcfcf_core.supermetrics.reverse"),
     ("vcfcf_reports.render", "vcfcf_core.reports.render"),
     ("vcfcf_packaging.deps", "vcfcf_core.packaging.deps"),
+    # Row 4.
+    ("vcfcf_extractor.reverse_local", "vcfcf_core.extractor.reverse_local"),
 ]
 
 # Row 3 wrappers: (old path, core path,
@@ -117,6 +130,19 @@ WRAPPERS = [
      ("load_dir",),
      ("SymptomDef",),
      ("load_file", "SymptomValidationError", "_condition_to_wire", "_strict_load")),
+    # Row 4: the extractor keeps its live half and the repo-root scan; the
+    # parsers and writers it calls are imported by name, the rest served.
+    ("vcfcf_extractor.extractor", "vcfcf_core.extractor.extractor",
+     ("_REPO_ROOT", "_build_sm_client", "_build_ui_client", "_dashboard_action", "_SMNameCache",
+      "_scan_existing_ids", "_run_content_export", "_export_views_zip", "_export_supermetrics_full",
+      "_export_dashboard_json", "_THIS_ENTRY_RE", "_sm_kinds_for_audit", "_sm_formula_refs_for_audit",
+      "list_dashboards", "extract_dashboard"),
+     ("_collect_enablement_entries", "_info", "_parse_view_xml", "_resource_kinds_from_formula",
+      "_rewrite_formula", "_safe_filename", "_warn", "_write_dashboard_yaml", "_write_manifest",
+      "_write_sm_yaml", "_write_view_yaml"),
+     ("_SM_UUID_TOKEN_RE", "_parse_view_def_element", "_parse_time_window", "_parse_controls_columns",
+      "_parse_column_value", "_to_yaml_str", "_emit_view_extras", "_metric_spec_to_yaml",
+      "_widget_to_yaml_dict")),
 ]
 
 
@@ -352,6 +378,42 @@ def test_row3_factory_only_names_are_absent_from_core() -> None:
             assert not hasattr(mod, name), f"{mod.__name__}.{name} must stay factory-side"
     assert not hasattr(core_desc.DescribeCache, "refresh")
     assert not hasattr(core_desc.DescribeCache, "refresh_all")
+
+
+def test_row4_factory_only_extractor_names_are_absent_from_core() -> None:
+    """The live half and the repo root stay in the factory; the library binds
+    no root at all (the row 4 leak)."""
+    import vcfcf_core.extractor.extractor as core_ex
+    import vcfcf_core.extractor.reverse_local as core_rl
+
+    for name in ("_REPO_ROOT", "_build_sm_client", "_build_ui_client", "_dashboard_action", "_SMNameCache",
+                 "_scan_existing_ids", "_run_content_export", "_export_views_zip", "_export_supermetrics_full",
+                 "_export_dashboard_json", "_sm_kinds_for_audit", "_sm_formula_refs_for_audit",
+                 "list_dashboards", "extract_dashboard"):
+        assert not hasattr(core_ex, name), f"vcfcf_core.extractor.extractor.{name} must stay factory-side"
+    assert not any(n.endswith("ROOT") for n in vars(core_ex)), sorted(n for n in vars(core_ex) if n.endswith("ROOT"))
+    assert not any(n.endswith("ROOT") for n in vars(core_rl))
+
+
+def test_row4_underscore_names_resolve_through_the_reverse_local_alias() -> None:
+    from vcfcf_extractor.reverse_local import (  # noqa: PLC0415
+        _parse_view_xml_to_dict, _write_view_yaml, _rewrite_sm_attr, _structural_key, build_view_uuid_map,
+        reverse_local_port,
+    )
+    import vcfcf_core.extractor.reverse_local as core_rl
+
+    for obj, name in ((_parse_view_xml_to_dict, "_parse_view_xml_to_dict"), (_write_view_yaml, "_write_view_yaml"),
+                      (_rewrite_sm_attr, "_rewrite_sm_attr"), (_structural_key, "_structural_key"),
+                      (build_view_uuid_map, "build_view_uuid_map"), (reverse_local_port, "reverse_local_port")):
+        assert obj is getattr(core_rl, name), name
+
+
+def test_row4_monkeypatch_on_reverse_local_alias_reaches_the_running_module(monkeypatch) -> None:
+    import vcfcf_core.extractor.reverse_local as core_rl
+    import vcfcf_extractor.reverse_local as old_rl
+
+    monkeypatch.setattr(old_rl, "_SM_BARE_UUID_RE", "probe-row4")
+    assert core_rl._SM_BARE_UUID_RE == "probe-row4"
 
 
 def test_row3_describe_wrapper_is_a_core_subclass_with_the_factory_default() -> None:

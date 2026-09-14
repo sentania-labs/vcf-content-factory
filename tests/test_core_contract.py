@@ -36,6 +36,10 @@ Two halves:
    - (row 3) a walk up the directory tree, ``<name> = <name>.parent`` (the
      repo-root sniff that provenance and the bundle loader kept on the
      factory side).
+   - (row 4) nothing new: the extractor's ``_REPO_ROOT = Path(__file__)
+     .parent.parent.parent`` (the leak that row fixed) is the ``.parent.parent``
+     rule; its exact shape is pinned in ``_VIOLATION_SAMPLES`` so the rule
+     cannot be narrowed without that sample failing.
 
 ``ALLOWLIST`` is the only escape hatch: explicit ``(relative path, line)``
 pairs, each expected to carry a reason in a comment next to it. It is empty
@@ -375,6 +379,9 @@ _VIOLATION_SAMPLES = {
     "string default on directory": "def load_dir(directory='alerts', enforce_framework_prefix=True):\n    pass\n",
     "string default on _dir kwonly": "def load(path, *, views_dir='v'):\n    pass\n",
     "string default on _root": "def f(cache_root='.'):\n    pass\n",
+    # Row 4: the extractor leak, verbatim shape (three parents, then a
+    # factory directory joined onto the bound name inside a function).
+    "extractor repo root": "from pathlib import Path\n_REPO_ROOT = Path(__file__).parent.parent.parent\ndef scan(kind):\n    return _REPO_ROOT / 'supermetrics'\n",
 }
 
 
