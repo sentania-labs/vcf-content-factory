@@ -138,7 +138,7 @@ class TestBuildTimeGuard:
         # returning empty XML, isolating the length-guard behavior under test.
         import vcfcf_dashboards.render as dash_render
 
-        monkeypatch.setattr(dash_render, "render_views_xml", lambda views, sm_scope=None: "")
+        monkeypatch.setattr(dash_render, "render_views_xml", lambda views, **kw: "")
 
         errors = sdk_builder._validate_localization_key_contract([view])
         assert any("localization-key-too-long" in e for e in errors), errors
@@ -150,7 +150,7 @@ class TestBuildTimeGuard:
         from vcfcf_managementpacks import sdk_builder
         import vcfcf_dashboards.render as dash_render
 
-        monkeypatch.setattr(dash_render, "render_views_xml", lambda views, sm_scope=None: "")
+        monkeypatch.setattr(dash_render, "render_views_xml", lambda views, **kw: "")
 
         view = SimpleNamespace(
             id="11112222-3333-4444-5555-666677778888",

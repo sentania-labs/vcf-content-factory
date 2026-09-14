@@ -19,8 +19,7 @@ import json
 import re
 import time
 import uuid
-from pathlib import Path
-from typing import Optional
+from typing import Mapping, Optional
 from xml.sax.saxutils import escape
 
 from .loader import (
@@ -1010,10 +1009,11 @@ def _render_view_def_fragment(
 
 def render_view_def_fragments(
     views: list[ViewDef],
-    sm_scope: Optional[list[Path]] = None,
+    sm_map: Optional[Mapping[str, str]] = None,
     bundle_context: Optional[str] = None,
     owning_adapter_kind: Optional[str] = None,
     owning_resource_kind: Optional[str] = None,
+    sm_scope_active: bool = False,
 ) -> str:
     """Render one or more ViewDefs into bare ``<ViewDef>...</ViewDef>``
     fragments (no ``<?xml?>`` prolog, no ``<Content><Views>`` wrapper).
@@ -1029,16 +1029,20 @@ def render_view_def_fragments(
 
     Args:
         views: ViewDef objects to render.
-        sm_scope: When provided, restrict SM name resolution to only the SM
-            YAML files in this list (bundle-scoped mode).  Any
-            ``supermetric:"<name>"`` reference that cannot be resolved within
-            this scope raises ``ValueError`` with a descriptive message naming
-            the view, the unresolved reference, and the bundle context.
-            When ``None`` (default), the full ``supermetrics/`` directory tree
-            is scanned, the existing native-content behaviour.
+        sm_map: Super metric name to uuid map used to resolve
+            ``supermetric:"<name>"`` column references. The caller builds it;
+            this module never looks for SM YAML on disk. The factory's
+            ``vcfcf_supermetrics.loader.sm_id_map`` produces it from a bundle
+            scope or from the repo's ``content/supermetrics`` tree. None is an
+            empty map.
+        sm_scope_active: Bundle-scoped mode. Any ``supermetric:"<name>"``
+            reference absent from ``sm_map`` raises ``ValueError`` with a
+            message naming the view, the reference, and the bundle context.
+            When False (native, unscoped mode) an unresolved reference is
+            still an error, worded for the repo tree.
         bundle_context: Human-readable bundle name used in scoped-mode error
             messages (e.g. ``'"idps-planner" (factory_native=False)'``).
-            Ignored when ``sm_scope`` is None.
+            Ignored when ``sm_scope_active`` is False.
         owning_adapter_kind: When provided (alongside ``owning_resource_kind``),
             emit an additional ``<SubjectType>`` element on every ViewDef
             binding the view to the pak's owning adapter namespace.  Required
@@ -1054,39 +1058,10 @@ def render_view_def_fragments(
         Concatenated ``<ViewDef>...</ViewDef>`` fragments (no wrapper).
 
     Raises:
-        ValueError: (scoped mode only) when a ``supermetric:"<name>"``
-            column references an SM not present in ``sm_scope``.
+        ValueError: when a ``supermetric:"<name>"`` column references an SM
+            not present in ``sm_map``.
     """
-    sm_map: dict[str, str] = {}
-    sm_scope_active = sm_scope is not None
-
-    if sm_scope_active:
-        # Scoped mode: load only the SM files declared in the bundle manifest.
-        # An empty list is valid, it means the bundle has no SMs, and any SM
-        # reference in a view will be caught as an error below.
-        try:
-            from vcfcf_supermetrics.loader import load_file as _sm_load_file
-            for sm_path in sm_scope:
-                sm = _sm_load_file(sm_path, enforce_framework_prefix=False)
-                sm_map[sm.name] = sm.id
-        except Exception as exc:
-            # Re-raise as ValueError so the build fails with a clear message.
-            raise ValueError(
-                f"render_view_def_fragments: failed to load scoped SM for "
-                f"bundle {bundle_context!r}: {exc}"
-            ) from exc
-    else:
-        # Native (unscoped) mode: scan the full supermetrics/ directory tree.
-        try:
-            from pathlib import Path as _Path
-            from vcfcf_supermetrics.loader import load_dir as _sm_load_dir
-            for _candidate in (_Path("content/supermetrics"), _Path("supermetrics")):
-                if _candidate.is_dir():
-                    for sm in _sm_load_dir(_candidate):
-                        sm_map[sm.name] = sm.id
-                    break
-        except Exception:
-            pass
+    sm_map = dict(sm_map or {})
 
     emit_owning_subject = bool(owning_adapter_kind and owning_resource_kind)
 
@@ -1117,10 +1092,11 @@ def render_view_def_fragments(
 
 def render_views_xml(
     views: list[ViewDef],
-    sm_scope: Optional[list[Path]] = None,
+    sm_map: Optional[Mapping[str, str]] = None,
     bundle_context: Optional[str] = None,
     owning_adapter_kind: Optional[str] = None,
     owning_resource_kind: Optional[str] = None,
+    sm_scope_active: bool = False,
 ) -> str:
     """Render one or more ViewDefs into the single content.xml the
     VCF Ops content importer expects inside views.zip.
@@ -1131,10 +1107,11 @@ def render_views_xml(
     """
     fragments = render_view_def_fragments(
         views,
-        sm_scope=sm_scope,
+        sm_map=sm_map,
         bundle_context=bundle_context,
         owning_adapter_kind=owning_adapter_kind,
         owning_resource_kind=owning_resource_kind,
+        sm_scope_active=sm_scope_active,
     )
     return (
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'

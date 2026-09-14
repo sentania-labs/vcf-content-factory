@@ -32,7 +32,7 @@ import io
 import json
 import time
 import zipfile
-from typing import Iterable
+from typing import Iterable, Mapping, Optional
 
 from .loader import Dashboard, ViewDef
 from .render import render_dashboards_bundle_json, render_views_xml
@@ -81,7 +81,14 @@ def build_import_zip(
     owner_user_id: str = DEFAULT_OWNER_USER_ID,
     owner_username: str = "admin",
     marker_filename: str | None = None,
+    sm_map: Optional[Mapping[str, str]] = None,
 ) -> bytes:
+    """Assemble the nested import zip for ``views`` and ``dashboards``.
+
+    ``sm_map`` (super metric name to uuid) resolves ``supermetric:"<name>"``
+    view columns; the caller supplies it (the factory scans its
+    ``content/supermetrics`` tree), this module never looks on disk.
+    """
     views = list(views)
     dashboards = list(dashboards)
     views_by_name = {v.name: v for v in views}
@@ -95,7 +102,7 @@ def build_import_zip(
         outer.writestr(marker_filename or _default_marker_filename(), owner_user_id)
 
         if views:
-            xml = render_views_xml(views)
+            xml = render_views_xml(views, sm_map=sm_map)
             outer.writestr("views.zip", _build_views_inner_zip(xml))
             config["views"] = len(views)
 

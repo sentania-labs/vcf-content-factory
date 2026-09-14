@@ -42,6 +42,7 @@ from vcfcf_dashboards.render import render_views_xml, render_dashboards_bundle_j
 from vcfcf_reports.render import render_report_xml
 from vcfcf_alerts.render import render_alert_content_xml
 from vcfcf_supermetrics.crossref import resolve_sm_formula, sm_name_to_uuid_map
+from vcfcf_supermetrics.loader import sm_id_map
 from .loader import Bundle, BundleValidationError, load_bundle, render_bme_items
 from .template_version import CURRENT_TEMPLATE_VERSION
 
@@ -660,7 +661,12 @@ def build_bundle(
     # bundle_context label is included in any resolution-error messages.
     bundle_ctx = f'"{bundle.name}" (factory_native={bundle.factory_native})'
     views_xml = (
-        render_views_xml(bundle.views, sm_scope=bundle.sm_paths, bundle_context=bundle_ctx)
+        render_views_xml(
+            bundle.views,
+            sm_map=sm_id_map(bundle.sm_paths, bundle_ctx),
+            sm_scope_active=True,
+            bundle_context=bundle_ctx,
+        )
         if bundle.views else None
     )
 

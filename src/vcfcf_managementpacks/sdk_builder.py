@@ -1055,7 +1055,10 @@ def _build_views_zip_bytes(views: list, sm_scope: Optional[List[Path]] = None) -
     YAML files (same scoped-resolution contract used at pak build time).
     """
     from vcfcf_dashboards.render import render_views_xml
-    xml_text = render_views_xml(views, sm_scope=sm_scope)
+    from vcfcf_supermetrics.loader import sm_id_map as _sm_id_map
+    xml_text = render_views_xml(
+        views, sm_map=_sm_id_map(sm_scope), sm_scope_active=sm_scope is not None
+    )
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
         z.writestr("content.xml", xml_text)
@@ -1818,8 +1821,8 @@ def _write_outer_pak(
     # column references resolve to the correct "Super Metric|sm_<uuid>"
     # attributeKey.  Both sides derive the UUID from the same YAML id: field —
     # consistent by construction.  When no supermetrics are bundled, pass
-    # sm_scope=None so the renderer falls back to its normal unscoped mode
-    # (scanning the full supermetrics/ dir, if any).
+    # sm_scope=None so sm_id_map falls back to its unscoped mode (scanning
+    # the full supermetrics/ dir, if any) before the renderer runs.
     _sm_scope: Optional[List[Path]] = None
     if supermetrics:
         _sm_scope = [sm.source_path for sm in supermetrics if sm.source_path is not None]
@@ -1943,6 +1946,7 @@ def _write_outer_pak(
 
         if views:
             from vcfcf_dashboards.render import render_views_xml
+            from vcfcf_supermetrics.loader import sm_id_map as _sm_id_map
             # Emit content/reports/ only when views are present.
             zf.writestr("content/reports/", "")
             # Write one XML file per view under content/reports/ — this is the
@@ -1952,14 +1956,18 @@ def _write_outer_pak(
             # A populated resources/ subdirectory with content.properties is required
             # (spec A3): bracket-prefix display names resolve through the i18n bundle;
             # a missing or empty bundle correlates with silent import failure.
-            # sm_scope is passed so view columns using supermetric:"<name>" syntax
-            # resolve to the correct "Super Metric|sm_<uuid>" attributeKey from the
-            # bundled SM YAML files.  When sm_scope is None (no bundled SMs), the
-            # renderer falls back to its normal directory scan.
+            # The SM name to uuid map is built from _sm_scope so view columns using
+            # supermetric:"<name>" syntax resolve to the correct
+            # "Super Metric|sm_<uuid>" attributeKey from the bundled SM YAML files.
+            # When _sm_scope is None (no bundled SMs), sm_id_map falls back to the
+            # factory's directory scan (M2 row 2: the renderer no longer scans).
+            _sm_map = _sm_id_map(_sm_scope)
+            _sm_scope_active = _sm_scope is not None
             for v in views:
                 xml_text = render_views_xml(
                     [v],
-                    sm_scope=_sm_scope,
+                    sm_map=_sm_map,
+                    sm_scope_active=_sm_scope_active,
                     owning_adapter_kind=owning_adapter_kind,
                     owning_resource_kind=owning_resource_kind,
                 )
@@ -2190,8 +2198,11 @@ def _write_outer_pak(
         if reports:
             from vcfcf_dashboards.render import render_view_def_fragments
             from vcfcf_reports.render import render_report_xml
+            from vcfcf_supermetrics.loader import sm_id_map as _sm_id_map
 
             _views_by_id = {v.id: v for v in (views or [])}
+            _rpt_sm_map = _sm_id_map(_sm_scope)
+            _rpt_sm_scope_active = _sm_scope is not None
 
             # Emit content/reports/ dir entry — only once; views may have
             # already written it.  ZipFile silently de-dupes same-path entries
@@ -2222,7 +2233,8 @@ def _write_outer_pak(
                 if embedded_views:
                     view_fragments = render_view_def_fragments(
                         embedded_views,
-                        sm_scope=_sm_scope,
+                        sm_map=_rpt_sm_map,
+                        sm_scope_active=_rpt_sm_scope_active,
                         owning_adapter_kind=owning_adapter_kind,
                         owning_resource_kind=owning_resource_kind,
                     )
@@ -3322,10 +3334,13 @@ def _validate_localization_key_contract(views: list, sm_scope: Optional[List[Pat
     # Lazy import — vcfcf_dashboards may not be installed in all environments.
     try:
         from vcfcf_dashboards.render import render_views_xml
+        from vcfcf_supermetrics.loader import sm_id_map as _sm_id_map
     except ImportError:
         # Cannot check without the renderer — skip silently (consistent with
         # how the build path handles missing vcfcf_dashboards).
         return errors
+    _sm_map = _sm_id_map(sm_scope)
+    _sm_scope_active = sm_scope is not None
 
     for view in views:
         uuid = view.id
@@ -3348,7 +3363,7 @@ def _validate_localization_key_contract(views: list, sm_scope: Optional[List[Pat
         # --- Step 3: localizationKey values from rendered XML ---
         # Pass sm_scope so that view columns using supermetric:"<name>" resolve
         # against bundled SM YAMLs, not the factory-level content/supermetrics/.
-        xml_text = render_views_xml([view], sm_scope=sm_scope)
+        xml_text = render_views_xml([view], sm_map=_sm_map, sm_scope_active=_sm_scope_active)
         xml_suffixes: list = _re.findall(r'localizationKey="([^"]+)"', xml_text)
 
         # --- Step 4: cross-check ---

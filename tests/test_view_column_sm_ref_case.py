@@ -71,10 +71,12 @@ def _view(tmp_path: Path, attribute: str, stem: str = "view"):
 
 def _render(tmp_path: Path, attribute: str, sm_files: list[Path]) -> str:
     from vcfcf_dashboards.render import render_view_def_fragments
+    from vcfcf_supermetrics.loader import sm_id_map
 
     return render_view_def_fragments(
         [_view(tmp_path, attribute)],
-        sm_scope=sm_files,
+        sm_map=sm_id_map(sm_files, "case-probe"),
+        sm_scope_active=True,
         bundle_context="case-probe",
     )
 
