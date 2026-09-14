@@ -47,7 +47,7 @@ with mock data, select what to keep, and produce an import bundle.
 | # | What | Where | Gate |
 |---|---|---|---|
 | M0 | Fix the walker and renderer issues below. **Done 2026-09-14**: PRs #155, #156, #157 merged; zips rebuilt, dashboard.json byte-identical across builds | this repo | reviewer, PR |
-| M1 | Rename import namespace `vcfops_*` to `vcfcf_*`. Mechanical, no behavior change, one PR | this repo | Scott picks the name; reviewer, PR, factory tag |
+| M1 | Rename import namespace `vcfops_*` to `vcfcf_*`. Mechanical, no behavior change, one PR. **Done 2026-09-14**: PR #160 merged, four review rounds, one Codex round; `src/vcfops_*/` shims stay one release (#159). Existing clones: move the gitignored `adapter_runtime/` jars to `src/vcfcf_managementpacks/`; the doctor says so | this repo | factory tag |
 | M2 | Carve pure parse/walk/build code into `vcf-cf-tooling-core` with its own `pyproject.toml`; factory imports it in-tree; CI builds and attaches the wheel on a library tag | this repo | one PR per package, reviewer each |
 | M3 | Migrator spec (`knowledge/designs/content-migrator-v1.md`) and repo skeleton: `sentania-labs/vcf-cf-migrator`, gitignored clone plus registry line like SDK adapters, CI with three-OS PyInstaller matrix, empty app that starts and shows the library version | new repo | Scott approves spec and repo creation |
 | M4 | Migrator MVP: load export zip, tree with dependencies, mock preview, select, emit import bundle | new repo | qa pass against a real export |
