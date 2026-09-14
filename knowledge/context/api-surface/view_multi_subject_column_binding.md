@@ -98,7 +98,7 @@ lines. The `<SubjectType>` block is unaffected: one `descendant` then
 ## Consumers of the binding
 
 - **Reverse path** (`src/vcfcf_core/dashboards/reverse.py`,
-  `src/vcfcf_extractor/extractor.py`, `src/vcfcf_extractor/reverse_local.py`):
+  `src/vcfcf_core/extractor/extractor.py`, `src/vcfcf_core/extractor/reverse_local.py`):
   an Item with both Properties on a multi-subject view is written back as
   a per-column `subject:`; an Item without them gets no `subject:`; on a
   single-subject view the binding is implied and never written.

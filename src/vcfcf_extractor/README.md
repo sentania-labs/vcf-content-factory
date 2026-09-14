@@ -145,8 +145,14 @@ with a WARN. Existing factory content is never overwritten.
 
 ## Architectural notes
 
-- Reverse parsers live in sibling packages: `vcfcf_dashboards.reverse` (Phase 1
-  partial) and `vcfcf_core.supermetrics.reverse` for cleaner separation.
+- Reverse parsers live in the `vcfcf_core` library: `vcfcf_core.dashboards.reverse`
+  and `vcfcf_core.supermetrics.reverse` (dashboard JSON, view XML and SM JSON to
+  dataclasses), and since M2 row 4 `vcfcf_core.extractor.extractor` (the
+  content-export parsers and factory-shape YAML writers this package calls) and
+  `vcfcf_core.extractor.reverse_local` (the whole offline `reverse-local` path;
+  `vcfcf_extractor.reverse_local` is an alias of it). This package keeps the live
+  half: clients, content-export calls, the instance-backed SM name cache, the
+  repo-root existing-id scan, and the `extract dashboard` walk.
 - SM formula UUID->name rewriting uses a lazy-loaded name cache backed by
   `GET /api/supermetrics/{id}` per-UUID (avoids a full list on small graphs).
 - View export uses `POST /api/content/operations/export` with
