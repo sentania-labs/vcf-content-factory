@@ -49,7 +49,7 @@ Track-specific examples:
 
 1. **Refuse without recon.** Hundreds of built-in symptoms exist.
 2. **Never fabricate metric/property keys.**
-3. **Validate:** `python -m vcfops_symptoms validate content/symptoms/<file>.yaml`
+3. **Validate:** `python -m vcfcf_symptoms validate content/symptoms/<file>.yaml`
 4. **Write only under `content/symptoms/`.**
 5. **IDs are server-assigned.** No `id:` field in YAML.
 6. **Never install.** Never create alerts.

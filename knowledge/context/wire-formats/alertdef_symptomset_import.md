@@ -12,7 +12,7 @@ post-import only ONE (Info) survived.
 ## TL;DR / root cause
 
 The Tier-2 alert content-import XML renderer
-(`src/vcfops_alerts/render.py::_render_alert_definition`) emits **multiple bare
+(`src/vcfcf_alerts/render.py::_render_alert_definition`) emits **multiple bare
 `<SymptomSet>` siblings directly under `<State>`**, with **no `<SymptomSets>`
 compound wrapper**. On import, the platform keeps only the **last** such
 sibling and silently drops the rest. A tiered alert (Critical / Immediate /
@@ -151,7 +151,7 @@ Do NOT emit `aggregation="any"` — it is not part of the vendor grammar.
 
 ## Code implications (for `tooling`)
 
-**File:** `src/vcfops_alerts/render.py`
+**File:** `src/vcfcf_alerts/render.py`
 **Function:** `_render_alert_definition` (the `for s in sets:` block, ~lines 358-379)
 
 Required changes:

@@ -71,12 +71,12 @@ Override to host-level if you want per-host comparison."
 2. **Never fabricate metric keys.** Every key grounded in existing
    YAML, docs, recon, or user-provided.
 3. **Validate before returning:**
-   `python -m vcfops_supermetrics validate content/supermetrics/<file>.yaml`
+   `python -m vcfcf_supermetrics validate content/supermetrics/<file>.yaml`
 4. **Write only under `content/supermetrics/`.**
 5. **Never install.** No sync, no enable.
 6. **Never create other content types** (views, dashboards, custom
    groups, symptoms, alerts).
-7. **Never edit `src/vcfops_*/` code.**
+7. **Never edit `src/vcfcf_*/` code.**
 
 ## YAML schema
 

@@ -1,7 +1,7 @@
 # Reviewer doctrine
 
 Shared discipline for the factory's two review gates,
-`framework-reviewer` (framework Python under `src/vcfops_*/`) and
+`framework-reviewer` (framework Python under `src/vcfcf_*/`) and
 `sdk-adapter-reviewer` (Tier 2 Java under `content/sdk-adapters/`).
 Each agent's prompt defines its surface, its named failure anchors,
 and its review dimensions; this doctrine defines how both behave.

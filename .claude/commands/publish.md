@@ -10,7 +10,7 @@ $ARGUMENTS
 
 ## Your job
 
-Wrap `python3 -m vcfops_packaging publish` and report the result. The CLI
+Wrap `python3 -m vcfcf_packaging publish` and report the result. The CLI
 runs the full publish pipeline (Phase 3 / v4 orchestrator from
 `knowledge/designs/release-lifecycle-v1.md` and `knowledge/designs/publish-pr-mode-v4.md`):
 validate → enumerate releases → build → route → retire stale zips →
@@ -87,7 +87,7 @@ If any of these aren't met, surface the issue early. Don't run.
 Pass `$ARGUMENTS` through directly:
 
 ```
-python3 -m vcfops_packaging publish $ARGUMENTS
+python3 -m vcfcf_packaging publish $ARGUMENTS
 ```
 
 The CLI handles lockfile acquisition, full validation, build, route,

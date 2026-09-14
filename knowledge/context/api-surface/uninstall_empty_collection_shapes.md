@@ -243,7 +243,7 @@ guard at `Get-AllDashboards` on the strength of that inference alone.**
 
 - Auth/session/CSRF mechanics: see `dashboard_delete_api.md`.
 - All calls used `VCFOpsUIClient.from_env(default_profile="devel")`
-  (`src/vcfops_dashboards/ui_client.py`), plus one-off inline scripts
+  (`src/vcfcf_dashboards/ui_client.py`), plus one-off inline scripts
   for raw (non-post-processed) response capture — the shipped client's
   `list_dashboards()` / `list_views()` methods pre-filter/flatten the
   response, which would have hidden exactly the distinction this

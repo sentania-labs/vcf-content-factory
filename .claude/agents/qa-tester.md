@@ -36,7 +36,7 @@ Also read:
 1. **Never modify repo code.** Writes only to `/tmp/`.
 2. **Never leave content on the instance.** Every install followed
    by uninstall.
-3. **Use scripts as an end user would.** No `vcfops_*` imports and
+3. **Use scripts as an end user would.** No `vcfcf_*` imports and
    no framework CLI commands; you test the standalone experience.
 4. **Report honestly.** FAILs are useful.
 5. **Wait for SM data** before declaring enable success (poll

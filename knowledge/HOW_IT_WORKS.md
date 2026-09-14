@@ -60,7 +60,7 @@ a disciplined authoring loop."
                   │        │        │        │
         ┌─────────▼─┐ ┌────▼────┐ ┌─▼──────┐ ┌▼────────┐
         │ ops-recon │ │authors  │ │tooling │ │installer│
-        │           │ │(narrow) │ │vcfops_*│ │packager │
+        │           │ │(narrow) │ │vcfcf_*│ │packager │
         │read-only  │ │one each │ │python  │ │qa-tester│
         │live Ops   │ │content  │ │renderer│ │ship+test│
         └───────────┘ │type     │ └────────┘ └─────────┘
@@ -281,8 +281,8 @@ clones each registered pak repo into the gitignored
 `knowledge/context/managed_paks.md`). The interactive dev loop is:
 
 ```bash
-python3 -m vcfops_managementpacks validate-sdk content/sdk-adapters/<name>  # cheap loop
-python3 -m vcfops_managementpacks build-sdk    content/sdk-adapters/<name>  # dev-preview .pak
+python3 -m vcfcf_managementpacks validate-sdk content/sdk-adapters/<name>  # cheap loop
+python3 -m vcfcf_managementpacks build-sdk    content/sdk-adapters/<name>  # dev-preview .pak
 ```
 
 You'll need a JDK 11+ and the Broadcom adapter SDK jar, which has no
@@ -324,10 +324,10 @@ content/sdk-adapters/            Tier 2 Java adapter projects
 supermetrics/  views/  dashboards/  customgroups/  symptoms/  alerts/
 recommendations/  reports/       per-content-type YAML
 
-src/vcfops_*/                    Python packages — renderer, loader, builder,
+src/vcfcf_*/                    Python packages — renderer, loader, builder,
                                  installer. Only the `tooling` agent edits.
                                  (Package names/imports unchanged by the src/
-                                 move — `python3 -m vcfops_<x>` still works.)
+                                 move — `python3 -m vcfcf_<x>` still works.)
 
 context/                         shared knowledge files (wire formats, rules,
                                  API maps, codified lessons). Agents read on

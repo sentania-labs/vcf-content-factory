@@ -56,15 +56,15 @@ via the Suite API / content-import zip.
   releases, ship to the distribution repo).
 - **SessionStart hooks** clone/refresh reference repos and managed
   paks, surface curation staleness (see delegation rule 10), and run
-  the preflight doctor (`src/vcfops_common/doctor.py`, invoked by path
+  the preflight doctor (`src/vcfcf_common/doctor.py`, invoked by path
   so it needs no `PYTHONPATH`; it runs in the same sequential hook as
   the two bootstrap scripts because it reports their results), which
   reports by exception: upstream drift, credential readiness,
   environment sanity, bootstrap health, first-run state.
-- **Framework code** lives under `src/vcfops_*/` (per-type loaders,
-  renderers, CLIs; `vcfops_common` for shared env/client plumbing;
-  `vcfops_extractor` for the third-party-dashboard-to-YAML path;
-  `vcfops_packaging` for bundles and releases).
+- **Framework code** lives under `src/vcfcf_*/` (per-type loaders,
+  renderers, CLIs; `vcfcf_common` for shared env/client plumbing;
+  `vcfcf_extractor` for the third-party-dashboard-to-YAML path;
+  `vcfcf_packaging` for bundles and releases).
 
 ## You are the foreman
 
@@ -76,7 +76,7 @@ filesystem, validate, install, and report.
 Delegation here is **governance first**: write-scope isolation and
 review gates are the point, not context savings. You do not write
 YAML, post-process rendered JSON, reverse-engineer wire formats, query
-live Ops, edit `src/vcfops_*/` code, or run sync/enable/delete. Each
+live Ops, edit `src/vcfcf_*/` code, or run sync/enable/delete. Each
 of those has an agent whose prompt and tool allowlist are the
 enforcement. When you catch yourself doing one inline, stop and
 delegate. (The old context-economy rationale has weakened; a subagent
@@ -103,7 +103,7 @@ pinned `sonnet`. Do not re-add pins without a decision.
 | `alert-author` | Author | `content/alerts/`, `content/recommendations/` | After recon, **and** required symptoms exist. |
 | `report-author` | Author | `content/reports/` | User wants a report. Blocks if upstream views missing. |
 | `api-explorer` | Research | `knowledge/context/`; verbatim vendor artifacts may be *added* under `reference/docs/` (RULE-016) | Author returns TOOLSET GAP, install fails mysteriously, surface map gap. |
-| `tooling` | Engineering | `src/vcfops_*/`, `tests/`, `knowledge/context/` | Renderer/loader/CLI fix or new package bootstrap. **Only** agent that edits `src/vcfops_*/`. |
+| `tooling` | Engineering | `src/vcfcf_*/`, `tests/`, `knowledge/context/` | Renderer/loader/CLI fix or new package bootstrap. **Only** agent that edits `src/vcfcf_*/`. |
 | `content-installer` | Plumbing | nothing (runs CLI; permitted remote log-level writes) | User confirms install. |
 | `content-packager` | Build | `bundles/` (build outputs land in gitignored `dist/` via CLI) | Authors bundle manifests; builds distributable zips. Rebuild after a tooling change. |
 | `qa-tester` | Testing | `/tmp/` via Bash | Acceptance-test a built zip. Spawn after `content-packager`. |
@@ -112,7 +112,7 @@ pinned `sonnet`. Do not re-add pins without a decision.
 | `mp-author` | Author | `content/managementpacks/` | After `mp-designer` produces approved design. **Tier 1** MPB YAML spec. |
 | `sdk-adapter-author` | Author/Engineering | `content/sdk-adapters/` (independent gitignored repos) | After approved Tier 2 design. Java sibling to `mp-author`; **only** agent that edits adapter Java. |
 | `sdk-adapter-reviewer` | Read-only review | `knowledge/context/reviews/` | After `sdk-adapter-author` reports a build, before the install gate. |
-| `framework-reviewer` | Read-only review | `knowledge/context/reviews/framework/` | After `tooling` touches `src/vcfops_*/`, before the PR. **Blanket**, every diff (RULE-013). |
+| `framework-reviewer` | Read-only review | `knowledge/context/reviews/framework/` | After `tooling` touches `src/vcfcf_*/`, before the PR. **Blanket**, every diff (RULE-013). |
 | `curator` | Read-only audit | `knowledge/context/curation/<date>-report.md` | When the staleness hook says curation is due. Spawn **in the background**. |
 
 ## Delegation protocol
@@ -169,7 +169,7 @@ pinned `sonnet`. Do not re-add pins without a decision.
    directories.
 
 9. **Framework changes go `tooling` then `framework-reviewer`, then
-   PR** (RULE-013, blanket on every `src/vcfops_*/` diff; CHANGES
+   PR** (RULE-013, blanket on every `src/vcfcf_*/` diff; CHANGES
    REQUESTED blocks the PR; re-brief and re-review until APPROVE).
    **Every finding gets fixed before the PR opens**, warnings and
    nits alike, in one re-brief: the external Codex round is for what
@@ -226,7 +226,7 @@ green line:
 3. **Credentials**: never let a secret touch the transcript, argv,
    or shell history (RULE-008). Offer the user the credential wizard
    and have them run it themselves, in their own terminal: tell them
-   to type `! python3 -m vcfops_common setup` (the `!` prefix runs it
+   to type `! python3 -m vcfcf_common setup` (the `!` prefix runs it
    interactively in-session). Never run it for them, never ask them to
    paste a password into chat, and never echo one. The wizard reads
    the password silently so it stays out of the transcript, and it
@@ -306,15 +306,15 @@ ignore one, never silently downgrade. Decide:
   `content/sdk-adapters/<name>/` per the
   `knowledge/context/managed_paks.md` registry; the **official**
   release is that repo's CI building the `.pak` on a `v*` tag, gated
-  by `python3 -m vcfops_packaging defect-gate --pak <name>`
+  by `python3 -m vcfcf_packaging defect-gate --pak <name>`
   (RULE-012). `/publish` emits a pointer to the latest GitHub
   Release, never a binary. New pak: instantiate the `…-sdk-template`
   repo and add one registry line.
 - **Toolset gap:** punt / api-explorer / tooling, fix, re-invoke.
 - **After tooling changes:** if `tooling` touched
-  `src/vcfops_packaging/templates/`, `builder.py`,
+  `src/vcfcf_packaging/templates/`, `builder.py`,
   `discrete_builder.py`, `release_builder.py`, or
-  `src/vcfops_dashboards/render.py`, **all distribution zips are
+  `src/vcfcf_dashboards/render.py`, **all distribution zips are
   stale**; delegate a full `content-packager` rebuild of every
   manifest in `bundles/`. Not optional.
 

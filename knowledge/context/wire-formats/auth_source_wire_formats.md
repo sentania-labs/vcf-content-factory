@@ -207,7 +207,7 @@ or DN-form (`CN=vcf,...`) principal on devel.
 ## UI session login: `POST /ui/login.action`
 
 The framework's UI session client lives at
-`src/vcfops_packaging/templates/install.py:937-981`. The full form
+`src/vcfcf_packaging/templates/install.py:937-981`. The full form
 contract:
 
 ```

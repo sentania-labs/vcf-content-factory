@@ -62,7 +62,7 @@ Full findings from the 2026-08-20 exploration pass, condensed:
    repos and SDK paks go stale silently. Hook failures are swallowed
    (`2>/dev/null || true`), so partial clones are invisible.
 4. **Credential leakage surface** despite RULE-008 being mostly honored
-   by the resolver (`src/vcfops_common/_env.py` is clean, no token
+   by the resolver (`src/vcfcf_common/_env.py` is clean, no token
    cache, no tmp writes):
    - Every CLI accepts `--password` on argv (visible in ps, history,
      and the transcript if an agent composes the command); the shipped
@@ -87,7 +87,7 @@ requested startup experience; 3 and 4 are convergence and hygiene.
 
 ### Phase 1: preflight doctor at session start
 
-All doctor logic lives in Python (`python3 -m vcfops_common doctor`),
+All doctor logic lives in Python (`python3 -m vcfcf_common doctor`),
 invoked directly by the SessionStart hook using `$CLAUDE_PROJECT_DIR`
 (absolute, unlike the current relative-path hooks that silently no-op
 off-root). No bash required, which is what makes Windows work (see
@@ -106,7 +106,7 @@ report-by-exception):
 - **Ahead-commit classification (the push-recommendation needle)**:
   when local commits are ahead, the doctor classifies each by touched
   paths before any "you should PR this" nudge:
-  - *Core* (recommend PR): `src/vcfops_*/`, `scripts/`, `.claude/`,
+  - *Core* (recommend PR): `src/vcfcf_*/`, `scripts/`, `.claude/`,
     `knowledge/rules/`, `knowledge/lessons/`, root docs, `bundles/`,
     `content/` YAML.
   - *Environment/state* (keep local, never nudge): curation markers,
@@ -126,7 +126,7 @@ report-by-exception):
   managed-pak scripts write a summary line the doctor surfaces
   (cloned/failed counts, names of failures).
 
-Doctor logic lives in `src/vcfops_common/`, so: `tooling` writes it,
+Doctor logic lives in `src/vcfcf_common/`, so: `tooling` writes it,
 `framework-reviewer` gates it (RULE-013). Hook wiring and shell wrapper
 are orchestrator-owned.
 
@@ -166,7 +166,7 @@ item at a time, re-running the doctor after each fix".
 ### Phase 2: credential wizard (no secrets in the transcript)
 
 New interactive `scripts/setup_credentials.sh` (or
-`python3 -m vcfops_common setup`), run BY THE USER in their terminal.
+`python3 -m vcfcf_common setup`), run BY THE USER in their terminal.
 In a Claude session the guided flow is: Claude says "type
 `! scripts/setup_credentials.sh`", the `!` prefix runs it interactively
 in-session, and because the password prompt uses silent input
@@ -235,7 +235,7 @@ everything this design adds: **logic in Python, shell only as optional
 convenience**.
 
 - The doctor, the concierge checklist, and the credential wizard are
-  all `python -m vcfops_common ...` entry points. Python's `getpass`
+  all `python -m vcfcf_common ...` entry points. Python's `getpass`
   gives the silent password prompt on Windows too.
 - The SessionStart hook command invokes python directly (no bash in the
   hook line). Use the interpreter detection pattern (`python3` on
@@ -270,7 +270,7 @@ AGENTS.md-reading harness) session is ever run in-repo.
 
 ## Sequencing and gates
 
-- Phase 1 and 2 each: `tooling` for the `src/vcfops_common/` pieces,
+- Phase 1 and 2 each: `tooling` for the `src/vcfcf_common/` pieces,
   `framework-reviewer` gate, orchestrator for scripts/hooks/docs, one
   PR, one Codex round.
 - Phase 3 is doc-only, orchestrator-owned, one PR.

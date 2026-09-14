@@ -28,7 +28,7 @@ super metrics via the CLI today.
 The *server* constraint is narrower:
 `PUT /internal/supermetrics/assign` with `policyIds` is a no-op for
 content-zip-imported SMs (real server behavior, documented in
-`src/vcfops_supermetrics/client.py:287-292`). But the policy-export →
+`src/vcfcf_supermetrics/client.py:287-292`). But the policy-export →
 edit-XML → re-import path used for actual enablement is
 policy-agnostic — it already operates on whatever ZIP the server
 returns. The Default-only behavior is a framework code shortcut,
@@ -46,7 +46,7 @@ supported: `alert-author` writes recommendation files, alerts
 reference them by name, and the validator resolves all cross-
 references. Recommendations are included in `AlertContent.xml` in
 distribution packages and import correctly via content-zip.
-**However, `python3 -m vcfops_alerts sync` (the live REST path)
+**However, `python3 -m vcfcf_alerts sync` (the live REST path)
 omits recommendations** because `POST /api/alertdefinitions` has no
 recommendations field — recommendations only travel via the
 AlertContent.xml import path. Users who sync alerts via the
@@ -212,7 +212,7 @@ Tier 2 native Java SDK adapter authoring path. Tier 2 has full
 programmatic control over relationship emission and the metric wire
 format. The factory's Tier 2 pipeline (`build-sdk`, `scaffold-sdk`,
 `validate-sdk` CLI commands, framework JAR at
-`src/vcfops_managementpacks/adapter_framework/`) is Phase-1 operational.
+`src/vcfcf_managementpacks/adapter_framework/`) is Phase-1 operational.
 
 For Synology DSM-shape APIs (where the data model exposes shared
 scalar identifiers between parent and child responses), `field_match`
@@ -252,10 +252,10 @@ easy to sail past 1024 without noticing — count the *rendered* string,
 not the YAML source lines.
 
 **Enforced at validate time (2026-07-27):** `ViewDef.validate()` in
-`src/vcfops_dashboards/loader.py` now rejects any view whose rendered
+`src/vcfcf_dashboards/loader.py` now rejects any view whose rendered
 `description` exceeds 1024 characters with a local
 `DashboardValidationError`, so this trap is caught by `python3 -m
-vcfops_dashboards validate` instead of surfacing as a silent import
+vcfcf_dashboards validate` instead of surfacing as a silent import
 failure. Scoped to `VIEW_DEFINITIONS` / `description` only per the
 "Scope notes" below.
 

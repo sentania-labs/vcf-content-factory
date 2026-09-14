@@ -2,7 +2,7 @@
 
 Authoritative field-by-field spec for `managementpacks/*.yaml`, the factory's
 **source-of-truth grammar** for Management Pack Builder (MPB) designs. This
-is what `mp-author` writes, what `vcfops_managementpacks` validates, and what
+is what `mp-author` writes, what `vcfcf_managementpacks` validates, and what
 `render_export.py` compiles into an MPB-importable design JSON.
 
 **Grammar level:** Option C / Tier 3.3 (2026-04-18). Older forms
@@ -22,7 +22,7 @@ migration hints — do not use them.
 
 **Ground truth for behavior.** When this doc and the loader disagree, the
 loader wins — open a tooling ticket to reconcile. Loader source is
-`src/vcfops_managementpacks/loader.py`; the module docstring has a working
+`src/vcfcf_managementpacks/loader.py`; the module docstring has a working
 example.
 
 ---
@@ -467,7 +467,7 @@ Leading/trailing `_` are preserved (not stripped). This matches MPB's
 
 #### Key quality signals from `validate`
 
-`python3 -m vcfops_managementpacks validate` emits `WARN` lines (not errors)
+`python3 -m vcfcf_managementpacks validate` emits `WARN` lines (not errors)
 for labels that produce unexpected or awkward derived keys:
 
 | Tag | Trigger | What it means |
@@ -699,8 +699,8 @@ files.
 ## Validation loop
 
 ```bash
-python3 -m vcfops_managementpacks validate managementpacks/<file>.yaml
-python3 -m vcfops_managementpacks validate            # whole dir
+python3 -m vcfcf_managementpacks validate managementpacks/<file>.yaml
+python3 -m vcfcf_managementpacks validate            # whole dir
 ```
 
 Validation is fast and read-only. Run it after every edit.
@@ -709,14 +709,14 @@ Validation is fast and read-only. Run it after every edit.
 drops into the MPB UI):
 
 ```bash
-python3 -m vcfops_managementpacks render-export managementpacks/<file>.yaml --out /tmp/design.json
+python3 -m vcfcf_managementpacks render-export managementpacks/<file>.yaml --out /tmp/design.json
 ```
 
 **Extract** to reverse an MPB UI exchange-format JSON back to a factory YAML
 (useful as a starting point after building a design in the MPB UI):
 
 ```bash
-python3 -m vcfops_managementpacks extract \
+python3 -m vcfcf_managementpacks extract \
     --from context/mpb_wire_reference/synology_nas_working_export.json \
     --out managementpacks/extracted.yaml
 ```
@@ -737,7 +737,7 @@ live API at import time — those extra entries are a runtime artifact and
 cannot be reproduced from author YAML. The minimal set is sufficient for
 MPB to accept and import the design.
 
-See `src/vcfops_managementpacks/README.md` for the full CLI surface. The authoring
+See `src/vcfcf_managementpacks/README.md` for the full CLI surface. The authoring
 loop stops at the YAML; rendering and install are not mp-author's job.
 
 ---
@@ -761,4 +761,4 @@ Before returning an AUTHOR RESULT, confirm:
       expressions are set iff `scope: field_match`.
 - [ ] Every `${credentials.X}` / `${session.X}` token in auth blocks
       resolves to a declared key.
-- [ ] `python3 -m vcfops_managementpacks validate` exits zero.
+- [ ] `python3 -m vcfcf_managementpacks validate` exits zero.

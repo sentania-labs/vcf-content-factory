@@ -92,23 +92,23 @@ XML renderer and the properties generator.
 
 VCF-CF convention: `desc` (matching VCFAutomation, our closest structural
 reference). The `_attribute_to_localization_key()` function that sanitizes
-column attribute keys runs identically in both `src/vcfops_dashboards/render.py`
-and `src/vcfops_managementpacks/sdk_builder.py` — keep them in sync when modifying
+column attribute keys runs identically in both `src/vcfcf_dashboards/render.py`
+and `src/vcfcf_managementpacks/sdk_builder.py` — keep them in sync when modifying
 either.
 
 A build-time validator in `validate_sdk_project()` now catches mismatches
-before the pak is built. Run `python3 -m vcfops_managementpacks validate`
+before the pak is built. Run `python3 -m vcfcf_managementpacks validate`
 after any change to the renderer or properties generator.
 
 ## Reference
 
 - Spec/18 Pass 31: `knowledge/context/cleanroom-spec/spec/18-pak-content-bundle.md`
   (four-bundle contract, diagnostic fingerprint, build history)
-- Generator code: `src/vcfops_managementpacks/sdk_builder.py` —
+- Generator code: `src/vcfcf_managementpacks/sdk_builder.py` —
   `_generate_outer_resources_properties`, `_generate_content_resources_properties`,
   `_generate_dashboard_resources_properties`, `_generate_view_content_properties`,
   `_attribute_to_localization_key`
-- XML renderer: `src/vcfops_dashboards/render.py` — since DEF-018 emits plain
+- XML renderer: `src/vcfcf_dashboards/render.py` — since DEF-018 emits plain
   `<Title>`/`<Description>` (no `localizationKey`); the suffix-alignment rule
   above applies only if a bundle-shipping path re-introduces the attribute
 - Confirmed working: v22 pak (`vcfcf_sdk_compliance.1.0.0.22.pak`) on devel,

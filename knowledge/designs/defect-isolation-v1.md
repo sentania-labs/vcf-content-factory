@@ -256,7 +256,7 @@ review, which at roughly 40 entries it is not.
 
 ## Blast radius if built
 
-- `src/vcfops_packaging/defects.py`: parser rework. `tooling` then
+- `src/vcfcf_packaging/defects.py`: parser rework. `tooling` then
   `framework-reviewer` per RULE-013.
 - New tracked `.githooks/pre-push` in the factory, invoked via
   `core.hooksPath`. A thin dispatcher: it finds the factory above the

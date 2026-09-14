@@ -74,7 +74,7 @@ is called.
 ## References
 
 - `knowledge/context/tier2_architecture.md` — transport section, SSL rationale
-- `src/vcfops_managementpacks/adapter_framework/src/com/vcfcf/adapter/stitch/SuiteApiStitchClient.java` — fix site
+- `src/vcfcf_managementpacks/adapter_framework/src/com/vcfcf/adapter/stitch/SuiteApiStitchClient.java` — fix site
 - SDK class: `com.integrien.alive.common.adapter3.CustomTrustManager`
   (in `vrops-adapters-sdk-2.2.jar`) — confirmed by `javap` inspection
 

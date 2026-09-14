@@ -569,5 +569,5 @@ and lets dashboards iterate without MP re-installs.
 - For Utilization chain params: default to the **two-request** variant
   (Gap #2) unless tooling or api-explorer has already confirmed the
   one-request variant works.
-- Validate with `python3 -m vcfops_managementpacks validate` before
+- Validate with `python3 -m vcfcf_managementpacks validate` before
   returning.

@@ -1,7 +1,7 @@
 # SDK paks are independent repos; the official artifact is the CI build
 
 **Context.** Tier 2 Java SDK adapters used to live inside the factory repo,
-be built locally by the factory's own `vcfops_managementpacks` tooling, and
+be built locally by the factory's own `vcfcf_managementpacks` tooling, and
 have no independent versioning or release channel. They were moved out into
 per-pak repos (`sentania-labs/vcf-content-factory-sdk-<name>`, gitignored,
 cloned via the `knowledge/context/managed_paks.md` registry) so each versions and

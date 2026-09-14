@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Non-blocking CI reminder for the framework-review gate (P4).
 #
-# When a PR's diff touches framework Python (src/vcfops_*/) but adds no
+# When a PR's diff touches framework Python (src/vcfcf_*/) but adds no
 # matching review doc under knowledge/context/reviews/framework/, emit a GitHub
 # Actions ::warning::. This is a NUDGE, never a failure — the real gate
 # is the orchestrator spawning `framework-reviewer` before the PR
@@ -31,11 +31,11 @@ if [ -z "${CHANGED}" ]; then
   exit 0
 fi
 
-# Did the change touch framework Python? The ten vcfops_* packages live
+# Did the change touch framework Python? The ten vcfcf_* packages live
 # under src/ (see pyproject.toml src-layout).
-FRAMEWORK_HITS="$(printf '%s\n' "${CHANGED}" | grep -E '^src/vcfops_[^/]+/' || true)"
+FRAMEWORK_HITS="$(printf '%s\n' "${CHANGED}" | grep -E '^src/vcfcf_[^/]+/' || true)"
 if [ -z "${FRAMEWORK_HITS}" ]; then
-  echo "check-framework-review: no vcfops_*/ changes; framework review not required."
+  echo "check-framework-review: no vcfcf_*/ changes; framework review not required."
   exit 0
 fi
 
@@ -50,14 +50,14 @@ done
 REVIEW_HITS="${REVIEW_HITS# }"
 
 if [ -n "${REVIEW_HITS}" ]; then
-  echo "check-framework-review: vcfops_*/ change has a framework review doc:"
+  echo "check-framework-review: vcfcf_*/ change has a framework review doc:"
   printf '  %s\n' ${REVIEW_HITS}
   exit 0
 fi
 
 # Touched framework Python, no review doc — warn (non-blocking).
 PKGS="$(printf '%s\n' "${FRAMEWORK_HITS}" | cut -d/ -f2 | sort -u | tr '\n' ' ')"
-MSG="vcfops_*/ changed (${PKGS}) with no knowledge/context/reviews/framework/ doc. Per CLAUDE.md, tooling changes need a framework-reviewer pass before merge (RULE/P4). This is a reminder, not a failure."
+MSG="vcfcf_*/ changed (${PKGS}) with no knowledge/context/reviews/framework/ doc. Per CLAUDE.md, tooling changes need a framework-reviewer pass before merge (RULE/P4). This is a reminder, not a failure."
 echo "::warning title=Framework review missing::${MSG}"
 echo "check-framework-review: WARN — ${MSG}"
 exit 0

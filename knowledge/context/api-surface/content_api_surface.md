@@ -35,7 +35,7 @@ enable a super metric in a policy in a single call.
 
 All content that needs UUID stability across instances goes through
 this path. The importer preserves UUIDs from the input zip. It is
-exactly the mechanism `vcfops_dashboards` already uses. This is why
+exactly the mechanism `vcfcf_dashboards` already uses. This is why
 every new content type added to this repo should target the content
 zip path first, not per-object CRUD.
 

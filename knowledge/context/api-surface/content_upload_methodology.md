@@ -17,7 +17,7 @@ POST /api/auth/token/acquire
 
 Returns a token used as `Authorization: OpsToken <token>` on every
 subsequent Suite API call. Credentials come from env vars
-(`VCFOPS_HOST/USER/PASSWORD`, profile form via `src/vcfops_common/_env.py`),
+(`VCFOPS_HOST/USER/PASSWORD`, profile form via `src/vcfcf_common/_env.py`),
 never from disk or argv. Internal (`/internal/*`) endpoints additionally
 require the header `X-Ops-API-use-unsupported: true`.
 
@@ -112,5 +112,5 @@ validate (loaders, offline) -> render the wire format -> assemble the
 zip with the target's marker -> import -> poll to FINISHED -> check
 summaries for ghost state -> enable/assign where the type needs it ->
 verify visible + collecting. All of this is what `content-installer`
-runs via the per-type CLIs (`python3 -m vcfops_<type> sync|enable`);
-pak install is `python3 -m vcfops_managementpacks install`.
+runs via the per-type CLIs (`python3 -m vcfcf_<type> sync|enable`);
+pak install is `python3 -m vcfcf_managementpacks install`.

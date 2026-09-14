@@ -53,7 +53,7 @@ jobs:
     # No JDK needed here: this workflow deliberately compiles nothing.
     runs-on: lab
     env:
-      # vcfops_managementpacks lives under src/ (see pyproject.toml
+      # vcfcf_managementpacks lives under src/ (see pyproject.toml
       # src-layout). Resolve it via PYTHONPATH — this workflow deliberately
       # never installs the factory as a package (see redistribution survey
       # note above: only pyyaml is installed).
@@ -106,7 +106,7 @@ jobs:
 
       - name: Assemble buildkit tarball
         run: |
-          python3 -m vcfops_managementpacks build-buildkit \
+          python3 -m vcfcf_managementpacks build-buildkit \
             --output dist/ \
             --version "${{ steps.ver.outputs.version }}"
 

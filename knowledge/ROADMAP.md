@@ -58,7 +58,7 @@ what's on the horizon. Updated as capabilities land.
       Four first-party bundles currently ship: vks-core-consumption,
       vm-performance, capacity-assessment, environment-config-status.
       Third-party / extracted bundles live under `bundles/third_party/`
-      (e.g. idps-planner via the `vcfops_extractor` reverse flow).
+      (e.g. idps-planner via the `vcfcf_extractor` reverse flow).
 - [x] **Multi-bundle distribution packaging** — extract any number of
       bundle zips into the same directory, run `install.py` once,
       get a multi-select checklist (all pre-checked), single
@@ -117,7 +117,7 @@ what's on the horizon. Updated as capabilities land.
 New capability: author REST-adapter management packs as YAML and
 compile them into `.pak` files via the built-in Management Pack
 Builder (MPB). Three new agents in place (`api-cartographer`,
-`mp-designer`, `mp-author`) plus `vcfops_managementpacks` package
+`mp-designer`, `mp-author`) plus `vcfcf_managementpacks` package
 with validate / render / render-export / build / install / uninstall
 subcommands. Two learning targets in flight:
 
@@ -148,7 +148,7 @@ from `knowledge/context/mpb/` before relying on it.
   format renderer does not emit `buildNumber` at `design.buildNumber`.
   `TestBuildNumberExport` (4 tests) documents the expected behaviour and is
   currently skipped. Whether `buildNumber` belongs in the exchange dict is a
-  product decision; fix belongs in the renderer (`vcfops_managementpacks/render_export.py`),
+  product decision; fix belongs in the renderer (`vcfcf_managementpacks/render_export.py`),
   not the test. Do NOT change the test — it is the spec.
 
 ### PropertyList dashboard widget
@@ -157,7 +157,7 @@ survey instance. Structurally reuses Scoreboard's `MetricSpec`
 machinery + adds `is_string_metric: bool` to the metric spec dataclass.
 Full scoping in `context/widget_renderer_scope.md`. Lifts renderer
 coverage from ~94% to ~95.5%. Estimated ~120 lines across
-`vcfops_dashboards/loader.py` and `render.py`.
+`vcfcf_dashboards/loader.py` and `render.py`.
 
 ### ResourceRelationshipAdvanced + SparklineChart widgets
 Follow-on to PropertyList per the widget scoping doc. Both are

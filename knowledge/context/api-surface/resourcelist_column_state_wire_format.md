@@ -173,7 +173,7 @@ strip it.** Cleanup: the XPROBE dashboard was deleted via
 `dashboard.action deleteTab` and its absence re-verified (0 XPROBE
 dashboards remain).
 
-> **Correction to a stale in-code comment.** `src/vcfops_dashboards/reverse.py`
+> **Correction to a stale in-code comment.** `src/vcfcf_dashboards/reverse.py`
 > (~line 905) says the `states[]` array "is ignored on import and skipped
 > here." That statement is about the **reverse→YAML** direction only —
 > `reverse.py` chooses to drop `states` when generating YAML. It is **not**
@@ -188,7 +188,7 @@ constant `value` and a `key` templated as
 `permResGrid_widget_<dashUuid>_<widgetUuid>`. This requires the widget/dash
 UUIDs to be known at render time (they are — the renderer assigns them).
 `reverse.py` currently **drops** `states`, and the dashboard loader/render
-path does not currently carry it (grep `states` in `src/vcfops_dashboards/`
+path does not currently carry it (grep `states` in `src/vcfcf_dashboards/`
 before implementing). This is a **tooling** change, not authorable in YAML
 until the renderer supports a `columns:`/`show_only:` style directive that
 compiles to this blob. Simplest first cut: a per-widget escape hatch that
@@ -279,6 +279,6 @@ as found. No other user's data and no dashboard definition were touched.
 - Widget `states[]` general note: `knowledge/context/api-surface/widget_types_survey.md`
   (§ states are optional URL-encoded UI prefs).
 - Content-zip import wire format: `knowledge/context/wire-formats/wire_formats.md`.
-- Import client / marker discovery: `src/vcfops_dashboards/client.py`.
+- Import client / marker discovery: `src/vcfcf_dashboards/client.py`.
 - Dashboard export helper used for ground-truth capture:
-  `src/vcfops_extractor/extractor.py` `_export_dashboard_json`.
+  `src/vcfcf_extractor/extractor.py` `_export_dashboard_json`.

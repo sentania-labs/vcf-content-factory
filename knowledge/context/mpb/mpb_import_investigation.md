@@ -201,7 +201,7 @@ Priority order:
 
 1. **Re-render with `--no-events`** as an immediate workaround:
    ```
-   python3 -m vcfops_managementpacks render-export \
+   python3 -m vcfcf_managementpacks render-export \
      content/managementpacks/vsphere_storage_paths.yaml \
      --out /tmp/vsphere_storage_paths_design.json --no-events
    ```

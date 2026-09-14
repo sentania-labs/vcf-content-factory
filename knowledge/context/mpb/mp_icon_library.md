@@ -6,7 +6,7 @@ files per MP.
 
 ## Where the icons live
 
-`src/vcfops_managementpacks/templates/icons/<hint>.svg`
+`src/vcfcf_managementpacks/templates/icons/<hint>.svg`
 
 These are factory-authored, single-color flat vectors using
 `viewBox="0 0 400 400"` and the VMware-blue palette
@@ -123,11 +123,11 @@ the WARN.
 
 ## Related
 
-- `src/vcfops_managementpacks/builder.py` — `_icon_bytes_for(hint)` helper
+- `src/vcfcf_managementpacks/builder.py` — `_icon_bytes_for(hint)` helper
   and the `conf/images/` write loop
-- `src/vcfops_managementpacks/loader.py` — `ObjectTypeDef.icon` field +
+- `src/vcfcf_managementpacks/loader.py` — `ObjectTypeDef.icon` field +
   `_parse_icon_hint()` extension normalization
-- `src/vcfops_managementpacks/templates/icons/` — the SVG files themselves
+- `src/vcfcf_managementpacks/templates/icons/` — the SVG files themselves
 - `.claude/agents/mp-designer.md` — icon-selection step in the design
   interview
 - `.claude/agents/mp-author.md` — icon-resolution enforcement at YAML

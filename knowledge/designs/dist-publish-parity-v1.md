@@ -6,7 +6,7 @@
 
 ## Goal
 
-Make `python3 -m vcfops_packaging build` (the local `dist/` writer)
+Make `python3 -m vcfcf_packaging build` (the local `dist/` writer)
 produce zips with the same **filenames and directory layout** that
 `/publish` ships to `vcf-content-factory-bundles/`. So a QA tester
 working out of `dist/` sees the exact artifact a customer would
@@ -18,7 +18,7 @@ download from the distribution repo.
 |---|---|---|
 | Filename | `[VCF Content Factory] <Display Name>.zip` | `<release-slug>.zip` |
 | Layout | flat | per-type subdirs (`dashboards/`, `bundles/`, `reports/`, `ThirdPartyContent/<type>/`) |
-| Driver | `vcfops_packaging.builder.build_package` (`output_dir="dist"`) | `vcfops_packaging.publish` via tempdir → routed copy |
+| Driver | `vcfcf_packaging.builder.build_package` (`output_dir="dist"`) | `vcfcf_packaging.publish` via tempdir → routed copy |
 
 Concrete example:
 - `dist/[VCF Content Factory] Idps Planner.zip`
@@ -29,7 +29,7 @@ That's bad for filename-as-identity tooling and confuses QA.
 
 ## Proposed change
 
-`python3 -m vcfops_packaging build <manifest>` should:
+`python3 -m vcfcf_packaging build <manifest>` should:
 
 1. Use the **release-routing logic** from `publish.py` (`_classify_release`,
    per-type subdir mapping, `factory_native` flag) to decide the dest
@@ -66,7 +66,7 @@ Same routing function, same naming function, called once per build.
 ## Implementation sketch
 
 1. Extract the routing + naming helpers from `publish.py` into
-   shared functions (`vcfops_packaging.routing`).
+   shared functions (`vcfcf_packaging.routing`).
 2. `builder.build_package` (or a new `build_release_artifact` wrapper)
    calls those helpers when given a release path.
 3. `cli.py`'s `build` command:

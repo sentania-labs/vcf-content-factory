@@ -25,7 +25,7 @@ Source material driving this design:
   supplement with per-surface detail.
 - `knowledge/designs/synology-mp-v1.md` — structural template and the 12-axis
   framework-vs-target review whose shape this artifact mirrors.
-- `vcfops_managementpacks/loader.py`, `render.py` — the post-Tier-3
+- `vcfcf_managementpacks/loader.py`, `render.py` — the post-Tier-3
   grammar reality against which every grammar claim below is checked.
 
 ## Design revisions
@@ -61,7 +61,7 @@ below are pushed out to v1.1 or v2 with reasons.
 
 Tier 1 threshold alerting (AP down, switch port error rate, WAN
 status, temp thresholds) is **not deferred** — it ships alongside the
-MP via the factory's existing `vcfops_symptoms` / `vcfops_alerts`
+MP via the factory's existing `vcfcf_symptoms` / `vcfcf_alerts`
 pipelines. Per framework doctrine codified in Synology axis 4,
 threshold alerting is never MPB territory.
 
@@ -630,8 +630,8 @@ test case because the alternative reads badly.
 
 Per framework doctrine (axis 4 codified from Synology), **threshold
 alerting is never MPB territory**. UniFi v1 ships with symptom + alert
-definitions in the factory's existing `vcfops_symptoms` /
-`vcfops_alerts` pipelines, authored in parallel with the MP PAK and
+definitions in the factory's existing `vcfcf_symptoms` /
+`vcfcf_alerts` pipelines, authored in parallel with the MP PAK and
 referencing the MP's adapter kind (`mpb_unifi_network`) and resource
 kinds.
 

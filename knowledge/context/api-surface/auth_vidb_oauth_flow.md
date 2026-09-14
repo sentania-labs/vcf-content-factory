@@ -40,7 +40,7 @@ Struts callback), but:
    `OpsToken` at `/suite-api/`.
 
 **Practical recommendation:** for programmatic access
-(install scripts, `vcfops_common` client, CI/QA), require a
+(install scripts, `vcfcf_common` client, CI/QA), require a
 Local-authSource service account. Document that VIDB-federated
 users are **UI-only** on this platform version. The Local-account
 flow is already what devel lab and existing tooling use.
@@ -346,7 +346,7 @@ Confirmed mutually exclusive with this path:
 
 ## Implications for the content factory
 
-- Keep `vcfops_common` and install scripts on the Local authSource
+- Keep `vcfcf_common` and install scripts on the Local authSource
   path. The existing `VCFOPS_USER` / `VCFOPS_PASSWORD` /
   optional `VCFOPS_AUTH_SOURCE` (default `"Local"`) contract is
   correct and should stay.

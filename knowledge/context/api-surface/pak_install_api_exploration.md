@@ -113,7 +113,7 @@ paths are silent in 9.0.2.  Subsequent live work disproved it:
   did not probe `solution.action` at all; the "dead stub" conclusion was
   extrapolated without evidence.
 
-**Current state as of 2026-04-17:**  `src/vcfops_managementpacks/installer.py` uses
+**Current state as of 2026-04-17:**  `src/vcfcf_managementpacks/installer.py` uses
 `/ui/solution.action` for the full pak lifecycle (install + uninstall + status
 polling).  `/admin/solution.action` is no longer used by this codebase.
 
@@ -257,7 +257,7 @@ From `admin/js/components/initialConfiguration/solutions/Select.js` +
 11. POST /admin/login.action?mainAction=logout  (cleanup)
 ```
 
-### Reference Python snippet (minimal, not committed to src/vcfops_*/)
+### Reference Python snippet (minimal, not committed to src/vcfcf_*/)
 
 ```python
 import base64, json, os, time, requests, urllib3
@@ -457,7 +457,7 @@ From the original task brief, each hypothesis and its verdict:
 If the user wants the factory to install its own `.pak` bundles, the
 cleanest path is:
 
-1. **Add a `vcfops_managementpacks` pak-install command** that:
+1. **Add a `vcfcf_managementpacks` pak-install command** that:
    - Requires admin credentials (`VCFOPS_ADMIN` / `VCFOPS_ADMINPASSWORD`
      — same envs the QA uninstall path already uses)
    - Runs steps 1–5 above (login → CSRF → prepare → upload → poll)

@@ -22,26 +22,26 @@ reference/                   Immutable external material (RULE-016) — see Know
 One package per content type plus shared infrastructure, all under
 `src/`. Only the `tooling` agent edits these. Package names and
 module invocations are unchanged by the `src/` move — `python3 -m
-vcfops_<x>` still works verbatim (ambient `PYTHONPATH=src`).
+vcfcf_<x>` still works verbatim (ambient `PYTHONPATH=src`).
 
 ```
 src/
-  vcfops_common/             Shared helpers: env loader, base HTTP client
-  vcfops_supermetrics/       Loader, client, CLI (validate/list/sync/delete)
-  vcfops_dashboards/         Views + dashboards loader/render/client/CLI
-  vcfops_customgroups/       Custom groups + group types loader/client/CLI
-  vcfops_symptoms/           Symptom definitions loader/client/CLI
-  vcfops_alerts/             Alert + recommendation loader/render/client/CLI
-  vcfops_reports/            Report definitions loader/render/client/CLI
-  vcfops_packaging/          Bundle loader, builder, install script templates
-  vcfops_managementpacks/    MP YAML loader, MPB render, .pak builder/installer
-  vcfops_extractor/          Reverse flow — extract live dashboards into bundles
+  vcfcf_common/             Shared helpers: env loader, base HTTP client
+  vcfcf_supermetrics/       Loader, client, CLI (validate/list/sync/delete)
+  vcfcf_dashboards/         Views + dashboards loader/render/client/CLI
+  vcfcf_customgroups/       Custom groups + group types loader/client/CLI
+  vcfcf_symptoms/           Symptom definitions loader/client/CLI
+  vcfcf_alerts/             Alert + recommendation loader/render/client/CLI
+  vcfcf_reports/            Report definitions loader/render/client/CLI
+  vcfcf_packaging/          Bundle loader, builder, install script templates
+  vcfcf_managementpacks/    MP YAML loader, MPB render, .pak builder/installer
+  vcfcf_extractor/          Reverse flow — extract live dashboards into bundles
 ```
 
 Every package follows the same skeleton:
 
 ```
-src/vcfops_<type>/
+src/vcfcf_<type>/
   __init__.py
   __main__.py    → cli.main()
   loader.py      → YAML schema → dataclass, validate
@@ -70,7 +70,7 @@ content/
 ## Distribution
 
 ```
-bundles/                     Bundle manifests (input to vcfops_packaging build)
+bundles/                     Bundle manifests (input to vcfcf_packaging build)
 dist/                        Built distribution zips (gitignored)
 designs/                     Approved MP / content design artifacts (mp-designer output)
 ```

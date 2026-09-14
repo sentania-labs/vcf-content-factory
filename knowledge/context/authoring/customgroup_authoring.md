@@ -61,8 +61,8 @@ rather than guess — especially for metric/property keys.
 
 ## YAML shape (proposed — no loader yet)
 
-There is no `vcfops_customgroups` package today. When one lands
-it should follow the same pattern as `vcfops_supermetrics`:
+There is no `vcfcf_customgroups` package today. When one lands
+it should follow the same pattern as `vcfcf_supermetrics`:
 
 ```yaml
 name: "[Custom] Noisy production VMs"
@@ -190,7 +190,7 @@ from the lab:
 
 Here `Function` is a group type (listed in `/groups/types`).
 The link is **by key**, not by id — there is no separate type
-id field. Consequences for the future `vcfops_customgroups`
+id field. Consequences for the future `vcfcf_customgroups`
 loader:
 
 1. **Types must be synced before instances.** An instance

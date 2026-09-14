@@ -11,7 +11,7 @@ attempt. These are the exact shapes that work.
    export from one Ops cluster uses the same `<19-digit>L.v1`
    filename. The importer rejects any other value — even an off-by-one
    is `INVALID_FILE_FORMAT`. Discover it via throwaway export:
-   `vcfops_dashboards.client.discover_marker_filename`.
+   `vcfcf_dashboards.client.discover_marker_filename`.
 2. **The marker file contents are the owner user UUID**, not
    arbitrary. Same across all exports from the same instance.
 3. **The multipart field is `contentFile`** on
@@ -50,7 +50,7 @@ Each entry in `supermetrics.json`:
 **optional on import** — confirmed empirically. The importer
 populates whatever it needs server-side.
 
-## Dashboards + views zip (existing `vcfops_dashboards` layout)
+## Dashboards + views zip (existing `vcfcf_dashboards` layout)
 
 ```
 outer.zip
@@ -119,7 +119,7 @@ which must match the view's UUID. In this repo, the dashboard YAML's
 view YAML's `id` at build time.
 
 External view references: a `view:` value that is a canonical lowercase
-UUID (anchored `_UUID_RE` in `vcfops_dashboards/loader.py`) and matches no
+UUID (anchored `_UUID_RE` in `vcfcf_dashboards/loader.py`) and matches no
 loaded view is emitted verbatim as `viewDefinitionId` (platform or
 other-MP views, resolved on the instance at install time). Anything else
 that is not a loaded view is rejected twice: `Dashboard.validate()` raises
@@ -145,7 +145,7 @@ they have `key` (not `type`), `gridsterX/Y/W/H` (flat, not nested
 (viewDefinitionId, metric specs, etc.) is NOT available from this endpoint.
 
 **The content-zip export is the only reliable source of full widget config
-for extraction.** `vcfops_extractor` uses `POST /api/content/operations/export`
+for extraction.** `vcfcf_extractor` uses `POST /api/content/operations/export`
 with `contentTypes: ["DASHBOARDS"]` to get the same `dashboard/dashboard.json`
 format the importer and `parse_dashboard_json()` were built for.
 
@@ -227,8 +227,8 @@ Request body (JSON):
 ```
 Note: the body uses `adapterKind` / `resourceKind` (not the
 `adapterKindKey` / `resourceKindKey` keys that the loader's
-`resource_kinds` list stores). Both `src/vcfops_supermetrics/client.py`
-and `src/vcfops_packaging/templates/install.py` translate the loader
+`resource_kinds` list stores). Both `src/vcfcf_supermetrics/client.py`
+and `src/vcfcf_packaging/templates/install.py` translate the loader
 keys to the API keys in the dict comprehension that builds the body.
 
 ### SM ghost state — assign returns 404 despite GET /{id} succeeding
@@ -255,10 +255,10 @@ the SM in ghost state, fully re-registers it, and reports `imported=N`.
 After re-import the SM appears in the list and assign/default returns
 200. Three call sites detect the all-skipped signal and retry
 automatically, and they must stay in step:
-`src/vcfops_supermetrics/client.py:import_supermetrics_bundle`,
-`src/vcfops_packaging/templates/install.py:_install_supermetrics`, and
+`src/vcfcf_supermetrics/client.py:import_supermetrics_bundle`,
+`src/vcfcf_packaging/templates/install.py:_install_supermetrics`, and
 (since 2026-08-23, issue #108)
-`src/vcfops_packaging/templates/install.ps1:Install-Supermetrics` via
+`src/vcfcf_packaging/templates/install.ps1:Install-Supermetrics` via
 `Get-SmGhostStateSkipCount`. The PowerShell one was missing for as long
 as that installer existed, so Windows operators got a clean-looking
 install whose SMs were invisible to list and assign while the Python
@@ -311,14 +311,14 @@ a content-type filter reports the dashboard that imported fine as
 the same envelope, on the ordinary sync path. Each call site filters to
 the one type it speaks for:
 
-- `src/vcfops_dashboards/cli.py:cmd_sync` names dashboards for a
+- `src/vcfcf_dashboards/cli.py:cmd_sync` names dashboards for a
   `DASHBOARDS` flag and views for a `VIEW_DEFINITIONS` flag (stderr
   WARNING lines), and says which type was not affected.
-- `src/vcfops_dashboards/handler.py`: `DashboardsHandler` speaks for
+- `src/vcfcf_dashboards/handler.py`: `DashboardsHandler` speaks for
   `DASHBOARDS` only, `ViewsHandler` for `VIEW_DEFINITIONS` only
   (per-item `status="warn"`, plus a one-line trailer count from the
   bundle syncer).
-- `src/vcfops_packaging/templates/install.py:_install_dashboards` emits
+- `src/vcfcf_packaging/templates/install.py:_install_dashboards` emits
   one line per type, so the type that imported normally still gets its
   success line. It does NOT append to the installer's warnings list:
   that list drives `sys.exit(2)`, and an advisory must not fail an
@@ -329,7 +329,7 @@ the one type it speaks for:
   output.". The last line an operator reads is the one they remember,
   so it must never claim success over a WARN saying content was not
   updated.
-- `src/vcfops_packaging/templates/install.ps1:Install-Dashboard` is the
+- `src/vcfcf_packaging/templates/install.ps1:Install-Dashboard` is the
   Windows sibling of the above and mirrors it line for line
   (`Get-AllSkippedSummaries` / `Get-DashboardAdvisoryNames` /
   `Get-ViewAdvisoryNames` / `Get-BoundedNames` /

@@ -24,15 +24,15 @@ reaches the platform. Resolution therefore happens at **emit/push time**, not
 at load time: `SuperMetricDef.formula` still holds the authoring-time token
 after `load_file()`, by design, so the YAML stays UUID-free and diffable.
 
-The one resolver lives in `src/vcfops_supermetrics/crossref.py`
+The one resolver lives in `src/vcfcf_supermetrics/crossref.py`
 (`resolve_sm_formula`). Every path that emits or pushes a formula calls it:
 
 | Path | Call site | Name scope |
 |---|---|---|
-| Native bundle zip | `vcfops_packaging.builder._render_supermetrics_dict` | the bundle's own SMs |
+| Native bundle zip | `vcfcf_packaging.builder._render_supermetrics_dict` | the bundle's own SMs |
 | Discrete / release zip | same (via `discrete_builder`, `release_builder`) | component SMs, after `_expand_sm_crossrefs` pulls in referents |
-| Live sync | `vcfops_supermetrics.client.import_supermetrics_bundle` | the sync batch, then `find_by_name` against the target instance |
-| Tier 2 pak | `vcfops_managementpacks.sdk_builder._resolve_sm_formula` | `bundled_content.supermetrics` |
+| Live sync | `vcfcf_supermetrics.client.import_supermetrics_bundle` | the sync batch, then `find_by_name` against the target instance |
+| Tier 2 pak | `vcfcf_managementpacks.sdk_builder._resolve_sm_formula` | `bundled_content.supermetrics` |
 
 An unresolvable name is a **hard error** on every path. Emitting the literal
 token produces a super metric the platform silently fails to evaluate, so
@@ -60,7 +60,7 @@ unresolvable name.
 **The token itself is case-insensitive, like the prefix.**
 `@SuperMetric:"X"` and `@SUPERMETRIC:"X"` resolve exactly as `@supermetric:"X"`
 does. They used to pass straight through: the resolver matched the token
-case-sensitively, and `vcfops_packaging.deps._is_sm_ref` lowercases before
+case-sensitively, and `vcfcf_packaging.deps._is_sm_ref` lowercases before
 comparing, so the dependency audit classified a mis-cased token as an
 already-good SM reference and skipped it. Audit green, build green, literal
 token in the zip (PR #141 round 3). Only the *token* is forgiving: the
@@ -71,8 +71,8 @@ awareness at all, by design (the formula stays in authoring form). The only
 real check on a cross-reference is building the bundle / pak and reading the
 emitted `supermetric.json`.
 
-The reverse direction (`vcfops_supermetrics.reverse.rewrite_formula`,
-`vcfops_extractor`) turns `sm_<uuid>` back into `@supermetric:"<name>"` so
+The reverse direction (`vcfcf_supermetrics.reverse.rewrite_formula`,
+`vcfcf_extractor`) turns `sm_<uuid>` back into `@supermetric:"<name>"` so
 extracted content round-trips through the authoring form.
 
 ## Why `POST /api/supermetrics` is a dead end
@@ -128,7 +128,7 @@ name at load time without round-tripping to the server:
   uses `@supermetric:"<name>"` inside the formula string. This one is
   **not** resolved at validate time: it is rewritten to
   `Super Metric|sm_<id>` at emit/push time by
-  `vcfops_supermetrics.crossref` (see the section above), which fails
+  `vcfcf_supermetrics.crossref` (see the section above), which fails
   loudly if the referenced name doesn't resolve.
 
 ## Cross-reference syntax quick reference

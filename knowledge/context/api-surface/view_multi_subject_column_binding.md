@@ -49,10 +49,10 @@ columns:
 | Single subject, one-entry `subjects:` list | Bound to the one kind (unchanged) | Accepted and bound to that one kind; output is byte-identical to leaving `subject:` off |
 | Multi-subject (2+ `subjects:`) | Unbound: no `adapterKind`, no `resourceKind`; `isStringAttribute` is followed directly by `rollUpType` | Bound to exactly that kind; must be one of the view's `subjects:` (loader error otherwise) |
 
-Loader: `src/vcfops_dashboards/loader.py` (`ViewColumn.subject`, parsed
+Loader: `src/vcfcf_dashboards/loader.py` (`ViewColumn.subject`, parsed
 as a `{adapter_kind, resource_kind}` mapping, unknown keys rejected;
 `ViewDef.validate()` checks membership). Renderer:
-`src/vcfops_dashboards/render.py::_column_kind_binding` decides the pair
+`src/vcfcf_dashboards/render.py::_column_kind_binding` decides the pair
 or `None`, `_xml_kind_binding_props` emits the two Properties in the
 historical position (after `isStringAttribute`, before `rollUpType`).
 
@@ -97,12 +97,12 @@ lines. The `<SubjectType>` block is unaffected: one `descendant` then
 
 ## Consumers of the binding
 
-- **Reverse path** (`src/vcfops_dashboards/reverse.py`,
-  `src/vcfops_extractor/extractor.py`, `src/vcfops_extractor/reverse_local.py`):
+- **Reverse path** (`src/vcfcf_dashboards/reverse.py`,
+  `src/vcfcf_extractor/extractor.py`, `src/vcfcf_extractor/reverse_local.py`):
   an Item with both Properties on a multi-subject view is written back as
   a per-column `subject:`; an Item without them gets no `subject:`; on a
   single-subject view the binding is implied and never written.
-- **Bundle dependency audit** (`src/vcfops_packaging/deps.py::_refs_from_view`,
+- **Bundle dependency audit** (`src/vcfcf_packaging/deps.py::_refs_from_view`,
   `_column_kinds`): an unbound column is audited once per subject kind; a
   bound column is audited against its one kind only, otherwise the audit
   raises a false "metric key not found" for the other kinds

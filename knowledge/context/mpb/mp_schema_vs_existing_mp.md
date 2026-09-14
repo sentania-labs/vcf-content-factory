@@ -8,7 +8,7 @@
 - **Postman collection** (API-exploration artifact) —
   `reference/references/sentania_aria_operations_dsm_mp/API Exploration/Synology.postman_collection.json`
 - **Research baseline** — `knowledge/context/mpb/reference-mpb-research.md`
-- **Our loader schema** — `src/vcfops_managementpacks/loader.py`
+- **Our loader schema** — `src/vcfcf_managementpacks/loader.py`
 
 **Cross-check reference MPs used**
 - Rubrik — `reference/references/brockpeterson_operations_management_packs/Rubrik Management Pack Design.json`
@@ -887,7 +887,7 @@ For future reference, the populated shape (from Broadcom Security Advisories):
 ```
 
 The embedded `content.content` matches the VCF Ops dashboard-export JSON
-shape that our `vcfops_dashboards` package already emits. When we decide to
+shape that our `vcfcf_dashboards` package already emits. When we decide to
 bundle content with the MP, the renderer can re-use existing dashboard/view
 exports wrapped in this envelope.
 

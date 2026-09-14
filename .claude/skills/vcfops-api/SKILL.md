@@ -138,7 +138,7 @@ Quick reference for the most common operations:
 Projects in this ecosystem use a shared client pattern:
 
 ```python
-from vcfops_supermetrics.client import VCFOpsClient
+from vcfcf_supermetrics.client import VCFOpsClient
 c = VCFOpsClient.from_env()           # loads .env automatically
 r = c._request('GET', '/api/supermetrics')
 ```

@@ -67,7 +67,7 @@ genuinely run out of room.
 Two rationales are tangled here and they age differently:
 
 - **Governance** (write-scope isolation, `tooling` is the only agent
-  touching `src/vcfops_*/`, review gates, serial spawning to avoid UUID
+  touching `src/vcfcf_*/`, review gates, serial spawning to avoid UUID
   races): model-independent, still correct, keep verbatim. The serial
   spawn rule in particular guards a real race, not a model weakness.
 - **Context economy** (delegate so the foreman's context survives):
@@ -90,9 +90,9 @@ the right granularity, but that is a bigger question than this review.
   currently inlined.
 - **Slash commands**: `/bundle`, `/extract`, `/publish`, `/release`
   exist and are never enumerated.
-- **`src/vcfops_extractor/`**: an entire workflow surface (third-party
+- **`src/vcfcf_extractor/`**: an entire workflow surface (third-party
   dashboard to factory YAML) absent from the workflow patterns list.
-  `src/vcfops_common/` is also unmentioned.
+  `src/vcfcf_common/` is also unmentioned.
 - Plan mode, background agents, and the Workflow tool are all
   post-authorship and unreferenced.
 
@@ -135,7 +135,7 @@ generate both:
 
 - Single source of truth for agent definitions (the existing
   `.claude/agents/*.md` bodies, or a neutral intermediate).
-- A small generator under `src/vcfops_*/` renders `.codex/agents/*.toml`
+- A small generator under `src/vcfcf_*/` renders `.codex/agents/*.toml`
   from it: `description` maps to `description`, the markdown body maps
   to `developer_instructions`.
 - Same treatment for the five skills (`.claude/skills/` and
@@ -148,7 +148,7 @@ generate both:
 **One caveat that is load-bearing here.** Tool restrictions do not map
 cleanly. Claude Code enforces write-scope with a per-agent `tools:`
 allowlist (this is how `tooling` is genuinely the only agent that can
-edit `src/vcfops_*/`). Codex offers `sandbox_mode`, which is coarser.
+edit `src/vcfcf_*/`). Codex offers `sandbox_mode`, which is coarser.
 So on the Codex side, write-scope isolation degrades from *enforced* to
 *instructed*. Given that write-scope isolation is the backbone of the
 governance model, the honest position is that Codex is a supported
@@ -165,7 +165,7 @@ should be written once.
 ## Real correctness bugs found (fix regardless of the restructure)
 
 1. `.claude/skills/vcfops-project-conventions/SKILL.md` validate chain
-   lists **6** commands, missing `vcfops_managementpacks validate`. An
+   lists **6** commands, missing `vcfcf_managementpacks validate`. An
    agent loading the skill and not CLAUDE.md ships unvalidated MP YAML.
 2. Same skill's `vcfops-orchestration` back-pointer references a skill
    deleted 2026-05-09 (commit `8e4f13a`). Eight curation cycles stale,
@@ -387,7 +387,7 @@ files reference it, none inline the format. The rest should follow it.
 ### Workflow gap
 
 `tooling.md` never mentions `framework-reviewer` despite CLAUDE.md:302
-making that gate mandatory after every `src/vcfops_*/` change.
+making that gate mandatory after every `src/vcfcf_*/` change.
 `sdk-adapter-author.md` likewise never mentions `sdk-adapter-reviewer`.
 Both reviewers know their author; neither author knows its reviewer, so
 both can plausibly return "done" without signalling the gate. Two
@@ -453,13 +453,13 @@ accepted decision. Safe to land without a style debate.
    classes it currently reports "clear" on while they are live.
 
 Gate: `framework-reviewer` if item 7 touches anything under
-`src/vcfops_*/` (it does not today; the script is standalone).
+`src/vcfcf_*/` (it does not today; the script is standalone).
 
 ### PR 2, CLAUDE.md v2
 
 Doc-only. Citation-over-restatement for the seven duplicated blocks;
 name the five skills and four slash commands; add the extractor
-workflow and `src/vcfops_common/`; reframe delegation as
+workflow and `src/vcfcf_common/`; reframe delegation as
 governance-first; separate harness-neutral content from harness
 mechanics; fix the roster write-scope drift (`tooling` + `tests/`,
 `content-packager` `dist/`, `content-installer` remote log-level
@@ -470,7 +470,7 @@ Rule 8", `guide_delegation.md` "eight numbered rules" (now eleven),
 and the `vcfops-orchestration` back-pointer in
 `vcfops-project-conventions/SKILL.md:10` that has survived eight
 curation cycles. Same PR fixes that skill's missing
-`vcfops_managementpacks validate` and its missing MP prefix carve-out.
+`vcfcf_managementpacks validate` and its missing MP prefix carve-out.
 
 ### PR 3, Agent prompt optimization
 

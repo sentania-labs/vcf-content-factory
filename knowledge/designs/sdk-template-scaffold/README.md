@@ -15,7 +15,7 @@ be maintained centrally and PR'd.
   no factory checkout), gates on `pak-compare`, and attaches the `.pak` to the
   tag's GitHub Release. It does **not** gate on defects: see below.
 - There is deliberately **no** `ci/defect_gate.py`. It was a vendored copy of
-  the factory's `src/vcfops_packaging/defects.py`, run against a registry
+  the factory's `src/vcfcf_packaging/defects.py`, run against a registry
   curled from factory `main` on every release. That made each pak's release
   depend on the tip of one working branch, and fail closed on an outage, for a
   check that could not fire on a pak the factory has no defects about
@@ -50,7 +50,7 @@ view/dashboard YAML — it cannot reference the factory's root `views/` or
 
 1. **Author** in-tree under the factory: `cd content/sdk-adapters/<name>` (the
    gitignored clone of this repo), edit, run the local dev preview
-   `python3 -m vcfops_managementpacks build-sdk content/sdk-adapters/<name>`.
+   `python3 -m vcfcf_managementpacks build-sdk content/sdk-adapters/<name>`.
    The `sdk-adapter-author` / `sdk-adapter-reviewer` agents operate here.
 2. **Commit + push** to this pak repo's `main`.
 3. **Release** = push a `v*` tag. The release rules (RULE-014, the `0.x`

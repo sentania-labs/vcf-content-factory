@@ -246,7 +246,7 @@ render remains the only proof of distribution-view internals.
 ## Addendum (2026-07-14, tooling) — validate-time WARNING guard landed
 
 Implemented the backlogged guard from "Fix ownership decision" item 3
-(`ViewDef.validate()`, `src/vcfops_dashboards/loader.py`). It is a
+(`ViewDef.validate()`, `src/vcfcf_dashboards/loader.py`). It is a
 **WARNING**, not an error — a data-less numeric histogram is a rendering
 defect, not a structurally invalid YAML document, and existing
 intentionally-numeric fixed-histogram distributions must keep validating.

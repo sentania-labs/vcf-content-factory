@@ -30,7 +30,7 @@ REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PAKS_DIR="${REPO_ROOT}/content/sdk-adapters"
 REGISTRY_FILE="${REPO_ROOT}/knowledge/context/managed_paks.md"
 
-# Record this run for the preflight doctor (contract: src/vcfops_common/doctor.py
+# Record this run for the preflight doctor (contract: src/vcfcf_common/doctor.py
 # header). Called at EVERY exit path, including the early ones: an empty registry
 # and a missing registry file are both real, reportable outcomes, and a script
 # that exits without recording leaves the doctor with a delta nothing can clear.

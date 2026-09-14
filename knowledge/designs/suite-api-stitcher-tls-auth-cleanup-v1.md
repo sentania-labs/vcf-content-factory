@@ -115,7 +115,7 @@ re-implement the transport, which is the *sole* reason it inherited a cert/auth 
 clients structurally never face. The fix is **parity with the SDK contract we replaced**, not novel
 policy. (An alternative — revert to the SDK-injected client — is out of scope here; this spec assumes
 we keep the re-implementation and match its two contracts.)
-**Component:** `vcfops_managementpacks/adapter_framework/src/com/vcfcf/adapter/stitch/SuiteApiStitcher.java`
+**Component:** `vcfcf_managementpacks/adapter_framework/src/com/vcfcf/adapter/stitch/SuiteApiStitcher.java`
 (the shared framework Suite API client; bundled into the sdk-buildkit, compiled into every Tier 2 pak).
 **Scope:** framework-wide — affects **every stitching pak** (synology, compliance, vcommunity, unifi), not synology alone.
 **Trigger:** synology cross-MP datastore stitch produces zero relationships on prod while working on devel.
@@ -269,10 +269,10 @@ fix until it is re-tagged (the kit is pulled at build time, not runtime).
   re-implemented transport must match.
 - `knowledge/context/investigations/recon_log.md` — 2026-06-29 synology prod recon (all four passes:
   version, behavioral fingerprint, jar bytecode, adapter-log 403, re-home → TLS, cert comparison).
-- `vcfops_managementpacks/adapter_framework/src/com/vcfcf/adapter/stitch/SuiteApiStitcher.java`
+- `vcfcf_managementpacks/adapter_framework/src/com/vcfcf/adapter/stitch/SuiteApiStitcher.java`
   — `create()` (ambient localhost) vs `explicitCredentials(host,user,pass)`.
 - `content/sdk-adapters/synology/src/com/vcfcf/adapters/synology/SynologyStitcher.java` —
   `loadDatastores()`, `SuiteApiDatastoreBridge`.
-- `vcfops_managementpacks/buildkit.py` — buildkit assembly; `content/sdk-adapters/synology/.github/workflows/build-pak-on-tag.yml`
+- `vcfcf_managementpacks/buildkit.py` — buildkit assembly; `content/sdk-adapters/synology/.github/workflows/build-pak-on-tag.yml`
   — pak CI pulls `sdk-buildkit-v1`.
 - Feedback queue: untrusted-SSL-cert item (this is its framework-side resolution).

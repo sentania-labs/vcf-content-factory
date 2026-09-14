@@ -42,7 +42,7 @@ Layer 1: vrops-adapters-sdk.jar (Broadcom, on appliance)
 
 - **No Maven, no Gradle, no pom.xml.** The Python tooling calls `javac` directly, manages the classpath from JARs shipped in the repo, and assembles the `.pak`. Same pattern as Tier 1 where Python handles everything.
 - **JDK is the only external dependency** for Tier 2 (Tier 1 stays zero-dependency). The tooling detects `javac` on PATH, gives clear guidance if missing, and can offer to help install it.
-- **Framework JAR is pre-compiled** by us, committed to the repo under `src/vcfops_managementpacks/adapter_runtime/`. Same pattern as `mpb_adapter-9.0.1-patch-1.jar` today.
+- **Framework JAR is pre-compiled** by us, committed to the repo under `src/vcfcf_managementpacks/adapter_runtime/`. Same pattern as `mpb_adapter-9.0.1-patch-1.jar` today.
 - **Dependency JARs are shipped in the repo** under `adapter_runtime/` — the SDK, aria-ops-core, HTTP client, JSON parser. No dependency resolution needed; the classpath is deterministic.
 - The `build` command detects Tier 1 (YAML) vs Tier 2 (Java project in `content/sdk-adapters/`) and routes accordingly.
 
@@ -71,7 +71,7 @@ vcf-content-factory/
 │           ├── resources/
 │           │   └── resources.properties
 │           └── lib/               # Optional: vendor JARs not in framework (e.g., JDBC driver)
-├── src/vcfops_managementpacks/
+├── src/vcfcf_managementpacks/
 │   ├── adapter_runtime/           # Pre-compiled JARs (exists today)
 │   │   ├── mpb_adapter-9.0.1-patch-1.jar    # Tier 1 runtime
 │   │   ├── vcfcf-adapter-base.jar            # NEW: Tier 2 framework
@@ -165,7 +165,7 @@ Serial authoring rule still applies (sdk-author before sdk-builder).
 
 ---
 
-## CLI Changes (`vcfops_managementpacks`)
+## CLI Changes (`vcfcf_managementpacks`)
 
 ### New commands
 
@@ -229,7 +229,7 @@ Core logic (pure Python + `javac`/`jar` subprocess calls, no Maven):
 
 ### Build process
 
-The framework JAR is built **once by us** with a JDK and committed to the repo. Users never compile it. A simple `build-framework.sh` script in `src/vcfops_managementpacks/adapter_framework/` handles the rebuild when we change framework source:
+The framework JAR is built **once by us** with a JDK and committed to the repo. Users never compile it. A simple `build-framework.sh` script in `src/vcfcf_managementpacks/adapter_framework/` handles the rebuild when we change framework source:
 
 ```bash
 # One-time framework build (we run this, not users)
@@ -238,7 +238,7 @@ javac -cp adapter_runtime/aria-ops-core-*.jar:adapter_runtime/vrops-adapters-sdk
 jar cf adapter_runtime/vcfcf-adapter-base.jar -C build/ .
 ```
 
-Framework source lives at: `src/vcfops_managementpacks/adapter_framework/src/` (Java source for the framework itself). No Maven, no Gradle — just `javac` + `jar`.
+Framework source lives at: `src/vcfcf_managementpacks/adapter_framework/src/` (Java source for the framework itself). No Maven, no Gradle — just `javac` + `jar`.
 
 ---
 
@@ -295,12 +295,12 @@ Framework source lives at: `src/vcfops_managementpacks/adapter_framework/src/` (
 
 ### New files
 - `content/sdk-adapters/` — directory structure
-- `src/vcfops_managementpacks/sdk_builder.py` — Tier 2 build pipeline
-- `src/vcfops_managementpacks/sdk_project.py` — adapter.yaml loader, project model
-- `src/vcfops_managementpacks/adapter_framework/` — framework Java source
-- `src/vcfops_managementpacks/adapter_runtime/vcfcf-adapter-base.jar` — pre-compiled framework
-- `src/vcfops_managementpacks/adapter_runtime/aria-ops-core-8.0.0.jar` — Layer 2
-- `src/vcfops_managementpacks/adapter_runtime/vrops-adapters-sdk-2.2.jar` — Layer 1
+- `src/vcfcf_managementpacks/sdk_builder.py` — Tier 2 build pipeline
+- `src/vcfcf_managementpacks/sdk_project.py` — adapter.yaml loader, project model
+- `src/vcfcf_managementpacks/adapter_framework/` — framework Java source
+- `src/vcfcf_managementpacks/adapter_runtime/vcfcf-adapter-base.jar` — pre-compiled framework
+- `src/vcfcf_managementpacks/adapter_runtime/aria-ops-core-8.0.0.jar` — Layer 2
+- `src/vcfcf_managementpacks/adapter_runtime/vrops-adapters-sdk-2.2.jar` — Layer 1
 - `.claude/agents/sdk-author.md` — Tier 2 Java author agent
 - `.claude/agents/sdk-builder.md` — Tier 2 build agent
 - `knowledge/context/tier2_architecture.md` — reference doc
@@ -310,8 +310,8 @@ Framework source lives at: `src/vcfops_managementpacks/adapter_framework/src/` (
 ### Modified files
 - `CLAUDE.md` — agent roster, workflow patterns, tier routing
 - `.claude/agents/mp-designer.md` — tier evaluation in interview
-- `src/vcfops_managementpacks/cli.py` — new commands
-- `src/vcfops_managementpacks/builder.py` — auto-detect routing
+- `src/vcfcf_managementpacks/cli.py` — new commands
+- `src/vcfcf_managementpacks/builder.py` — auto-detect routing
 - `knowledge/context/known_limitations.md` — Tier 2 capabilities
 - `knowledge/context/README.md` — index updates
 
@@ -321,6 +321,6 @@ Framework source lives at: `src/vcfops_managementpacks/adapter_framework/src/` (
 
 After each phase:
 
-1. **Phase 1:** `python3 -m vcfops_managementpacks build-sdk content/sdk-adapters/hello-world/` produces a `.pak` that installs on devel and appears in getIntegrations
+1. **Phase 1:** `python3 -m vcfcf_managementpacks build-sdk content/sdk-adapters/hello-world/` produces a `.pak` that installs on devel and appears in getIntegrations
 2. **Phase 2:** Synology adapter discovers NAS resources and collects storage/system metrics on a real Synology device
 3. **Phase 3:** Full orchestrator flow — user says "monitor my Synology NAS", gets a working `.pak` through the guided agent pipeline

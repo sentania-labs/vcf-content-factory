@@ -189,10 +189,10 @@ On the wire: `${this, metric=Super Metric|sm_<uuid>}`.
 
 **Resolution happens at emit/push time, not at load or validate time.**
 The loader keeps the formula in authoring form on purpose, so
-`vcfops_supermetrics validate` passing tells you nothing about whether a
+`vcfcf_supermetrics validate` passing tells you nothing about whether a
 reference resolves. The four call sites that resolve are the native
 bundle builder, the discrete builder, the live-sync push, and the Tier 2
-pak builder; all share `vcfops_supermetrics.crossref` and all hard-error
+pak builder; all share `vcfcf_supermetrics.crossref` and all hard-error
 on a name they cannot resolve. To check a reference for real, build the
 bundle and read the emitted `supermetric.json`.
 
@@ -208,7 +208,7 @@ sum(${adaptertype=VMWARE, objecttype=VirtualMachine,
 
 ## Formula validation
 
-The loader (`src/vcfops_supermetrics/loader.py`) enforces a subset of
+The loader (`src/vcfcf_supermetrics/loader.py`) enforces a subset of
 these rules. **The loader is not a full parser** — treat a
 successful `validate` as necessary but not sufficient. Always
 re-read the formula yourself.

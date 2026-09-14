@@ -34,7 +34,7 @@ them — that process defect is why this file exists as a PR.)
 
 - The GitHub landing page is a **product surface**. README renders below
   the file listing; today the listing is **42 tracked entries** (25
-  directories — ten of them `vcfops_*` — plus 17 files). Nobody scrolls
+  directories — ten of them `vcfcf_*` — plus 17 files). Nobody scrolls
   that. Success metric: a first-time visitor sees the README with at
   most one flick, and the README's first screen routes them ("want
   content → bundles repo; want to drive the factory → Getting_Started").
@@ -60,14 +60,14 @@ Deltas from today:
 
 | Change | Entries removed |
 |---|---|
-| `vcfops_*` × 10 → `src/` (names unchanged inside) | −9 |
+| `vcfcf_*` × 10 → `src/` (names unchanged inside) | −9 |
 | `rules/ lessons/ context/ designs/` → `knowledge/` | −3 |
 | Legacy stubs `dashboards/`, `views/` deleted | −2 |
 | `HOW_IT_WORKS.md`, `ROADMAP.md`, `vcf_ops_concepts.md` → `knowledge/` | −3 |
 | `pytest.ini`, `requirements.txt`, `requirements-dev.txt` → `pyproject.toml` | −3 (+1) |
 
 Explicitly **kept at root**: `third_party/` (machine-routed by
-`vcfops_packaging` — v1 decision stands), `bundles/` + `releases/`
+`vcfcf_packaging` — v1 decision stands), `bundles/` + `releases/`
 (publish pipeline inputs; merging them is a possible phase 3, not
 required), `memory/` (local-state home), `diagrams/` (small; candidate
 to fold later). Per-item content folders remain a **separate deferred
@@ -98,12 +98,12 @@ effort** — they change depth, not top-level row count.
 ### Phase 1 — `src/` (the −9 move)
 Mechanics: src-layout `pyproject.toml` declaring all ten packages with
 names unchanged; `pip install -e .` replaces `requirements.txt` manual
-path-dependency; every `python3 -m vcfops_<x>` invocation in CLAUDE.md /
+path-dependency; every `python3 -m vcfcf_<x>` invocation in CLAUDE.md /
 agents / CI / pak workflows keeps working verbatim.
 **Spike first, on a branch, before any sweep:**
-- `src/vcfops_managementpacks/buildkit.py` (build-buildkit packages the sdk
+- `src/vcfcf_managementpacks/buildkit.py` (build-buildkit packages the sdk
   tarball from package-relative paths — must use `__file__`, verify);
-- `scripts/*.sh` referencing `vcfops_*` paths; CI install step;
+- `scripts/*.sh` referencing `vcfcf_*` paths; CI install step;
   `Getting_Started.md` dev setup; editable-install behavior for the
   gitignored `adapter_runtime/` JARs inside the package tree.
 - pak repos are insulated (they consume the published buildkit tarball,
@@ -113,7 +113,7 @@ buildkit rebuild compared against the released 1.0.6 tarball.
 
 **Execution note (2026-07-08):** the spike ran and the move executed on
 `chore/reorg-v2-phase1-src` — all ten packages now live at
-`src/vcfops_<x>/`, names and `python3 -m vcfops_<x>` invocations
+`src/vcfcf_<x>/`, names and `python3 -m vcfcf_<x>` invocations
 unchanged. The install mechanism decided differs from the sketch above:
 **no package install at all** — `pip install -e .` was rejected because an
 editable install would leak the packages into every subprocess via

@@ -163,7 +163,7 @@ the factory ever runs concurrent sessions against one checkout.
 - `scripts/bootstrap_managed_paks.sh`, `scripts/bootstrap_references.sh`:
   state detection, `--ff-only` pull, daily stamp, per-clone setup on the
   skip path, structured output for the report.
-- `src/vcfops_common/doctor.py`: consume that output, own the
+- `src/vcfcf_common/doctor.py`: consume that output, own the
   ahead/behind and missing-registry lines, emit the single report.
 - `.claude/settings.json`: raise the SessionStart timeout from 60 to
   180, and pass the hook payload through so the script can route on

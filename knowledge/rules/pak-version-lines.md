@@ -31,7 +31,7 @@ Operational consequences:
 - RULE-012 (defect gate before `v*` tags) is unchanged and runs before
   any CI release build exists.
 
-Enforced mechanically by `vcfops_managementpacks` `build-sdk` (default
+Enforced mechanically by `vcfcf_managementpacks` `build-sdk` (default
 `0.x` stamp; release line requires the explicit CI opt-in). The
 mechanical guardrail does not relax the rule: if the tooling is ever
 found stamping `1.x` on a local build, that is a blocking framework

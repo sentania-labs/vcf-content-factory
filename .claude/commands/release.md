@@ -10,7 +10,7 @@ $ARGUMENTS
 
 ## Your job
 
-Wrap `python3 -m vcfops_packaging release` so the user can release a content
+Wrap `python3 -m vcfcf_packaging release` so the user can release a content
 item by typing a slash command. The CLI does all the actual work — your job
 is to parse the args, run the command, and report the result clearly.
 
@@ -49,7 +49,7 @@ if anything below is ambiguous.
 Invoke directly, passing $ARGUMENTS through:
 
 ```
-python3 -m vcfops_packaging release $ARGUMENTS
+python3 -m vcfcf_packaging release $ARGUMENTS
 ```
 
 If the user did not supply a `<type>` or `<name>`, the CLI errors with usage

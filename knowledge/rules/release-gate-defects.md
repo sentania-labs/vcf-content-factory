@@ -10,7 +10,7 @@ No artifact ships while `knowledge/context/defects.md` carries an **open
    of a push:
 
    ```
-   python3 -m vcfops_packaging defect-gate --pak <name>
+   python3 -m vcfcf_packaging defect-gate --pak <name>
    ```
 
    Non-zero exit = the release is refused. Fix or legitimately close the
@@ -24,7 +24,7 @@ No artifact ships while `knowledge/context/defects.md` carries an **open
    blocking defect naming that pak refuses it. An infrastructure problem
    must never stop someone pushing a fix.
 
-2. **`/release` and `/publish`.** The `vcfops_packaging` `release` and
+2. **`/release` and `/publish`.** The `vcfcf_packaging` `release` and
    `publish` commands run the same check mechanically and refuse,
    naming the open defect ids, when the item being released has an open
    blocking defect (matched by its `Affects:` token — pak name for

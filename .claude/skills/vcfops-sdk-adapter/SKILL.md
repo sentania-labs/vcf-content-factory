@@ -45,9 +45,9 @@ Cheap loop first — every structural error caught here is one not paid
 for at pak-install time:
 
 ```
-python3 -m vcfops_managementpacks validate-sdk content/sdk-adapters/<adapter>
-python3 -m vcfops_managementpacks build-sdk    content/sdk-adapters/<adapter> -o dist
-python3 -m vcfops_managementpacks pak-compare   dist/<built>.pak --reference-dir <ref-dir>
+python3 -m vcfcf_managementpacks validate-sdk content/sdk-adapters/<adapter>
+python3 -m vcfcf_managementpacks build-sdk    content/sdk-adapters/<adapter> -o dist
+python3 -m vcfcf_managementpacks pak-compare   dist/<built>.pak --reference-dir <ref-dir>
 ```
 
 `scaffold-sdk "<Name>"` generates a skeleton. **Zero BLOCKING from

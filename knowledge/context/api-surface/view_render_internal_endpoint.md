@@ -43,7 +43,7 @@ Auth:   vRealizeOpsToken (normal Suite API bearer — NOT a UI session)
   definition order, plus synthetic `summary`, `grandTotal`, `groupUUID`,
   `objUUID`. Each `cells` dict is keyed by those same column keys.
 - This is the **Suite API bearer** path — reuse
-  `vcfops_common.client.VCFOpsClient` directly; no `/ui/` session, no
+  `vcfcf_common.client.VCFOpsClient` directly; no `/ui/` session, no
   CSRF, no OPS_SESSION dance. Much cheaper than the UI route in
   `dashboard_delete_api.md`.
 
@@ -95,7 +95,7 @@ null expiration; see the closeout design note.)
 
 ```python
 import sys; sys.path.insert(0, "src")
-from vcfops_common.client import VCFOpsClient
+from vcfcf_common.client import VCFOpsClient
 c = VCFOpsClient.from_env(profile="devel", default_profile="devel")
 c.authenticate()
 r = c._request("GET", f"/internal/views/{VIEW_UUID}/data/export",

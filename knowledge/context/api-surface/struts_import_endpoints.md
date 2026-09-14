@@ -267,8 +267,8 @@ that's the supported path.
 
 Because no UI import endpoint works, qa-tester should reuse the
 existing REST client code in `install.py` and in the
-`vcfops_dashboards`, `vcfops_supermetrics`, `vcfops_alerts`,
-`vcfops_reports`, `vcfops_customgroups`, `vcfops_symptoms` packages.
+`vcfcf_dashboards`, `vcfcf_supermetrics`, `vcfcf_alerts`,
+`vcfcf_reports`, `vcfcf_customgroups`, `vcfcf_symptoms` packages.
 The minimal pattern for a "UI realism" mode of qa-tester is:
 
 ```python
@@ -278,14 +278,14 @@ The minimal pattern for a "UI realism" mode of qa-tester is:
 # content-zip envelope path the installer uses, and record in the
 # test report that "no per-object UI endpoint exists in 9.0.2".
 
-from vcfops_packaging.templates.install import (
+from vcfcf_packaging.templates.install import (
     UIClient,                    # for dashboard/view delete cleanup
     _build_sm_zip,               # SM envelope builder
     _build_views_inner_zip,      # views inner content.xml
     _build_dashboard_inner_zip,  # dashboard inner JSON
     # etc.
 )
-from vcfops_dashboards.client import VCFOpsClient  # for REST import
+from vcfcf_dashboards.client import VCFOpsClient  # for REST import
 
 client = VCFOpsClient.from_env()
 # Upload the same content-zip envelope the real install does.
@@ -359,7 +359,7 @@ The inner keys are resource kind strings. The leaf values are lists of view
 summary dicts, each with at minimum `id` and `name`.
 
 **Failure mode**: iterating the top-level dict yields string keys. The old
-`_resolve_view_ids` in `src/vcfops_dashboards/cli.py` tested each `item` for
+`_resolve_view_ids` in `src/vcfcf_dashboards/cli.py` tested each `item` for
 `isinstance(item, dict)` or `isinstance(item, list)` — string keys matched
 neither branch, so `all_views` stayed empty and every name lookup returned
 `[]`. Result: `list-views` and `delete-view` silently found nothing.

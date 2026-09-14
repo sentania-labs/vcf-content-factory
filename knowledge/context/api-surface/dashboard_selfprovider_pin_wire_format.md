@@ -38,7 +38,7 @@ Plus two prerequisite checks (both green):
 
 ## The precise wire-format delta (this is the tooling brief input)
 
-Read from `src/vcfops_dashboards/render.py` at HEAD, compared to the
+Read from `src/vcfcf_dashboards/render.py` at HEAD, compared to the
 vendor export. **Note the installed pak (0.0.0.10) is OLDER than HEAD**
 — its cloned export shows the View widget with `selfProvider:false,
 resource:null` and HealthCharts with `resource:[]` (no pin emitted at
@@ -79,7 +79,7 @@ Vendor (working):
 > top-level `config.traversalSpecId` is **`null`**, even on this
 > fully-bound pin — the spec string lives **only** in the nested
 > `config.resource.traversalSpecId`. `refreshContent` is also `false` on
-> this widget, not `true`. `src/vcfops_dashboards/render.py` was corrected
+> this widget, not `true`. `src/vcfcf_dashboards/render.py` was corrected
 > to match (commit on `fix/dashboard-selfprovider-pin-wire-format`): the
 > `_VIEW_PIN_TRAVERSAL_SPEC` enrichment now applies to the nested site
 > only; top-level `traversalSpecId` is unconditionally `null` and
@@ -235,7 +235,7 @@ dashboard/dashboard.json                     # {"entries":{...}, "dashboards":[.
 dashboard/resources/resources.properties     # localization stub
 ```
 devel admin `userId` = `29c1613f-3bbe-4aa0-8236-2c74db22c661`.
-`import_content_zip()` in `src/vcfops_dashboards/client.py` handles the
+`import_content_zip()` in `src/vcfcf_dashboards/client.py` handles the
 `contentFile` field + `Content-Type: None` override + poll.
 
 ## Why binding is browser-only observable (important)
