@@ -423,3 +423,88 @@ class TestCorruptCacheFile:
         assert list(doc["metrics"]) == ["cpu|usage_average"]
         err = capsys.readouterr().err
         assert "corrupt" in err and "overwriting" in err
+
+
+# ---------------------------------------------------------------------------
+# M2 row 3 side item: a refresh that would change nothing but fetched_at
+# leaves the file alone (a credentialed build used to dirty ten cache files)
+# ---------------------------------------------------------------------------
+
+class TestRefreshSkipsTimestampOnlyRewrites:
+
+    def _live(self):
+        stats = [_entry(k, v["name"], v["default_monitored"]) for k, v in _SEED_METRICS.items()]
+        props = [_entry(k, v["name"], v["default_monitored"], v["instance_type"]) for k, v in _SEED_PROPERTIES.items()]
+        return stats, props
+
+    def test_second_identical_refresh_is_a_no_op_on_disk(self, tmp_path, capsys):
+        cache_dir = _seed_cache(tmp_path, extra={"merged_from": list(_MERGED_FROM), "merge_note": "kept"})
+        path = cache_dir / "VMWARE" / "HostSystem.json"
+        stats, props = self._live()
+
+        # First refresh from this host: adds the host's merged_from refresh
+        # entry (new counts, new source), so the file is rewritten.
+        DescribeCache(cache_dir=cache_dir, client=_make_client(stats, props)).refresh("VMWARE", "HostSystem")
+        first = path.read_bytes()
+        first_doc = json.loads(first)
+        assert first_doc["merged_from"][-1]["role"] == "refresh"
+        assert "not rewritten" not in capsys.readouterr().out
+
+        # Second refresh, same instance, same answer: only the two fetched_at
+        # stamps would change, so nothing is written.
+        path.write_bytes(first)
+        before_stat = path.stat()
+        DescribeCache(cache_dir=cache_dir, client=_make_client(stats, props)).refresh("VMWARE", "HostSystem")
+        out = capsys.readouterr().out
+        assert path.read_bytes() == first
+        assert path.stat().st_mtime_ns == before_stat.st_mtime_ns
+        assert "cache file unchanged, not rewritten" in out
+
+        # Third refresh: still a no-op (the no-op path does not accumulate state).
+        DescribeCache(cache_dir=cache_dir, client=_make_client(stats, props)).refresh("VMWARE", "HostSystem")
+        assert path.read_bytes() == first
+
+    def test_a_real_change_is_still_written(self, tmp_path, capsys):
+        cache_dir = _seed_cache(tmp_path)
+        path = cache_dir / "VMWARE" / "HostSystem.json"
+        stats, props = self._live()
+        DescribeCache(cache_dir=cache_dir, client=_make_client(stats, props)).refresh("VMWARE", "HostSystem")
+        first = path.read_bytes()
+        stats2 = stats + [_entry("NTP|DRIFT_IN_MILLS", "NTP|Drift (ms)", True)]
+        DescribeCache(cache_dir=cache_dir, client=_make_client(stats2, props)).refresh("VMWARE", "HostSystem")
+        assert path.read_bytes() != first
+        assert "NTP|DRIFT_IN_MILLS" in _read(cache_dir)["metrics"]
+        assert "not rewritten" not in capsys.readouterr().out
+        # A flag flip on an existing key is a change too.
+        stats3 = [_entry(k, v["name"], not v["default_monitored"]) if k == "gpu|utilization"
+                  else _entry(k, v["name"], v["default_monitored"]) for k, v in _SEED_METRICS.items()]
+        stats3.append(_entry("NTP|DRIFT_IN_MILLS", "NTP|Drift (ms)", True))
+        second = path.read_bytes()
+        DescribeCache(cache_dir=cache_dir, client=_make_client(stats3, props)).refresh("VMWARE", "HostSystem")
+        assert path.read_bytes() != second
+        assert _read(cache_dir)["metrics"]["gpu|utilization"]["default_monitored"] is True
+
+    def test_in_memory_layer_is_still_invalidated_on_the_no_op_path(self, tmp_path):
+        cache_dir = _seed_cache(tmp_path)
+        stats, props = self._live()
+        cache = DescribeCache(cache_dir=cache_dir, client=_make_client(stats, props))
+        cache.refresh("VMWARE", "HostSystem")
+        assert cache.resolve_metric("VMWARE", "HostSystem", "cpu|usage_average") is not None
+        assert ("VMWARE", "HostSystem") in cache._cache
+        cache.refresh("VMWARE", "HostSystem")  # no-op on disk
+        assert ("VMWARE", "HostSystem") not in cache._cache
+        assert cache.resolve_metric("VMWARE", "HostSystem", "cpu|usage_average").default_monitored is True
+
+    def test_same_but_fetched_at_helper(self):
+        from vcfcf_packaging.describe import _same_but_fetched_at
+        a = {"fetched_at": "1", "metrics": {"k": 1},
+             "merged_from": [{"role": "primary", "source": "x"}, {"role": "refresh", "source": "y", "fetched_at": "1", "counts": {}}]}
+        b = json.loads(json.dumps(a))
+        b["fetched_at"] = "2"
+        b["merged_from"][1]["fetched_at"] = "2"
+        assert _same_but_fetched_at(a, b)
+        b["merged_from"][1]["counts"] = {"metrics": {"added": 1}}
+        assert not _same_but_fetched_at(a, b)
+        assert not _same_but_fetched_at({}, a)
+        assert _same_but_fetched_at({"metrics": {}}, {"metrics": {}, "fetched_at": "3"})
+

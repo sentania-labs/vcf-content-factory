@@ -48,6 +48,25 @@ _REPO_ROOT = Path(__file__).parent.parent.parent
 _DEFAULT_CACHE_ROOT = _REPO_ROOT / "knowledge" / "context" / "adapter_describe_cache"
 
 
+def _same_but_fetched_at(existing_doc: dict, cache_doc: dict) -> bool:
+    """True when ``cache_doc`` differs from ``existing_doc`` only in the
+    top-level ``fetched_at`` and the ``fetched_at`` of ``merged_from``
+    entries. Everything else (keys, values, counts, retained sets, entry
+    order, hand-written entries) must be equal."""
+    def strip(doc: dict) -> dict:
+        out = dict(doc)
+        out.pop("fetched_at", None)
+        entries = []
+        for entry in out.get("merged_from") or []:
+            if isinstance(entry, dict):
+                entry = {k: v for k, v in entry.items() if k != "fetched_at"}
+            entries.append(entry)
+        if "merged_from" in out or entries:
+            out["merged_from"] = entries
+        return out
+    return strip(existing_doc) == strip(cache_doc)
+
+
 class DescribeCache(_core.DescribeCache):
     """Describe-surface cache: the core reader plus the factory's default
     location and the live refresh.
@@ -324,11 +343,18 @@ class DescribeCache(_core.DescribeCache):
             "properties": merged_props,
         })
 
-        cache_path.parent.mkdir(parents=True, exist_ok=True)
-        cache_path.write_text(
-            json.dumps(cache_doc, indent=2, sort_keys=True),
-            encoding="utf-8",
-        )
+        # M2 row 3 side item: when the only difference between the file on
+        # disk and the merged document is the two ``fetched_at`` stamps (top
+        # level and this host's ``merged_from`` refresh entry), leave the file
+        # alone. Every credentialed build refreshes the pairs it references,
+        # and a timestamp-only rewrite dirtied ten cache files per build.
+        unchanged = cache_path.exists() and _same_but_fetched_at(existing_doc, cache_doc)
+        if not unchanged:
+            cache_path.parent.mkdir(parents=True, exist_ok=True)
+            cache_path.write_text(
+                json.dumps(cache_doc, indent=2, sort_keys=True),
+                encoding="utf-8",
+            )
 
         # Invalidate in-memory layers so the next resolve_metric reloads.
         self.invalidate(adapter_kind, resource_kind)
@@ -376,10 +402,11 @@ class DescribeCache(_core.DescribeCache):
         local_summary = (
             f"; {skipped_local} instance-local key(s) skipped" if skipped_local else ""
         )
+        unchanged_summary = "; cache file unchanged, not rewritten" if unchanged else ""
         print(
             f"  refreshed describe cache: {pair_label}: "
             f"{len(merged_metrics)} metric keys{_summarize(metric_stats)}; "
-            f"{prop_summary}{local_summary}"
+            f"{prop_summary}{local_summary}{unchanged_summary}"
         )
 
     def refresh_all(
