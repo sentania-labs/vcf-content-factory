@@ -31,7 +31,7 @@ if [ -z "${CHANGED}" ]; then
   exit 0
 fi
 
-# Did the change touch framework Python? The ten vcfcf_* packages live
+# Did the change touch framework Python? The ten vcfcf_* packages and the vcfcf_core library live
 # under src/ (see pyproject.toml src-layout). src/vcfops_*/ are the M1
 # compatibility shims; guard them too until they are removed.
 FRAMEWORK_HITS="$(printf '%s\n' "${CHANGED}" | grep -E '^src/(vcfcf|vcfops)_[^/]+/' || true)"

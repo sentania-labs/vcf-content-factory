@@ -51,10 +51,10 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Build wheel and sdist
+      - name: Build wheel
         run: |
           python -m pip install --upgrade pip build
-          python -m build
+          python -m build --wheel
           ls -l dist/
           # The wheel must contain vcfcf_core and nothing else from src/.
           python - <<'PY'
@@ -87,9 +87,9 @@ jobs:
         run: |
           TAG="${{ github.ref_name }}"
           if gh release view "$TAG" --repo "${{ github.repository }}" >/dev/null 2>&1; then
-            gh release upload "$TAG" dist/* --clobber --repo "${{ github.repository }}"
+            gh release upload "$TAG" dist/*.whl --clobber --repo "${{ github.repository }}"
           else
-            gh release create "$TAG" dist/* \
+            gh release create "$TAG" dist/*.whl \
               --repo "${{ github.repository }}" \
               --title "vcf-cf-tooling-core $TAG" \
               --notes "Python wheel for the vcfcf_core library. Install: pip install <wheel URL>. Design: knowledge/designs/tooling-core-carveout-v1.md"
