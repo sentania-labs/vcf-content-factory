@@ -98,7 +98,7 @@ python3 -m vcfcf_extractor extract dashboard \
 
 If the extractor emits WARNs (e.g. about a specific widget type needing review, or about a suspected custom group that wasn't extracted), surface them to the user verbatim — don't filter. The extractor's contract is honest reporting; the user decides whether to proceed.
 
-If the extractor reports that it skipped content because the UUID already exists under the factory's first-party trees (`supermetrics/`, `views/`, etc.), surface those skip WARNs and the affected paths — that's a signal the user may want to reconcile.
+If the extractor reports that it skipped content because the UUID already exists under the factory's first-party trees (`content/supermetrics/`, `content/views/`, `content/dashboards/`), surface those skip WARNs and the affected paths: that's a signal the user may want to reconcile.
 
 ### 6. Resolve the build decision
 
@@ -142,7 +142,7 @@ Final summary:
 - **User bails mid-interview**: capture whatever was collected, print a recap so it's not lost, offer to resume with the values pre-filled.
 - **Extractor returns non-zero exit**: surface the full stderr, don't auto-retry. The error is likely a credentials issue, a missing dashboard, or an endpoint quirk the CLI can't handle. The user decides next steps.
 - **Bundle slug collision**: if `bundles/third_party/<slug>/` already exists, ask whether to overwrite, pick a new slug, or abort. Never silently overwrite.
-- **Dashboard has unsupported widget types**: the extractor emits WARN and best-effort YAML per `vcfcf_dashboards/reverse.py`. Surface the WARN; user may want to hand-edit the emitted YAML before building.
+- **Dashboard has unsupported widget types**: the extractor emits WARN and best-effort YAML per `vcfcf_core/dashboards/reverse.py`. Surface the WARN; user may want to hand-edit the emitted YAML before building.
 
 ## Old-school equivalent
 

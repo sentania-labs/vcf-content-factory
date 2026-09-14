@@ -72,12 +72,23 @@ row; the zip comparison from M1 is the proof each time.
 | 1 | Scaffold, contract test, wheel build in CI on `core-v*`. Plus the modules with no leaks and no imports outside the row: `dashboards/yaml_utils`, `supermetrics/crossref`, `symptoms/loader`, `alerts/loader`, `alerts/render`, `packaging/release_types`, `packaging/template_version`. (Row 1 as built, 2026-09-14: `supermetrics/reverse`, `reports/render`, and `packaging/deps` import row-3 loaders at runtime, so they move with row 3) | none; this PR proves the mechanism. **Done 2026-09-14, PR #161**: wheel gate green in CI, Codex clean, not yet tagged |
 | 2 | `dashboards/reverse`, `dashboards/render`, `dashboards/packager`, the parse half of `dashboards/loader`, the pure half of `dashboards/summary_bind` | `render.py` scans `content/supermetrics` relative to the working directory when unscoped; the SM map becomes a required argument. `loader.py` writes a minted id back into the YAML during load; minting moves to the factory's CLI layer. **Done 2026-09-14, PR #162**: both leaks fixed (SM map is a render argument, minting and provenance are callbacks the factory wrapper supplies), three bundles and the standalone package zip byte-identical to main apart from the build timestamp, buildkit copies the core loader/renderer so an adapter YAML without an id now fails the pak build instead of being minted in CI |
 | 3 | Pure halves of `common/dep_walker` (collect, extract refs, expand, scope), `packaging/describe` (resolve, disk load, merge), `packaging/audit`, `common/provenance`, parse halves of `supermetrics/loader`, `customgroups/loader`, `reports/loader`, `packaging/loader`; with them `supermetrics/reverse`, `reports/render`, `packaging/deps` (deferred from row 1); the in-memory zip assembly and manifest writer from `packaging/builder` and `discrete_builder` | `describe` defaults its cache dir to `knowledge/context/...`; becomes required. `provenance` sniffs for a repo root; becomes required. The three loaders default to `content/...` directories; become required. `vcfcf_common/__init__` stops importing `.env` machinery eagerly. **Done 2026-09-14, PR #163**: every root and directory is a required argument in the library, factory wrappers keep the old defaults, zip assembly and the manifest writer live in `packaging/assembly.py`, describe refresh no longer rewrites a cache file when only the timestamp would change, three bundles plus the standalone and discrete zips byte-identical to main apart from timestamps |
-| 4 | Extractor's pure parsers (`_parse_view_xml` and friends, `_widget_to_yaml_dict`, `_emit_view_extras`) and `reverse_local` | `extractor.py` binds a repo root at import time; the pure parsers leave, the root stays behind. This row is what gives the migrator its offline read path |
+| 4 | Extractor's pure parsers (`_parse_view_xml` and friends, `_widget_to_yaml_dict`, `_emit_view_extras`) and `reverse_local` | `extractor.py` binds a repo root at import time; the pure parsers leave, the root stays behind. This row is what gives the migrator its offline read path. **Done 2026-09-14, PR pending**: pure parsers, YAML writers, export-zip readers and the whole offline reverse live in `vcfcf_core/extractor/`; a seam test installs the wheel alone into a bare site and proves the offline reverse produces byte-identical YAML to the factory path; the extractor's skip-if-already-authored check, inert since the v3 `content/` move, works again |
 | 5 (later) | Management pack pure set: `loader`, `render`, `render_export`, `render_template`, `extract`, `pak_compare`, `pak_validator`, `sdk_project`, `docs_gen` | none in the code; deferred because the migrator MVP does not need it |
 
 After row 4 the migrator (M3, M4) has everything it needs: read an
 export zip offline, walk the graph, render previews, assemble an import
 bundle.
+
+Notes for the migrator, from the row 4 review:
+
+- The library never mints ids. A source dashboard with no id comes out
+  as `id: ''` with an ERROR verdict; the migrator supplies its own
+  `on_missing_id` callback if it wants ids minted.
+- `reverse_local_port` wants a directory of super metric YAML;
+  `vcfcf_core.extractor.extractor._write_sm_yaml` materializes one from
+  the export's super metric dict.
+- `reverse_local_port` returns 0 on an ERROR verdict (pre-existing);
+  the migrator reads the verdicts, not the exit code.
 
 ## What stays put and why
 
