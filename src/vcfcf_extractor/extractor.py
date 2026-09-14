@@ -706,6 +706,14 @@ def extract_dashboard(
     existing_view_ids = _scan_existing_ids("view", _REPO_ROOT)
     existing_dash_ids = _scan_existing_ids("dashboard", _REPO_ROOT)
 
+    # The dashboard itself is subject to the same invariant as its views and
+    # super metrics: already authored under content/dashboards means its
+    # YAML is not written (WARN, same shape); the dependency walk, the views
+    # and SMs it still needs, and the manifest proceed as usual.
+    dashboard_existing_path: Optional[Path] = existing_dash_ids.get(dashboard_id.lower())
+    if dashboard_existing_path is not None:
+        _warn(f"dashboard {dashboard_id} already exists at {dashboard_existing_path}; skipping")
+
     # -----------------------------------------------------------------------
     # BFS dependency walk
     # -----------------------------------------------------------------------
@@ -983,7 +991,10 @@ def extract_dashboard(
     print()
 
     print(f"Dashboard YAML (widget graph extracted from getDashboardConfig):")
-    print(f"  + {display_name}  ({dashboard_id})")
+    if dashboard_existing_path is not None:
+        print(f"  - SKIP {dashboard_id}: {dashboard_existing_path}")
+    else:
+        print(f"  + {display_name}  ({dashboard_id})")
     print()
 
     if dry_run:
@@ -994,7 +1005,7 @@ def extract_dashboard(
     # Confirmation (no interactive prompts -- require --yes flag)
     # -----------------------------------------------------------------------
     if not yes:
-        total_files = len(sm_results) + len(view_results) + 1  # +1 for dashboard
+        total_files = len(sm_results) + len(view_results) + (0 if dashboard_existing_path is not None else 1)
         print(
             f"\nWould write {total_files} YAML file(s) under {slug_dir}"
         )
@@ -1105,15 +1116,17 @@ def extract_dashboard(
         view_file_paths.append(rel)
         _info(f"wrote {path}")
 
-    # Dashboard
-    dash_subdir = slug_dir / "dashboards"
-    dash_name_safe = _safe_filename(display_name)
-    dash_filename = f"{dash_name_safe}.yaml"
-    dash_path = dash_subdir / dash_filename
-    dash_data["id"] = dashboard_id
-    _write_dashboard_yaml(dash_path, dash_data, dashboard_id, view_results, factory_native=False)
-    dash_file_paths.append(f"dashboards/{dash_filename}")
-    _info(f"wrote {dash_path}")
+    # Dashboard (skipped when already authored under content/dashboards;
+    # the WARN was emitted at scan time and the plan shows the SKIP line)
+    if dashboard_existing_path is None:
+        dash_subdir = slug_dir / "dashboards"
+        dash_name_safe = _safe_filename(display_name)
+        dash_filename = f"{dash_name_safe}.yaml"
+        dash_path = dash_subdir / dash_filename
+        dash_data["id"] = dashboard_id
+        _write_dashboard_yaml(dash_path, dash_data, dashboard_id, view_results, factory_native=False)
+        dash_file_paths.append(f"dashboards/{dash_filename}")
+        _info(f"wrote {dash_path}")
 
     # -----------------------------------------------------------------------
     # Enablement walk: collect all metric refs and check defaultMonitored
