@@ -5,7 +5,10 @@ CustomGroupDef), this module:
 
   1. Extracts every dependency that requires an instance-side capability to
      be active:
-       - Super metric references (must be enabled on the target policy)
+       - Super metric references (must be enabled on the target policy),
+         including @supermetric:"<name>" formula cross-references, which are
+         resolved against the sync batch, the repo SM YAML, then the target
+         instance, and reported as a missing referent when none knows the name
        - OOTB metric references (must be collected — defaultMonitored may be false)
        - Custom group references (view-scoped groups must exist on the target)
 
@@ -228,17 +231,39 @@ def _extract_sm_uuid(key: str) -> Optional[str]:
 
 def extract_refs_from_supermetrics(
     defs: "List[SuperMetricDef]",
+    sm_name_map: Optional[dict] = None,
 ) -> Tuple[List[SmRef], List[MetricRef]]:
     """Extract SM-to-SM and SM-to-OOTB-metric references from SM formulas.
 
-    SM formulas reference other SMs as ``attribute=sm_<uuid>`` inside
-    ${...} resource entries, and reference OOTB metrics as
-    ``metric=<key>`` with an adaptertype/objecttype context.
+    SM formulas reference other SMs either pre-resolved, as
+    ``attribute=sm_<uuid>`` inside ${...} resource entries, or by name with
+    the authoring-time token ``@supermetric:"<name>"``; and reference OOTB
+    metrics as ``metric=<key>`` with an adaptertype/objecttype context.
+
+    A name-keyed reference yields an SmRef whose ``name`` is the referenced
+    display name and whose ``sm_id`` is resolved from ``sm_name_map`` (a
+    ``{name: uuid}`` dict) or from ``defs`` themselves; when neither knows
+    the name, ``sm_id`` is empty and the caller decides what that means
+    (``walk_and_check`` tries the target instance, then reports it).
     """
+    from vcfops_supermetrics.crossref import crossref_names
+
+    _names: dict = dict(sm_name_map or {})
+    for d in defs:
+        if d.name and d.id and d.name not in _names:
+            _names[d.name] = d.id
+
     sm_refs: List[SmRef] = []
     metric_refs: List[MetricRef] = []
     for sm in defs:
         formula = sm.formula or ""
+        for ref_name in crossref_names(formula):
+            uid = _names.get(ref_name) or ""
+            sm_refs.append(SmRef(
+                sm_id=uid.lower(),
+                name=ref_name,
+                source=f"SM '{sm.name}' formula",
+            ))
         for entry_match in _FORMULA_METRIC_RE.finditer(formula):
             raw = entry_match.group(0)
             inner = raw[2:-1]  # strip ${...}
@@ -410,9 +435,9 @@ def _walk_sm_crossrefs(
     A referent whose name is not in ``sm_by_name`` is recorded in ``errors``
     and the walk continues, so the caller sees every missing name in one pass.
 
-    Token semantics come from ``vcfops_supermetrics.crossref.SM_CROSSREF_RE``:
-    the ``@supermetric`` token is case-insensitive, the quoted name is matched
-    exactly against the SM display name.  Cycles terminate via a visited set
+    Tokens are found with ``vcfops_supermetrics.crossref.crossref_names`` (the
+    ``SM_CROSSREF_RE`` match): the ``@supermetric`` token is case-insensitive,
+    the quoted name is matched exactly against the SM display name.  Cycles terminate via a visited set
     keyed on the SM id (falling back to the name for id-less fixtures).
     """
     from vcfops_supermetrics.crossref import crossref_names
@@ -696,6 +721,7 @@ def collect_deps(
     needed_views: "dict" = {}       # name -> ViewDef
     needed_sms: "dict" = {}         # id -> SuperMetricDef
     needed_cgs: "dict" = {}         # name -> CustomGroupDef
+    _sm_scope_rejected: Set[Tuple[str, str]] = set()  # (uuid, source) already reported
 
     # --- Step 1: dashboard → view names ------------------------------------
     view_names = extract_view_names_from_dashboards(dashboards)
@@ -749,7 +775,14 @@ def collect_deps(
                 _cl_sms,
             )
             if err:
-                graph.errors.append(err)
+                # Name the referrer: for a formula cross-reference the
+                # referring SM is the only pointer an operator has to where
+                # the out-of-scope name came from.  One line per (referent,
+                # referrer): a formula that names the same SM twice does
+                # not repeat itself.
+                if (sm_uuid, source) not in _sm_scope_rejected:
+                    _sm_scope_rejected.add((sm_uuid, source))
+                    graph.errors.append(f"{source}: {err}")
                 return False
         needed_sms[sm_uuid] = sm
         return True
@@ -963,6 +996,30 @@ def _fetch_describe(client: "VCFOpsClient", adapter_kind: str, resource_kind: st
 # SM enablement helper (thin wrapper over client method)
 # ---------------------------------------------------------------------------
 
+def _lookup_sm_uuid_on_target(
+    client: "VCFOpsClient",
+    sm_name: str,
+    result: WalkResult,
+) -> Optional[str]:
+    """Resolve an SM display name to its UUID on the target instance.
+
+    Uses the SM client's ``find_by_name`` (exact name; raises on a duplicate
+    name rather than guessing).  Returns None when the client cannot look
+    names up, the name is absent, or the lookup fails; a failure is recorded
+    on ``result`` so the operator sees why the name went unresolved.
+    """
+    find = getattr(client, "find_by_name", None)
+    if find is None:
+        return None
+    try:
+        hit = find(sm_name)
+    except Exception as e:  # VCFOpsError on ambiguity or transport failure
+        result._msg("ERROR", f"lookup of super metric '{sm_name}' on target failed: {e}")
+        return None
+    uid = (hit or {}).get("id") or None
+    return uid.lower() if uid else None
+
+
 def _resolve_sm_name(client: "VCFOpsClient", sm_uuid: str) -> Optional[str]:
     """Look up SM display name from UUID via GET /api/supermetrics/{id}."""
     try:
@@ -1068,7 +1125,7 @@ def walk_and_check(
     sm_refs_all: List[SmRef] = []
     metric_refs_all: List[MetricRef] = []
 
-    sm_r, m_r = extract_refs_from_supermetrics(supermetrics)
+    sm_r, m_r = extract_refs_from_supermetrics(supermetrics, sm_name_map=_sm_name_map)
     sm_refs_all.extend(sm_r)
     metric_refs_all.extend(m_r)
 
@@ -1079,6 +1136,33 @@ def walk_and_check(
     sm_r, m_r = extract_refs_from_dashboards(dashboards)
     sm_refs_all.extend(sm_r)
     metric_refs_all.extend(m_r)
+
+    # --- Phase 1b: name-only SM refs (@supermetric:"<name>" tokens) --------
+    # A referent that is neither in this batch nor in the repo SM YAML may
+    # still exist on the target (the push-time resolver falls back to
+    # find_by_name the same way).  Resolve it here so the policy check below
+    # covers it; when nothing knows the name, say so up front, naming the
+    # referrer and the referent, instead of letting the push fail later.
+    _remote_by_name: dict = {}
+    for ref in sm_refs_all:
+        if ref.sm_id or not ref.name:
+            continue
+        if ref.name not in _remote_by_name:
+            _remote_by_name[ref.name] = _lookup_sm_uuid_on_target(
+                client, ref.name, result
+            )
+        uid = _remote_by_name[ref.name]
+        if uid:
+            ref.sm_id = uid
+            _uuid_to_name[uid] = ref.name
+        else:
+            result._msg(
+                "ERROR",
+                f"{ref.source} references @supermetric:\"{ref.name}\" but no "
+                f"super metric with that name is in this sync batch, in the "
+                f"repo SM YAML, or on the target instance. Sync that super "
+                f"metric first, or fix the name in the formula."
+            )
 
     # Deduplicate SM refs by UUID, collecting sources
     sm_by_uuid: dict = {}
