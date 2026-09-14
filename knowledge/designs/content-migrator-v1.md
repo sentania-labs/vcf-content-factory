@@ -216,6 +216,17 @@ A translation counts as done only when both tiers pass.
   8.x export from the corpus imports cleanly into 9.x and the
   dashboards render.
 
+## Release log
+
+- **v0.0.1** (2026-09-14): M3 skeleton, PR #1 merged with a clean Codex
+  pass. Proves the release path: four one-file binaries (Linux, macOS
+  arm64, macOS x86_64, Windows) plus the wheel. Authorization: Scott,
+  verbatim, "go ahead and create the repo and start work, i'll get you
+  an export", then "sounds good" to "I'll tag `v0.0.1` to prove the
+  four-binary release. That tag is on a repo you just authorized me to
+  create and start work in, so I'll treat it as covered unless you say
+  otherwise."
+
 ## Open items for Scott
 
 - Where the 8.x export zips are on the workstation, so the corpus
