@@ -138,3 +138,39 @@ class TestViewColumnNameCaseIsExact:
         lower = _render(tmp_path, f'{token}:"{lower_name}"', [ref, other])
         assert f'value="Super Metric|sm_{self.OTHER_UUID}"' in lower, lower
         assert REF_UUID not in lower, lower
+
+
+class TestViewColumnLooseSpellingsFailLoudly:
+    """Review of #146, WARNING 1. deps._is_sm_ref only checks a lowercased
+    prefix, so these spellings are skipped by the dependency audit. The
+    render gate (_SM_COLUMN_PREFIX_RE) must therefore be at least as wide,
+    so they land in the SM branch and hit the malformed-reference ValueError
+    instead of falling through to a literal attributeKey with rollUpType AVG.
+    """
+
+    @pytest.mark.parametrize("attribute", [
+        f'supermetric: "{REF_NAME}"',    # space after the colon
+        f"supermetric:{REF_NAME}",       # unquoted name
+        f'SuperMetric : "{REF_NAME}"',   # space before the colon, mis-cased
+        f'@supermetric: "{REF_NAME}"',   # formula-token near-miss
+        f"@supermetric:{REF_NAME}",      # formula-token unquoted
+    ])
+    def test_loose_form_is_a_malformed_reference_error(self, tmp_path, attribute):
+        ref = _sm_file(tmp_path, REF_UUID, REF_NAME)
+        with pytest.raises(ValueError, match="malformed supermetric"):
+            _render(tmp_path, attribute, [ref])
+
+    @pytest.mark.parametrize("token", ["@supermetric", "@SuperMetric", "@SUPERMETRIC"])
+    def test_well_formed_at_sign_form_resolves(self, tmp_path, token):
+        """deps._is_sm_ref already treats @supermetric:"X" in a column as an
+        SM reference; render agrees and resolves it, the way it forgives
+        token case, rather than erroring on the one extra character."""
+        ref = _sm_file(tmp_path, REF_UUID, REF_NAME)
+        xml = _render(tmp_path, f'{token}:"{REF_NAME}"', [ref])
+        assert f'<Property name="attributeKey" value="{RESOLVED_KEY}"/>' in xml, xml
+        assert "supermetric" not in xml.lower(), xml
+
+    def test_at_sign_form_wrong_case_name_still_hard_errors(self, tmp_path):
+        ref = _sm_file(tmp_path, REF_UUID, REF_NAME)
+        with pytest.raises(ValueError, match="not in the bundle scope"):
+            _render(tmp_path, f'@supermetric:"{REF_NAME.lower()}"', [ref])

@@ -136,6 +136,9 @@ such as `criticality`, `time_window`, `date_range`, `alert_types`,
 PYTHONHASHSEED-salted and changed on every interpreter run). The rendered
 `dashboard/dashboard.json` and `views.zip/content.xml` are now
 byte-identical across runs with no `PYTHONHASHSEED` workaround; diff
-renders directly. The one remaining per-run difference in a `package` zip
-is the outer marker member name (`<time_ns>L.v1`, `packager.py`), which
-the sync path replaces with the target instance's real marker anyway.
+those two payloads directly. The `package` zip as a whole is still not
+byte-identical: the outer marker member name (`<time_ns>L.v1`,
+`packager.py`, replaced by the target instance's real marker on sync) and
+the zip member timestamps of the nested containers (`views.zip`,
+`dashboards/<uuid>`) both carry the build time. Compare the extracted
+`dashboard.json` and `content.xml`, not the zip bytes.

@@ -1146,3 +1146,36 @@ reused. Field lines are `- **Field:** value` (parsed by
   passthrough; the widget populates only when `vcommunity-os` is installed)
   or removes the widget; version bump and CI release; managementpacks
   validate passes for all Tier 2 paks.
+
+### DEF-021
+
+- **Title:** `vcommunity-vsphere` view "Report: Distributed Switch for CSV
+  export" writes four super metric columns in the unquoted form
+  `attribute: supermetric:Number of VM` (also `Number of Port Groups`,
+  `Total Network Configuration Issues`, `Total Non-default Settings`);
+  every build shipped the literal string as the column `attributeKey`
+  with `rollUpType AVG`, which renders as a blank column on the instance
+- **Severity:** blocking
+- **Status:** open
+- **Affects:** vcommunity-vsphere
+- **First-seen:** the build that ported the vendor Distributed Switch
+  report (that repo's CHANGELOG line ~348 records the intent as the quoted
+  `supermetric:"<name>"` form); detected 2026-09-14.
+- **Source:** `knowledge/context/reviews/framework/render-sm-refs-stable-ids-146-147-148-2026-09-14.md`
+  WARNING 1 (loose view-column spellings pass the dependency audit and
+  miss the renderer's SM branch). Same reports-green-while-broken class as
+  issue #146.
+- **Summary:** Location: `content/sdk-adapters/vcommunity-vsphere/views/Report Distributed Switch for CSV export.yaml`
+  lines 15, 19, 39, 43. `vcfops_packaging.deps._is_sm_ref` classified the
+  prefix as an SM reference and skipped it; `render._xml_attribute_item`
+  required a quote after the colon and fell through to the plain-metric
+  branch. Exposed by the widened SM-column gate on branch
+  `fix/146-147-148-render-sm-refs-stable-ids`, which now fails the
+  validate chain on this pak with "malformed supermetric reference"
+  instead of shipping the defect. All four SM names exist in the pak's
+  own `supermetrics/` with exactly that casing, so the fix is quoting.
+  Repo-wide: the other 28 SM column references across all six paks are
+  quoted; these four are the only loose spellings.
+- **Close condition:** `sdk-adapter-author` changes the four attributes to
+  `supermetric:"<name>"`; version bump and CI release; managementpacks
+  validate passes for all Tier 2 paks.

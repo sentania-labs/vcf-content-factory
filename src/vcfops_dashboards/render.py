@@ -632,10 +632,24 @@ def _xml_kind_binding_props(view: ViewDef, col) -> list[str]:
     return [_xml_property("adapterKind", binding[0]), _xml_property("resourceKind", binding[1])]
 
 
-# View-column super metric cross-reference, supermetric:"<name>" (no ``@``).
-# Token case-insensitive, quoted name case-sensitive. See _xml_attribute_item.
-_SM_COLUMN_PREFIX_RE = re.compile(r'''(?i:supermetric):["']''')
-_SM_COLUMN_REF_RE = re.compile(r'''(?i:supermetric):["'](.+?)["']$''')
+# View-column super metric cross-reference, supermetric:"<name>". Token
+# case-insensitive, quoted name case-sensitive. See _xml_attribute_item.
+#
+# The GATE regex is deliberately wider than the REF regex. Anything that
+# looks like an SM reference (optional ``@``, any case, optional whitespace
+# before the colon, quoted or not) enters the SM branch, where only the
+# well-formed shape resolves and everything else is a hard error. Without
+# the wide gate a loose spelling (``supermetric: "X"``, ``supermetric:X``)
+# falls through to the plain-metric branch and ships as a literal
+# attributeKey with rollUpType AVG, while ``vcfops_packaging.deps._is_sm_ref``
+# (prefix-only, lowercased) has already waved it through as an SM ref:
+# green audit, blank column (review of #146, WARNING 1).
+#
+# ``@supermetric:"X"`` (the formula-form token) is accepted in a column as
+# well-formed: deps.py already treats it as an SM reference, so the two
+# stay in agreement and the ``@`` is forgiven the same way token case is.
+_SM_COLUMN_PREFIX_RE = re.compile(r"(?i:@?supermetric)\s*:")
+_SM_COLUMN_REF_RE = re.compile(r'''(?i:@?supermetric):["'](.+?)["']$''')
 
 
 def _xml_attribute_item(
@@ -696,7 +710,8 @@ def _xml_attribute_item(
         else:
             raise ValueError(
                 f'View "{view.name}" column {idx} has malformed supermetric '
-                f'reference: {raw!r}. Expected supermetric:"<name>".'
+                f'reference: {raw!r}. Expected supermetric:"<name>" '
+                f"(quoted, no space after the colon)."
             )
         roll_up_type = "NONE"
     elif raw.startswith("sm_"):
