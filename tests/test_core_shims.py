@@ -97,6 +97,11 @@ def test_loader_wrapper_resolves_every_core_name_to_the_same_object() -> None:
         assert getattr(old, name) is getattr(core, name), name
     with pytest.raises(AttributeError):
         old.__getattr__("_no_such_name_row2")
+    # Nothing is copied into the wrapper namespace: reads go through
+    # __getattr__ (identical objects above), and a write on the old path
+    # therefore does NOT reach core, which the wrapper docstring states.
+    assert "stable_id" not in vars(old)
+    assert "ViewColumn" not in vars(old)
 
 
 def test_loader_wrapper_keeps_minting_and_provenance_on_the_factory_side(tmp_path) -> None:
