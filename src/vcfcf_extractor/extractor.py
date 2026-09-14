@@ -33,10 +33,8 @@ own. To affect a running extraction, patch ``vcfcf_core.extractor.extractor``.
 """
 from __future__ import annotations
 
-import io
 import re
 import sys
-import zipfile
 from collections import deque
 from pathlib import Path
 from typing import Optional
