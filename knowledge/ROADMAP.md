@@ -157,7 +157,7 @@ survey instance. Structurally reuses Scoreboard's `MetricSpec`
 machinery + adds `is_string_metric: bool` to the metric spec dataclass.
 Full scoping in `context/widget_renderer_scope.md`. Lifts renderer
 coverage from ~94% to ~95.5%. Estimated ~120 lines across
-`vcfcf_dashboards/loader.py` and `render.py`.
+`vcfcf_core/dashboards/loader.py` and `render.py`.
 
 ### ResourceRelationshipAdvanced + SparklineChart widgets
 Follow-on to PropertyList per the widget scoping doc. Both are

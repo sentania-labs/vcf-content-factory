@@ -67,8 +67,8 @@
 #           directory, not the repo root:
 #             i.   literal path from the repo root
 #             ii.  same, with a `.md` or `.py` extension appended (docs
-#                  drop extensions in prose; `vcfcf_dashboards/render`
-#                  for `vcfcf_dashboards/render.py` is a real example)
+#                  drop extensions in prose; `vcfcf_core/dashboards/render`
+#                  for `vcfcf_core/dashboards/render.py` is a real example)
 #             iii. relative to the directory the citing file lives in
 #                  (a `.claude/skills/<skill>/SKILL.md` citing
 #                  `references/foo.md` means ITS OWN `references/`
