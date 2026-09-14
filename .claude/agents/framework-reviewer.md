@@ -230,7 +230,7 @@ Walk all of these against the change. Each is tied to its authority.
 
 ```
 FRAMEWORK REVIEW
-  area: <package(s) touched, e.g. src/vcfcf_dashboards/render>
+  area: <package(s) touched, e.g. src/vcfcf_core/dashboards/render>
   change: <one line — what tooling changed>
   verdict: APPROVE | CHANGES REQUESTED
   findings: <B> BLOCKING / <W> WARNING / <N> NIT

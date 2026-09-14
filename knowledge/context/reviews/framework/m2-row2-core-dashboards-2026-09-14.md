@@ -155,3 +155,88 @@ renderer change would land in `src/vcfcf_core/dashboards/render.py` and the
 CLAUDE.md stale-zip rule, still keyed on the alias, would not prompt the
 rebuild; and a regression in `sm_id_map` or the handler wiring would fail
 loudly in a build but have no test to name it first.
+
+## Round 2 (2026-09-14, after merge with main)
+
+Head `ea585b8` (merge of main into the branch). Fix commits: `730d0ea`
+(N3, N4, N5, N7), `34cee26` (W1), `d45bc07` (W2, N5 orchestrator side,
+design row 2 marked done). Verdict: **APPROVE**, zero BLOCKING, zero
+WARNING, two NITs (below), neither blocks the PR.
+
+### Checks re-run
+
+| Check | Result |
+|---|---|
+| Full suite `-n auto --dist=loadgroup -m ""` | **1858 passed, 7 skipped** (45 s); round 1 was 1846, the 12 new tests (7 `test_sm_id_map`, 3 `test_dashboards_standalone_sm_wiring`, 2 kit no-id cases) account for the whole delta |
+| `test_core_contract.py` + `test_core_shims.py` + the four new/extended files | 89 passed |
+| Validate chain (eight packages) | clean; tree clean afterwards |
+| `scripts/path_reference_audit.sh` | clear (four standing RULE-015 exceptions, pre-existing) |
+| Standalone content-import zip, branch vs `git archive main`, post-merge | 8/8 members (nested zips walked), zero differing members apart from the marker name |
+| Em-dashes in added lines, whole `main..HEAD` | zero |
+| `main...HEAD` outside `src/` and `tests/` | exactly the five files `d45bc07` names plus the report; the design file shows only the row 2 line |
+
+### Finding-by-finding
+
+- **W1 closed.** `tests/test_sm_id_map.py` pins candidate order
+  (`content/supermetrics` beats `supermetrics`), fallback, empty map with
+  no tree, the all-or-nothing swallow (one unprefixed sibling empties the
+  map), scoped mode ignoring the cwd tree and the prefix, and the scoped
+  `ValueError` naming the bundle and `sm_id_map` (with a negative assert on
+  the old function name). `tests/test_dashboards_standalone_sm_wiring.py`
+  runs `cmd_package` and `ViewsHandler.sync` (import call stubbed, blob
+  captured) against a `content/supermetrics` tree under `tmp_path` and
+  reads `Super Metric|sm_<uuid>` out of `views.zip/content.xml`; the
+  canary removes the SM file and expects `could not be resolved to a
+  UUID`, so a green run proves the map reached the zip. Not tautological.
+  The kit test in `test_buildkit_isolated_build.py` runs in the isolated
+  subprocess (`env -i` style, cwd `tmp`), asserts `SdkBuildError` with a
+  `DashboardValidationError` cause containing `missing id`, asserts the
+  source YAML is byte-unchanged, and contrasts with the factory wrapper
+  minting `id:` on the same input, for both `views` and `dashboards`.
+  The `pytest.mark.timeout` unknown-mark warning is pre-existing (four
+  uses on main in the same file).
+- **W2 closed.** `CLAUDE.md:317` and `.claude/agents/framework-reviewer.md:182`
+  name `src/vcfcf_core/dashboards/render.py`; packaging paths unchanged.
+- **N3 closed.** `src/vcfcf_supermetrics/loader.py:254` reads
+  `sm_id_map: failed to load scoped SM for bundle ...`; pinned by
+  `test_load_failure_is_a_value_error_naming_the_bundle`.
+- **N4 closed.** `src/vcfcf_dashboards/loader.py` drops `import *`; only
+  `Dashboard`, `ViewDef` and `_core` are bound by name, everything else is
+  served by `__getattr__` from `vcfcf_core.dashboards.loader`. Docstring
+  states the read-only nature and where to patch. `test_core_shims.py:103-104`
+  pins `"stable_id" not in vars(old)` and `"ViewColumn" not in vars(old)`
+  alongside the existing identity loop over every core name. No caller in
+  `src/` or `tests/` does `from vcfcf_dashboards.loader import *` or
+  monkeypatches the wrapper (grep).
+- **N5 closed** for the five tooling-owned docs and the three
+  orchestrator-owned files named in round 1; every replacement path exists.
+- **N6**: orchestrator reports it goes in the PR body; not verifiable from
+  the tree, noted as accepted.
+- **N7 closed.** `buildkit.py` module docstring has no em-dashes; the
+  arrows (`→`) in the rewrite table are pre-existing and not in scope.
+
+### NIT (new, non-blocking)
+
+1. `src/vcfcf_managementpacks/buildkit.py:52`: the em-dash conversion left
+   `In the kit, there is no factory root :` with a stray space before the
+   colon. Cosmetic. Owner: tooling.
+2. Three more current-architecture docs still cite the old path, not
+   enumerated in round 1 (reviewer omission, not a tooling miss):
+   `knowledge/context/api-surface/widget_types_survey.md:844`,
+   `knowledge/context/api-surface/distribution_view_no_data.md:249`,
+   `knowledge/context/wire-formats/dashboard_section_gauge_viewdetails.md:7`;
+   plus the example string in `.claude/agents/framework-reviewer.md:233`
+   (`e.g. src/vcfcf_dashboards/render`). The wrappers and aliases still
+   exist so the audit passes and nothing is dead. The other hits
+   (`resourcelist_column_state_wire_format.md:176`,
+   `dashboard_selfprovider_pin_wire_format.md:41,82`,
+   `dashboard_widgets_alertvolume_section_viewdetails.md:557,615`) are dated
+   records and should stay. The branch does not touch these files, so a
+   follow-up issue is acceptable under CLAUDE.md step 9; a one-line edit
+   each is the alternative.
+
+### If shipped as-is
+
+Identical factory output to main on every path re-checked, including the
+standalone content-import zip. Every seam the branch introduced now has a
+test that names it. Nothing open that would reach an operator.
