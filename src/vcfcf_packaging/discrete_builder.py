@@ -40,11 +40,9 @@ Dependency resolution:
 """
 from __future__ import annotations
 
-import io
 import json
 import re
 import sys
-import zipfile
 from pathlib import Path
 from typing import List, Optional
 
@@ -57,19 +55,13 @@ from vcfcf_alerts.loader import (
     AlertDef, load_dir as load_alert_dir,
     Recommendation, load_recommendations,
 )
-from vcfcf_dashboards.render import render_views_xml, render_dashboards_bundle_json
-from vcfcf_reports.render import render_report_xml
-from vcfcf_alerts.render import render_alert_content_xml
-from .builder import (
-    _render_supermetrics_dict,
-    _build_views_inner_zip,
-    _build_dashboard_dropin_zip,
-    _build_reports_dropin_zip,
-    _render_customgroup_rest_payload,
-    _render_customgroup_ui_payload,
-    PLACEHOLDER_USER_ID,
+from vcfcf_core.packaging.assembly import (
+    _build_content_block,
+    assemble_distribution_zip,
+    render_bundle_payloads,
+    render_vcfops_manifest,
 )
-from .loader import Bundle, BuiltinMetricEnable, render_bme_items
+from .loader import Bundle, BuiltinMetricEnable, render_bme_items  # noqa: F401  (parity contract with builder.py, see tests)
 from .template_version import CURRENT_TEMPLATE_VERSION
 
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
@@ -725,12 +717,12 @@ def _assemble_zip(
     description: str,
     output_dir: Path,
 ) -> Path:
-    """Assemble the output zip from a synthetic Bundle, mirroring build_bundle."""
+    """Assemble the output zip from a synthetic Bundle, mirroring build_bundle
+    (same ``vcfcf_core.packaging.assembly`` layout; only bundle.json,
+    the README and the manifest fields are item-shaped)."""
     # Zip filename follows the same [VCF Content Factory] prefix convention
     out_path = output_dir / f"[VCF Content Factory] {display_name}.zip"
     slug = bundle.name
-    bundle_prefix = f"bundles/{slug}/"
-    content_prefix = f"bundles/{slug}/content/"
 
     # Static templates
     install_py = (_TEMPLATES_DIR / "install.py").read_text(encoding="utf-8")
@@ -738,134 +730,25 @@ def _assemble_zip(
     framework_readme = (_TEMPLATES_DIR / "README_framework.md").read_text(encoding="utf-8")
 
     # Render content
-    sm_dict = _render_supermetrics_dict(bundle) if bundle.supermetrics else {}
-    sm_json = json.dumps(sm_dict, indent=2) if sm_dict else None
-
     bundle_ctx = f'discrete:{item_type}:{display_name!r}'
-    views_xml = (
-        render_views_xml(
-            bundle.views,
-            sm_map=sm_id_map(bundle.sm_paths, bundle_ctx),
-            sm_scope_active=True,
-            bundle_context=bundle_ctx,
-        )
-        if bundle.views else None
+    payloads = render_bundle_payloads(
+        bundle,
+        sm_map=sm_id_map(bundle.sm_paths, bundle_ctx),
+        bundle_context=bundle_ctx,
     )
 
-    dashboard_json = None
-    if bundle.dashboards:
-        views_by_name = {v.name: v for v in bundle.views}
-        dashboard_json = render_dashboards_bundle_json(
-            bundle.dashboards, views_by_name, PLACEHOLDER_USER_ID
-        )
-
-    cg_rest_payload = _render_customgroup_rest_payload(bundle)
-    cg_rest_json = json.dumps(cg_rest_payload, indent=2) if cg_rest_payload is not None else None
-    cg_ui_payload = _render_customgroup_ui_payload(bundle)
-    cg_ui_json = json.dumps(cg_ui_payload, indent=2) if cg_ui_payload is not None else None
-
-    reports_xml = render_report_xml(bundle.reports) if bundle.reports else None
-
-    symptoms_payload = [s.to_wire() for s in bundle.symptoms] if bundle.symptoms else None
-    symptoms_json = json.dumps(symptoms_payload, indent=2) if symptoms_payload else None
-
-    alerts_json = None
-    if bundle.alerts:
-        alerts_payload = []
-        for a in bundle.alerts:
-            rec_refs_serialized = [
-                {"name": r.name, "priority": r.priority}
-                for r in a.recommendations
-            ]
-            alerts_payload.append({
-                "name": a.name,
-                "description": a.description,
-                "adapter_kind": a.adapter_kind,
-                "resource_kind": a.resource_kind,
-                "type": a.type,
-                "sub_type": a.sub_type,
-                "wait_cycles": a.wait_cycles,
-                "cancel_cycles": a.cancel_cycles,
-                "criticality": a.criticality,
-                "impact_badge": a.impact_badge,
-                "symptom_sets": a.symptom_sets,
-                "recommendations": rec_refs_serialized,
-            })
-        alerts_json = json.dumps(alerts_payload, indent=2)
-
-    alert_content_xml = None
-    if bundle.symptoms or bundle.alerts or bundle.recommendations:
-        alert_content_xml = render_alert_content_xml(
-            bundle.symptoms,
-            bundle.alerts,
-            recommendations=bundle.recommendations or [],
-        )
-
     # bundle.json
-    content_block: dict = {}
-    if bundle.supermetrics:
-        content_block["supermetrics"] = {
-            "file": "content/supermetrics.json",
-            "items": [{"uuid": sm.id, "name": sm.name} for sm in bundle.supermetrics],
-        }
-    if bundle.views:
-        content_block["views"] = {
-            "file": "content/views_content.xml",
-            "items": [{"uuid": v.id, "name": v.name} for v in bundle.views],
-        }
-    if bundle.dashboards:
-        content_block["dashboards"] = {
-            "file": "content/dashboard.json",
-            "items": [{"uuid": d.id, "name": d.name} for d in bundle.dashboards],
-        }
-    if bundle.customgroups:
-        content_block["customgroups"] = {
-            "file": "content/customgroup.json",
-            "items": [{"name": cg.name} for cg in bundle.customgroups],
-        }
-    if bundle.symptoms:
-        content_block["symptoms"] = {
-            "file": "content/symptoms.json",
-            "items": [{"name": s.name} for s in bundle.symptoms],
-        }
-    if bundle.alerts:
-        content_block["alerts"] = {
-            "file": "content/alerts.json",
-            "items": [{"name": a.name} for a in bundle.alerts],
-        }
-    if bundle.reports:
-        content_block["reports"] = {
-            "file": "content/reports_content.xml",
-            "items": [{"uuid": rd.id, "name": rd.name} for rd in bundle.reports],
-        }
-    if bundle.builtin_metric_enables:
-        content_block["builtin_metric_enables"] = {
-            "file": "content/builtin_metric_enables.json",
-            # render_bme_items() is shared with builder.py so this stays
-            # byte-identical to the bundle-headline build path.
-            "items": render_bme_items(bundle.builtin_metric_enables),
-        }
-
     bundle_json_str = json.dumps({
         "name": slug,
         "display_name": display_name,
         "description": description or "",
         "discrete_item_type": item_type,
         "discrete_item_version": version,
-        "content": content_block,
+        "content": _build_content_block(bundle),
     }, indent=2)
 
     # Item-focused README
     readme = _generate_discrete_readme(item_type, display_name, description, version, bundle)
-
-    # Drag-drop zip artifacts
-    views_zip_bytes = _build_views_inner_zip(views_xml) if views_xml else None
-    dashboard_zip_bytes = (
-        _build_dashboard_dropin_zip(dashboard_json) if dashboard_json else None
-    )
-    reports_zip_bytes = (
-        _build_reports_dropin_zip(reports_xml) if reports_xml else None
-    )
 
     # LICENSE
     license_path = _REPO_ROOT / "LICENSE"
@@ -873,59 +756,26 @@ def _assemble_zip(
 
     # vcfops_manifest.json
     import datetime as _dt
-    vcfops_manifest = json.dumps({
-        "bundle_name": slug,
-        "item_type": item_type,
-        "item_name": display_name,
-        "item_version": version,
-        "template_version": CURRENT_TEMPLATE_VERSION,
-        "built_at": _dt.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
-    }, indent=2)
+    vcfops_manifest = render_vcfops_manifest(
+        {
+            "bundle_name": slug,
+            "item_type": item_type,
+            "item_name": display_name,
+            "item_version": version,
+            "template_version": CURRENT_TEMPLATE_VERSION,
+        },
+        built_at=_dt.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+    )
 
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
-        z.writestr("install.py", install_py)
-        z.writestr("install.ps1", install_ps1)
-        z.writestr("README.md", framework_readme)
-        z.writestr("vcfops_manifest.json", vcfops_manifest)
-        if license_text is not None:
-            z.writestr("LICENSE", license_text)
-
-        z.writestr(bundle_prefix + "bundle.json", bundle_json_str)
-        z.writestr(bundle_prefix + "README.md", readme)
-
-        if sm_json:
-            z.writestr(bundle_prefix + "supermetric.json", sm_json)
-        if cg_ui_json:
-            z.writestr(bundle_prefix + "customgroup.json", cg_ui_json)
-        if views_zip_bytes:
-            z.writestr(bundle_prefix + "Views.zip", views_zip_bytes)
-        if dashboard_zip_bytes:
-            z.writestr(bundle_prefix + "Dashboard.zip", dashboard_zip_bytes)
-        if reports_zip_bytes:
-            z.writestr(bundle_prefix + "Reports.zip", reports_zip_bytes)
-        if alert_content_xml:
-            z.writestr(bundle_prefix + "AlertContent.xml", alert_content_xml)
-
-        if sm_json:
-            z.writestr(content_prefix + "supermetrics.json", sm_json)
-        if views_xml:
-            z.writestr(content_prefix + "views_content.xml", views_xml)
-        if dashboard_json:
-            z.writestr(content_prefix + "dashboard.json", dashboard_json)
-        if cg_rest_json:
-            z.writestr(content_prefix + "customgroup.json", cg_rest_json)
-        if reports_xml:
-            z.writestr(content_prefix + "reports_content.xml", reports_xml)
-        if symptoms_json:
-            z.writestr(content_prefix + "symptoms.json", symptoms_json)
-        if alerts_json:
-            z.writestr(content_prefix + "alerts.json", alerts_json)
-        if bundle.builtin_metric_enables:
-            z.writestr(
-                content_prefix + "builtin_metric_enables.json",
-                json.dumps(render_bme_items(bundle.builtin_metric_enables), indent=2),
-            )
-
-    out_path.write_bytes(buf.getvalue())
+    out_path.write_bytes(assemble_distribution_zip(
+        slug=slug,
+        payloads=payloads,
+        bundle_json=bundle_json_str,
+        bundle_readme=readme,
+        install_py=install_py,
+        install_ps1=install_ps1,
+        framework_readme=framework_readme,
+        vcfops_manifest=vcfops_manifest,
+        license_text=license_text,
+    ))
     return out_path
