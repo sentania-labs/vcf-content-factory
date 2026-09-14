@@ -1096,8 +1096,9 @@ reused. Field lines are `- **Field:** value` (parsed by
   `filter=` and the instanced-group member `isProperty` flag on round-trip
 - **Severity:** tracked
 - **Status:** open
-- **Affects:** factory:extractor (`src/vcfcf_extractor/extractor.py`,
-  `src/vcfcf_extractor/reverse_local.py`, `src/vcfcf_dashboards/reverse.py`)
+- **Affects:** factory:extractor (`src/vcfcf_core/extractor/extractor.py`,
+  `src/vcfcf_core/extractor/reverse_local.py`, `src/vcfcf_core/dashboards/reverse.py`;
+  moved into `vcfcf_core` in M2 row 4, old paths alias them)
 - **First-seen:** commit b12bd2a (HEAD baseline of the 2026-08-29
   multi-subject column binding review); pre-existing, date of introduction
   not traced.

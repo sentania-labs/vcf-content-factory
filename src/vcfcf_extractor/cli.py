@@ -437,7 +437,7 @@ def cmd_reverse_local(args) -> int:
     from pathlib import Path
     from .reverse_local import reverse_local_port
 
-    return reverse_local_port(
+    rc = reverse_local_port(
         source_dashboard_json=Path(args.dashboard_json),
         source_view_xml_dir=Path(args.view_xml_dir),
         sm_yaml_dir=Path(args.sm_dir),
@@ -447,6 +447,15 @@ def cmd_reverse_local(args) -> int:
         dry_run=args.dry_run,
         run_diff=not args.no_diff,
     )
+    if rc == 0 and not args.dry_run:
+        # Factory next steps stay with the factory CLI: the library
+        # (vcfcf_core.extractor.reverse_local) has no `validate` to point at.
+        print()
+        print("Next steps:")
+        print("  1. Review emitted YAML files")
+        print("  2. Validate: python3 -m vcfcf_dashboards validate")
+        print("  3. Address any PARTIAL/WARN items manually")
+    return rc
 
 
 def cmd_list_dashboards(args) -> int:

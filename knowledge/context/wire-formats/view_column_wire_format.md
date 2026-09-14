@@ -297,7 +297,8 @@ is not emitted on these columns.
 
 Some source XMLs omit `ascendingRange` even when all three numeric bounds are
 present (observed in vCommunity View - Set 3.xml and View - Set 4.xml, 4 total
-columns).  When the reverse parsers (`reverse.py` and `reverse_local.py`)
+columns).  When the reverse parsers (`vcfcf_core/dashboards/reverse.py` and
+`vcfcf_core/extractor/reverse_local.py`)
 encounter this, they derive `ascending_range` from the bound ordering — the
 same ordering that the forward renderer encodes and the loader's validation
 check (line ~351) enforces:
@@ -1336,8 +1337,8 @@ Loader: `src/vcfcf_core/dashboards/loader.py` (`ViewSubject`,
 `ViewDef.subjects`, `ViewDef.subject_kinds`, `ViewColumn.subject`);
 renderer: `src/vcfcf_core/dashboards/render.py::_render_view_def_fragment`
 and `_column_kind_binding`; tests: `tests/test_view_multi_subject.py`,
-`tests/test_view_multi_subject_column_binding.py`. The reverse path (`reverse.py`,
-`vcfcf_extractor/extractor.py`, `vcfcf_extractor/reverse_local.py`)
+`tests/test_view_multi_subject_column_binding.py`. The reverse path (`vcfcf_core/dashboards/reverse.py`,
+`vcfcf_core/extractor/extractor.py`, `vcfcf_core/extractor/reverse_local.py`)
 collects every distinct (adapterKind, resourceKind) pair in document
 order; when more than one is present the written YAML carries
 `subjects:` (first pair mirrored into the scalar fields) instead of
@@ -1390,8 +1391,9 @@ columns:
 
 `attribute:` must not be set (the loader synthesizes it). The renderer
 (`render._xml_time_segment_item`) emits the nine Properties above
-byte-for-byte. All three reverse paths (`reverse.py`,
-`extractor.py`, `reverse_local.py`) detect `isTimeSegment="true"` and emit
+byte-for-byte. All three reverse paths (`vcfcf_core/dashboards/reverse.py`,
+`vcfcf_core/extractor/extractor.py`, `vcfcf_core/extractor/reverse_local.py`)
+detect `isTimeSegment="true"` and emit
 `time_segment:` instead of a bogus metric column named `Interval Breakdown`.
 
 Limits: only `breakdownBy=MONTHS` / `startingOnUnit=WEEKS` /
