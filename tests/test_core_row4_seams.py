@@ -4,7 +4,12 @@ Design: ``knowledge/designs/tooling-core-carveout-v1.md`` row 4. Each test
 pins one contract the library now exposes and the factory keeps on top:
 
 - the repo root stays in the factory: core binds none, ``_scan_existing_ids``
-  takes it as a required argument and ``extract_dashboard`` passes its own;
+  takes it as a required argument, joins the v3 ``content/`` trees (so the
+  skip-with-WARN non-overwrite invariant is live again, review W1) and
+  ``extract_dashboard`` passes its own;
+- the export-zip readers (views ``content.xml``, dashboards with ``entries``
+  merged, super metrics with ids injected) are library code and the live
+  ``_export_*`` functions only run the export (review W3);
 - ``_rewrite_formula`` needs only ``name_for_uuid``: a plain map works in
   the library, the live ``_SMNameCache`` still fits in the factory;
 - the round-trip check in reverse_local loads the emitted YAML through the
@@ -58,12 +63,26 @@ class TestRepoRootStaysInTheFactory:
         assert _REPO_ROOT == REPO_ROOT
         with pytest.raises(TypeError):
             _scan_existing_ids("supermetric")  # type: ignore[call-arg]
+        # v3 layout: the trees live under content/ (review W1: the pre-row-4
+        # join off the root matched nothing).
+        (tmp_path / "content" / "supermetrics").mkdir(parents=True)
         (tmp_path / "supermetrics").mkdir()
-        target = tmp_path / "supermetrics" / "x.yaml"
+        target = tmp_path / "content" / "supermetrics" / "x.yaml"
         target.write_text(f"id: {_UUID}\nname: x\n", encoding="utf-8")
+        (tmp_path / "supermetrics" / "stale.yaml").write_text("id: 11111111-1111-4111-8111-111111111111\n", encoding="utf-8")
         assert _scan_existing_ids("supermetric", tmp_path) == {_UUID: target}
         assert _scan_existing_ids("view", tmp_path) == {}
         assert _scan_existing_ids("supermetric", tmp_path / "absent") == {}
+
+    def test_scan_existing_ids_finds_the_real_first_party_trees(self):
+        """The skip-with-WARN non-overwrite invariant is live again: against
+        the real checkout every kind resolves to files under content/."""
+        from vcfcf_extractor.extractor import _REPO_ROOT, _scan_existing_ids
+
+        for kind, subdir in (("supermetric", "supermetrics"), ("view", "views"), ("dashboard", "dashboards")):
+            found = _scan_existing_ids(kind, _REPO_ROOT)
+            assert found, f"{kind}: nothing found under {_REPO_ROOT / 'content' / subdir}"
+            assert all(path.is_relative_to(_REPO_ROOT / "content" / subdir) for path in found.values())
 
     def test_extract_dashboard_passes_the_factory_root(self):
         text = (SRC / "vcfcf_extractor" / "extractor.py").read_text(encoding="utf-8")
@@ -150,13 +169,20 @@ def test_round_trip_check_never_mints_into_the_emitted_yaml(tmp_path, capsys):
 # The migrator gate: offline read path from the wheel alone
 # ---------------------------------------------------------------------------
 
+_OWNER = "b58a71ee-e909-5b40-a355-9e199e6f0f53"
+
+
 def _export_zip_bytes() -> bytes:
     """A content-export-shaped zip built from the two export-derived text
-    fixtures: ``views.zip`` holding ``content.xml`` (VIEW_DEFINITIONS shape,
-    the nested form ``_parse_view_xml`` accepts), ``dashboards/<uuid>`` inner
-    zips holding ``dashboard/dashboard.json`` (DASHBOARDS shape, what
-    ``_export_dashboard_json`` walks), and a ``supermetrics.json`` keyed by
-    UUID (SUPER_METRICS shape) naming the six SMs the views reference."""
+    fixtures, with every member a real dashboards+views export carries per
+    ``.claude/skills/vcfops-api/references/wire-formats.md`` (Dashboards +
+    views zip): the ``<digits>L.v1`` marker (owner uuid inside),
+    ``configuration.json``, ``views.zip`` holding ``content.xml``,
+    ``usermappings.json``, ``dashboards/<ownerUserId>`` (inner zip with
+    ``dashboard/dashboard.json``) and ``dashboardsharings/<ownerUserId>``
+    (``[]``); plus the SUPER_METRICS export's ``supermetrics.json`` keyed by
+    UUID naming the six SMs the views reference. The readers must ignore
+    the marker, the manifest, the user mapping and the sharing list."""
     views_inner = io.BytesIO()
     with zipfile.ZipFile(views_inner, "w", zipfile.ZIP_DEFLATED) as z:
         z.writestr("content.xml", VIEWS_XML.read_bytes())
@@ -164,47 +190,122 @@ def _export_zip_bytes() -> bytes:
     dash_inner = io.BytesIO()
     with zipfile.ZipFile(dash_inner, "w", zipfile.ZIP_DEFLATED) as z:
         z.writestr("dashboard/dashboard.json", json.dumps(dash_doc))
+        z.writestr("dashboard/resources/resources.properties", "")
     sm_uuids = sorted(set(re.findall(r"Super Metric\|sm_([0-9a-f-]{36})", VIEWS_XML.read_text(encoding="utf-8"))))
     sms = {u: {"name": f"[Fixture] SM {i}", "formula": "1", "resourceKinds": []} for i, u in enumerate(sm_uuids, 1)}
     outer = io.BytesIO()
     with zipfile.ZipFile(outer, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("1757800000000000000L.v1", _OWNER)
+        z.writestr("configuration.json", json.dumps({"dashboards": 1, "views": 2, "superMetrics": len(sms), "type": "CUSTOM"}))
         z.writestr("views.zip", views_inner.getvalue())
-        z.writestr(f"dashboards/{dash_doc.get('uuid') or 'export'}", dash_inner.getvalue())
+        z.writestr("usermappings.json", json.dumps({_OWNER: {"userName": "admin", "userId": _OWNER}}))
+        z.writestr(f"dashboards/{_OWNER}", dash_inner.getvalue())
+        z.writestr(f"dashboardsharings/{_OWNER}", "[]")
         z.writestr("supermetrics.json", json.dumps(sms))
     return outer.getvalue()
 
 
 def unpack_export_zip(zip_path, dest):
-    """Stdlib-only: lay a content-export zip out as reverse_local's inputs.
-
-    Returns (dashboard_json_path, view_xml_dir, sm_yaml_dir). Shared by the
-    bare-venv subprocess and the factory run, so both read identical inputs.
+    """Lay a content-export zip out as reverse_local's inputs, through the
+    library's own readers (review W3): ``_content_xml_from_export_zip``,
+    ``_dashboards_from_export_zip``, ``_supermetrics_from_export_zip`` and
+    ``_write_sm_yaml`` from ``vcfcf_core.extractor.extractor``; the stdlib
+    only writes the files. Returns (dashboard_json_path, view_xml_dir,
+    sm_yaml_dir). Shared by the bare-venv subprocess and the factory run, so
+    both read identical inputs and both exercise the wheel's readers.
     """
-    import io as _io
     import json as _json
-    import zipfile as _zipfile
     from pathlib import Path as _Path
+    from vcfcf_core.extractor.extractor import (
+        _content_xml_from_export_zip, _dashboards_from_export_zip, _supermetrics_from_export_zip, _write_sm_yaml,
+    )
 
     dest = _Path(dest)
     xml_dir = dest / "xml"
     sm_dir = dest / "sm"
     xml_dir.mkdir(parents=True)
     sm_dir.mkdir()
+    outer = _Path(zip_path).read_bytes()
+    content_xml = _content_xml_from_export_zip(outer)
+    assert content_xml is not None, "no content.xml in the export"
+    (xml_dir / "content.xml").write_bytes(content_xml)
+    dashboards = _dashboards_from_export_zip(outer)
+    assert len(dashboards) == 1, [d.get("name") for d in dashboards]
     dash_path = dest / "dashboard.json"
-    with _zipfile.ZipFile(zip_path) as outer:
-        for name in outer.namelist():
-            data = outer.read(name)
-            if name.startswith("dashboards/"):
-                with _zipfile.ZipFile(_io.BytesIO(data)) as inner:
-                    dash_path.write_bytes(inner.read("dashboard/dashboard.json"))
-            elif name.lower().endswith(".zip"):
-                with _zipfile.ZipFile(_io.BytesIO(data)) as inner:
-                    if "content.xml" in inner.namelist():
-                        (xml_dir / "content.xml").write_bytes(inner.read("content.xml"))
-            elif name == "supermetrics.json":
-                for uid, sm in _json.loads(data).items():
-                    (sm_dir / f"{uid}.yaml").write_text(f"id: {uid}\nname: \"{sm['name']}\"\n", encoding="utf-8")
+    dash_path.write_text(_json.dumps({"dashboards": dashboards}), encoding="utf-8")
+    for uid, sm in _supermetrics_from_export_zip(outer).items():
+        assert sm["id"] == uid
+        _write_sm_yaml(sm_dir / f"{uid}.yaml", sm, sm["formula"], policy_resource_kinds=[])
     return dash_path, xml_dir, sm_dir
+
+
+class TestExportZipReaders:
+    """Review W3: the export-zip readers are library code, the live export
+    functions only run the export and hand the bytes over."""
+
+    def test_dashboards_reader_merges_entries_and_skips_the_other_members(self):
+        from vcfcf_core.extractor.extractor import _dashboards_from_export_zip
+
+        dashboards = _dashboards_from_export_zip(_export_zip_bytes())
+        src = json.loads(DASH_JSON.read_text(encoding="utf-8"))
+        assert [d["name"] for d in dashboards] == [d["name"] for d in src["dashboards"]]
+        assert dashboards[0]["entries"] == src["entries"]
+        assert len(dashboards[0]["widgets"]) == 3
+
+    def test_supermetrics_reader_injects_ids_and_skips_configuration(self):
+        from vcfcf_core.extractor.extractor import _supermetrics_from_export_zip
+
+        sms = _supermetrics_from_export_zip(_export_zip_bytes())
+        assert len(sms) == 6
+        assert all(sm["id"] == uid and sm["name"].startswith("[Fixture] SM ") for uid, sm in sms.items())
+        assert "superMetrics" not in {k for sm in sms.values() for k in sm}
+
+    def test_content_xml_reader_finds_the_nested_views_zip(self):
+        from vcfcf_core.extractor.extractor import _content_xml_from_export_zip
+
+        assert _content_xml_from_export_zip(_export_zip_bytes()) == VIEWS_XML.read_bytes()
+        assert _content_xml_from_export_zip(b"not a zip") is None
+
+    def test_readers_raise_value_error_on_unreadable_bytes(self):
+        from vcfcf_core.extractor.extractor import _dashboards_from_export_zip, _supermetrics_from_export_zip
+
+        with pytest.raises(ValueError, match="failed to parse dashboard export zip"):
+            _dashboards_from_export_zip(b"not a zip")
+        with pytest.raises(ValueError, match="failed to parse super metrics export zip"):
+            _supermetrics_from_export_zip(b"not a zip")
+
+    def test_live_export_functions_call_the_core_readers(self):
+        import vcfcf_extractor.extractor as fac
+        import vcfcf_core.extractor.extractor as core
+
+        assert fac._dashboards_from_export_zip is core._dashboards_from_export_zip
+        assert fac._supermetrics_from_export_zip is core._supermetrics_from_export_zip
+        src = inspect.getsource(fac._export_dashboard_json)
+        assert "_dashboards_from_export_zip(outer_zip)" in src and "zipfile" not in src
+        src = inspect.getsource(fac._export_supermetrics_full)
+        assert "_supermetrics_from_export_zip(outer_zip)" in src and "zipfile" not in src
+
+        class _Client:
+            pass
+
+        calls = []
+
+        def fake_export(client, types):
+            calls.append(types)
+            return _export_zip_bytes()
+
+        import pytest as _pytest
+        mp = _pytest.MonkeyPatch()
+        try:
+            mp.setattr(fac, "_run_content_export", fake_export)
+            got = fac._export_dashboard_json(_Client(), "b1c1c0a5-2bc8-4d5a-9b6c-000000000000")
+            assert got is None
+            want = json.loads(DASH_JSON.read_text(encoding="utf-8"))["dashboards"][0]["id"]
+            assert fac._export_dashboard_json(_Client(), want.upper())["id"] == want
+            assert len(fac._export_supermetrics_full(_Client())) == 6
+        finally:
+            mp.undo()
+        assert calls == [["DASHBOARDS"], ["DASHBOARDS"], ["SUPER_METRICS"]]
 
 
 def _run_factory_reverse(zip_path: Path, work: Path) -> tuple[dict[str, bytes], str]:
@@ -245,6 +346,16 @@ def core_wheel_site(tmp_path_factory) -> Path:
         assert not bad, f"wheel carries files outside vcfcf_core: {bad[:10]}"
         assert "vcfcf_core/extractor/reverse_local.py" in z.namelist()
         assert "vcfcf_core/extractor/extractor.py" in z.namelist()
+        # Review W2: tie the wheel to the tree under test. setuptools reuses
+        # build/lib by mtime, so a module deleted from src/ could still ride
+        # in the wheel; every .py must be byte-equal to src/ and none absent.
+        py_members = [n for n in z.namelist() if n.endswith(".py")]
+        absent = [n for n in py_members if not (SRC / n).is_file()]
+        assert not absent, f"wheel carries modules src/ no longer has: {absent}"
+        stale = [n for n in py_members if z.read(n) != (SRC / n).read_bytes()]
+        assert not stale, f"wheel modules differ from src/: {stale}"
+        on_disk = {str(p.relative_to(SRC)) for p in (SRC / "vcfcf_core").rglob("*.py")}
+        assert set(py_members) == on_disk, f"missing from wheel: {sorted(on_disk - set(py_members))}"
     install = subprocess.run(
         [sys.executable, "-m", "pip", "install", "--quiet", "--no-deps", "--target", str(site), str(wheels[0])],
         capture_output=True, text=True, timeout=600,
