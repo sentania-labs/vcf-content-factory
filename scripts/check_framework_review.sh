@@ -32,8 +32,9 @@ if [ -z "${CHANGED}" ]; then
 fi
 
 # Did the change touch framework Python? The ten vcfcf_* packages live
-# under src/ (see pyproject.toml src-layout).
-FRAMEWORK_HITS="$(printf '%s\n' "${CHANGED}" | grep -E '^src/vcfcf_[^/]+/' || true)"
+# under src/ (see pyproject.toml src-layout). src/vcfops_*/ are the M1
+# compatibility shims; guard them too until they are removed.
+FRAMEWORK_HITS="$(printf '%s\n' "${CHANGED}" | grep -E '^src/(vcfcf|vcfops)_[^/]+/' || true)"
 if [ -z "${FRAMEWORK_HITS}" ]; then
   echo "check-framework-review: no vcfcf_*/ changes; framework review not required."
   exit 0

@@ -60,7 +60,7 @@ Deltas from today:
 
 | Change | Entries removed |
 |---|---|
-| `vcfcf_*` × 10 → `src/` (names unchanged inside) | −9 |
+| `vcfops_*` × 10 → `src/` (names unchanged inside; renamed to `vcfcf_*` in M1, 2026-09-14) | −9 |
 | `rules/ lessons/ context/ designs/` → `knowledge/` | −3 |
 | Legacy stubs `dashboards/`, `views/` deleted | −2 |
 | `HOW_IT_WORKS.md`, `ROADMAP.md`, `vcf_ops_concepts.md` → `knowledge/` | −3 |
@@ -98,7 +98,7 @@ effort** — they change depth, not top-level row count.
 ### Phase 1 — `src/` (the −9 move)
 Mechanics: src-layout `pyproject.toml` declaring all ten packages with
 names unchanged; `pip install -e .` replaces `requirements.txt` manual
-path-dependency; every `python3 -m vcfcf_<x>` invocation in CLAUDE.md /
+path-dependency; every `python3 -m vcfops_<x>` invocation in CLAUDE.md /
 agents / CI / pak workflows keeps working verbatim.
 **Spike first, on a branch, before any sweep:**
 - `src/vcfcf_managementpacks/buildkit.py` (build-buildkit packages the sdk
@@ -113,7 +113,7 @@ buildkit rebuild compared against the released 1.0.6 tarball.
 
 **Execution note (2026-07-08):** the spike ran and the move executed on
 `chore/reorg-v2-phase1-src` — all ten packages now live at
-`src/vcfcf_<x>/`, names and `python3 -m vcfcf_<x>` invocations
+`src/vcfops_<x>/`, names and `python3 -m vcfops_<x>` invocations
 unchanged. The install mechanism decided differs from the sketch above:
 **no package install at all** — `pip install -e .` was rejected because an
 editable install would leak the packages into every subprocess via
