@@ -20,7 +20,7 @@ jobs:
     # exact string "lab", ephemeral pod per job, no state between jobs.
     runs-on: lab
     env:
-      # The ten vcfcf_* packages live under src/ (see pyproject.toml
+      # The ten vcfcf_* packages and the vcfcf_core library live under src/ (see pyproject.toml
       # src-layout). CI resolves them via PYTHONPATH — never `pip install`
       # the factory as a package — so the kit-isolation regression tests
       # (tests/managementpacks/test_buildkit_isolated_build.py and friends)
@@ -120,6 +120,11 @@ jobs:
               print("::error::wheel carries files outside vcfcf_core:", bad[:10]); sys.exit(1)
           print("wheel ok:", whl)
           PY
+          # Install it somewhere that is not the repo and import with the
+          # factory absent, so a broken wheel fails here and not at tag time.
+          python3 -m pip install --quiet --target "$RUNNER_TEMP/site" "$RUNNER_TEMP"/wheel/*.whl
+          ( cd "$RUNNER_TEMP" && PYTHONPATH="$RUNNER_TEMP/site" python3 -c "import vcfcf_core, vcfcf_core.supermetrics.crossref; print('import ok', vcfcf_core.__version__)" )
+          rm -rf src/*.egg-info build
 
       - name: Validate content corpus
         run: |
