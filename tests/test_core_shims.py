@@ -13,6 +13,20 @@ repo layout) and ``vcfcf_dashboards.summary_bind`` (the live ``ui`` half).
 For those the tests pin what the wrapper must still guarantee: every core
 name resolves through the old path to the identical object, and the
 factory-only names stay on the factory side.
+
+Row 3 adds three aliases (``vcfcf_supermetrics.reverse``,
+``vcfcf_reports.render``, ``vcfcf_packaging.deps``) and eight wrappers:
+``vcfcf_common.dep_walker`` (the live half), ``vcfcf_common.provenance``
+(the repo-root sniff), ``vcfcf_packaging.describe`` (cache location, live
+refresh, ``make_cache``), ``vcfcf_packaging.audit`` (``run_dependency_audit``),
+``vcfcf_supermetrics.loader``, ``vcfcf_customgroups.loader``,
+``vcfcf_reports.loader`` (minting, provenance, directory defaults, the
+unscoped ``sm_id_map`` scan) and ``vcfcf_packaging.loader`` (root sniff,
+callbacks, ``bundles`` default). Every wrapper serves core names through
+module ``__getattr__`` (reads are identical objects; a write on the old
+path does NOT reach core, pinned below), and ``vcfcf_packaging.builder``
+re-exports the assembly helpers that moved to
+``vcfcf_core.packaging.assembly``.
 """
 from __future__ import annotations
 
@@ -32,6 +46,65 @@ SHIMS = [
     ("vcfcf_dashboards.reverse", "vcfcf_core.dashboards.reverse"),
     ("vcfcf_dashboards.render", "vcfcf_core.dashboards.render"),
     ("vcfcf_dashboards.packager", "vcfcf_core.dashboards.packager"),
+    # Row 3.
+    ("vcfcf_supermetrics.reverse", "vcfcf_core.supermetrics.reverse"),
+    ("vcfcf_reports.render", "vcfcf_core.reports.render"),
+    ("vcfcf_packaging.deps", "vcfcf_core.packaging.deps"),
+]
+
+# Row 3 wrappers: (old path, core path,
+#   names the wrapper defines itself,
+#   core names the wrapper imports explicitly (a namespace copy, for its own
+#     annotations and calls; identical object on read),
+#   core names served only by module __getattr__ (identical object on read,
+#     never copied into the wrapper namespace)).
+WRAPPERS = [
+    ("vcfcf_common.dep_walker", "vcfcf_core.common.dep_walker",
+     ("walk_and_check", "WalkResult", "MetricGap", "_fetch_describe", "_enable_sm",
+      "_lookup_sm_uuid_on_target", "_resolve_sm_name", "_get_sm_resource_kinds", "_LOOKUP_FAILED"),
+     ("MetricRef", "SmRef", "extract_refs_from_supermetrics", "extract_refs_from_views",
+      "extract_refs_from_dashboards", "extract_customgroup_names_from_views"),
+     ("collect_deps", "expand_sm_crossrefs", "DepGraph", "CollectDepsCrossLinks",
+      "extract_view_names_from_dashboards", "extract_customgroup_names_from_dashboards",
+      "_scope_allows", "_auto_detect_scope", "_pick_sm_by_name", "_walk_sm_crossrefs",
+      "_is_sm_key", "_extract_sm_uuid", "_SM_UUID_RE")),
+    ("vcfcf_common.provenance", "vcfcf_core.common.provenance",
+     ("_find_repo_root", "provenance_from_path"),
+     (),
+     ()),
+    ("vcfcf_packaging.describe", "vcfcf_core.packaging.describe",
+     ("DescribeCache", "make_cache", "_DEFAULT_CACHE_ROOT", "_REPO_ROOT", "_same_but_fetched_at"),
+     ("MetricInfo", "DescribeCacheError", "_merge_section", "_counts", "_summarize", "_host_of",
+      "_is_instance_local"),
+     ("MergeStats", "_INSTANCE_LOCAL_PREFIX")),
+    ("vcfcf_packaging.audit", "vcfcf_core.packaging.audit",
+     ("run_dependency_audit",),
+     ("AuditError", "AuditResult", "audit_bundle_dependencies"),
+     ("analyze_staged_bundle", "print_audit_summary", "staged_bundle_problem",
+      "check_staged_bundle_dir", "_check_cache_coverage", "_bundle_declares",
+      "_refs_from_views_xml", "_refs_from_dashboard_json", "_refs_from_widget_config",
+      "_RESOURCE_ENTRY_RE")),
+    ("vcfcf_supermetrics.loader", "vcfcf_core.supermetrics.loader",
+     ("load_file", "load_dir", "sm_id_map", "_mint_id_into_file", "_provenance_of"),
+     ("SuperMetricDef",),
+     ("SuperMetricValidationError", "LOOPING_FUNCS", "SINGLE_FUNCS", "_strict_load",
+      "_UUID_RE", "_resolve_id")),
+    ("vcfcf_customgroups.loader", "vcfcf_core.customgroups.loader",
+     ("load_file", "load_dir", "_provenance_of"),
+     ("CustomGroupDef",),
+     ("CustomGroupValidationError", "COMPARE_OPS", "RELATIONS", "collect_required_types",
+      "_strict_load", "_UI_STRING_OP_MAP", "_UI_NUMERIC_OP_MAP",
+      "_property_condition_to_wire", "_relationship_condition_to_wire")),
+    ("vcfcf_reports.loader", "vcfcf_core.reports.loader",
+     ("load_file", "load_dir", "_mint_id_into_file"),
+     ("ReportDef",),
+     ("Section", "SubjectType", "ReportSettings", "ReportValidationError", "SECTION_TYPES",
+      "VALID_ORIENTATIONS", "VALID_OUTPUT_FORMATS", "_STATIC_CONTENT_KEYS", "_strict_load",
+      "_UUID_RE", "_build_view_index", "_build_dashboard_index", "_resolve_id")),
+    ("vcfcf_packaging.loader", "vcfcf_core.packaging.loader",
+     ("load_bundle", "load_all_bundles", "_find_repo_root", "_mint_id_into_file", "_provenance_of"),
+     ("Bundle", "BundleValidationError"),
+     ("BuiltinMetricEnable", "parse_builtin_metric_enables", "render_bme_items")),
 ]
 
 
@@ -185,3 +258,114 @@ def test_core_loader_validates_the_minted_id_like_a_yaml_id(tmp_path, garbage) -
     minted = old.load_dashboard(dash)
     assert core._UUID_RE.match(minted.id)
     assert dash.read_text(encoding="utf-8").startswith(f"id: {minted.id}\n")
+
+
+# ---------------------------------------------------------------------------
+# Row 3 aliases and wrappers
+# ---------------------------------------------------------------------------
+
+def test_row3_underscore_names_resolve_through_aliases() -> None:
+    from vcfcf_supermetrics.reverse import _SM_UUID_TOKEN_RE  # noqa: PLC0415
+    from vcfcf_reports.render import _render_section, _build_reports_inner_zip  # noqa: PLC0415
+    from vcfcf_packaging.deps import _is_sm_ref, _normalize_metric_key, _refs_from_formula  # noqa: PLC0415
+
+    assert _SM_UUID_TOKEN_RE.pattern.startswith("sm_")
+    assert callable(_render_section) and callable(_build_reports_inner_zip)
+    assert callable(_is_sm_ref) and callable(_normalize_metric_key) and callable(_refs_from_formula)
+
+
+def test_row3_monkeypatch_on_alias_reaches_the_running_module(monkeypatch) -> None:
+    import vcfcf_core.packaging.deps as core_deps
+    import vcfcf_packaging.deps as old_deps
+
+    monkeypatch.setattr(old_deps, "_SUPER_METRIC_PREFIX", "probe|")
+    assert core_deps._SUPER_METRIC_PREFIX == "probe|"
+
+
+@pytest.mark.parametrize("old,new,own,imported,served", WRAPPERS, ids=[w[0] for w in WRAPPERS])
+def test_row3_wrapper_serves_core_names_and_keeps_its_own(old, new, own, imported, served) -> None:
+    old_mod = importlib.import_module(old)
+    core_mod = importlib.import_module(new)
+    assert old_mod is not core_mod  # wrapper, not alias
+    for name in imported + served:
+        assert getattr(old_mod, name) is getattr(core_mod, name), f"{old}.{name}"
+    for name in imported:
+        assert name in vars(old_mod), f"{old} should import {name} explicitly"
+    for name in served:
+        # Served by __getattr__, never copied: a monkeypatch on the old path
+        # binds here and does NOT reach core (the wrapper docstrings say so).
+        assert name not in vars(old_mod), f"{old}.{name} is a namespace copy"
+    for name in own:
+        assert name in vars(old_mod), f"{old} must define {name} itself"
+        assert not hasattr(core_mod, name) or getattr(old_mod, name) is not getattr(core_mod, name), (
+            f"{name} should be the factory's own object, not core's"
+        )
+    with pytest.raises(AttributeError):
+        old_mod.__getattr__("_no_such_name_row3")
+
+
+@pytest.mark.parametrize("old,new,own,imported,served", WRAPPERS, ids=[w[0] for w in WRAPPERS])
+def test_row3_wrapper_write_does_not_reach_core(old, new, own, imported, served, monkeypatch) -> None:
+    """Pins the documented asymmetry: patch the core module, not the wrapper."""
+    if not served:
+        pytest.skip("wrapper defines every public name itself")
+    old_mod = importlib.import_module(old)
+    core_mod = importlib.import_module(new)
+    name = served[0]
+    original = getattr(core_mod, name)
+    monkeypatch.setattr(old_mod, name, "probe-row3", raising=False)
+    assert getattr(core_mod, name) is original
+    assert getattr(old_mod, name) == "probe-row3"
+
+
+def test_row3_factory_only_names_are_absent_from_core() -> None:
+    import vcfcf_core.common.dep_walker as core_dw
+    import vcfcf_core.common.provenance as core_prov
+    import vcfcf_core.packaging.describe as core_desc
+    import vcfcf_core.packaging.audit as core_audit
+    import vcfcf_core.supermetrics.loader as core_sm
+    import vcfcf_core.reports.loader as core_rpt
+    import vcfcf_core.packaging.loader as core_bundle
+
+    for mod, names in (
+        (core_dw, ("walk_and_check", "WalkResult", "MetricGap", "_fetch_describe", "_enable_sm")),
+        (core_prov, ("_find_repo_root",)),
+        (core_desc, ("make_cache", "_DEFAULT_CACHE_ROOT", "_REPO_ROOT")),
+        (core_audit, ("run_dependency_audit",)),
+        (core_sm, ("_mint_id_into_file",)),
+        (core_rpt, ("_mint_id_into_file",)),
+        (core_bundle, ("_find_repo_root", "_mint_id_into_file")),
+    ):
+        for name in names:
+            assert not hasattr(mod, name), f"{mod.__name__}.{name} must stay factory-side"
+    assert not hasattr(core_desc.DescribeCache, "refresh")
+    assert not hasattr(core_desc.DescribeCache, "refresh_all")
+
+
+def test_row3_describe_wrapper_is_a_core_subclass_with_the_factory_default() -> None:
+    import vcfcf_core.packaging.describe as core
+    import vcfcf_packaging.describe as old
+
+    assert issubclass(old.DescribeCache, core.DescribeCache)
+    assert old.DescribeCache is not core.DescribeCache
+    c = old.DescribeCache()
+    assert c._cache_dir == old._DEFAULT_CACHE_ROOT
+    assert old._DEFAULT_CACHE_ROOT.name == "adapter_describe_cache"
+    assert c._client is None
+    assert hasattr(old.DescribeCache, "refresh") and hasattr(old.DescribeCache, "refresh_all")
+    with pytest.raises(TypeError, match="cache_dir is required"):
+        core.DescribeCache(None)  # type: ignore[arg-type]
+
+
+def test_row3_builder_reexports_the_assembly_helpers() -> None:
+    import vcfcf_core.packaging.assembly as asm
+    import vcfcf_packaging.builder as builder
+
+    for name in ("PLACEHOLDER_USER_ID", "DASHBOARD_DROPIN_USER_ID", "_render_supermetrics_dict",
+                 "_render_customgroup_rest_payload", "_render_customgroup_ui_payload",
+                 "_build_views_inner_zip", "_build_dashboard_dropin_zip", "_build_reports_dropin_zip",
+                 "_build_bundle_json", "render_bundle_payloads", "render_vcfops_manifest",
+                 "assemble_distribution_zip"):
+        assert getattr(builder, name) is getattr(asm, name), name
+    assert builder.DASHBOARD_DROPIN_USER_ID == "b58a71ee-e909-5b40-a355-9e199e6f0f53"
+

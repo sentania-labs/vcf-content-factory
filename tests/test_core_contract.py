@@ -25,9 +25,15 @@ Two halves:
      ``dist...``, or exactly ``supermetrics`` / ``views`` / ``dashboards``
      / ``bundles``),
    - ``import requests`` in any form,
-   - an import of any ``vcfcf_*`` package other than ``vcfcf_core``,
+   - an import of any ``vcfcf_*`` package other than ``vcfcf_core``
+     (module level or function-local: the walk recurses into bodies),
    - a file write (``open(..., "w"/"a"/"x")``, ``.write_text``,
-     ``.write_bytes``) inside a function whose name starts with ``load``.
+     ``.write_bytes``) inside a function whose name starts with ``load``,
+   - (row 3) a ``Path(...)`` built from a literal naming a factory directory
+     (``Path("content/supermetrics")``: a working-directory scan), and
+   - (row 3) a walk up the directory tree, ``<name> = <name>.parent`` (the
+     repo-root sniff that provenance and the bundle loader kept on the
+     factory side).
 
 ``ALLOWLIST`` is the only escape hatch: explicit ``(relative path, line)``
 pairs, each expected to carry a reason in a comment next to it. It is empty
@@ -259,10 +265,28 @@ def _static_findings(path: Path) -> list[tuple[int, str]]:
                     v = d.value  # type: ignore[union-attr]
                     if v.startswith(_DIR_DEFAULT_PREFIXES) or v.rstrip("/") in _DIR_DEFAULT_EXACT:
                         hit(d, f"default argument names a directory: {v!r}")
-        # Calls: nested dirname, joinpath(".."), and writes inside load*.
+        # A walk up the tree: ``<name> = <name>.parent`` (row 3: the repo-root
+        # sniff pattern in provenance and the bundle loader, both factory-side).
+        elif isinstance(node, ast.Assign):
+            v = node.value
+            if (
+                isinstance(v, ast.Attribute) and v.attr == "parent"
+                and isinstance(v.value, ast.Name)
+                and any(isinstance(t, ast.Name) and t.id == v.value.id for t in node.targets)
+            ):
+                hit(node, f"walks up the directory tree ({v.value.id} = {v.value.id}.parent)")
+        # Calls: nested dirname, joinpath(".."), Path("<factory dir>"), and
+        # writes inside load*.
         elif isinstance(node, ast.Call):
             if is_os_path_dirname(node) and node.args and is_os_path_dirname(node.args[0]):
                 hit(node, "escapes the package via nested os.path.dirname()")
+            if (
+                (isinstance(node.func, ast.Name) and node.func.id == "Path")
+                or (isinstance(node.func, ast.Attribute) and node.func.attr == "Path")
+            ) and node.args and _is_str_const(node.args[0]):
+                v = node.args[0].value  # type: ignore[union-attr]
+                if v.startswith(_DIR_DEFAULT_PREFIXES) or v.rstrip("/") in _DIR_DEFAULT_EXACT:
+                    hit(node, f"Path() over a factory directory literal: {v!r}")
             if isinstance(node.func, ast.Attribute) and node.func.attr == "joinpath":
                 if any(_is_str_const(a) and a.value == ".." for a in node.args):  # type: ignore[union-attr]
                     hit(node, "escapes the package via .joinpath('..')")
@@ -320,6 +344,12 @@ _VIOLATION_SAMPLES = {
     "non-core vcfcf": "from vcfcf_common.client import Client\n",
     "open w in load": "def load_x(p):\n    with open(p, 'w') as fh:\n        fh.write('')\n",
     "write_text in load": "def load_y(p):\n    p.write_text('')\n",
+    # Row 3 additions and the two patterns the brief named explicitly.
+    "default knowledge/ path": "def f(cache_dir='knowledge/context/adapter_describe_cache'):\n    pass\n",
+    "function-local vcfcf_common import": "def load_z(p):\n    from vcfcf_common.provenance import provenance_from_path\n    return provenance_from_path(p)\n",
+    "Path over content/ literal": "from pathlib import Path\ndef f():\n    for c in (Path('content/supermetrics'), Path('supermetrics')):\n        pass\n",
+    "Path over bare views literal": "import pathlib\nX = pathlib.Path('views')\n",
+    "walk up the tree": "from pathlib import Path\ndef f(start):\n    current = start\n    for _ in range(5):\n        current = current.parent\n    return current\n",
 }
 
 
@@ -343,7 +373,12 @@ def test_static_checker_accepts_clean_module(tmp_path: Path, monkeypatch) -> Non
         "def write_out(p: Path, text):\n    p.write_text(text)\n"
         "HERE = Path(__file__).parent\nSIBLING = HERE / 'x'\n"
         "D = os.path.dirname(__file__)\nJ = HERE.joinpath('templates', 'icons')\n"
-        "def g(kind='contents', where='knowledgeable'):\n    pass\n",
+        "def g(kind='contents', where='knowledgeable'):\n    pass\n"
+        # A path handed in as an argument may be joined with a factory-looking
+        # segment (the staged bundle's content/ subdir, a root's content/ tree),
+        # and Path() over a variable or a non-factory literal is fine.
+        "def h(root: Path, ref: str):\n    return (root / 'content').resolve(), Path(ref), Path('templates')\n"
+        "def k(p: Path):\n    up = p.parent\n    return up.parent if False else up\n",
         encoding="utf-8",
     )
     monkeypatch.setattr(sys.modules[__name__], "SRC", tmp_path / "src")
