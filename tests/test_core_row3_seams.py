@@ -319,6 +319,28 @@ class TestBundleLoader:
         assert old._find_repo_root(manifest.parent) == tmp_path  # no vcfcf_common marker anywhere
         assert old.load_bundle(manifest).supermetrics[0].id == _SM_UUID
 
+    @pytest.mark.parametrize("how", ["absolute", "relative"])
+    def test_project_yaml_discovery_resolves_for_absolute_and_relative_manifest_paths(self, tmp_path, monkeypatch, how):
+        """Codex round on PR #163: discovered entries were joined on the
+        manifest path as given, so load_bundle("proj/PROJECT.yaml") looked
+        for proj/proj/customgroups/a.yaml."""
+        import vcfcf_core.packaging.loader as core
+        project = tmp_path / "proj"
+        (project / "customgroups").mkdir(parents=True)
+        (project / "customgroups" / "a.yaml").write_text(_cg_yaml("Acme Group"), encoding="utf-8")
+        (project / "PROJECT.yaml").write_text("name: acme\nfactory_native: false\n", encoding="utf-8")
+        if how == "relative":
+            monkeypatch.chdir(tmp_path)
+            manifest = Path("proj") / "PROJECT.yaml"
+        else:
+            manifest = project / "PROJECT.yaml"
+        b = core.load_bundle(manifest)
+        assert [cg.name for cg in b.customgroups] == ["Acme Group"]
+        assert b.customgroups[0].source_path == manifest.parent / "customgroups" / "a.yaml"
+        # Same through the factory wrapper (root sniff falls back to the parent's parent).
+        import vcfcf_packaging.loader as old
+        assert [cg.name for cg in old.load_bundle(manifest).customgroups] == ["Acme Group"]
+
     def test_core_report_sections_default_to_dirs_beside_the_manifest(self, tmp_path):
         import vcfcf_core.packaging.loader as core
         project = tmp_path / "third_party" / "acme"

@@ -331,10 +331,15 @@ def load_bundle(
     if is_project_yaml and not has_explicit_lists:
         project_dir = path.parent
         def _discover_type(type_name: str) -> list:
+            # Entries are relative to the project directory, never joined on
+            # the manifest path as given: a relative manifest path
+            # ("proj/PROJECT.yaml") would otherwise yield "proj/views/x.yaml",
+            # which _resolve() below treats as manifest-relative and turns
+            # into "proj/proj/views/x.yaml" (Codex round on PR #163).
             type_dir = project_dir / type_name
             if not type_dir.exists():
                 return []
-            return sorted(str(p) for p in type_dir.rglob("*.y*ml"))
+            return sorted(str(p.relative_to(project_dir)) for p in type_dir.rglob("*.y*ml"))
         # Inject discovered file lists into data for downstream loading.
         for k in _CONTENT_LIST_KEYS:
             discovered = _discover_type(k)
