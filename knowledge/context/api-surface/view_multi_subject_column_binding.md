@@ -49,10 +49,10 @@ columns:
 | Single subject, one-entry `subjects:` list | Bound to the one kind (unchanged) | Accepted and bound to that one kind; output is byte-identical to leaving `subject:` off |
 | Multi-subject (2+ `subjects:`) | Unbound: no `adapterKind`, no `resourceKind`; `isStringAttribute` is followed directly by `rollUpType` | Bound to exactly that kind; must be one of the view's `subjects:` (loader error otherwise) |
 
-Loader: `src/vcfcf_dashboards/loader.py` (`ViewColumn.subject`, parsed
+Loader: `src/vcfcf_core/dashboards/loader.py` (`ViewColumn.subject`, parsed
 as a `{adapter_kind, resource_kind}` mapping, unknown keys rejected;
 `ViewDef.validate()` checks membership). Renderer:
-`src/vcfcf_dashboards/render.py::_column_kind_binding` decides the pair
+`src/vcfcf_core/dashboards/render.py::_column_kind_binding` decides the pair
 or `None`, `_xml_kind_binding_props` emits the two Properties in the
 historical position (after `isStringAttribute`, before `rollUpType`).
 
@@ -97,7 +97,7 @@ lines. The `<SubjectType>` block is unaffected: one `descendant` then
 
 ## Consumers of the binding
 
-- **Reverse path** (`src/vcfcf_dashboards/reverse.py`,
+- **Reverse path** (`src/vcfcf_core/dashboards/reverse.py`,
   `src/vcfcf_extractor/extractor.py`, `src/vcfcf_extractor/reverse_local.py`):
   an Item with both Properties on a multi-subject view is written back as
   a per-column `subject:`; an Item without them gets no `subject:`; on a

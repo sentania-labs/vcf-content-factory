@@ -1,4 +1,4 @@
-"""buildkit.py — Assemble a portable sdk-buildkit tarball.
+"""buildkit.py: Assemble a portable sdk-buildkit tarball.
 
 The kit is a self-contained Python package (sdk_buildkit) that can build
 Tier 2 SDK adapter .pak files without a factory checkout and without any
@@ -9,24 +9,24 @@ LLM / agent involvement.  CI runners pull the tarball, extract it, and run:
 Kit contents (assembled under a temp dir, then tarballed):
   sdk_buildkit/
     __init__.py
-    __main__.py                 — exposes build-sdk / validate-sdk / pak-compare
-    sdk_builder.py              — copy of vcfcf_managementpacks/sdk_builder.py (paths relocated)
-    sdk_project.py              — copy (no path changes needed)
-    pak_compare.py              — copy (no path changes needed)
-    provenance.py               — copy of vcfcf_common/provenance.py (pure stdlib)
+    __main__.py                : exposes build-sdk / validate-sdk / pak-compare
+    sdk_builder.py             : copy of vcfcf_managementpacks/sdk_builder.py (paths relocated)
+    sdk_project.py             : copy (no path changes needed)
+    pak_compare.py             : copy (no path changes needed)
+    provenance.py              : copy of vcfcf_common/provenance.py (pure stdlib)
     dashboard_loader.py         : copy of vcfcf_core/dashboards/loader.py (imports patched)
     dashboard_render.py         : copy of vcfcf_core/dashboards/render.py (imports patched)
     dashboard_yaml_utils.py     : copy of vcfcf_core/dashboards/yaml_utils.py
-    sm_loader.py                — copy of vcfcf_supermetrics/loader.py
+    sm_loader.py               : copy of vcfcf_supermetrics/loader.py
     symptoms_loader.py          : copy of vcfcf_core/symptoms/loader.py
     alerts_loader.py            : copy of vcfcf_core/alerts/loader.py
     alerts_render.py            : copy of vcfcf_core/alerts/render.py (imports patched)
-    reports_loader.py           — copy of vcfcf_reports/loader.py
-    reports_render.py           — copy of vcfcf_reports/render.py (imports patched)
-    adapter_framework/src/       — framework Java source (compiled at build-sdk time)
-    adapter_runtime/             — empty directory (jar compiled into here on first use)
-    templates/icons/             — SVG icon assets
-    reference_paks/             — one reference .pak for pak-compare
+    reports_loader.py          : copy of vcfcf_reports/loader.py
+    reports_render.py          : copy of vcfcf_reports/render.py (imports patched)
+    adapter_framework/src/      : framework Java source (compiled at build-sdk time)
+    adapter_runtime/            : empty directory (jar compiled into here on first use)
+    templates/icons/            : SVG icon assets
+    reference_paks/            : one reference .pak for pak-compare
     LICENSE
     VERSION
 
@@ -40,16 +40,16 @@ Path relocation in the kit's sdk_builder.py:
 
 Import rewrites also applied to:
   alerts_render.py  : vcfcf_core.symptoms.loader / vcfcf_core.alerts.loader → flat kit names
-  reports_render.py — relative .loader → reports_loader (flat kit name)
-  sdk_builder.py    — also rewrites the inline `from vcfcf_dashboards.render
+  reports_render.py: relative .loader → reports_loader (flat kit name)
+  sdk_builder.py   : also rewrites the inline `from vcfcf_dashboards.render
                        import render_view_def_fragments` used by the
                        co-bundled-reports path (report subdir embeds its
                        referenced views' <ViewDef> fragments)
 
 repo_root handling:
   In the factory, _load_bundled_content resolves bundled_content paths against
-  _REPO_ROOT (_HERE.parent.parent since the src/ reorg — the factory root).
-  In the kit, there is no factory root —
+  _REPO_ROOT (_HERE.parent.parent since the src/ reorg: the factory root).
+  In the kit, there is no factory root :
   adapters carry their own view/dashboard YAML.  The kit's build-sdk passes
   project_dir as repo_root so that bundled_content: paths are relative to the
   adapter's own directory.
@@ -76,7 +76,7 @@ from pathlib import Path
 from typing import Optional
 
 # ---------------------------------------------------------------------------
-# Version constant — bump when kit contents change in a meaningful way
+# Version constant: bump when kit contents change in a meaningful way
 # ---------------------------------------------------------------------------
 
 BUILDKIT_VERSION = "1.0.9"

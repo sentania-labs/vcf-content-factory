@@ -383,8 +383,8 @@ a backstop, but do not rely on it: author 1-based coordinates.
 | What | Where |
 |---|---|
 | View/dashboard YAML | `content/views/`, `content/dashboards/` |
-| Loader (dataclasses + parsing) | `src/vcfcf_dashboards/loader.py` |
-| Renderer (wire format emission) | `src/vcfcf_dashboards/render.py` |
+| Loader (dataclasses + parsing) | `src/vcfcf_core/dashboards/loader.py` |
+| Renderer (wire format emission) | `src/vcfcf_core/dashboards/render.py` |
 | Wire format spec | `knowledge/context/wire-formats/view_column_wire_format.md` |
 | Widget type survey | `knowledge/context/api-surface/widget_types_survey.md` |
 | Widget renderer scope | `knowledge/context/api-surface/widget_renderer_scope.md` |

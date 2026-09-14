@@ -11,9 +11,12 @@ factory caller relied on:
 ``load_view``, ``load_dashboard`` and ``load_all`` keep their old signatures
 and pass those two behaviours into the core loader as callbacks. Every other
 name (dataclasses, ``stable_id``, ``parse_summary_for``, underscore helpers)
-resolves to the core module object itself via ``__getattr__``, so
+is served by module ``__getattr__`` straight from the core module, so
 ``from vcfcf_dashboards.loader import X`` works for any ``X`` the core
-module defines.
+module defines and reads back the identical object. That is a read-only
+view: ``monkeypatch.setattr(vcfcf_dashboards.loader, "stable_id", ...)``
+binds a new attribute on this wrapper and the core loader keeps calling
+its own. To affect the running loader, patch ``vcfcf_core.dashboards.loader``.
 """
 from __future__ import annotations
 
@@ -21,7 +24,6 @@ import uuid
 from pathlib import Path
 
 from vcfcf_core.dashboards import loader as _core
-from vcfcf_core.dashboards.loader import *  # noqa: F401,F403  (public names)
 from vcfcf_core.dashboards.loader import Dashboard, ViewDef
 
 
@@ -77,7 +79,7 @@ def load_all(views_dir: Path, dashboards_dir: Path, enforce_framework_prefix: bo
 
 
 def __getattr__(name: str):
-    """Underscore names and anything ``import *`` skipped resolve to core."""
+    """Every name this wrapper does not define itself resolves to core."""
     try:
         return getattr(_core, name)
     except AttributeError:

@@ -251,7 +251,7 @@ def sm_id_map(sm_scope: Optional[Iterable[Path]] = None, bundle_context: Optiona
                 sm_map[sm.name] = sm.id
         except Exception as exc:
             raise ValueError(
-                f"render_view_def_fragments: failed to load scoped SM for "
+                f"sm_id_map: failed to load scoped SM for "
                 f"bundle {bundle_context!r}: {exc}"
             ) from exc
         return sm_map

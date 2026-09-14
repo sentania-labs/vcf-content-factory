@@ -1,7 +1,7 @@
 # Dashboard widget renderer scoping
 
 **Purpose.** Plan the next wave of widget-type support in
-`src/vcfcf_dashboards/render.py`. Inventory every widget type still
+`src/vcfcf_core/dashboards/render.py`. Inventory every widget type still
 unsupported, categorize each by engineering value, and propose an
 implementation order with draft YAML schemas.
 
@@ -15,8 +15,8 @@ implementation order with draft YAML schemas.
   from a fresh lab export via
   `POST /api/content/operations/export` with
   `{"scope":"ALL","contentTypes":["DASHBOARDS"]}`.
-- Loader/renderer source: `src/vcfcf_dashboards/loader.py`,
-  `src/vcfcf_dashboards/render.py`.
+- Loader/renderer source: `src/vcfcf_core/dashboards/loader.py`,
+  `src/vcfcf_core/dashboards/render.py`.
 
 **Scope.** Research and planning only. No `src/vcfcf_*/` or content
 YAML edits. A follow-up `tooling` agent invocation will implement
@@ -656,7 +656,7 @@ config), Geo (instance data dependency), ContainerOverview/Details
 ## Tooling brief stub (next hand-off)
 
 **Task.** Add PropertyList widget support to
-`src/vcfcf_dashboards/loader.py` and `src/vcfcf_dashboards/render.py`.
+`src/vcfcf_core/dashboards/loader.py` and `src/vcfcf_core/dashboards/render.py`.
 
 **Wire format.** See "PropertyList" section above. The config is
 structurally identical to Scoreboard but with three additional
