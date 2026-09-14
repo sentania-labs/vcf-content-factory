@@ -222,7 +222,8 @@ class TestRefreshCarriesThroughHandWrittenKeys:
         cache = DescribeCache(cache_dir=cache_dir, client=_make_client(live_stats, []))
         cache.refresh("VMWARE", "HostSystem")
         doc = _read(cache_dir)
-        assert doc["merged_from"] == _MERGED_FROM
+        # Hand-written entries are untouched; the refresh appends its own.
+        assert doc["merged_from"][:2] == _MERGED_FROM
         assert doc["merge_note"] == "Union of two live instances."
         # fetched_at / source describe this refresh, not the original grounding.
         assert doc["source"].startswith("https://ro818/suite-api/api/adapterkinds/VMWARE")
@@ -277,3 +278,148 @@ class TestCliPruneFlag:
         fake_cache.refresh_all.assert_called_once_with(
             kinds=[("VMWARE", "HostSystem")], prune=True
         )
+
+
+class TestProvenanceAndByExceptionWarn:
+
+    def _refresh(self, cache_dir, live_stats, live_props=(), host="https://ro818/suite-api"):
+        client = _make_client(list(live_stats), list(live_props))
+        client.base = host
+        cache = DescribeCache(cache_dir=cache_dir, client=client)
+        cache.refresh("VMWARE", "HostSystem")
+        return _read(cache_dir)
+
+    def test_merged_from_refresh_entry_records_counts_and_retained(self, tmp_path):
+        cache_dir = _seed_cache(tmp_path, extra={"merged_from": _MERGED_FROM})
+        doc = self._refresh(cache_dir, [_entry("cpu|usage_average", "CPU|Usage (%)", True)])
+        entries = [e for e in doc["merged_from"] if e.get("role") == "refresh"]
+        assert len(entries) == 1
+        e = entries[0]
+        assert e["source"].startswith("https://ro818/suite-api/api/adapterkinds/VMWARE")
+        assert e["fetched_at"] == doc["fetched_at"]
+        assert e["counts"]["metrics"] == {
+            "added": 0, "updated": 0, "unchanged": 1,
+            "retained": 2, "pruned": 0, "dropped_instance_local": 0,
+        }
+        assert e["retained_absent"]["metrics"] == [
+            "gpu|utilization", "vsan|performance|domClient|iops",
+        ]
+        assert e["retained_absent"]["properties"] == sorted(_SEED_PROPERTIES)
+
+    def test_refresh_entry_updated_in_place_per_host(self, tmp_path):
+        cache_dir = _seed_cache(tmp_path, extra={"merged_from": _MERGED_FROM})
+        live = [_entry("cpu|usage_average", "CPU|Usage (%)", True)]
+        self._refresh(cache_dir, live)
+        doc = self._refresh(cache_dir, live)
+        refresh_entries = [e for e in doc["merged_from"] if e.get("role") == "refresh"]
+        assert len(refresh_entries) == 1, "same host must update, not append"
+        assert doc["merged_from"][:2] == _MERGED_FROM
+        # A different host gets its own entry.
+        doc = self._refresh(cache_dir, live, host="https://lab9/suite-api")
+        hosts = sorted(
+            e["source"].split("/")[2] for e in doc["merged_from"] if e.get("role") == "refresh"
+        )
+        assert hosts == ["lab9", "ro818"]
+
+    def test_second_identical_refresh_prints_count_line_not_list(self, tmp_path, capsys):
+        cache_dir = _seed_cache(tmp_path)
+        live = [_entry("cpu|usage_average", "CPU|Usage (%)", True)]
+        self._refresh(cache_dir, live)
+        err1 = capsys.readouterr().err
+        assert "WARN" in err1 and "gpu|utilization" in err1
+
+        self._refresh(cache_dir, live)
+        err2 = capsys.readouterr().err
+        assert "gpu|utilization" not in err2
+        assert "WARN" not in err2
+        assert "2 cached key(s) not reported by ro818" in err2
+        assert "unchanged since" in err2
+
+    def test_changed_retained_set_prints_full_list_again(self, tmp_path, capsys):
+        cache_dir = _seed_cache(tmp_path)
+        self._refresh(cache_dir, [_entry("cpu|usage_average", "CPU|Usage (%)", True)])
+        capsys.readouterr()
+        # Now the instance also stops reporting cpu|usage_average.
+        self._refresh(cache_dir, [_entry("mem|usage_average", "Memory|Usage (%)", True)])
+        err = capsys.readouterr().err
+        assert "WARN: VMWARE/HostSystem metrics" in err
+        assert "cpu|usage_average" in err
+
+    def test_different_host_prints_full_list(self, tmp_path, capsys):
+        cache_dir = _seed_cache(tmp_path)
+        live = [_entry("cpu|usage_average", "CPU|Usage (%)", True)]
+        self._refresh(cache_dir, live)
+        capsys.readouterr()
+        self._refresh(cache_dir, live, host="https://lab9/suite-api")
+        err = capsys.readouterr().err
+        assert "WARN" in err and "gpu|utilization" in err
+
+
+class TestInstanceLocalKeys:
+
+    _LOCAL = "Super Metric|sm_51613351-5865-478e-9f26-b9d5598fed4d"
+
+    def test_live_super_metric_keys_are_not_imported(self, tmp_path, capsys):
+        cache_dir = _seed_cache(tmp_path)
+        live_stats = [
+            _entry("cpu|usage_average", "CPU|Usage (%)", True),
+            _entry(self._LOCAL, "Super Metric|Other Lab SM", True),
+        ]
+        live_props = [_entry("Super Metric|sm_deadbeef", "Super Metric|Prop", True, "INSTANCED")]
+        cache = DescribeCache(cache_dir=cache_dir, client=_make_client(live_stats, live_props))
+        cache.refresh("VMWARE", "HostSystem")
+        doc = _read(cache_dir)
+        assert not any(k.startswith("Super Metric|") for k in doc["metrics"])
+        assert not any(k.startswith("Super Metric|") for k in doc["properties"])
+        assert "2 instance-local key(s) skipped" in capsys.readouterr().out
+
+    def test_cached_super_metric_keys_are_dropped_without_prune(self, tmp_path, capsys):
+        metrics = dict(_SEED_METRICS)
+        metrics[self._LOCAL] = {"name": "Super Metric|Other Lab SM", "default_monitored": True}
+        cache_dir = _seed_cache(tmp_path, metrics=metrics)
+        live_stats = [_entry("cpu|usage_average", "CPU|Usage (%)", True)]
+        cache = DescribeCache(cache_dir=cache_dir, client=_make_client(live_stats, []))
+        cache.refresh("VMWARE", "HostSystem")
+        doc = _read(cache_dir)
+        assert self._LOCAL not in doc["metrics"]
+        # Platform keys the instance did not report are still retained.
+        assert "gpu|utilization" in doc["metrics"]
+        out, err = capsys.readouterr()
+        assert "1 dropped-instance-local" in out
+        assert self._LOCAL in err
+        # And the existence gate no longer sees it.
+        assert cache.resolve_metric("VMWARE", "HostSystem", self._LOCAL) is None
+
+
+class TestCorruptCacheFile:
+
+    def _corrupt(self, tmp_path) -> Path:
+        cache_dir = tmp_path / "cache"
+        (cache_dir / "VMWARE").mkdir(parents=True)
+        (cache_dir / "VMWARE" / "HostSystem.json").write_text("{not json", encoding="utf-8")
+        return cache_dir
+
+    def test_corrupt_file_raises_with_recovery_path(self, tmp_path):
+        from vcfops_packaging.describe import DescribeCacheError
+        cache_dir = self._corrupt(tmp_path)
+        live = [_entry("cpu|usage_average", "CPU|Usage (%)", True)]
+        cache = DescribeCache(cache_dir=cache_dir, client=_make_client(live, []))
+        with pytest.raises(DescribeCacheError) as exc:
+            cache.refresh("VMWARE", "HostSystem")
+        msg = str(exc.value)
+        assert "corrupt" in msg
+        assert "delete the file" in msg
+        assert "refresh-describe --kind VMWARE:HostSystem" in msg
+        assert "--prune" in msg
+        # File untouched.
+        assert (cache_dir / "VMWARE" / "HostSystem.json").read_text() == "{not json"
+
+    def test_corrupt_file_overwritten_with_prune(self, tmp_path, capsys):
+        cache_dir = self._corrupt(tmp_path)
+        live = [_entry("cpu|usage_average", "CPU|Usage (%)", True)]
+        cache = DescribeCache(cache_dir=cache_dir, client=_make_client(live, []))
+        cache.refresh("VMWARE", "HostSystem", prune=True)
+        doc = _read(cache_dir)
+        assert list(doc["metrics"]) == ["cpu|usage_average"]
+        err = capsys.readouterr().err
+        assert "corrupt" in err and "overwriting" in err
