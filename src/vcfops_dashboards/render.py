@@ -632,6 +632,12 @@ def _xml_kind_binding_props(view: ViewDef, col) -> list[str]:
     return [_xml_property("adapterKind", binding[0]), _xml_property("resourceKind", binding[1])]
 
 
+# View-column super metric cross-reference, supermetric:"<name>" (no ``@``).
+# Token case-insensitive, quoted name case-sensitive. See _xml_attribute_item.
+_SM_COLUMN_PREFIX_RE = re.compile(r'''(?i:supermetric):["']''')
+_SM_COLUMN_REF_RE = re.compile(r'''(?i:supermetric):["'](.+?)["']$''')
+
+
 def _xml_attribute_item(
     view: ViewDef,
     col,
@@ -655,10 +661,18 @@ def _xml_attribute_item(
     # from the sentania/AriaOperationsContent VCF License Consumption
     # bundle. Super metric columns also use rollUpType=NONE, not AVG.
     raw = col.attribute
-    if raw.startswith('supermetric:"') or raw.startswith("supermetric:'"):
+    if _SM_COLUMN_PREFIX_RE.match(raw):
         # Author wrote supermetric:"<name>", resolve to sm_<uuid> using
         # the SM name map built from supermetrics/ YAML at render time.
-        m = re.match(r'''supermetric:["'](.+?)["']$''', raw)
+        # The token is matched case-insensitively (issue #146): the loader
+        # and vcfops_packaging.deps._is_sm_ref already lowercase before
+        # comparing, so a mis-cased token such as SuperMetric:"X" passed
+        # every gate and reached the wire as a literal attributeKey, a
+        # blank column with no diagnostic. The captured NAME stays
+        # case-sensitive: SM display names are exact, only the token
+        # spelling is forgiving (same boundary as SM_CROSSREF_RE in
+        # vcfops_supermetrics.crossref).
+        m = _SM_COLUMN_REF_RE.match(raw)
         if m:
             sm_name = m.group(1)
             sm_id = (sm_map or {}).get(sm_name)
