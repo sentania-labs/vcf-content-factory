@@ -366,44 +366,66 @@ container member the target requires is the tool's responsibility to
 write even when the source export did not have one. Absence of
 scaffolding is not content to preserve.
 
-## The overwrite problem, found 2026-09-15
+## The overwrite scare, and what it actually was
 
-Importing a dashboard that already exists on the target leaves it with
-its widgets unbound. Observed on devel 9.0.2 against
-`66ec0811` (vSAN Cluster Health), five imports:
+Recorded here because the wrong conclusion was reported to Scott before
+the right one was found, and the reasoning error is worth keeping.
 
-1. Bundle from devel's own export: dashboard bound, `importComplete: true`.
-2. Same bundle with the i18n properties member removed: hollow.
-3. The bundle from step 1 again, byte-identical: still hollow.
-4. Same again: still hollow.
-5. The **factory's own** `vcfcf_dashboards` build and install path, real
-   owner, real marker, the code path `cmd_sync` uses: still hollow.
+On 2026-09-15 a dashboard imported into devel read back with every
+widget's `config` empty and `importComplete: false`. Re-importing the
+identical bundle did not fix it. Neither did the factory's own
+`vcfcf_dashboards` build and install path. Five imports, all reporting
+`FINISHED` and `errorCode: NONE`. The conclusion drawn, and escalated,
+was that the product empties an existing dashboard on overwrite and
+that content could not be restored.
 
-Every import reported `state: FINISHED`, `errorCode: NONE`, `imported: 1`.
-The product says it worked every time. It did not.
+That was wrong. A read-only investigation
+(`knowledge/context/api-surface/dashboard_import_two_phase_materialization.md`)
+found that the import materializes in two phases. Phase 1, inside the
+operation, writes the record, widgets, layout and `states`, parks the
+bundle's portability tokens in `entryKeys` and sets
+`importComplete: false`. Phase 2 runs asynchronously, resolves those
+tokens to instance-local ids, writes each widget's `config`, clears
+`entryKeys` and sets `importComplete: true`. A bundle's `config` is
+tokenized, `kind:resourceKind:id:6_::_` rather than an instance-local
+id, which is exactly why `config` is absent until phase 2 and why the
+opaque `states` blob survives phase 1 untouched.
 
-So this is not the migrator. A tool with months of production use behind
-it produces the same result. Something in the import path leaves an
-existing dashboard's widget configuration empty, and re-importing known
-good content does not put it back.
+Both dashboards completed on their own and read fully bound hours
+later. Nothing was ever broken, nothing needed restoring, and the 8.x
+import was never implicated: `Cluster Cost Details` from the 8.18.7
+export is bound on devel. The earlier reading that the 9.x success
+might have been a no-op merge is also settled: the import is a
+uuid-keyed replace, proven by `creationTime` being reset to the import
+time on replaced dashboards while untouched siblings keep their
+original.
 
-Two consequences:
+The error was measuring immediately after each import and then
+measuring again, which restarted the settling clock each time and made
+a transient state look permanent and then sticky. `FINISHED` means the
+end of phase 1 only, and `imported` is a processed count rather than a
+changed count, so the envelope is truthful and simply cannot speak to
+phase 2. The product exposes no phase-2 signal on the Suite API.
 
-- **The 9.x success is unproven.** The bundle in step 1 was built from
-  an export of the same instance, so its widget bindings were identical
-  to what devel already held. A genuine replace and a no-op merge that
-  left the existing content untouched are indistinguishable in every
-  signal collected: the operation summary reports written, not changed.
-  What is actually proven is that the zip is structurally acceptable.
-- **The tool cannot promise an import is safe over existing content.**
-  Whatever the cause, an admin importing a bundle onto an instance that
-  already carries one of those dashboards can end up worse off than
-  before. Until this is understood, that belongs in the tool's own
-  output and in the README, not only here.
+What the tool should do, and should not:
 
-`f5a14e9c` (Cluster Cost Details, from the 8.18.7 export, new to devel)
-has never bound on any of three imports, so the 8.x hollowing may be the
-same phenomenon rather than a cross-version gap.
+- Verification polls `importComplete: true`, or the cheaper `entryKeys`
+  being null, before reading config or taking a screenshot.
+- The two states get different words. Minutes old is settling. Hours or
+  days old is a failure, and the pending `entryKeys` name the adapter
+  kind that cannot be resolved, which turns an opaque hang into "install
+  the X adapter".
+- **No warning that importing over existing content is unsafe.** It is
+  safe. That warning would be a permanent cost paid for a transient
+  state.
+- **No delete before import.** It does not help the resolvable case and
+  re-stalls the unresolvable one.
+
+The genuine failure mode exists on the same instance and is unrelated:
+three dashboards have been `importComplete: false` since May and June,
+their pending `entryKeys` naming `SqlServerAdapter`, `OracleDBAdapter`
+and `mpb_rubrik`, none of which is among the 21 adapter kinds installed.
+Phase 2 cannot resolve a kind whose adapter is absent.
 
 ## Release log
 
