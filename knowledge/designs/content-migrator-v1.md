@@ -465,6 +465,14 @@ Phase 2 cannot resolve a kind whose adapter is absent.
 
 ## Release log
 
+- **v0.2.0** (2026-09-15): no version handling. The declaration, the
+  8.10 floor and all version language are gone, so the first command is
+  `vcfcf-migrator ui my-export.zip`. Bundles byte-identical to v0.1.0's.
+  Also supersedes v0.1.0, whose test suite carried a compact-form copy
+  of the lab prod admin account uuid; the v0.1.0 release is deleted
+  rather than re-cut, so no history is rewritten. Scott, verbatim, to
+  the proposal to ship v0.2.0 and delete the v0.1.0 release, and to tag
+  the factory v1.0.0: "sure on both."
 - **v0.1.0** (2026-09-15): the first usable release. Read an export,
   see the dependency tree, preview any object, pick what you want, get
   an importable bundle, with a run log that can be sent to support.
