@@ -299,7 +299,9 @@ What never goes in a log, and this is the harder half:
   say nothing, but real metric keys are content and are logged; sampled
   or observed values never appear because none are read.
 
-Content identity is in scope: kind, uuid and name for dashboards,
+The content-versus-people boundary was put to Scott explicitly, since
+"no confidential data" could be read either way, and he agreed to it on
+2026-09-14: content identity in, people out. Content identity is in scope: kind, uuid and name for dashboards,
 views, super metrics, groups, symptoms, alerts, reports, rules,
 templates and endpoints, plus metric and property keys. That is what
 makes the log diagnostic, it is what the paired bundles carry anyway,
