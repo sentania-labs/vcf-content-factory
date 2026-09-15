@@ -299,6 +299,16 @@ What never goes in a log, and this is the harder half:
   say nothing, but real metric keys are content and are logged; sampled
   or observed values never appear because none are read.
 
+Two limits of the exclusion, stated rather than left in a code comment. A
+person value of three characters or fewer is not excluded: it cannot be told
+from an ordinary word, and substituting it would rewrite the customer's own
+content. Neither are values that are ordinary words in their own right, the
+built-in `admin` account being the one that matters, for the same reason: a log
+that says `"[excluded:person] alert"` where VCF Operations says `"admin alert"`
+cannot be paired with what Ops said, which is the whole bar. The file paths the
+admin typed are carried as given, and the log's first line says so, because the
+tool cannot be diagnosed without knowing which file it was pointed at.
+
 The content-versus-people boundary was put to Scott explicitly, since
 "no confidential data" could be read either way, and he agreed to it on
 2026-09-14: content identity in, people out. Content identity is in scope: kind, uuid and name for dashboards,
@@ -355,6 +365,45 @@ untouched; the container around it is the tool's to build, and a
 container member the target requires is the tool's responsibility to
 write even when the source export did not have one. Absence of
 scaffolding is not content to preserve.
+
+## The overwrite problem, found 2026-09-15
+
+Importing a dashboard that already exists on the target leaves it with
+its widgets unbound. Observed on devel 9.0.2 against
+`66ec0811` (vSAN Cluster Health), five imports:
+
+1. Bundle from devel's own export: dashboard bound, `importComplete: true`.
+2. Same bundle with the i18n properties member removed: hollow.
+3. The bundle from step 1 again, byte-identical: still hollow.
+4. Same again: still hollow.
+5. The **factory's own** `vcfcf_dashboards` build and install path, real
+   owner, real marker, the code path `cmd_sync` uses: still hollow.
+
+Every import reported `state: FINISHED`, `errorCode: NONE`, `imported: 1`.
+The product says it worked every time. It did not.
+
+So this is not the migrator. A tool with months of production use behind
+it produces the same result. Something in the import path leaves an
+existing dashboard's widget configuration empty, and re-importing known
+good content does not put it back.
+
+Two consequences:
+
+- **The 9.x success is unproven.** The bundle in step 1 was built from
+  an export of the same instance, so its widget bindings were identical
+  to what devel already held. A genuine replace and a no-op merge that
+  left the existing content untouched are indistinguishable in every
+  signal collected: the operation summary reports written, not changed.
+  What is actually proven is that the zip is structurally acceptable.
+- **The tool cannot promise an import is safe over existing content.**
+  Whatever the cause, an admin importing a bundle onto an instance that
+  already carries one of those dashboards can end up worse off than
+  before. Until this is understood, that belongs in the tool's own
+  output and in the README, not only here.
+
+`f5a14e9c` (Cluster Cost Details, from the 8.18.7 export, new to devel)
+has never bound on any of three imports, so the 8.x hollowing may be the
+same phenomenon rather than a cross-version gap.
 
 ## Release log
 
