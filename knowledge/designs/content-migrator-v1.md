@@ -328,6 +328,34 @@ permission to import into the devel lab instance.
 It writes content to a live instance, so what it creates is recorded
 and reversible.
 
+**Result, 2026-09-15: it failed, and nothing was created.** A bundle
+built from the 8.18.7 export, one dashboard with a fully resolved
+closure of 5 views and 13 super metrics, was rejected by devel 9.0.2 in
+121ms with `INVALID_FILE_FORMAT`, "Failed to import content: invalid
+format", and an empty `operationSummaries`. That is a structural
+rejection of the zip, not a per-item complaint. Verified read-only
+afterwards that no super metric, view or dashboard from the selection
+exists on the instance.
+
+The hypothesis, from comparing the bundle against a real 9.x export and
+against the factory's own `packager.py`: the bundle lacks the zip
+directory entries `dashboards/` and `dashboardsharings/` and the
+`dashboardsharings/<owner>` sibling that every real export and every
+working factory-built bundle carries when `dashboards/<owner>` is
+present. `packager.py` carries a comment recording that an earlier
+factory implementation missing exactly these was rejected with this
+same code. The 8.18.7 export itself carries no `dashboardsharings`
+member at all, so pass-through faithfully carried that absence forward.
+
+This is the finding the whole milestone existed to produce, and no
+amount of self-consistency testing could have produced it: every check
+before this was the tool agreeing with itself and with the export
+files. It also sharpens the pass-through rule. A document is carried
+untouched; the container around it is the tool's to build, and a
+container member the target requires is the tool's responsibility to
+write even when the source export did not have one. Absence of
+scaffolding is not content to preserve.
+
 ## Release log
 
 - **v0.0.1** (2026-09-14): M3 skeleton, PR #1 merged with a clean Codex
