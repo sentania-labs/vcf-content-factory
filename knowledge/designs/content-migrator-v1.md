@@ -463,8 +463,84 @@ their pending `entryKeys` naming `SqlServerAdapter`, `OracleDBAdapter`
 and `mpb_rubrik`, none of which is among the 21 adapter kinds installed.
 Phase 2 cannot resolve a kind whose adapter is absent.
 
+## Getting the binaries to actually run
+
+Both binary platforms refused the download by default, for different
+reasons, and neither is a defect in the build. The published Windows
+asset was checked and is a valid x64 PE; the file was never the problem.
+
+**macOS** showed Gatekeeper's "cannot be opened because Apple cannot
+check it for malicious software", which has no visible way past it for a
+normal user. The fix is a Developer ID Application certificate, the
+hardened runtime, and notarization, wired into the release workflow in
+v0.2.1.
+
+Three things about that are worth keeping:
+
+- **The ticket is not stapled, and cannot be.** Stapling attaches
+  Apple's notarization ticket to the artifact so the check works
+  offline, but it only works on a bundle: a `.app`, a `.dmg`, a `.pkg`.
+  These are bare Mach-O executables. So the first run on a given Mac
+  asks Apple over the network. Anyone who just downloaded the file from
+  a GitHub release is online by definition, so this was judged not a
+  real constraint. Making it offline-proof would mean shipping a signed
+  `.pkg`, which needs a Developer ID **Installer** certificate, a
+  different certificate from the Application one. That is the trigger to
+  revisit: someone on a genuinely disconnected Mac.
+- **The hardened runtime needs one entitlement, and PyInstaller is
+  why.** `com.apple.security.cs.disable-library-validation`. A one-file
+  PyInstaller binary carries Python's extension modules and their
+  dylibs inside itself, unpacks them to a temp directory at startup and
+  dlopens them from there. Those files carry whoever built the upstream
+  wheel's signature, or none, so library validation rejects them and the
+  binary dies before printing anything. The entitlement turns off that
+  one check; the binary is still Developer ID signed, still notarized,
+  still tamper-evident. The release workflow runs the signed binary
+  through the full smoke pass before notarizing, which is what proves
+  the entitlement set is sufficient.
+- **A notary outage blocks the entire release, Linux included.** This is
+  deliberate. The alternative is publishing an unsigned macOS binary
+  nobody can run, which is the exact problem being fixed, and a
+  half-published release is worse than a late one. Recovery is
+  `gh run rerun <id> --failed` against the same tag, since the publish
+  step is idempotent per tag. Scott, verbatim: "if we can't ship a
+  signed apple build - we shoudl fail early and rerun later." Hence the
+  preflight in the validate job, which refuses the release before
+  anything is built if any of the six signing secrets is missing.
+
+**Windows** was a Defender Attack Surface Reduction block, rule
+`01443614-CD74-433A-B99E-2ECDC07BFC25`, "block executable files from
+running unless they meet a prevalence, age, or trusted list criterion".
+Unblock-File did not help and neither did moving it out of the profile
+directory, because the rule is about how many machines have seen the
+file, not about where it sits or its zone marker. Windows remains
+unsigned and the README points Windows users at the wheel instead.
+
+Signing Windows is a larger decision than signing macOS, because since
+mid-2023 the CA/Browser Forum requires the private key for a
+publicly-trusted code signing certificate to live on FIPS 140-2 Level 2
+hardware. A `.pfx` in a repository secret, which is exactly how the
+Apple certificate is handled, is not available. Every workable option is
+a cloud signing service (SignPath, free for open source; Azure Trusted
+Signing, around ten dollars a month) or a physical USB token, which is
+miserable in CI. And an OV certificate earns SmartScreen reputation over
+downloads rather than instantly; only an EV certificate skips that wait.
+Scott, verbatim, deferring it: "i'm going to skip windows signing right
+now and just update my PC to let me override it for now."
+
 ## Release log
 
+- **v0.2.1** (2026-09-15): the macOS binaries are signed and notarized.
+  Both macOS legs of the release now sign with a Developer ID Application
+  identity under the hardened runtime with a trusted timestamp, then
+  submit to Apple's notary service, and the release fails unless Apple
+  reports Accepted. Before this, a downloaded binary was refused outright
+  ("Apple cannot check it for malicious software") with no obvious way
+  past it, which is how this started: a coworker on a Mac could not run
+  the tool at all. PR #7. Authorization: Scott, verbatim, "the PR went
+  green, go ahead and merge and then tag as 0.2.1", after "i have an
+  apple developer account" and setting all six repository secrets
+  himself.
 - **v0.2.0** (2026-09-15): no version handling. The declaration, the
   8.10 floor and all version language are gone, so the first command is
   `vcfcf-migrator ui my-export.zip`. Bundles byte-identical to v0.1.0's.
