@@ -316,6 +316,18 @@ and a level flag, and a control on the page. The page also offers a
 run header, the input fingerprint and the resulting bundle's manifest,
 ready to attach to a mail, with the contents named on the button.
 
+## The import test
+
+The premise of the whole pass-through design is that a target instance
+accepts a bundle this tool wrote, including one built from an 8.x
+export. Nothing verified so far tests that: every check to date is the
+tool agreeing with itself and with the export files. Scott authorized
+the test on 2026-09-14, answering "1. Yes." to being asked for
+permission to import into the devel lab instance.
+
+It writes content to a live instance, so what it creates is recorded
+and reversible.
+
 ## Release log
 
 - **v0.0.1** (2026-09-14): M3 skeleton, PR #1 merged with a clean Codex
