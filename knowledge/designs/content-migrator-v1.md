@@ -528,6 +528,50 @@ downloads rather than instantly; only an EV certificate skips that wait.
 Scott, verbatim, deferring it: "i'm going to skip windows signing right
 now and just update my PC to let me override it for now."
 
+## Where this ends up: not here
+
+The migrator is meant to leave. It was built from this repo because the
+carve-out (`vcfcf_core`) is the reusable asset and doing both at once is
+what made the library's boundaries honest, not because the factory
+should own a second product long term. Scott, verbatim, 2026-09-15: "i
+just want to track that because I don't want you to manage this long run
+and stay focused on pure content generation, and i had you drive it
+because I knew your tooling libraries would be worthwhile."
+
+So this repo's session stays pointed at content generation, and the
+migrator moves to independent management (firstmate or a comparable
+orchestrator) once it can stand up on its own. Assessed 2026-09-15: the
+code is ready, the context around it is not. Four things do not travel
+with the repo today, and none of them are code.
+
+1. **The spec is in the wrong repo.** This file, the plan, and the seven
+   migrator review records live under `vcf-content-factory/knowledge/`.
+   They hold the pass-through contract, the logging contract, the import
+   evidence and the signing decisions. A crew working only in
+   `vcf-cf-migrator` has no definition of correct and will re-litigate
+   settled decisions. This is the blocking one.
+2. **The corpus cannot be committed and is not reachable.** Five real
+   exports, gitignored in both repos, present only at
+   `content/migrator/corpus/`. They are what prove the walker, the
+   previews and the census. An agent in a clean worktree gets none of
+   it, and correctness work silently degrades to fixture-only testing.
+   Needs a deliberate answer rather than an accident.
+3. **It is pinned to a wheel built here.** `pyproject.toml` depends on
+   `vcf-cf-tooling-core` by release URL. A migrator change needing a
+   core change is a two-repo task under two governance regimes, and the
+   tempting wrong move when that bites is to vendor the code. Tolerable
+   as-is while core changes are rare; it needs solving properly if the
+   migrator starts driving core's roadmap.
+4. **The clone is nested inside this working tree** at
+   `content/migrator/`, gitignored by the parent. Worktree-based
+   orchestration wants it standalone.
+
+Sequencing, when the time comes: finish the signing work so the repo
+sits in a clean released state rather than mid-flight, move the spec and
+review records into the migrator repo, answer the corpus question, then
+relocate the clone. Handing over a half-released state means explaining
+it twice.
+
 ## Release log
 
 - **v0.2.1** (2026-09-15): the macOS binaries are signed and notarized.
