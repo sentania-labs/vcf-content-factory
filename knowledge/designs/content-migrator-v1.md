@@ -508,6 +508,16 @@ Three things about that are worth keeping:
   preflight in the validate job, which refuses the release before
   anything is built if any of the six signing secrets is missing.
 
+A note for anyone changing the release workflow: the post-notarization
+`spctl -a -t exec` check is advisory, and v0.2.2 is why. On a
+successfully notarized binary it printed "rejected (the code is valid
+but does not seem to be an app)" on both legs. That is spctl declining
+to assess a bare command line tool, not a verdict on the signature. Had
+it stayed the hard gate it was first written as, this release would have
+failed with everything actually correct. The check that does work on a
+bare Mach-O, and which passed silently on both legs, is
+`codesign --verify --strict --test-requirement="=notarized"`.
+
 **Windows** was a Defender Attack Surface Reduction block, rule
 `01443614-CD74-433A-B99E-2ECDC07BFC25`, "block executable files from
 running unless they meet a prevalence, age, or trusted list criterion".
@@ -574,6 +584,17 @@ it twice.
 
 ## Release log
 
+- **v0.2.2** (2026-09-15): the first release whose macOS binaries are
+  signed and notarized. Supersedes v0.2.1, which produced no release at
+  all. PR #14. Authorization: Scott, verbatim, "push tag v0.2.2".
+  Notarization took **19 seconds** on arm64 and **20 seconds** on
+  x86_64, against 68 to 96 minutes for the same artifacts a few hours
+  earlier. Same binary shape, same entitlements, same credentials. That
+  rules out the PyInstaller one-file shape as the cause of the morning's
+  delay and leaves first-submission processing on a new Developer ID, or
+  a transient on Apple's side, as the explanation. No change to the 2h
+  timeout is warranted on the strength of one fast run; it costs nothing
+  when Apple is quick.
 - **v0.2.1** (2026-09-15): the macOS binaries are signed and notarized.
   Both macOS legs of the release now sign with a Developer ID Application
   identity under the hardened runtime with a trusted timestamp, then
