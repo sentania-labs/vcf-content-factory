@@ -137,6 +137,7 @@ cycles because that did not happen.
 | `distribution_view_no_data.md` | DEF-012 root cause: property distributions rendered as numeric histograms |
 | `view_multi_subject_column_binding.md` | Multi-subject views: per-column `adapterKind`/`resourceKind` is a kind filter; `subject:` contract, accepted column kinds (driver and time-segment rejected), DEF-019/DEF-020 pointers |
 | `dashboard_selfprovider_pin_wire_format.md` | Self-provider widget pin wire format (View traversalSpecId, HealthChart) |
+| `dashboard_import_two_phase_materialization.md` | Dashboard import is a uuid-keyed replace landing deferred: phase 1 writes record/layout/`states`, phase 2 resolves `entryKeys` tokens and writes widget `config`. `importComplete`/`entryKeys` semantics (undocumented in both specs); stalls permanently when an adapter kind is absent |
 | `resourcelist_column_state_wire_format.md` | ResourceList column-state wire format (widget `states[]` presets) |
 | `casa-inventory-access.md` | CaSA / Cloud-Proxy adapter inventory-read mechanism |
 | `casa-injected-vs-raw-client.md` | CaSA routing: raw SDK SuiteAPIClient vs injected UnlicensedAdapter client |
