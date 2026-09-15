@@ -25,7 +25,7 @@ Interview on 2026-09-14. Each answer is quoted as given.
 | Source | "Offline export zip only (Recommended)" | v1 never logs in anywhere. The admin exports from the source instance the normal way and points the tool at the zip. Live pull is a v2 item. |
 | Versions | "8.x to 9.x from the start", then 2026-09-14: "but do we really need to account for them? if operations imports them properly, let them handle it, and we just handle dependency tracking, preview generation, and output bundle creation based on selected objects." | **No translation layer.** The tool carries each selected object's document through unchanged and lets the target's import do what it already does with an 8.x document. The tool's job is the three things Scott named: dependency tracking, preview, and bundle creation from the selection. |
 | 8.x corpus | "Saved 8.x export zips only" then "the 8.x exports should not be in the repo." | No live 8.x. The translation layer is built against export zips Scott supplies, which stay on the workstation and never enter the repo. Coverage is what those zips contain; anything not in the corpus is refused, not guessed. |
-| 8.x floor | "8.10 and later (Recommended)" | Exports older than 8.10 are refused with a message naming the floor. Found 2026-09-14: an export zip carries no product version anywhere (checked an 8.18.7 export and a 9.0.2 export; both carry the same `6844548499441080431L.v1` marker, so that is a format marker, not an instance or version id). The admin therefore declares the source version: a `--source-version` option on every command with a matching control on the page, remembered in settings. The floor is enforced on the declared value; with none declared the tool says so and continues in inspect, and refuses to build. |
+| Version handling | 2026-09-15, after the evidence came in: "But those could be settings from the export and not necessarily be version artifacts. Until we have proof drop all version stuff" | **No version handling at all.** No declared source version, no floor, no refusal, no version language in the interface. The tool reads an export and works on it. |
 | Outbound settings | "I believe the secrets are encrypted, so we should just pass them along." then "Yes, endpoints and rules, as exported" | Notification rules and outbound endpoint definitions ride in the bundle exactly as the export carries them, encrypted values included. The tool does not decrypt, edit, or strip them. M4 acceptance includes a real import proving the target accepts the values; if it does not, that is a finding, not a silent drop. |
 | Operator | "Customer-run, no LLM (Recommended)" | Deterministic. No API key, no outbound calls. Shippable as a per-OS binary. |
 
@@ -144,7 +144,9 @@ not request. The 8.18.7 outbound setting is plain text (an SMTP relay
 with no credentials); the encoded `exportId` and `signature` strings
 in every member are signatures, not encrypted payloads.
 
-What the 8.x to 9.x gap actually looks like. Scott, 2026-09-14: "the
+What the 8.x to 9.x gap actually looks like (superseded 2026-09-15:
+see the Versions row; the evidence below is why there is no version
+handling, not why there is). Scott, 2026-09-14: "the
 8.18 and 9.0.2 (new one) are from brock's lab", so those two exports
 carry the same objects before and after, and the overlap is a matched
 pair set: 3 super metrics, 5 views, 3 dashboards, 1 custom group and 1
@@ -249,6 +251,40 @@ A translation counts as done only when both tiers pass.
   either a report message or, if a container-level fix makes it work,
   a fix in the bundle writer. `v1.0.0` when an 8.x-sourced bundle
   imports into 9.x and the dashboards render.
+
+## Why there is no version handling
+
+The tool once required the admin to declare the source version and
+refused anything below 8.10. That is gone. The evidence that removed it,
+all from matched pairs, the same uuid in Brock's 8.18.7 export and his
+9.0.2 export, so a content edit is the only confound:
+
+- 3 super metrics: identical but for `modificationTime` and `modifiedBy`.
+- 5 views: two byte-identical; three differ only in instance-local
+  control id counters and in renamed display text.
+- 3 dashboards: widget config key sets identical in all three, document
+  key sets identical in two. The third carries `autoswitchDelay`,
+  `autoswitchTabId` and `namePath` on the 9.0.2 side, and Scott's
+  reading is the right one: those are a tab auto-switch setting and a
+  folder path, things an author chose, not format.
+
+And the decisive one: a bundle built from the 8.18.7 export imported
+into a 9.0.2 instance and came back fully bound, with no translation
+and nothing the admin had to know.
+
+The only genuine cross-version difference found is that an 8.x export
+carries no `dashboardsharings/<owner>` where a 9.x export does, and
+that is container scaffolding the tool synthesizes without telling
+anyone, which is the correct handling for exactly this class of thing.
+
+So the version ceremony was friction in the first command a user runs,
+justified by a drift nobody has observed, and able to refuse an export
+that would have worked. The rule now: best effort, invisible, and the
+log records what was read. If drift appears it will appear as a
+specific failure on a specific object, the log will name it, and that
+is the moment to say something to the user. The corpus holds nothing
+older than 8.18.7, so none of this is a claim about 8.6; it is a
+statement that a gate needs evidence and this one had none.
 
 ## Logging
 
