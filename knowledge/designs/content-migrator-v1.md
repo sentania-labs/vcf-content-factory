@@ -250,6 +250,70 @@ A translation counts as done only when both tiers pass.
   a fix in the bundle writer. `v1.0.0` when an 8.x-sourced bundle
   imports into 9.x and the dashboards render.
 
+## Logging
+
+Scott, verbatim, 2026-09-14: "V0.1.0 should provide very robust logs
+which when paired with an input and output bundle and pointers from ops
+tell a whole story, but the logs itself and the ops error(s) is enough
+to diagnose. No secrets not confidential data but solid verbose logs,
+we can dial it back around 0.3 or 0.4".
+
+So the bar for v0.1.0 is: a support case arrives as a log plus whatever
+VCF Operations said when the import failed, and that pair is enough to
+say what the tool did and why. The bundles and the source export make
+the story complete but are not required to reach a diagnosis. Verbosity
+is deliberately high for the early releases and gets dialled back
+around v0.3 or v0.4, once the failure modes are known.
+
+What a log must carry:
+
+- A run header: tool version, library version, Python, platform, the
+  exact argument vector, the declared source version and where it came
+  from, the corpus directory setting, and a fingerprint of the input
+  (size, member count, member names, manifest counts) so two runs can
+  be told apart and an export identified without shipping it.
+- Every decision, with the object it concerns and the reason: a
+  reference followed or not followed and which spelling it was written
+  in, a node added to a closure and what required it, a widget
+  classified and which code and which evidence, a grid widened, a
+  container rebuilt, a member carried or skipped.
+- Every refusal and every swallowed failure. Nothing the tool decides
+  to keep quiet about in its output may be quiet in the log.
+- Counts and timings per phase, so a slow or wrong run can be located
+  without a rerun.
+- The output fingerprint on a build: member list, per member size, and
+  the hash of each carried document, so "what did it actually write"
+  is answerable from the log alone.
+
+What never goes in a log, and this is the harder half:
+
+- Credentials of any kind, the export encryption password, and the
+  encrypted values an export carries for outbound endpoints and auth
+  sources. Not even their length.
+- People. The export carries `usermappings.json`, `users.json` and
+  owner uuids; user names, display names, mail addresses and user or
+  owner uuids are excluded. A dashboard's owner is logged as a stable
+  per-run pseudonym, `owner-1`, `owner-2`, so multi-owner behaviour is
+  still legible.
+- Metric values and mock values. The preview's numbers are invented and
+  say nothing, but real metric keys are content and are logged; sampled
+  or observed values never appear because none are read.
+
+Content identity is in scope: kind, uuid and name for dashboards,
+views, super metrics, groups, symptoms, alerts, reports, rules,
+templates and endpoints, plus metric and property keys. That is what
+makes the log diagnostic, it is what the paired bundles carry anyway,
+and it is the customer's own content rather than anyone's personal
+data. The log says at the top, in one line, what classes of thing it
+contains, so an admin can decide before sending it.
+
+Shape: one line per event, machine readable, with a human readable
+rendering available. Off by default at the usual level, `--log FILE`
+and a level flag, and a control on the page. The page also offers a
+"save diagnostics" action producing a single file holding the log, the
+run header, the input fingerprint and the resulting bundle's manifest,
+ready to attach to a mail, with the contents named on the button.
+
 ## Release log
 
 - **v0.0.1** (2026-09-14): M3 skeleton, PR #1 merged with a clean Codex
