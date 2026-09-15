@@ -1,11 +1,20 @@
 # Content migrator v1
 
-Status: approved 2026-09-14. Scott, verbatim: "go ahead and create the
-repo and start work, i'll get you an export". That covers creating the
-public repo `sentania-labs/vcf-cf-migrator` under his account and
-starting M3. Parent plan: `content-migrator-plan-v1.md` (M3). Library
-it builds on: `vcf-cf-tooling-core` 0.1.0, released 2026-09-14
-(`tooling-core-carveout-v1.md`).
+Status: **built and shipping. v0.3.0, 2026-09-15.** Every milestone in
+this document is complete; what is left is in §Open items for Scott.
+
+Approved 2026-09-14. Scott, verbatim: "go ahead and create the repo and
+start work, i'll get you an export". That covered creating the public
+repo `sentania-labs/vcf-cf-migrator` under his account and starting M3.
+Parent plan: `content-migrator-plan-v1.md`. Library it builds on:
+`vcf-cf-tooling-core` 0.1.0, released 2026-09-14
+(`tooling-core-carveout-v1.md`), pinned by release URL and deliberately
+not published to an index.
+
+Where it stands: four releases, macOS binaries signed and notarized,
+627 tests, seven issues closed for v0.3.0 including the first three
+raised by a user outside the lab. This document is due to move into the
+migrator repo (§Where this ends up: not here).
 
 ## What it is
 
@@ -239,18 +248,26 @@ A translation counts as done only when both tiers pass.
 - **M4 (MVP)**: the use case works on a 9.x export: tree, preview,
   select, build, import the bundle into the lab's 9.x instance and see
   the dashboards. Outbound pass-through verified on that import.
-  **Built 2026-09-14, PRs #2 and #4**: read, tree, closed selection,
-  byte-exact build, per-object preview and the selection page, proven
-  against five real exports. The import half is not done: no bundle
-  this tool wrote has been fed to a VCF Operations instance yet, and
-  until one is, M4 is not complete. That is the next thing to do and
-  it needs Scott's go, since it writes to a live instance.
-- **M5**: cross-version verification, not translation. Build a bundle
-  from Brock's 8.18.7 export, import it into a 9.x instance, and
-  record per type what the target accepted. Anything refused becomes
-  either a report message or, if a container-level fix makes it work,
-  a fix in the bundle writer. `v1.0.0` when an 8.x-sourced bundle
-  imports into 9.x and the dashboards render.
+  **Done 2026-09-15**. Built in PRs #2 and #4: read, tree, closed
+  selection, byte-exact build, per-object preview and the selection
+  page, proven against five real exports. The import half followed the
+  same day: a bundle this tool wrote was rejected by devel 9.0.2 for a
+  missing container member, the container writer was fixed, and bundles
+  from both a 9.x and an 8.18.7 source then imported and bound fully.
+  See §The import test.
+- **M5**: cross-version verification, not translation. **Its test was
+  met on 2026-09-15** and then the milestone dissolved. An 8.18.7-sourced
+  bundle imported into 9.0.2 and the dashboards rendered, which was the
+  stated bar for `v1.0.0`. Nothing was refused per type, so there was
+  no report message to write and no second container fix to make.
+
+  The version number did not follow, and deliberately. The same evidence
+  that passed this test also showed there is no 8.x to 9.x document
+  drift to account for, so all version handling was removed in v0.2.0
+  rather than being completed. A milestone about crossing versions
+  cannot be finished when the thing it was crossing turns out not to
+  exist. What `v1.0.0` should mean is now an open question rather than a
+  scheduled one: see §Open items for Scott.
 
 ## Why there is no version handling
 
@@ -401,6 +418,20 @@ untouched; the container around it is the tool's to build, and a
 container member the target requires is the tool's responsibility to
 write even when the source export did not have one. Absence of
 scaffolding is not content to preserve.
+
+**Then it passed, 2026-09-15.** The hypothesis was right. With the zip
+directory entries written and an empty `dashboardsharings/<owner>`
+synthesized when `dashboards/<owner>` is present, devel 9.0.2 accepted
+the bundle. Both sources were then imported and both bound fully: one
+built from the 9.x export and one built from Brock's 8.18.7 export. The
+second is the whole premise of the design, and it is the evidence that
+later removed version handling entirely: an 8.x-sourced bundle needed no
+translation to import into 9.x.
+
+So the milestone is complete. Three things are written fresh by the tool
+and everything else is carried: the zip directory entries, the
+`configuration.json`, and that synthesized empty sharings member. Two
+are narrowed to the selection: sharings and usermappings.
 
 ## The overwrite scare, and what it actually was
 
@@ -690,5 +721,38 @@ the needles.
 
 ## Open items for Scott
 
-- Where the 8.x export zips are on the workstation, so the corpus
-  directory can be pointed at them.
+Resolved and struck, kept so the list is not mistaken for never having
+had anything on it:
+
+- ~~Where the 8.x export zips are, so the corpus directory can be
+  pointed at them.~~ Answered 2026-09-14; the corpus is five exports at
+  `content/migrator/corpus/`, and Scott has said it stays there, with a
+  copy going into a gitignored directory in the migrator repo at his
+  next iteration.
+
+Open, as of v0.3.0:
+
+- **What `v1.0.0` means.** M5's stated bar was met and the milestone it
+  belonged to dissolved (see §Milestones). The number is unclaimed and
+  there is no longer a scheduled reason to claim it.
+- **Whether the factory's committed exports should be scrubbed.**
+  `knowledge/context/exports/*.json` in the public factory repo carry
+  272 distinct uuids from the lab, including the prod admin account id
+  that was force-pushed out of the migrator repo on 2026-09-14. They are
+  wire-format reference material and may well be deliberate. The finding
+  is the inconsistency: one rule, two public repos, enforced in one.
+  Not credentials, and no person names were found in them.
+- **Whether the review records that quote that uuid should be redacted**
+  when this document and they move into the migrator repo. They only
+  cite it while describing the leak, so redacting costs nothing.
+- **Whether any of it is worth rewriting public history for.** It has
+  been public since 2026-09-14 and is an object id, not a secret. The
+  recommendation on file is no: scrub going forward.
+- **Windows code signing.** Deferred by Scott, verbatim: "i'm going to
+  skip windows signing right now and just update my PC to let me
+  override it for now." Research links and the hardware-key constraint
+  are in §Getting the binaries to actually run.
+- **Regenerating the two README screenshots.** Both predate v0.3.0, so
+  they show the uuid clutter the preview no longer prints and none of
+  the tabs. A new reader's first impression of the tool is a version of
+  it that no longer exists.

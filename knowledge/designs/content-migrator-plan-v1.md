@@ -1,6 +1,10 @@
 # Content migrator: plan v1
 
-Status: approved plan, 2026-09-14. Milestones M1 and M2 happen in this
+Status: **complete, 2026-09-15.** Every milestone below is done; the
+migrator is at v0.3.0. Living detail is in `content-migrator-v1.md`,
+which is due to move into the migrator repo.
+
+Approved 2026-09-14. Milestones M1 and M2 happen in this
 repo. M3 and M4 happen in a new repo the factory authors.
 
 ## Use case
@@ -48,16 +52,16 @@ with mock data, select what to keep, and produce an import bundle.
 |---|---|---|---|
 | M0 | Fix the walker and renderer issues below. **Done 2026-09-14**: PRs #155, #156, #157 merged; zips rebuilt, dashboard.json byte-identical across builds | this repo | reviewer, PR |
 | M1 | Rename import namespace `vcfops_*` to `vcfcf_*`. Mechanical, no behavior change, one PR. **Done 2026-09-14**: PR #160 merged, four review rounds, one Codex round; `src/vcfops_*/` shims stay one release (#159). Existing clones: move the gitignored `adapter_runtime/` jars to `src/vcfcf_managementpacks/`; the doctor says so | this repo | factory tag |
-| M2 | Carve pure parse/walk/build code into `vcf-cf-tooling-core` with its own `pyproject.toml`; factory imports it in-tree; CI builds and attaches the wheel on a library tag. **Done 2026-09-14**: rows 1 to 4 merged (PRs #161, #162, #163, #164), two reviewer rounds and one Codex round each; publish path proven with `core-v0.0.1`; `core-v0.1.0` awaits Scott's word. Row 5 (management pack pure set) deferred, not needed for the migrator MVP | this repo | one PR per package, reviewer each |
-| M3 | Migrator spec (`knowledge/designs/content-migrator-v1.md`) and repo skeleton: `sentania-labs/vcf-cf-migrator`, gitignored clone plus registry line like SDK adapters, CI with three-OS PyInstaller matrix, empty app that starts and shows the library version | new repo | Scott approves spec and repo creation |
-| M4 | Migrator MVP: load export zip, tree with dependencies, mock preview, select, emit import bundle | new repo | qa pass against a real export |
+| M2 | Carve pure parse/walk/build code into `vcf-cf-tooling-core` with its own `pyproject.toml`; factory imports it in-tree; CI builds and attaches the wheel on a library tag. **Done 2026-09-14**: rows 1 to 4 merged (PRs #161, #162, #163, #164), two reviewer rounds and one Codex round each; publish path proven with `core-v0.0.1`; `core-v0.1.0` tagged 2026-09-14 on Scott's "Go ahead" and consumed by the migrator ever since. Row 5 (management pack pure set) deferred, not needed for the migrator MVP | this repo | one PR per package, reviewer each |
+| M3 | Migrator spec and repo skeleton: `sentania-labs/vcf-cf-migrator`, gitignored clone, CI with a PyInstaller matrix, app that starts and shows the library version. **Done 2026-09-14**: PR #1, released as `v0.0.1`, four binaries plus the wheel | new repo | Scott approves spec and repo creation |
+| M4 | Migrator MVP: load export zip, tree with dependencies, mock preview, select, emit import bundle. **Done 2026-09-15**: PRs #2, #4, #5, released as `v0.1.0`; bundles from a 9.x and an 8.18.7 source both imported into devel 9.0.2 and bound fully | new repo | qa pass against a real export |
 
 Open questions for M3, answered by Scott on 2026-09-14 (verbatim in
 `content-migrator-v1.md`): offline export zip only; 8.x (8.10 and
 later) to 9.x from the start, built against saved 8.x export zips;
 outbound rules and endpoints pass through as exported, encrypted
-values included; customer-run, no LLM. Spec written, awaiting Scott's
-approval of the spec and the repo creation.
+values included; customer-run, no LLM. Spec written and approved, and
+the repo created, both on 2026-09-14.
 
 ## M0: issues fixed before the namespace sweep
 
