@@ -429,6 +429,15 @@ Phase 2 cannot resolve a kind whose adapter is absent.
 
 ## Release log
 
+- **v0.1.0** (2026-09-15): the first usable release. Read an export,
+  see the dependency tree, preview any object, pick what you want, get
+  an importable bundle, with a run log that can be sent to support.
+  PRs #2, #4 and #5. Authorization: Scott asked for the logging as the
+  v0.1.0 bar, verbatim "V0.1.0 should provide very robust logs which
+  when paired with an input and output bundle and pointers from ops
+  tell a whole story", and confirmed the numbering, verbatim "Fine by
+  me on 0.1 vs 0.2". Bundles proven against a live 9.0.2 instance from
+  both a 9.x and an 8.18.7 source.
 - **v0.0.1** (2026-09-14): M3 skeleton, PR #1 merged with a clean Codex
   pass. Proves the release path: four one-file binaries (Linux, macOS
   arm64, macOS x86_64, Windows) plus the wheel. Authorization: Scott,
