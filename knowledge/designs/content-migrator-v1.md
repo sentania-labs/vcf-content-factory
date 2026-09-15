@@ -304,8 +304,8 @@ around v0.3 or v0.4, once the failure modes are known.
 What a log must carry:
 
 - A run header: tool version, library version, Python, platform, the
-  exact argument vector, the declared source version and where it came
-  from, the corpus directory setting, and a fingerprint of the input
+  exact argument vector, the corpus directory setting, and a
+  fingerprint of the input
   (size, member count, member names, manifest counts) so two runs can
   be told apart and an export identified without shipping it.
 - Every decision, with the object it concerns and the reason: a
