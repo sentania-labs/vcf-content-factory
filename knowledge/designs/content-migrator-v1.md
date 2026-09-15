@@ -237,6 +237,12 @@ A translation counts as done only when both tiers pass.
 - **M4 (MVP)**: the use case works on a 9.x export: tree, preview,
   select, build, import the bundle into the lab's 9.x instance and see
   the dashboards. Outbound pass-through verified on that import.
+  **Built 2026-09-14, PRs #2 and #4**: read, tree, closed selection,
+  byte-exact build, per-object preview and the selection page, proven
+  against five real exports. The import half is not done: no bundle
+  this tool wrote has been fed to a VCF Operations instance yet, and
+  until one is, M4 is not complete. That is the next thing to do and
+  it needs Scott's go, since it writes to a live instance.
 - **M5**: cross-version verification, not translation. Build a bundle
   from Brock's 8.18.7 export, import it into a 9.x instance, and
   record per type what the target accepted. Anything refused becomes
