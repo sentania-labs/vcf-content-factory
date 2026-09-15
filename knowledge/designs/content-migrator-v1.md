@@ -584,6 +584,37 @@ it twice.
 
 ## Release log
 
+- **v0.3.0** (2026-09-15): the page grew up. Seven PRs (#17, #18, #19,
+  #23, #24, #26 plus the signing work already in v0.2.2's line).
+  Authorization: Scott, verbatim "perfect", to the plan "two PRs, #20
+  then #22, then tag v0.3.0", after "let's address these issues as
+  discreate PRs and maybe do a v0.3 tag" and "personally I think the
+  native GUI should be first since that has an affect on everything".
+
+  Four from Scott: a native window with no listening socket (#12), a
+  Browse button using the machine's own file dialog (#10), a preview
+  that shows names instead of uuids (#13), and the right-hand panels
+  behind tabs (#11). Three from `dalebroadcom`, the first outside user:
+  a group you opened stays open when you tick a checkbox (#20), the
+  Clear filter button works (#21, fixed in #17 before it was reported),
+  and dependency names are shown in full (#22).
+
+  What the reviews caught is the more useful record. Six tests in this
+  repo were found passing while the bug they guarded was present, all
+  the same shape: asserting a string appears *somewhere* on a page.
+  `pv-grid` matched a stylesheet selector on every page. `"hidden" in
+  page` matched the `<input type='hidden'>` every page carries. A gate
+  on the picker grepped its own source and passed on a total break. Two
+  more inspected a panel the control had moved off, and one inspected a
+  control that only renders once a filter is set. The habit to distrust
+  is `assert X in page`; the fix each time was to name the element.
+
+  Two fixes were worse than the bug and had to be caught in review: the
+  scoreboard printed each metric's name twice, larger the second time,
+  on 61 tiles; and trading an ellipsis for a wrap turned 402 of 756 rows
+  into vertical word-strips at a normal desktop width. Neither would
+  have been found without measuring a real export.
+
 - **v0.2.2** (2026-09-15): the first release whose macOS binaries are
   signed and notarized. Supersedes v0.2.1, which produced no release at
   all. PR #14. Authorization: Scott, verbatim, "push tag v0.2.2".
