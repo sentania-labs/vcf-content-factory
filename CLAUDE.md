@@ -65,7 +65,9 @@ via the Suite API / content-import zip.
   location-agnostic parse/validate/render/packaging logic (no `.env`, no
   live instance, no repo-layout assumptions). The per-type packages
   (`vcfcf_supermetrics`, `vcfcf_dashboards`, etc.) wrap it with the
-  factory-side pieces: UUID minting, provenance, REST clients, CLIs.
+  factory-side pieces: UUID minting and provenance where the type has
+  them, REST clients, CLIs. `vcfcf_managementpacks` is not in core
+  yet.
   `vcfcf_common` holds shared env/client plumbing, `vcfcf_extractor` the
   third-party-dashboard-to-YAML path, `vcfcf_packaging` bundles and
   releases. `vcfops_*` are one-release import aliases only.

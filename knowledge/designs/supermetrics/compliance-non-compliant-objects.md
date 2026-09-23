@@ -4,9 +4,13 @@
 - **Slug:** compliance-non-compliant-objects
 - **Authored YAML:** content/sdk-adapters/compliance/supermetrics/compliance-non-compliant-objects.yaml
 - **Date:** 2026-09-23
-- **Status:** authored 2026-09-23
+- **Status:** authored 2026-09-23; ships in adapter build 61
 
 ## Initial prompt
+
+Scott, 2026-09-23 (verbatim, relevant part):
+
+> Like a Top level: Environment overview with a breakdown by object type and then different dashboards that drill into each object: vCenter Server, ESXi host, vDS, VM, etc.
 
 Derived from the approved dashboard design. Verbatim prompts live in
 `knowledge/designs/sdk-adapters/compliance-v3-version-aware.md`; the

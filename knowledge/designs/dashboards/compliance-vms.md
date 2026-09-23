@@ -4,7 +4,7 @@
 - **Slug:** compliance-vms
 - **Authored YAML:** content/sdk-adapters/compliance/dashboards/compliance-vms.yaml
 - **Date:** 2026-09-23
-- **Status:** mock approved 2026-09-23
+- **Status:** mock approved and authored 2026-09-23; ships in adapter build 61
 - **Mock:** knowledge/designs/dashboards/compliance-vms.html
 - **Parent design:** knowledge/designs/sdk-adapters/compliance-v3-version-aware.md
 
@@ -24,7 +24,7 @@ readable; the sorted list and its totals row carry the overview.
 
 ## Keys
 
-Adapter v3 build 57 key list (per-object, on `VMWARE / VirtualMachine`):
+Adapter v3 build 60 key list (per-object, on `VMWARE / VirtualMachine`):
 `VCF-CF Compliance|score`, `|pass_count`, `|fail_count`,
 `|total_count`, `|unreadable_count`, `|non_compliant`, `|no_benchmark`,
 `|profile_name`. Known-good VMWARE keys used across reference content:
@@ -36,7 +36,7 @@ Adapter v3 build 57 key list (per-object, on `VMWARE / VirtualMachine`):
 |---|---|---|---|---|---|
 | W1 | Scope | ResourceList | 1, 1, 3, 12 | `vSphere World`, `VMwareAdapter Instance`, `ClusterComputeResource`, `HostSystem` | Picker, default vSphere World. Drives W2 |
 | W2 | VM Compliance | View | 4, 1, 9, 12 | driven by W1, descendants of kind `VirtualMachine` | New view (below), score ascending. Selection drives W3, W4, W5 |
-| W3 | Failing Controls on Selected VM | AlertList | 1, 13, 7, 8 | driven by W2 | alert type `15_21`, the generated `vm.*` alert definitions, criticality warning and up |
+| W3 | Failing Controls on Selected VM | AlertList | 1, 13, 7, 8 | driven by W2 | explicit `alert_definitions` list of the generated `vm.*` alert definitions, criticality warning and up |
 | W4 | Compliance Details | PropertyList | 8, 13, 5, 8 | driven by W2 | `summary\|parentHost`, `VCF-CF Compliance\|profile_name`, `\|total_count`, `\|pass_count`, `\|fail_count`, `\|unreadable_count` |
 | W5 | Score Trend | MetricChart | 1, 21, 12, 5 | driven by W2 | `VCF-CF Compliance\|score` and `\|fail_count`, 30 days |
 
@@ -68,5 +68,21 @@ No SCG. Score columns filtered to `no_benchmark = 0` and
   and sorts server side, so worst-first still works, but the default
   selection may move to the first vCenter if load time is poor on the
   first install.
-- Unreadable VM settings count as failing but raise no per-control
-  alert (Compliant = -1); the Unreadable column is where they show.
+- Unreadable VM settings raise no per-control
+  alert (Compliant = -1) and are excluded from the score; the object counts as
+  non-compliant, and the Unreadable column is where they show.
+
+## Amendments after approval (2026-09-23)
+
+- **Totals rows are SUM-only.** The framework allows one aggregation per
+  totals row (issue #168); owner decision: ship without count and
+  average for now. Wherever this note says a summary row carries a
+  count or an average, read: sums of the count and flag columns only.
+- **No default sort.** Embedded views open in the product default
+  order; the framework drops View widget sort settings (TOOLSET GAP
+  reported by dashboard-author). Click the Score header to sort.
+- **Alert lists** filter by an explicit `alert_definitions` list of the
+  generated per-control definitions (adapter kind VMWARE, type 15,
+  subType 21), not by adapter kind.
+- **Keys** are the adapter v3 build 60 contract (README.md and
+  docs/overview.md in the adapter repo); build 61 ships this dashboard.

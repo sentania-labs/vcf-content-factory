@@ -4,7 +4,7 @@
 - **Slug:** compliance-esxi-hosts
 - **Authored YAML:** content/sdk-adapters/compliance/dashboards/compliance-esxi-hosts.yaml
 - **Date:** 2026-09-23
-- **Status:** mock approved 2026-09-23
+- **Status:** mock approved and authored 2026-09-23; ships in adapter build 61
 - **Mock:** knowledge/designs/dashboards/compliance-esxi-hosts.html
 - **Parent design:** knowledge/designs/sdk-adapters/compliance-v3-version-aware.md
 
@@ -52,7 +52,7 @@ Known-good VMWARE keys (used across reference content):
 | W1 | Scope | ResourceList | 1, 1, 3, 12 | `vSphere World`, `VMwareAdapter Instance`, `ClusterComputeResource` | Object picker; default selection vSphere World. Drives W2 and W3 |
 | W2 | Host Compliance | View | 4, 1, 9, 12 | driven by W1, descendants of kind `HostSystem` | New view (below), sorted by score ascending. Selection drives W4, W5, W6 |
 | W3 | Host Score Heatmap | Heatmap | 1, 13, 5, 8 | driven by W1, `HostSystem` | Color by `VCF-CF Compliance\|score` (red 0, green 100), group by parent cluster, fixed size |
-| W4 | Failing Controls on Selected Host | AlertList | 6, 13, 7, 8 | driven by W2 | Alerts from adapter kind `vcfcf_compliance`, subType 21, on the selected host: control ID and title, criticality, recommendation (runbook), since |
+| W4 | Failing Controls on Selected Host | AlertList | 6, 13, 7, 8 | driven by W2 | Explicit `alert_definitions` list of the generated per-control definitions (type 15, subType 21), on the selected host: control ID and title, criticality, recommendation (runbook), since |
 | W5 | Score Trend | MetricChart | 1, 21, 6, 6 | driven by W2 | `VCF-CF Compliance\|score` and `\|fail_count`, 30 days |
 | W6 | Compliance Details | PropertyList | 7, 21, 6, 6 | driven by W2 | `summary\|version`, `VCF-CF Compliance\|profile_name`, `\|total_count`, `\|pass_count`, `\|fail_count`, `\|unreadable_count` |
 
@@ -96,3 +96,18 @@ Non-compliant (= non-compliant hosts in scope), sum of No SCG.
   `no_benchmark = 0` and `total_count > 0` for score columns so a stale
   score never shows as current. No-benchmark hosts still list, with the
   No SCG flag set.
+
+## Amendments after approval (2026-09-23)
+
+- **Totals rows are SUM-only.** The framework allows one aggregation per
+  totals row (issue #168); owner decision: ship without count and
+  average for now. Wherever this note says a summary row carries a
+  count or an average, read: sums of the count and flag columns only.
+- **No default sort.** Embedded views open in the product default
+  order; the framework drops View widget sort settings (TOOLSET GAP
+  reported by dashboard-author). Click the Score header to sort.
+- **Alert lists** filter by an explicit `alert_definitions` list of the
+  generated per-control definitions (adapter kind VMWARE, type 15,
+  subType 21), not by adapter kind.
+- **Keys** are the adapter v3 build 60 contract (README.md and
+  docs/overview.md in the adapter repo); build 61 ships this dashboard.

@@ -47,9 +47,12 @@ src/
 
 The parsing, validation and rendering live in `vcfcf_core/<type>/`.
 The per-type factory package keeps the same module names (`loader.py`,
-`render.py`, ...) as thin entry points that re-export the core module and
-add what a library must not do on its own: mint UUIDs into authored YAML,
-derive provenance from the repo layout, talk to a live instance. Fix
+`render.py`, ...): they re-export the core names and keep the live half,
+what a library must not do on its own (mint UUIDs into authored YAML and
+derive provenance from the repo layout where the type has them, talk to
+a live instance). Some factory-side modules are substantial code in
+their own right (for example `vcfcf_packaging/describe.py`,
+`vcfcf_extractor/extractor.py`). Fix
 behaviour in the core module; patch the core module in tests. Design:
 `knowledge/designs/tooling-core-carveout-v1.md`.
 
@@ -59,7 +62,7 @@ Every per-type factory package follows the same skeleton:
 src/vcfcf_<type>/
   __init__.py
   __main__.py    → cli.main()
-  loader.py      → wraps vcfcf_core.<type>.loader (UUID mint, provenance)
+  loader.py      → wraps vcfcf_core.<type>.loader (UUID mint and provenance where the type has them)
   client.py      → REST client
   cli.py         → validate, list, sync, delete
 ```

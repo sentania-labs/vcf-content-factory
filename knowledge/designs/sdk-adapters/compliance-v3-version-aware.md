@@ -4,7 +4,7 @@
 - **Slug:** compliance-v3-version-aware
 - **Adapter repo:** `content/sdk-adapters/compliance/` (sentania-labs/vcf-content-factory-sdk-compliance)
 - **Date:** 2026-09-23
-- **Status:** drafted
+- **Status:** adapter built (build 61, feat/v3-version-aware); devel install pending
 
 ## Initial prompt
 
@@ -79,9 +79,12 @@ Scott, on testing (verbatim, after recon showed a single ESXi build in both labs
    `remediation_text`, so every failing control arrives with its fix.
    Existing score alert re-checked for subtype (appears to be 20,
    Capacity).
-5. **Summary per object type.** World object rolls up per kind and per
-   benchmark (scored, average score, non-compliant, no-benchmark count),
-   not hosts only.
+5. **Summary per object type, per vCenter.** Rollups per kind and per
+   benchmark (scored, average score, non-compliant, no-benchmark count)
+   are pushed onto each vCenter object. Recon found one ComplianceWorld
+   shared by all adapter instances, so its Summary values were
+   last-writer-wins; build 57 retired them (World keeps only
+   last_scan_timestamp).
 6. **Dashboards bundled in the pak** via `adapter.yaml`
    `bundled_content` (build-sdk already bundles views, dashboards,
    symptoms, alerts, recommendations): Environment Overview, ESXi Hosts,
@@ -102,13 +105,22 @@ Scott, on testing (verbatim, after recon showed a single ESXi build in both labs
   both Ops 9.0 and 9.1.
 - **Unreadable controls push Compliant = -1** (approved 2026-09-23 with
   the VMs / vCenter & Networking mock plan): no per-control alert for a
-  setting nobody could read; the object still counts as non-compliant
-  and the score still counts it failing.
+  setting nobody could read; the object still counts as non-compliant,
+  and the unreadable control is excluded from the score (numerator and
+  denominator), as the adapter already did before v3.
+- **Average score when nothing is scored** (owner answer to review 57
+  W2): avg_score is not pushed when scored = 0; a retained old average
+  is identifiable from the non_compliant / scored columns beside it.
+- **Version unreadable is not "no benchmark"** (review 57 B2, build 58):
+  the object reuses last cycle's SCG, else counts as non-compliant in
+  the `unknown` benchmark bucket.
 - **Dashboard set approved:** Environment Overview, ESXi Hosts, VMs,
   vCenter & Networking (mocks and tables under designs/dashboards/).
 - **Order:** dashboard mocks (RULE-011) first, then the adapter work
   interleaved with authoring, so no pak is built without its
-  dashboards.
+  dashboards. In practice builds 57 to 60 were adapter-only dev builds
+  for review (not installed); build 61 is the first to carry the
+  dashboards and the first intended for install.
 
 ## Future (considered, not in v3 scope)
 
@@ -139,7 +151,7 @@ matches and every object fails:
 | Profile | control_ids |
 |---|---|
 | 6.7 | `esx.logs-remote`, `esx.lockdown-dcui-access`, `esx.account-password-policies`, `vm.transparentpagesharing-inter-vm-enabled` |
-| 7.0 | `esx.annotations-welcomemessage`, `esx.etc-issue`, `esx.logs-remote`, `vc.etc-issue` |
+| 7.0 | `esx.annotations-welcomemessage`, `esx.etc-issue` (see note), `esx.logs-remote`, `vc.etc-issue` |
 | 8.0 | `esx.annotations-welcomemessage`, `esx.etc-issue`, `esx.logs-remote`, `vc.etc-issue` |
 | 9.0 | `esx.etc-issue`, `esx.log-forwarding`, `esx.login-message`, `vc.etc-issue`, `esx.ad-admin-group-name` |
 | 9.1 | `esx.ad-admin-group-name`, `esx.etc-issue`, `esx.log-forwarding`, `esx.login-message`, `vc.etc-issue`, `vm.virtual-hardware` |

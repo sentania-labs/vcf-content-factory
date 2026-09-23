@@ -1,5 +1,9 @@
 # Design: Compliance Fleet Overview Dashboard
 
+> **Superseded 2026-09-23** by `compliance-environment-overview.md` (adapter v3).
+> Its ComplianceWorld Summary keys were retired in build 57 and the
+> dashboard is no longer bundled.
+
 ## Initial prompt
 
 "Author compliance dashboards: Compliance Overview (heatmap + scoreboard) and

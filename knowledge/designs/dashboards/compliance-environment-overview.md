@@ -5,7 +5,7 @@
 - **Authored YAML:** content/sdk-adapters/compliance/dashboards/compliance-environment-overview.yaml
 - **Replaces:** content/sdk-adapters/compliance/dashboards/compliance-overview.yaml (Compliance Fleet Overview)
 - **Date:** 2026-09-23
-- **Status:** mock approved 2026-09-23
+- **Status:** mock approved and authored 2026-09-23; ships in adapter build 61
 - **Mock:** knowledge/designs/dashboards/compliance-environment-overview.html
 - **Parent design:** knowledge/designs/sdk-adapters/compliance-v3-version-aware.md
 
@@ -36,8 +36,9 @@ goes to act on a single object.
   depth 1 over its `VMwareAdapter Instance` children (recon: the three
   vCenters are its only direct children, on devel and prod).
 - **Non-compliant** = an object with at least one failing or
-  unreadable control (`fail_count > 0` or `unreadable_count > 0`), per
-  the unreadable-is-not-compliant rule. The adapter computes it.
+  unreadable control (`fail_count > 0` or `unreadable_count > 0`), or
+  whose version could not be read, per the unreadable-is-not-compliant
+  rule. The adapter computes it.
 - **No benchmark** = object whose version has no SCG in the pak; it is
   counted, never scored.
 
@@ -56,7 +57,7 @@ Per-vCenter rollups on `VMWARE / VMwareAdapter Instance` `[planned v3]`,
 | `VCF-CF Compliance\|Rollup\|<K>\|no_benchmark` | objects with no matching SCG |
 | `VCF-CF Compliance\|Rollup\|<K>\|score_sum` | sum of scores (for weighted averages) |
 | `VCF-CF Compliance\|Rollup\|<K>\|avg_score` | score_sum / scored |
-| `VCF-CF Compliance\|Rollup\|Benchmark\|<B>\|objects` | objects scored against `<B>` in `SCG_6.7, SCG_7.0, SCG_8.0, SCG_9.0, SCG_9.1, none` |
+| `VCF-CF Compliance\|Rollup\|Benchmark\|<B>\|objects` | objects scored against `<B>` in `SCG_6.7, SCG_7.0, SCG_8.0, SCG_9.0, SCG_9.1, none, unknown` (unknown = version unreadable, build 58) |
 
 Observed: `summary|version` on `VMwareAdapter Instance` (vCenter version).
 
@@ -81,7 +82,7 @@ dashboard):
 | W3 | Compliance by vCenter and Object Type | View | 1, 5, 12, 8 | self-provider, pinned `vSphere World`, children `VMwareAdapter Instance` | New view (below). Summary row = environment totals |
 | W4 | Objects by SCG Version | View | 1, 13, 6, 7 | same as W3 | New view (below). Summary row = totals |
 | W5 | Environment Score Trend | MetricChart | 7, 13, 6, 7 | pinned `vSphere World` | SM Average Score and SM Non-Compliant Objects, last 30 days |
-| W6 | Open Compliance Alerts | AlertList | 1, 20, 12, 7 | driven by W3, default all | Alerts from adapter kind `vcfcf_compliance`, subType 21 (compliance), criticality warning and up, newest first |
+| W6 | Open Compliance Alerts | AlertList | 1, 20, 12, 7 | driven by W3, default all | Explicit `alert_definitions` list of the generated per-control definitions (type 15, subType 21) (compliance), criticality warning and up, newest first |
 
 Interactions: W3 row selection drives W6 (alerts scoped to that
 vCenter's descendants). No selection = all compliance alerts.
@@ -98,7 +99,7 @@ summary so score columns summarize as average of vCenters (labelled so).
 
 **Objects by SCG Version** (subject `VMwareAdapter Instance`):
 vCenter name, then `Rollup|Benchmark|<B>|objects` for SCG 6.7, 7.0,
-8.0, 9.0, 9.1, none. Summary row: sum.
+8.0, 9.0, 9.1, none, unknown. Summary row: sum.
 
 ## Known constraints
 
@@ -117,3 +118,18 @@ vCenter name, then `Rollup|Benchmark|<B>|objects` for SCG 6.7, 7.0,
   checkable by API; verified visually after the first install on each.
 - Retires the existing Compliance Fleet Overview, whose ComplianceWorld
   summaries are last-writer-wins across adapter instances.
+
+## Amendments after approval (2026-09-23)
+
+- **Totals rows are SUM-only.** The framework allows one aggregation per
+  totals row (issue #168); owner decision: ship without count and
+  average for now. Wherever this note says a summary row carries a
+  count or an average, read: sums of the count and flag columns only.
+- **No default sort.** Embedded views open in the product default
+  order; the framework drops View widget sort settings (TOOLSET GAP
+  reported by dashboard-author). Click the Score header to sort.
+- **Alert lists** filter by an explicit `alert_definitions` list of the
+  generated per-control definitions (adapter kind VMWARE, type 15,
+  subType 21), not by adapter kind.
+- **Keys** are the adapter v3 build 60 contract (README.md and
+  docs/overview.md in the adapter repo); build 61 ships this dashboard.
