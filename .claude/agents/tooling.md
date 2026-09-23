@@ -33,16 +33,27 @@ The `vcfops-*` entries below are skills; each lives at
 
 ## Package skeleton
 
-Every `vcfcf_*` package follows:
+Parse, validate, and render logic lives in `vcfcf_core/<type>/`, which
+must not read `.env`, assume a `content/` or `knowledge/` tree, call a
+live instance, or write a file it was not handed
+(`tests/test_core_contract.py` enforces this). Each per-type factory
+package wraps it:
 
 ```
+vcfcf_core/<type>/
+  loader.py      → YAML schema → dataclass, validate
+  render.py      → wire format (where the type has one)
+
 vcfcf_<type>/
   __init__.py
   __main__.py    → cli.main()
-  loader.py      → YAML schema → dataclass, validate
+  loader.py      → wraps the core loader (UUID mint, provenance)
   client.py      → REST client
   cli.py         → validate, list, sync, delete
 ```
+
+Fix behaviour in the core module, not the wrapper. `vcfcf_managementpacks`
+is not in core yet. Design: `knowledge/designs/tooling-core-carveout-v1.md`.
 
 ## Common gap patterns
 

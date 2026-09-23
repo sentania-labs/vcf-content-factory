@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>[VCF Content Factory] Compliance ESXi Hosts (mock)</title>
+<style>
+  :root { --bg:#1b1f24; --panel:#23282f; --panel-2:#2a3038; --line:#363d47; --ink:#f2f4f7; --ink-2:#b7bfca; --ink-3:#7f8896; --accent:#3987e5; --red:#e5484d; --orange:#e5822e; --yellow:#e0b400; --green:#2fa36b; --plan:#9b7be0; }
+  * { box-sizing:border-box } body { margin:0; background:var(--bg); color:var(--ink); font:13px/1.4 "Metropolis","Segoe UI",system-ui,sans-serif }
+  .shell { padding:14px 18px 40px; max-width:1500px } .hdr { display:flex; align-items:center; gap:10px; margin-bottom:12px; flex-wrap:wrap } .hdr h1 { font-size:18px; font-weight:600; margin:0 }
+  .badge { font-size:11px; padding:2px 8px; border-radius:10px; background:var(--panel-2); color:var(--ink-2); border:1px solid var(--line) }
+  .badge.plan { color:var(--plan); border-color:var(--plan) }
+  .grid { display:grid; grid-template-columns:repeat(12,1fr); grid-auto-rows:34px; gap:10px }
+  .w { background:var(--panel); border:1px solid var(--line); border-radius:4px; padding:10px 12px; position:relative; overflow:hidden }
+  .w h2 { font-size:13px; font-weight:600; margin:0 0 8px; display:flex; align-items:center; gap:8px } .w h2 .type { margin-left:auto; font-weight:400; font-size:10px; color:var(--ink-3); text-transform:uppercase; letter-spacing:.04em }
+  .note { position:absolute; left:12px; bottom:6px; font-size:10px; color:var(--ink-3) }
+  .tiles { display:grid; grid-template-columns:repeat(4,1fr); gap:8px } .tile { background:var(--panel-2); border-radius:4px; padding:10px 8px; text-align:center; border-top:3px solid var(--line) } .tile .v { font-size:28px; font-weight:600 } .tile .l { font-size:11px; color:var(--ink-2) }
+  .k { color:var(--ink-3); font-size:9px; font-family:ui-monospace,Menlo,monospace; word-break:break-all } .k.p { color:var(--plan) }
+  .txt { color:var(--ink-2); font-size:12px; line-height:1.5 } .txt p { margin:0 0 6px } .txt b { color:var(--ink) }
+  .lv { width:100%; border-collapse:collapse; font-size:12px } .lv th { text-align:left; color:var(--ink-3); font-weight:500; font-size:11px; padding:3px 6px; border-bottom:1px solid var(--line); vertical-align:bottom } .lv td { padding:5px 6px; border-bottom:1px solid var(--line) } .lv .num { text-align:right; font-variant-numeric:tabular-nums } .lv tr.sum td { font-weight:600; background:var(--panel-2) } .lv tr.sel td { background:#2c3b52 }
+  .lv th .k { display:block; font-weight:400 }
+  .grp { text-align:center !important; color:var(--ink-2) !important; border-bottom:none !important }
+  .c-red { color:var(--red) } .c-or { color:var(--orange) } .c-ye { color:var(--yellow) } .c-gr { color:var(--green) }
+  .chip { display:inline-block; min-width:44px; text-align:right; padding:1px 6px; border-radius:3px; font-variant-numeric:tabular-nums }
+  .chip.red { background:rgba(229,72,77,.18); color:var(--red) } .chip.or { background:rgba(229,130,46,.18); color:var(--orange) } .chip.ye { background:rgba(224,180,0,.16); color:var(--yellow) } .chip.gr { background:rgba(47,163,107,.16); color:var(--green) }
+  .chart { width:100%; height:calc(100% - 58px) } .legend { display:flex; gap:14px; font-size:11px; color:var(--ink-2) } .legend i { display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:5px; vertical-align:-1px }
+  .sev { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px }
+  .keybox { border:1px dashed var(--line); color:var(--ink-3); font-size:11px; padding:10px 12px; border-radius:4px; margin-top:14px; line-height:1.6 } .keybox b { color:var(--ink-2) }
+  .wire { position:absolute; right:10px; bottom:6px; font-size:10px; color:var(--accent) }
+
+  .pick div { padding:4px 6px; border-radius:3px; font-size:12px; color:var(--ink-2) } .pick div.sel { background:#2c3b52; color:var(--ink) } .pick .kind { font-size:10px; color:var(--ink-3); margin-left:4px }
+  .hm { display:flex; gap:10px; flex-wrap:wrap } .hm .grpbox { border:1px solid var(--line); border-radius:3px; padding:4px; } .hm .grpbox .t { font-size:10px; color:var(--ink-3); margin-bottom:3px } .hm .cells { display:flex; gap:3px; flex-wrap:wrap; width:150px } .hm .cell { width:46px; height:40px; border-radius:2px; font-size:10px; display:flex; align-items:center; justify-content:center; color:#111; font-weight:600 }
+  .lv td { white-space:nowrap; padding:4px 6px }
+  .props td:first-child { color:var(--ink-3) }
+</style>
+</head>
+<body>
+<div class="shell">
+  <div class="hdr">
+    <h1>[VCF Content Factory] Compliance ESXi Hosts</h1>
+    <span class="badge">targets: VCF Operations 9.0 (devel) and 9.1 (prod)</span>
+    <span class="badge">ALL VALUES SIMULATED; vCenter, cluster naming and ESXi build as observed on devel</span>
+    <span class="badge plan">purple key = planned v3, not yet collected</span>
+  </div>
+  <div class="grid">
+
+    <div class="w" style="grid-column:1 / span 3; grid-row:1 / span 12">
+      <h2>Scope <span class="type">W1 ResourceList</span></h2>
+      <div class="pick">
+        <div class="sel">vSphere World<span class="kind">vSphere World</span></div>
+        <div>vcf-lab-mgmt<span class="kind">vCenter</span></div>
+        <div>vcf-lab-wld01<span class="kind">vCenter</span></div>
+        <div>vcf-lab-wld02<span class="kind">vCenter</span></div>
+        <div>vcf-lab-mgmt-cl01<span class="kind">Cluster</span></div>
+        <div>vcf-lab-wld01-cl01<span class="kind">Cluster</span></div>
+        <div>vcf-lab-wld02-cl01<span class="kind">Cluster</span></div>
+      </div>
+      <div class="note">Kinds: vSphere World, VMwareAdapter Instance, ClusterComputeResource. Drives W2, W3.</div>
+    </div>
+
+    <div class="w" style="grid-column:4 / span 9; grid-row:1 / span 12">
+      <h2>Host Compliance: vSphere World <span class="type">W2 View: Compliance Host Detail, driven by W1, worst first</span></h2>
+      <table class="lv">
+        <tr><th>Host</th><th>Cluster<span class="k">summary|parentCluster</span></th><th>vCenter<span class="k">summary|parentVcenter</span></th><th>ESXi<span class="k">summary|version</span></th><th>SCG applied<span class="k">VCF-CF Compliance|profile_name</span></th><th class="num">Score %<span class="k">…|score</span></th><th class="num">Failing<span class="k">…|fail_count</span></th><th class="num">Unreadable<span class="k">…|unreadable_count</span></th><th class="num">Non-comp<span class="k p">…|non_compliant</span></th><th class="num">No SCG<span class="k p">…|no_benchmark</span></th></tr>
+        <tr class=sel><td>vcf-lab-mgmt-esx06</td><td>vcf-lab-mgmt-cl01</td><td>vcf-lab-mgmt</td><td>9.1.1</td><td>VMware_SCG_9.1</td><td class="num"><span class="chip red">71.4</span></td><td class="num">16</td><td class="num">3</td><td class="num">1</td><td class="num">0</td></tr><tr><td>vcf-lab-mgmt-esx02</td><td>vcf-lab-mgmt-cl01</td><td>vcf-lab-mgmt</td><td>9.1.1</td><td>VMware_SCG_9.1</td><td class="num"><span class="chip or">85.7</span></td><td class="num">8</td><td class="num">0</td><td class="num">1</td><td class="num">0</td></tr><tr><td>vcf-lab-wld02-esx02</td><td>vcf-lab-wld02-cl01</td><td>vcf-lab-wld02</td><td>9.1.1</td><td>VMware_SCG_9.1</td><td class="num"><span class="chip ye">91.1</span></td><td class="num">5</td><td class="num">0</td><td class="num">1</td><td class="num">0</td></tr><tr><td>vcf-lab-mgmt-esx04</td><td>vcf-lab-mgmt-cl01</td><td>vcf-lab-mgmt</td><td>9.1.1</td><td>VMware_SCG_9.1</td><td class="num"><span class="chip ye">92.9</span></td><td class="num">4</td><td class="num">0</td><td class="num">1</td><td class="num">0</td></tr><tr><td>vcf-lab-wld01-esx03</td><td>vcf-lab-wld01-cl01</td><td>vcf-lab-wld01</td><td>9.1.1</td><td>VMware_SCG_9.1</td><td class="num"><span class="chip ye">94.6</span></td><td class="num">3</td><td class="num">0</td><td class="num">1</td><td class="num">0</td></tr><tr><td>vcf-lab-wld02-esx01</td><td>vcf-lab-wld02-cl01</td><td>vcf-lab-wld02</td><td>9.1.1</td><td>VMware_SCG_9.1</td><td class="num"><span class="chip gr">96.4</span></td><td class="num">2</td><td class="num">0</td><td class="num">1</td><td class="num">0</td></tr><tr><td>vcf-lab-mgmt-esx05</td><td>vcf-lab-mgmt-cl01</td><td>vcf-lab-mgmt</td><td>9.1.1</td><td>VMware_SCG_9.1</td><td class="num"><span class="chip gr">98.2</span></td><td class="num">1</td><td class="num">0</td><td class="num">1</td><td class="num">0</td></tr><tr><td>vcf-lab-wld01-esx01</td><td>vcf-lab-wld01-cl01</td><td>vcf-lab-wld01</td><td>9.1.1</td><td>VMware_SCG_9.1</td><td class="num"><span class="chip gr">100</span></td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">0</td></tr><tr><td>vcf-lab-wld01-esx02</td><td>vcf-lab-wld01-cl01</td><td>vcf-lab-wld01</td><td>9.1.1</td><td>VMware_SCG_9.1</td><td class="num"><span class="chip gr">100</span></td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">0</td></tr><tr><td>vcf-lab-wld02-esx03</td><td>vcf-lab-wld02-cl01</td><td>vcf-lab-wld02</td><td>9.1.1</td><td>VMware_SCG_9.1</td><td class="num"><span class="chip gr">100</span></td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">0</td></tr><tr class="sum"><td>Summary: 10 hosts</td><td></td><td></td><td></td><td></td><td class="num">avg 93.0</td><td class="num">39</td><td class="num">3</td><td class="num">7</td><td class="num">0</td></tr>
+      </table>
+      <div class="note">Summary row = totals for the selected scope. Sum of Non-comp = non-compliant hosts. Row select drives W4, W5, W6.</div>
+    </div>
+
+    <div class="w" style="grid-column:1 / span 5; grid-row:13 / span 8">
+      <h2>Host Score Heatmap <span class="type">W3 Heatmap, driven by W1</span></h2>
+      <div class="hm"><div class="grpbox"><div class="t">vcf-lab-mgmt-cl01</div><div class="cells"><div class="cell" style="background:#e5484d" title="vcf-lab-mgmt-esx06">esx06</div><div class="cell" style="background:#e5822e" title="vcf-lab-mgmt-esx02">esx02</div><div class="cell" style="background:#e0b400" title="vcf-lab-mgmt-esx04">esx04</div><div class="cell" style="background:#2fa36b" title="vcf-lab-mgmt-esx05">esx05</div></div></div><div class="grpbox"><div class="t">vcf-lab-wld02-cl01</div><div class="cells"><div class="cell" style="background:#e0b400" title="vcf-lab-wld02-esx02">esx02</div><div class="cell" style="background:#2fa36b" title="vcf-lab-wld02-esx01">esx01</div><div class="cell" style="background:#2fa36b" title="vcf-lab-wld02-esx03">esx03</div></div></div><div class="grpbox"><div class="t">vcf-lab-wld01-cl01</div><div class="cells"><div class="cell" style="background:#e0b400" title="vcf-lab-wld01-esx03">esx03</div><div class="cell" style="background:#2fa36b" title="vcf-lab-wld01-esx01">esx01</div><div class="cell" style="background:#2fa36b" title="vcf-lab-wld01-esx02">esx02</div></div></div></div>
+      <div class="note">Color: VCF-CF Compliance|score, red 0 to green 100. Grouped by parent cluster.</div>
+    </div>
+
+    <div class="w" style="grid-column:6 / span 7; grid-row:13 / span 8">
+      <h2>Failing Controls: vcf-lab-mgmt-esx06 <span class="type">W4 AlertList, driven by W2, vcfcf_compliance subType 21</span></h2>
+      <table class="lv">
+        <tr><th>Criticality</th><th>Control</th><th>Recommendation (runbook)</th><th>Since</th></tr>
+        <tr><td><span class="sev" style="background:var(--red)"></span>Critical</td><td>esx.ssh-disabled: SSH service must be stopped</td><td>Stop the SSH service and set its policy to off</td><td>Sep 21, 9:14 AM</td></tr>
+        <tr><td><span class="sev" style="background:var(--orange)"></span>Immediate</td><td>esx.account-lockout: account lockout threshold</td><td>Set Security.AccountLockFailures to 5</td><td>Sep 22, 3:40 PM</td></tr>
+        <tr><td><span class="sev" style="background:var(--orange)"></span>Immediate</td><td>esx.shell-timeout: ESXi shell idle timeout</td><td>Set UserVars.ESXiShellInteractiveTimeOut to 900</td><td>Sep 22, 3:40 PM</td></tr>
+        <tr><td><span class="sev" style="background:var(--yellow)"></span>Warning</td><td>esx.syslog-remote: remote log target</td><td>Set Syslog.global.logHost to your log server</td><td>Sep 23, 8:21 AM</td></tr>
+        <tr><td><span class="sev" style="background:var(--yellow)"></span>Warning</td><td>esx.ntp-configured: time sources</td><td>Configure at least two NTP servers</td><td>Sep 23, 8:21 AM</td></tr>
+        <tr><td colspan="4" style="color:var(--ink-3)">+ 11 more (16 failing, 3 unreadable)</td></tr>
+      </table>
+      <div class="note">Control IDs, titles and runbook text simulated; real ones generate from the canonical profiles (control_id, title, remediation_text).</div>
+    </div>
+
+    <div class="w" style="grid-column:1 / span 6; grid-row:21 / span 6">
+      <h2>Score Trend: vcf-lab-mgmt-esx06 <span class="type">W5 MetricChart, driven by W2, 30 d</span></h2>
+      <svg class="chart" viewBox="0 0 400 150" preserveAspectRatio="none">
+        <line x1="0" y1="140" x2="400" y2="140" stroke="#363d47"/>
+        <polyline points="0,40 60,40 120,42 180,42 220,70 260,72 300,72 340,74 400,74" fill="none" stroke="#3987e5" stroke-width="2"/>
+        <polyline points="0,120 60,120 120,118 180,118 220,98 260,96 300,96 340,94 400,94" fill="none" stroke="#e5822e" stroke-width="2"/>
+      </svg>
+      <div class="legend"><span><i style="background:var(--accent)"></i>Score (%)</span><span><i style="background:var(--orange)"></i>Failing controls</span></div>
+      <div class="k">VCF-CF Compliance|score, VCF-CF Compliance|fail_count</div>
+    </div>
+
+    <div class="w" style="grid-column:7 / span 6; grid-row:21 / span 6">
+      <h2>Compliance Details: vcf-lab-mgmt-esx06 <span class="type">W6 PropertyList, driven by W2</span></h2>
+      <table class="lv props">
+        <tr><td>ESXi version <span class="k">summary|version</span></td><td>9.1.1-25714478</td></tr>
+        <tr><td>SCG applied <span class="k">VCF-CF Compliance|profile_name</span></td><td>VMware_SCG_9.1</td></tr>
+        <tr><td>Controls evaluated <span class="k">…|total_count</span></td><td>56</td></tr>
+        <tr><td>Passing <span class="k">…|pass_count</span></td><td>40</td></tr>
+        <tr><td>Failing <span class="k">…|fail_count</span></td><td>16</td></tr>
+        <tr><td>Unreadable (counted as failing) <span class="k">…|unreadable_count</span></td><td>3</td></tr>
+      </table>
+    </div>
+
+  </div>
+  <div class="keybox">
+    <b>Reading this mock.</b> All values simulated. Keys in grey are observed on devel today; purple keys are planned for adapter v3. "Which controls fail" is W4: one compliance alert per failing control, each carrying its runbook. Host names other than vcf-lab-mgmt-esx06 and vcf-lab-wld01-esx01 are illustrative.
+  </div>
+</div>
+</body>
+</html>

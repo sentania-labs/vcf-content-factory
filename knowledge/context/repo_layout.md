@@ -19,32 +19,47 @@ reference/                   Immutable external material (RULE-016) — see Know
 
 ## Python packages
 
-One package per content type plus shared infrastructure, all under
-`src/`. Only the `tooling` agent edits these. Package names and
-module invocations are unchanged by the `src/` move — `python3 -m
-vcfcf_<x>` still works verbatim (ambient `PYTHONPATH=src`).
+A location-agnostic core library, one factory package per content
+type, and shared infrastructure, all under `src/`. Only the `tooling`
+agent edits these. Package names and module invocations are unchanged
+by the `src/` move: `python3 -m vcfcf_<x>` still works verbatim
+(ambient `PYTHONPATH=src`).
 
 ```
 src/
+  vcfcf_core/               Parse/validate/render/packaging logic per type
+                            (alerts, customgroups, dashboards, reports,
+                            supermetrics, symptoms, packaging, extractor,
+                            common). No .env, no live instance, no repo
+                            layout assumptions (tests/test_core_contract.py)
   vcfcf_common/             Shared helpers: env loader, base HTTP client
-  vcfcf_supermetrics/       Loader, client, CLI (validate/list/sync/delete)
-  vcfcf_dashboards/         Views + dashboards loader/render/client/CLI
-  vcfcf_customgroups/       Custom groups + group types loader/client/CLI
-  vcfcf_symptoms/           Symptom definitions loader/client/CLI
-  vcfcf_alerts/             Alert + recommendation loader/render/client/CLI
-  vcfcf_reports/            Report definitions loader/render/client/CLI
-  vcfcf_packaging/          Bundle loader, builder, install script templates
-  vcfcf_managementpacks/    MP YAML loader, MPB render, .pak builder/installer
-  vcfcf_extractor/          Reverse flow — extract live dashboards into bundles
+  vcfcf_supermetrics/       Loader wrapper, client, CLI (validate/list/sync/delete)
+  vcfcf_dashboards/         Views + dashboards loader wrapper/client/CLI
+  vcfcf_customgroups/       Custom groups + group types loader wrapper/client/CLI
+  vcfcf_symptoms/           Symptom definitions loader wrapper/client/CLI
+  vcfcf_alerts/             Alert + recommendation loader wrapper/client/CLI
+  vcfcf_reports/            Report definitions loader wrapper/client/CLI
+  vcfcf_packaging/          Bundle builder, releases, publish, install script templates
+  vcfcf_managementpacks/    MP YAML loader, MPB render, .pak builder/installer (not in core)
+  vcfcf_extractor/          Reverse flow: extract live dashboards into bundles
+  vcfops_*/                 Deprecated one-release import aliases for vcfcf_*
 ```
 
-Every package follows the same skeleton:
+The parsing, validation and rendering live in `vcfcf_core/<type>/`.
+The per-type factory package keeps the same module names (`loader.py`,
+`render.py`, ...) as thin entry points that re-export the core module and
+add what a library must not do on its own: mint UUIDs into authored YAML,
+derive provenance from the repo layout, talk to a live instance. Fix
+behaviour in the core module; patch the core module in tests. Design:
+`knowledge/designs/tooling-core-carveout-v1.md`.
+
+Every per-type factory package follows the same skeleton:
 
 ```
 src/vcfcf_<type>/
   __init__.py
   __main__.py    → cli.main()
-  loader.py      → YAML schema → dataclass, validate
+  loader.py      → wraps vcfcf_core.<type>.loader (UUID mint, provenance)
   client.py      → REST client
   cli.py         → validate, list, sync, delete
 ```

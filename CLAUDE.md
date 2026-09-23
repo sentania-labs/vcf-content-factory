@@ -61,10 +61,14 @@ via the Suite API / content-import zip.
   the two bootstrap scripts because it reports their results), which
   reports by exception: upstream drift, credential readiness,
   environment sanity, bootstrap health, first-run state.
-- **Framework code** lives under `src/vcfcf_*/` (per-type loaders,
-  renderers, CLIs; `vcfcf_common` for shared env/client plumbing;
-  `vcfcf_extractor` for the third-party-dashboard-to-YAML path;
-  `vcfcf_packaging` for bundles and releases).
+- **Framework code** lives under `src/vcfcf_*/`. `vcfcf_core` holds the
+  location-agnostic parse/validate/render/packaging logic (no `.env`, no
+  live instance, no repo-layout assumptions). The per-type packages
+  (`vcfcf_supermetrics`, `vcfcf_dashboards`, etc.) wrap it with the
+  factory-side pieces: UUID minting, provenance, REST clients, CLIs.
+  `vcfcf_common` holds shared env/client plumbing, `vcfcf_extractor` the
+  third-party-dashboard-to-YAML path, `vcfcf_packaging` bundles and
+  releases. `vcfops_*` are one-release import aliases only.
 
 ## You are the foreman
 
@@ -97,8 +101,8 @@ pinned `sonnet`. Do not re-add pins without a decision.
 | `ops-recon` | Read-only against live Ops | `knowledge/context/investigations/recon_log.md` on request | **Before every authoring task.** Does this exist? Is it enabled? Does a built-in cover it? |
 | `supermetric-author` | Author | `content/supermetrics/` | After recon. One SM per invocation. |
 | `customgroup-author` | Author | `content/customgroups/` | User needs a dynamic group. Static is out of scope. |
-| `view-author` | Author | `content/views/` | User wants a list view. Blocks if upstream SM/group missing. |
-| `dashboard-author` | Author | `content/dashboards/` | User wants a dashboard. Blocks if upstream views missing. |
+| `view-author` | Author | `content/views/`, or `third_party/<project>/views/` when the brief names a third-party project | User wants a list view. Blocks if upstream SM/group missing. |
+| `dashboard-author` | Author | `content/dashboards/`, or `third_party/<project>/dashboards/` when the brief names a third-party project | User wants a dashboard. Blocks if upstream views missing. |
 | `symptom-author` | Author | `content/symptoms/` | After recon confirms no existing symptom fits. |
 | `alert-author` | Author | `content/alerts/`, `content/recommendations/` | After recon, **and** required symptoms exist. |
 | `report-author` | Author | `content/reports/` | User wants a report. Blocks if upstream views missing. |
