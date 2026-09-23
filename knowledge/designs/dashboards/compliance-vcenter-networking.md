@@ -79,3 +79,12 @@ widget into one receiver (e.g. vSphere Network Configuration 2.0).
   subType 21), not by adapter kind.
 - **Keys** are the adapter v3 build 60 contract (README.md and
   docs/overview.md in the adapter repo); build 61 ships this dashboard.
+- **Retained scores (owner decision 2026-09-23, Option A).** Ops keeps
+  a metric's last value when pushes stop. Score columns list every row
+  and rely on the No SCG flag column beside them instead of hiding the
+  score (views can only filter whole rows). The ESXi heatmap has no flag
+  column and may color a host by a retained score after it moves to a
+  version with no SCG; accepted as rare.
+- **Unreadable counts as failing** (owner decision 2026-09-23,
+  build 63): unreadable controls lower the score, and a per-object
+  "Compliance data not collected" alert says why.

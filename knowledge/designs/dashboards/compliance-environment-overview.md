@@ -133,3 +133,10 @@ vCenter name, then `Rollup|Benchmark|<B>|objects` for SCG 6.7, 7.0,
   subType 21), not by adapter kind.
 - **Keys** are the adapter v3 build 60 contract (README.md and
   docs/overview.md in the adapter repo); build 61 ships this dashboard.
+- **W6 opens on the first vCenter** (owner decision 2026-09-23): W3
+  auto-selects its first row (`select_first_row` default), so W6 shows
+  that vCenter's alerts on load and follows clicks. "All, then narrow"
+  is issue #177.
+- **Unreadable counts as failing** (owner decision 2026-09-23,
+  build 63): unreadable controls lower the score, and a per-object
+  "Compliance data not collected" alert says why.

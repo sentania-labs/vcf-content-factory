@@ -176,3 +176,36 @@ seven issues filed on sentania-labs/vcf-content-factory.
 Scott, 2026-09-23 (verbatim), authorizing the factory PR:
 
 > file the factory PR when ready
+
+## Owner decisions after build 62 (verbatim)
+
+Scott, 2026-09-23:
+
+> 1> If unreadable = not collected/etc, let's count it as failing, but can we tell the user it's failing to collect?
+> 2> showing them all are important, but only if once we click a vcenter it filters, or just use select first for vcenter, so it populates.
+> 3> Remind me again on the SCG No flat?
+> 4> do they break our progress, if yes fix them, if no, open an issues.
+
+Effect:
+1. Unreadable controls count as failing in the score (supersedes
+   "excluded from the score"), and the adapter raises a separate
+   "compliance data not collected" alert per object so the user can
+   tell a collection failure from a real violation.
+2. Overview W3 selects its first vCenter on load (View widget default
+   `select_first_row: true`), so the alert list populates; clicking a
+   vCenter switches it. "Show all, then narrow on click" is not
+   expressible in the framework today: issue.
+4. The three dashboard-author toolset gaps (view default sort, inverted
+   scoreboard colors, all-then-narrow widget) do not block progress:
+   issues filed.
+
+Scott, 2026-09-23 (verbatim), on the retained-score question (review
+61 W2):
+
+> 3: Option A.
+
+Effect: score columns keep every row and rely on the No SCG flag
+beside them; the ESXi heatmap may color a host by a retained score
+after it moves to a version with no SCG (rare: only after an upgrade
+to an unsupported release). Recorded as an accepted constraint in the
+dashboard notes.
