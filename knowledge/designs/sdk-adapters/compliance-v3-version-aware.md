@@ -230,3 +230,28 @@ compliance connection to fixed VMware_SCG_8.0 in the Ops UI, reported
 Acceptance (c), step 2: Scott set the devel vcf-lab-wld02 compliance
 connection back to "Auto (by version)", reported 2026-09-23 01:01 PM CDT ("WLD 02 is set
 back to auto").
+
+## Devel acceptance record (build 67, 2026-09-23)
+
+- **Install** 11:44 to 11:47 AM: 1.0.0.56 to 0.0.0.67, all three
+  connections kept VMware_SCG_9.1. Super metrics arrived disabled;
+  enabled in vSphere Solution's Default Policy (active on vSphere
+  World). Average Score showed no data before the first cycle.
+- **Dashboards:** ESXi Hosts was created then lost about 5 s later to
+  Ops's phase-2 background pass (knowledge/context/api-surface/
+  pak_dashboard_import_race.md); re-imported alone at 12:14 PM and fully
+  bound by 12:27 PM. The other three bound on their own within 15 min.
+- **Alerts:** per-control alerts fire from a new key's second sample
+  (knowledge/context/api-surface/
+  compliance_per_control_alert_first_sample_lag.md); 336 active on 96
+  objects at 12:53 PM.
+- **(a) cleanup read shape:** confirmed on devel before install.
+- **(c) SCG switch, wld02:** fixed 8.0 at 12:17 PM, cleanup at 12:47 PM
+  set 17 stale 9.1-only zeros to -1 on 5 objects; Auto at 1:01 PM chose
+  SCG 9.1, cleanup at 1:47 PM set 20 stale 8.0-only zeros to -1 on 2
+  hosts; 0 read failures both times. Alerts for controls in both SCGs
+  stayed active; seven 9.1-only alerts returned at 1:52 PM.
+- **Not yet observed live:** an active per-control alert canceling
+  because cleanup set its control to -1 (the 8.0-only alerts never
+  opened, per the first-sample lag). Visual check of the dashboards and
+  the vSphere World super metric values pending.

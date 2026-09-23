@@ -127,6 +127,7 @@ cycles because that did not happen.
 | `pak_uninstall_api_exploration.md` | .pak uninstall API exploration |
 | `pak_ui_upload_investigation.md` | .pak UI upload investigation |
 | `compliance_enablement_markers.md` | Compliance enablement markers (per-profile enablement wire state) |
+| `compliance_per_control_alert_first_sample_lag.md` | Compliance per-control alerts "not firing" on build 67 was timing: a symptom on a newly created pushed metric key skips the key's first sample (hourly adapter, so about 1 h plus 5 min to first alert); keys, `EQ` operator, metric condition type, and policy all verified correct |
 | `auth_vidb_oauth_flow.md` | VIDB OAuth flow |
 | `struts_import_endpoints.md` | Struts/Ext.Direct endpoint catalog |
 | `struts_exploration_backlog.md` | Struts exploration backlog |
@@ -138,6 +139,7 @@ cycles because that did not happen.
 | `view_multi_subject_column_binding.md` | Multi-subject views: per-column `adapterKind`/`resourceKind` is a kind filter; `subject:` contract, accepted column kinds (driver and time-segment rejected), DEF-019/DEF-020 pointers |
 | `dashboard_selfprovider_pin_wire_format.md` | Self-provider widget pin wire format (View traversalSpecId, HealthChart) |
 | `dashboard_import_two_phase_materialization.md` | Dashboard import is a uuid-keyed replace landing deferred: phase 1 writes record/layout/`states`, phase 2 resolves `entryKeys` tokens and writes widget `config`. `importComplete`/`entryKeys` semantics (undocumented in both specs); stalls permanently when an adapter kind is absent |
+| `pak_dashboard_import_race.md` | Pak install created a bundled dashboard then lost it within seconds with no delete audit (compliance build 67, ESXi Hosts): phase-2 `DashboardImporter` pass racing the pak's sequential ForceByName imports; content exonerated; verify pak dashboard count after install |
 | `resourcelist_column_state_wire_format.md` | ResourceList column-state wire format (widget `states[]` presets) |
 | `casa-inventory-access.md` | CaSA / Cloud-Proxy adapter inventory-read mechanism |
 | `casa-injected-vs-raw-client.md` | CaSA routing: raw SDK SuiteAPIClient vs injected UnlicensedAdapter client |
