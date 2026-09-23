@@ -61,9 +61,10 @@ widget into one receiver (e.g. vSphere Network Configuration 2.0).
 - The vDS version column is context only. The SCG applied follows the
   vCenter version by design, so a 9.0.0 switch under a 9.1.1 vCenter
   shows SCG 9.1.
-- Unreadable controls raise no per-control alert
-  (Compliant = -1) and are excluded from the score; the object counts
-  as non-compliant, and they show in the Unreadable column.
+- Unreadable controls raise no per-control alert (Compliant = -1) but
+  count as failing in the score (build 63); the object counts as
+  non-compliant, they show in the Unreadable column, and a "Compliance
+  data not collected" alert says why.
 
 ## Amendments after approval (2026-09-23)
 

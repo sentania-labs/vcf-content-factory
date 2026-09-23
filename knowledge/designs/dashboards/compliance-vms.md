@@ -68,9 +68,10 @@ No SCG. Score columns filtered to `no_benchmark = 0` and
   and sorts server side, so worst-first still works, but the default
   selection may move to the first vCenter if load time is poor on the
   first install.
-- Unreadable VM settings raise no per-control
-  alert (Compliant = -1) and are excluded from the score; the object counts as
-  non-compliant, and the Unreadable column is where they show.
+- Unreadable VM settings raise no per-control alert (Compliant = -1) but
+  count as failing in the score (build 63); the object counts as
+  non-compliant, the Unreadable column shows them, and a "Compliance data
+  not collected" alert says why.
 
 ## Amendments after approval (2026-09-23)
 

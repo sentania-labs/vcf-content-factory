@@ -4,7 +4,7 @@
 - **Slug:** compliance-v3-version-aware
 - **Adapter repo:** `content/sdk-adapters/compliance/` (sentania-labs/vcf-content-factory-sdk-compliance)
 - **Date:** 2026-09-23
-- **Status:** adapter built (build 61, feat/v3-version-aware); devel install pending
+- **Status:** build 67 (feat/v3-version-aware, commit 3e61a29) installed on devel 2026-09-23 and in acceptance; builds 57 to 66 are superseded review milestones
 
 ## Initial prompt
 
@@ -105,9 +105,10 @@ Scott, on testing (verbatim, after recon showed a single ESXi build in both labs
   both Ops 9.0 and 9.1.
 - **Unreadable controls push Compliant = -1** (approved 2026-09-23 with
   the VMs / vCenter & Networking mock plan): no per-control alert for a
-  setting nobody could read; the object still counts as non-compliant,
-  and the unreadable control is excluded from the score (numerator and
-  denominator), as the adapter already did before v3.
+  setting nobody could read; the object still counts as non-compliant.
+  (Its effect on the score was later changed: since build 63 unreadable
+  controls count as failing in the score; see "Owner decisions after
+  build 62".)
 - **Average score when nothing is scored** (owner answer to review 57
   W2): avg_score is not pushed when scored = 0; a retained old average
   is identifiable from the non_compliant / scored columns beside it.
@@ -209,3 +210,23 @@ beside them; the ESXi heatmap may color a host by a retained score
 after it moves to a version with no SCG (rare: only after an upgrade
 to an unsupported release). Recorded as an accepted constraint in the
 dashboard notes.
+
+## Devel install go (verbatim)
+
+Orchestrator asked (2026-09-23): upgrade devel from build 56 to 67,
+enable the 4 super metrics in the active policy, run the CHANGELOG
+acceptance checks including switching one devel connection to fixed
+SCG 8.0 for one cycle and back to Auto, and look at all four
+dashboards. Not covered: deleting old content, anything on prod.
+
+Scott:
+
+> Proceed.
+
+Acceptance (c), step 1: Scott switched the devel vcf-lab-wld02
+compliance connection to fixed VMware_SCG_8.0 in the Ops UI, reported
+2026-09-23 12:17 PM CDT ("WLD02 - updated").
+
+Acceptance (c), step 2: Scott set the devel vcf-lab-wld02 compliance
+connection back to "Auto (by version)", reported 2026-09-23 01:01 PM CDT ("WLD 02 is set
+back to auto").

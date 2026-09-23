@@ -54,7 +54,10 @@ vcfcf_<type>/
   cli.py         → validate, list, sync, delete
 ```
 
-Fix behaviour in the core module, not the wrapper. `vcfcf_managementpacks`
+Fix shared parse, validate and render behaviour in the core module;
+fix UUID minting, provenance, REST clients and CLIs in the wrapper, which
+owns them (moving them into core would break its contract).
+`vcfcf_managementpacks`
 is not in core yet. Design: `knowledge/designs/tooling-core-carveout-v1.md`.
 
 ## Common gap patterns

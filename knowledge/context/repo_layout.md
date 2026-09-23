@@ -52,8 +52,9 @@ what a library must not do on its own (mint UUIDs into authored YAML and
 derive provenance from the repo layout where the type has them, talk to
 a live instance). Some factory-side modules are substantial code in
 their own right (for example `vcfcf_packaging/describe.py`,
-`vcfcf_extractor/extractor.py`). Fix
-behaviour in the core module; patch the core module in tests. Design:
+`vcfcf_extractor/extractor.py`). Fix shared parse, validate and render behaviour in the core module
+(patch the core module in tests); fix UUID minting, provenance, REST
+clients and CLIs in the wrapper that owns them. Design:
 `knowledge/designs/tooling-core-carveout-v1.md`.
 
 Every per-type factory package follows the same skeleton:
