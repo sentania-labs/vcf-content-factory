@@ -33,16 +33,32 @@ The `vcfops-*` entries below are skills; each lives at
 
 ## Package skeleton
 
-Every `vcfcf_*` package follows:
+Parse, validate, and render logic lives in `vcfcf_core/<type>/`, which
+must not read `.env`, assume a `content/` or `knowledge/` tree, call a
+live instance, or write a file it was not handed
+(`tests/test_core_contract.py` guards the common cases: it bans
+`requests` imports and file writes inside `load*` functions, so review
+the rest by hand). Each per-type factory
+package wraps it:
 
 ```
+vcfcf_core/<type>/
+  loader.py      → YAML schema → dataclass, validate
+  render.py      → wire format (where the type has one)
+
 vcfcf_<type>/
   __init__.py
   __main__.py    → cli.main()
-  loader.py      → YAML schema → dataclass, validate
+  loader.py      → wraps the core loader (UUID mint and provenance where the type has them)
   client.py      → REST client
   cli.py         → validate, list, sync, delete
 ```
+
+Fix shared parse, validate and render behaviour in the core module;
+fix UUID minting, provenance, REST clients and CLIs in the wrapper, which
+owns them (moving them into core would break its contract).
+`vcfcf_managementpacks`
+is not in core yet. Design: `knowledge/designs/tooling-core-carveout-v1.md`.
 
 ## Common gap patterns
 
@@ -56,7 +72,10 @@ vcfcf_<type>/
 
 ## Bootstrapping a new package
 
-Use `src/vcfcf_supermetrics/` as the template. Read the author agent's
+Put the parse, validate and render logic in `src/vcfcf_core/<type>/`
+(use `src/vcfcf_core/supermetrics/` as the template) and the factory
+wrapper, client and CLI in `src/vcfcf_<type>/` (template:
+`src/vcfcf_supermetrics/`). Read the author agent's
 YAML schema from its prompt. Consult both OpenAPI specs for target
 endpoints. Deliver a working `validate` command at minimum.
 

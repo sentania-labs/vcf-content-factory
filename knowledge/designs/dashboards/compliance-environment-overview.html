@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>[VCF Content Factory] Compliance Environment Overview (mock)</title>
+<style>
+  :root { --bg:#1b1f24; --panel:#23282f; --panel-2:#2a3038; --line:#363d47; --ink:#f2f4f7; --ink-2:#b7bfca; --ink-3:#7f8896; --accent:#3987e5; --red:#e5484d; --orange:#e5822e; --yellow:#e0b400; --green:#2fa36b; --plan:#9b7be0; }
+  * { box-sizing:border-box } body { margin:0; background:var(--bg); color:var(--ink); font:13px/1.4 "Metropolis","Segoe UI",system-ui,sans-serif }
+  .shell { padding:14px 18px 40px; max-width:1500px } .hdr { display:flex; align-items:center; gap:10px; margin-bottom:12px; flex-wrap:wrap } .hdr h1 { font-size:18px; font-weight:600; margin:0 }
+  .badge { font-size:11px; padding:2px 8px; border-radius:10px; background:var(--panel-2); color:var(--ink-2); border:1px solid var(--line) }
+  .badge.plan { color:var(--plan); border-color:var(--plan) }
+  .grid { display:grid; grid-template-columns:repeat(12,1fr); grid-auto-rows:34px; gap:10px }
+  .w { background:var(--panel); border:1px solid var(--line); border-radius:4px; padding:10px 12px; position:relative; overflow:hidden }
+  .w h2 { font-size:13px; font-weight:600; margin:0 0 8px; display:flex; align-items:center; gap:8px } .w h2 .type { margin-left:auto; font-weight:400; font-size:10px; color:var(--ink-3); text-transform:uppercase; letter-spacing:.04em }
+  .note { position:absolute; left:12px; bottom:6px; font-size:10px; color:var(--ink-3) }
+  .tiles { display:grid; grid-template-columns:repeat(4,1fr); gap:8px } .tile { background:var(--panel-2); border-radius:4px; padding:10px 8px; text-align:center; border-top:3px solid var(--line) } .tile .v { font-size:28px; font-weight:600 } .tile .l { font-size:11px; color:var(--ink-2) }
+  .k { color:var(--ink-3); font-size:9px; font-family:ui-monospace,Menlo,monospace; word-break:break-all } .k.p { color:var(--plan) }
+  .txt { color:var(--ink-2); font-size:12px; line-height:1.5 } .txt p { margin:0 0 6px } .txt b { color:var(--ink) }
+  .lv { width:100%; border-collapse:collapse; font-size:12px } .lv th { text-align:left; color:var(--ink-3); font-weight:500; font-size:11px; padding:3px 6px; border-bottom:1px solid var(--line); vertical-align:bottom } .lv td { padding:5px 6px; border-bottom:1px solid var(--line) } .lv .num { text-align:right; font-variant-numeric:tabular-nums } .lv tr.sum td { font-weight:600; background:var(--panel-2) } .lv tr.sel td { background:#2c3b52 }
+  .lv th .k { display:block; font-weight:400 }
+  .grp { text-align:center !important; color:var(--ink-2) !important; border-bottom:none !important }
+  .c-red { color:var(--red) } .c-or { color:var(--orange) } .c-ye { color:var(--yellow) } .c-gr { color:var(--green) }
+  .chip { display:inline-block; min-width:44px; text-align:right; padding:1px 6px; border-radius:3px; font-variant-numeric:tabular-nums }
+  .chip.red { background:rgba(229,72,77,.18); color:var(--red) } .chip.or { background:rgba(229,130,46,.18); color:var(--orange) } .chip.ye { background:rgba(224,180,0,.16); color:var(--yellow) } .chip.gr { background:rgba(47,163,107,.16); color:var(--green) }
+  .chart { width:100%; height:calc(100% - 58px) } .legend { display:flex; gap:14px; font-size:11px; color:var(--ink-2) } .legend i { display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:5px; vertical-align:-1px }
+  .sev { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px }
+  .keybox { border:1px dashed var(--line); color:var(--ink-3); font-size:11px; padding:10px 12px; border-radius:4px; margin-top:14px; line-height:1.6 } .keybox b { color:var(--ink-2) }
+  .wire { position:absolute; right:10px; bottom:6px; font-size:10px; color:var(--accent) }
+</style>
+</head>
+<body>
+<div class="shell">
+  <div class="hdr">
+    <h1>[VCF Content Factory] Compliance Environment Overview</h1>
+    <span class="badge">targets: VCF Operations 9.0 (devel) and 9.1 (prod)</span>
+    <span class="badge">ALL VALUES SIMULATED</span>
+    <span class="badge plan">purple key = planned v3, not yet collected</span>
+  </div>
+  <div class="grid">
+
+    <!-- W1 -->
+    <div class="w" style="grid-column:1 / span 8; grid-row:1 / span 4">
+      <h2>Environment Compliance <span class="type">W1 Scoreboard, pinned vSphere World</span></h2>
+      <div class="tiles">
+        <div class="tile"><div class="v">1,284</div><div class="l">Objects scored</div><div class="k p">SM Compliance Objects Scored</div></div>
+        <div class="tile" style="border-top-color:var(--orange)"><div class="v c-or">86.4 %</div><div class="l">Average score (weighted)</div><div class="k p">SM Compliance Average Score</div></div>
+        <div class="tile" style="border-top-color:var(--yellow)"><div class="v c-ye">412</div><div class="l">Non-compliant objects</div><div class="k p">SM Compliance Non-Compliant Objects</div></div>
+        <div class="tile" style="border-top-color:var(--orange)"><div class="v c-or">6</div><div class="l">No matching SCG</div><div class="k p">SM Compliance Objects Without Benchmark</div></div>
+      </div>
+    </div>
+
+    <!-- W2 -->
+    <div class="w" style="grid-column:9 / span 4; grid-row:1 / span 4">
+      <h2>About this dashboard <span class="type">W2 TextDisplay</span></h2>
+      <div class="txt">
+        <p>Each object is scored against the SCG for its own version. <b>Non-compliant</b>: at least one failing control (unreadable counts as failing). <b>No matching SCG</b>: version has no benchmark in this pak, so it is counted but not scored.</p>
+        <p>Drill in: <b>Compliance ESXi Hosts</b>, <b>Compliance VMs</b>, <b>Compliance vCenter &amp; Networking</b>.</p>
+      </div>
+    </div>
+
+    <!-- W3 -->
+    <div class="w" style="grid-column:1 / span 12; grid-row:5 / span 8">
+      <h2>Compliance by vCenter and Object Type <span class="type">W3 View, vSphere World children: VMwareAdapter Instance</span></h2>
+      <table class="lv">
+        <tr><th rowspan="2">vCenter</th><th rowspan="2">Version<span class="k">summary|version</span></th>
+          <th colspan="2" class="grp">ESXi hosts</th><th colspan="2" class="grp">VMs</th><th class="grp">vCenter</th><th colspan="2" class="grp">Clusters</th><th colspan="2" class="grp">vDS</th><th colspan="2" class="grp">Portgroups</th><th rowspan="2" class="num">No SCG<span class="k p">Rollup|All|no_benchmark</span></th></tr>
+        <tr>
+          <th class="num">Avg<span class="k p">Rollup|Host|avg_score</span></th><th class="num">Non-comp<span class="k p">Rollup|Host|non_compliant</span></th>
+          <th class="num">Avg<span class="k p">Rollup|VM|avg_score</span></th><th class="num">Non-comp<span class="k p">Rollup|VM|non_compliant</span></th>
+          <th class="num">Score<span class="k">VCF-CF Compliance|score</span></th>
+          <th class="num">Avg<span class="k p">Rollup|Cluster|avg_score</span></th><th class="num">Non-comp<span class="k p">…|non_compliant</span></th>
+          <th class="num">Avg<span class="k p">Rollup|vDS|avg_score</span></th><th class="num">Non-comp<span class="k p">…|non_compliant</span></th>
+          <th class="num">Avg<span class="k p">Rollup|Portgroup|avg_score</span></th><th class="num">Non-comp<span class="k p">…|non_compliant</span></th>
+        </tr>
+        <tr class="sel"><td>vcf-lab-mgmt</td><td>9.1.1</td><td class="num"><span class="chip ye">93.1</span></td><td class="num">3 / 4</td><td class="num"><span class="chip or">84.0</span></td><td class="num">141 / 402</td><td class="num"><span class="chip red">70.0</span></td><td class="num"><span class="chip gr">100</span></td><td class="num">0 / 1</td><td class="num"><span class="chip or">85.7</span></td><td class="num">1 / 1</td><td class="num"><span class="chip ye">91.4</span></td><td class="num">4 / 12</td><td class="num">0</td></tr>
+        <tr><td>vcf-lab-wld01</td><td>9.1.1</td><td class="num"><span class="chip gr">96.4</span></td><td class="num">1 / 3</td><td class="num"><span class="chip or">86.3</span></td><td class="num">130 / 421</td><td class="num"><span class="chip or">80.0</span></td><td class="num"><span class="chip red">50.0</span></td><td class="num">1 / 1</td><td class="num"><span class="chip or">85.7</span></td><td class="num">1 / 1</td><td class="num"><span class="chip gr">100</span></td><td class="num">0 / 18</td><td class="num">2</td></tr>
+        <tr><td>vcf-lab-wld02</td><td>9.1.1</td><td class="num"><span class="chip ye">94.6</span></td><td class="num">2 / 3</td><td class="num"><span class="chip or">88.1</span></td><td class="num">128 / 398</td><td class="num"><span class="chip or">80.0</span></td><td class="num"><span class="chip gr">100</span></td><td class="num">0 / 1</td><td class="num"><span class="chip gr">100</span></td><td class="num">0 / 1</td><td class="num"><span class="chip ye">92.9</span></td><td class="num">3 / 14</td><td class="num">4</td></tr>
+        <tr class="sum"><td>Summary</td><td></td><td class="num">avg of vCenters 94.7</td><td class="num">6 / 10</td><td class="num">86.1</td><td class="num">399 / 1,221</td><td class="num">76.7</td><td class="num">83.3</td><td class="num">1 / 3</td><td class="num">90.5</td><td class="num">2 / 3</td><td class="num">94.8</td><td class="num">7 / 44</td><td class="num">6</td></tr>
+      </table>
+      <div class="note">Row select drives W6. Summary row: counts are sums; scores are the average of vCenters (a view summary cannot weight). Weighted environment average is W1.</div>
+    </div>
+
+    <!-- W4 -->
+    <div class="w" style="grid-column:1 / span 6; grid-row:13 / span 7">
+      <h2>Objects by SCG Version <span class="type">W4 View, VMwareAdapter Instance</span></h2>
+      <table class="lv">
+        <tr><th>vCenter</th><th class="num">6.7<span class="k p">Benchmark|SCG_6.7|objects</span></th><th class="num">7.0<span class="k p">…|SCG_7.0|…</span></th><th class="num">8.0<span class="k p">…|SCG_8.0|…</span></th><th class="num">9.0<span class="k p">…|SCG_9.0|…</span></th><th class="num">9.1<span class="k p">…|SCG_9.1|…</span></th><th class="num">None<span class="k p">…|none|…</span></th></tr>
+        <tr><td>vcf-lab-mgmt</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">421</td><td class="num">0</td></tr>
+        <tr><td>vcf-lab-wld01</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">445</td><td class="num">2</td></tr>
+        <tr><td>vcf-lab-wld02</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">418</td><td class="num">4</td></tr>
+        <tr class="sum"><td>Summary</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">1,284</td><td class="num">6</td></tr>
+      </table>
+      <div class="note">The lab is uniformly ESXi / vCenter 9.1.1, so one column fills here. A mixed fleet spreads across columns.</div>
+    </div>
+
+    <!-- W5 -->
+    <div class="w" style="grid-column:7 / span 6; grid-row:13 / span 7">
+      <h2>Environment Score Trend <span class="type">W5 MetricChart, vSphere World, 30 d</span></h2>
+      <svg class="chart" viewBox="0 0 400 150" preserveAspectRatio="none">
+        <line x1="0" y1="140" x2="400" y2="140" stroke="#363d47"/>
+        <line x1="0" y1="30" x2="400" y2="30" stroke="#363d47" stroke-dasharray="3 4"/>
+        <polyline points="0,70 40,68 80,72 120,66 160,64 200,58 240,60 280,54 320,50 360,52 400,48" fill="none" stroke="#3987e5" stroke-width="2"/>
+        <polyline points="0,96 40,98 80,94 120,100 160,104 200,108 240,106 280,112 320,116 360,114 400,118" fill="none" stroke="#e5822e" stroke-width="2"/>
+      </svg>
+      <div class="legend"><span><i style="background:var(--accent)"></i>Average score (%)</span><span><i style="background:var(--orange)"></i>Non-compliant objects</span></div>
+      <div class="k p">SM Compliance Average Score, SM Compliance Non-Compliant Objects</div>
+    </div>
+
+    <!-- W6 -->
+    <div class="w" style="grid-column:1 / span 12; grid-row:20 / span 7">
+      <h2>Open Compliance Alerts: vcf-lab-mgmt <span class="type">W6 AlertList, driven by W3, adapter kind vcfcf_compliance, subType 21</span></h2>
+      <table class="lv">
+        <tr><th>Criticality</th><th>Alert (one per control)</th><th>Object</th><th>Object type</th><th>SCG</th><th>Recommendation</th><th>Since</th></tr>
+        <tr><td><span class="sev" style="background:var(--red)"></span>Critical</td><td>esx.ssh-disabled: SSH service must be stopped</td><td>vcf-lab-mgmt-esx02</td><td>HostSystem</td><td>9.1</td><td>Stop and disable the SSH service (runbook)</td><td>Sep 21, 9:14 AM</td></tr>
+        <tr><td><span class="sev" style="background:var(--orange)"></span>Immediate</td><td>esx.account-lockout: account lockout threshold</td><td>vcf-lab-mgmt-esx04</td><td>HostSystem</td><td>9.1</td><td>Set Security.AccountLockFailures to 5 (runbook)</td><td>Sep 22, 3:40 PM</td></tr>
+        <tr><td><span class="sev" style="background:var(--yellow)"></span>Warning</td><td>vm.isolation-copy-disable: disable copy operations</td><td>vcf_Avi-se-jjvwd</td><td>VirtualMachine</td><td>9.1</td><td>Set isolation.tools.copy.disable = TRUE (runbook)</td><td>Sep 23, 8:21 AM</td></tr>
+        <tr><td><span class="sev" style="background:var(--yellow)"></span>Warning</td><td>vds.forged-transmits: reject forged transmits</td><td>vcf-lab-mgmt-vds01</td><td>VmwareDistributedVirtualSwitch</td><td>9.1</td><td>Set forged transmits to Reject (runbook)</td><td>Sep 23, 8:21 AM</td></tr>
+      </table>
+      <div class="note">Alert names, control IDs and runbook text simulated; real ones generate from the canonical profiles (control_id, title, remediation_text). Severity follows SCG control priority.</div>
+    </div>
+
+  </div>
+
+  <div class="keybox">
+    <b>Reading this mock.</b> All numbers are simulated; vCenter names and versions match devel as observed by recon on Sep 23. Purple keys are planned for adapter v3 and are pushed onto each vCenter object (<code>VMWARE / VMwareAdapter Instance</code>). "SM" tiles are new super metrics on <code>vSphere World</code> that sum the three vCenters (depth 1, confirmed on devel and prod).
+    Replaces the current Compliance Fleet Overview, whose Compliance World totals are overwritten by whichever of the three adapter connections collected last.
+  </div>
+</div>
+</body>
+</html>
