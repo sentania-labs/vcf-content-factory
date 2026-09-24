@@ -71,10 +71,11 @@ view/dashboard YAML — it cannot reference the factory's root `views/` or
 
 ## Runner requirements
 
-The CI workflow needs, on the runner: a **JDK 11+** (`javac`/`jar`), `python3`
-+ pip (for `pyyaml`), `gh`, and `tar`. The sentania-labs runner image
-currently lacks a JDK: either bake `default-jdk` into the image (then drop the
-`setup-java` step) or keep the `actions/setup-java` step in the workflow.
+The CI workflow runs on GitHub-hosted `ubuntu-latest`. The job reaches only
+github.com, and the pak repos are public, so hosted minutes are free; the lab's
+`runs-on: lab` pool is for jobs that must reach lab resources. The workflow
+installs its own JDK (`actions/setup-java`) and Python (`actions/setup-python`,
+then `pyyaml` via pip); `gh`, `tar`, `ssh`, and `curl` come with the image.
 
 ## Buildkit pinning
 

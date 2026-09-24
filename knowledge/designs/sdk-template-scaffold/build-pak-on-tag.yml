@@ -37,9 +37,13 @@ env:
 
 jobs:
   build:
-    # Self-hosted runner (the sentania-labs image). Adjust labels to match your
-    # runner pool. To use GitHub-hosted runners instead, switch to `ubuntu-latest`.
-    runs-on: [self-hosted, Linux, X64, generic]
+    # GitHub-hosted. This job reaches only github.com (checkout, the factory's
+    # defect registry and buildkit, the private SDK runtime repo), never the lab,
+    # and the pak repos are public, so hosted minutes are free. The legacy
+    # self-hosted `generic` runners were retired 2026-09-08; a label matching no
+    # runner queues silently for ~24h instead of failing. Use `runs-on: lab`
+    # only for a job that must reach lab resources.
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout adapter source
@@ -68,8 +72,13 @@ jobs:
       # mid-edit commit upstream, a raw.githubusercontent outage, or
       # blocked runner egress. See knowledge/designs/defect-isolation-v1.md.
 
-      # The sentania-labs runner image ships NO JDK. build-sdk needs javac+jar.
-      # If you bake a JDK into the runner image, delete this step.
+      # Own the interpreter: the hosted image's system python3 is externally
+      # managed (PEP 668) and may refuse a bare `pip install`.
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: '3.12'
+
       - name: Ensure PyYAML
         run: python3 -m pip install --quiet --disable-pip-version-check pyyaml
 
@@ -95,7 +104,7 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      # The kit is pure stdlib + pyyaml. The image has python3 + pip on PATH.
+      # The kit is pure stdlib + pyyaml (see the Set up Python and Ensure PyYAML steps).
       - name: Download sdk-buildkit from factory releases
         env:
           # The factory repo is public, so the job's github.token can read its
