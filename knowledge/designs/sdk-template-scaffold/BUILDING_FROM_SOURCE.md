@@ -71,12 +71,11 @@ builds and attaches to a GitHub Release when a `v*` tag is pushed —
 deterministic, no developer machine in the path.
 
 **If you fork this repo**, the CI workflow
-(`.github/workflows/build-pak-on-tag.yml`) needs two adjustments
-before your own `v*` tags will build:
+(`.github/workflows/build-pak-on-tag.yml`) needs one adjustment
+before your own `v*` tags will build (it already runs on GitHub-hosted
+`ubuntu-latest`, so no runner change is needed).
 
-1. **Runner**: it targets a `self-hosted` runner pool — switch
-   `runs-on` to `ubuntu-latest` (the workflow comments call this out).
-2. **SDK jar sourcing**: the upstream workflow fetches the Broadcom
+**SDK jar sourcing**: the upstream workflow fetches the Broadcom
    jar from a private repo via an `SDK_RUNTIME_SSH_KEY` deploy-key
    secret you won't have. Replace that step with your own source —
    e.g. store the appliance-extracted jar in your own private repo or
