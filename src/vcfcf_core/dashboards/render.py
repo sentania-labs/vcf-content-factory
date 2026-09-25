@@ -60,22 +60,34 @@ def adapter_kind_prefix(adapter_kind: str) -> str:
     CASAdapter 002010, NSXTAdapter 002011, KubernetesAdapter 002017,
     VMWARE_INFRA_HEALTH 002019, VrAdapter 002009) matches the formula, as
     do all 363 resource kinds on the devel instance
-    (knowledge/context/api-surface/summary_dashboard_assignment.md) and
-    every ``0020NN<adapterKind>`` string in the reference corpus.
+    (knowledge/context/api-surface/summary_dashboard_assignment.md). In the
+    reference corpus (files and nested pak/zip members) 50 of 51 adapter
+    kinds match; the one exception is a vendor typo in the DellEMC
+    OpenManage Enterprise pak (``002015`` for the 18-character
+    ``DELLEMCOME_ADAPTER``), outranked by the server's own generator and
+    the 363-kind devel check.
 
     Lives here rather than in summary_bind so the sdk-buildkit's flat copy
     of this module (dashboard_render.py) needs no extra sibling.
 
-    Raises ``ValueError`` for an empty key or one longer than 99 characters,
-    which the two-digit length field cannot encode.
+    Unverified above 99 characters (the ``004null`` groupBy form hints at a
+    three-digit length encoding server-side), and ASCII keys are assumed:
+    Python ``len`` counts code points where Java counts UTF-16 units.
+    Raises ``ValueError`` for an empty key, a non-ASCII key, or one longer
+    than 99 characters rather than guess.
     """
     if not adapter_kind:
         raise ValueError("resourceKindId prefix: adapter kind is empty")
+    if not adapter_kind.isascii():
+        raise ValueError(
+            f"resourceKindId prefix: adapter kind {adapter_kind!r} is not "
+            f"ASCII; the length encoding is only verified for ASCII keys"
+        )
     if len(adapter_kind) > 99:
         raise ValueError(
             f"resourceKindId prefix: adapter kind {adapter_kind!r} is "
-            f"{len(adapter_kind)} characters; the two-digit length field "
-            f"holds at most 99"
+            f"{len(adapter_kind)} characters; the encoding is only "
+            f"verified for the two-digit length field (at most 99)"
         )
     return f"0020{len(adapter_kind):02d}"
 

@@ -6,8 +6,17 @@ outside the table (an SDK pak's own kind, e.g. unifi_controller) failed to
 render with "no known resourceKindId prefix". Evidence for the formula:
 all 363 resource kinds on the devel instance
 (knowledge/context/api-surface/summary_dashboard_assignment.md), every
-entry of the old table, and every 0020NN<adapterKind> string in the
-reference corpus.
+entry of the old table, and 50 of 51 adapter kinds in the reference corpus
+(files and nested pak/zip members).
+
+Known deviation, deliberately NOT honoured: the DellEMC OpenManage
+Enterprise pak
+(reference/references/tvs/DellEMCOpenManageEnterprise-7.0_2.0.0_b20200917.104045.pak,
+dashboards/overview.json) writes Heatmap groupBy ids
+"004null002015DELLEMCOME_ADAPTER..." for the 18-character key
+DELLEMCOME_ADAPTER. That is a vendor typo, outranked by the server's own
+IdGeneratorUtil.toID and the 363-kind devel check; the factory emits
+002018 (see test_known_vendor_typo_is_not_reproduced).
 """
 from __future__ import annotations
 
@@ -20,7 +29,11 @@ from vcfcf_core.dashboards.loader import (
     Dashboard,
     HeatmapConfig,
     HeatmapTab,
+    ViewColumn,
+    ViewDef,
     Widget,
+    WidgetResourceKindRef,
+    load_dashboard,
 )
 from vcfcf_core.dashboards.render import (
     adapter_kind_prefix,
@@ -81,6 +94,20 @@ def test_unseen_adapter_kind_is_computed():
 def test_unencodable_adapter_kind_rejected(bad):
     with pytest.raises(ValueError):
         adapter_kind_prefix(bad)
+
+
+@pytest.mark.parametrize("bad", ["café_adapter", "アダプタ", "kind\U0001F600"])
+def test_non_ascii_adapter_kind_rejected(bad):
+    # Python len counts code points, Java counts UTF-16 units; the encoding
+    # is only verified for ASCII keys, so refuse rather than guess.
+    with pytest.raises(ValueError, match="not ASCII"):
+        adapter_kind_prefix(bad)
+
+
+def test_known_vendor_typo_is_not_reproduced():
+    # DellEMC OME pak ships 004null002015DELLEMCOME_ADAPTER... (see module
+    # docstring). The factory follows the server generator, not the typo.
+    assert adapter_kind_prefix("DELLEMCOME_ADAPTER") == "002018"
 
 
 def test_resource_kind_id_uses_same_prefix():
@@ -154,3 +181,77 @@ def test_heatmap_vmware_group_by_unchanged():
     )
     gb = _group_by(_heatmap_dashboard(tab))
     assert gb["id"] == "004null002006VMWAREHostSystem"
+
+
+# ---------------------------------------------------------------------------
+# The other two call sites: pinned View and Scoreboard resource mode, each
+# with an SDK pak's own adapter kind (never in the old table).
+# ---------------------------------------------------------------------------
+
+def test_pinned_view_on_sdk_adapter_kind():
+    view = ViewDef(
+        id="aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+        name="UniFi Sites",
+        description="",
+        adapter_kind="unifi_controller",
+        resource_kind="UniFiSite",
+        columns=[ViewColumn(attribute="badge|health", display_name="Health")],
+    )
+    widget = Widget(
+        local_id="sites",
+        type="View",
+        title="Sites",
+        coords={"x": 1, "y": 1, "w": 6, "h": 4},
+        view_name=view.name,
+        self_provider=True,
+        pin=WidgetResourceKindRef(
+            adapter_kind="unifi_controller", resource_kind="UniFiWorld"
+        ),
+        dashboard_name="Prefix Test",
+    )
+    dashboard = Dashboard(
+        id=str(uuid.uuid4()),
+        name="Prefix Test",
+        description="",
+        widgets=[widget],
+        interactions=[],
+        name_path="Testing",
+        shared=True,
+        hidden=False,
+    )
+    bundle = json.loads(
+        render_dashboards_bundle_json([dashboard], {view.name: view}, _OWNER_ID)
+    )
+    resource = bundle["dashboards"][0]["widgets"][0]["config"]["resource"]
+    assert resource["resourceKindId"] == "002016unifi_controllerUniFiWorld"
+
+
+def test_scoreboard_resource_mode_on_sdk_adapter_kind(tmp_path):
+    import yaml
+
+    path = tmp_path / "dash.yaml"
+    path.write_text(yaml.dump({
+        "id": str(uuid.uuid4()),
+        "name": "[VCF Content Factory] Prefix Probe",
+        "widgets": [{
+            "id": "nas",
+            "type": "Scoreboard",
+            "title": "NAS",
+            "coords": {"x": 1, "y": 1, "w": 6, "h": 5},
+            "self_provider": True,
+            "metric_mode": "resource",
+            "resource": {
+                "adapter_kind": "synology_diskstation",
+                "resource_kind": "SynologyWorld",
+                "name": "Synology World",
+            },
+            "metrics": [
+                {"metric_key": "badge|health", "metric_name": "Health",
+                 "label": "Health", "color_method": 1},
+            ],
+        }],
+    }, default_flow_style=False))
+    dashboard = load_dashboard(path)
+    bundle = json.loads(render_dashboards_bundle_json([dashboard], {}, _OWNER_ID))
+    entry = bundle["dashboards"][0]["widgets"][0]["config"]["metric"]["resourceMetrics"][0]
+    assert entry["resourceKindId"] == "002020synology_diskstationSynologyWorld"

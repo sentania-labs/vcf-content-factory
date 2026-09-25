@@ -840,11 +840,19 @@ different instance.
 `"002006VMWAREVirtualMachine"` where `002006` is the VMWARE adapter prefix.
 The prefix is `"0020"` + the adapter-kind key length as two digits
 (`VMWARE` is 6 characters, so `002006`); it is not a per-adapter lookup.
-Verified 2026-09-25 against every entry of the renderer's former closed
-table, every `0020NN<adapterKind>` string in `reference/references/`,
-`third_party/` and `knowledge/context/` (12 adapter kinds, lengths 6 to
-32, including MPB kinds like `mpb_ubiquiti_unifi`), and the 363-kind
-check in `summary_dashboard_assignment.md`.
+Checked 2026-09-25 against every entry of the renderer's former closed
+table and every `0020NN<adapterKind>` string in `reference/references/`,
+`third_party/` and `knowledge/context/`, including members of nested
+pak/zip files: 50 of 51 adapter kinds match (lengths 6 to 32, including
+MPB kinds like `mpb_ubiquiti_unifi`). The one exception is a known vendor
+typo: the DellEMC OpenManage Enterprise pak
+(`reference/references/tvs/DellEMCOpenManageEnterprise-7.0_2.0.0_b20200917.104045.pak`,
+`dashboards/overview.json`, Heatmap `groupBy.id`) writes
+`004null002015DELLEMCOME_ADAPTER...` for an 18-character key. That
+exception is outranked by the server's own `IdGeneratorUtil.toID` and by
+the 363-kind devel check in `summary_dashboard_assignment.md`, both of
+which follow the formula. Unverified above 99 characters and for
+non-ASCII keys; the renderer rejects both rather than guess.
 
 ## What renderer v1 (this repo) currently supports
 
