@@ -44,6 +44,9 @@ load_registry(registry_path) -> List[DefectEntry]
       - duplicate IDs
       - missing required fields (Title, Severity, Status, Affects, First-seen,
         Source, Summary)
+      - an ``Affects:`` that is not one scope token (multi-token, or a
+        prefix other than ``factory:``); such an entry used to parse as valid
+        and silently gate nothing (#153)
       - a ``DEF``-prefixed heading whose id is not ``DEF-NNN`` (a typo such as
         ``DEF-1O2``, or trailing text): it always terminates the previous entry,
         so it can never repoint a good entry, and it becomes a parse error of
@@ -236,6 +239,12 @@ _ID_RE = re.compile(r"^DEF-\d+$")
 
 #: Required field names (exact, case-sensitive as they appear in the registry).
 _REQUIRED_FIELDS = ("Title", "Severity", "Status", "Affects", "First-seen", "Source", "Summary")
+
+#: ``Affects:`` scope shapes that are unambiguous on their own (no registry
+#: lookup needed): a content item ``<type>/<slug>`` and ``factory:<area>``.
+#: A bare managed-pak name is the third shape; see :func:`_known_pak_names`.
+_ITEM_SCOPE_RE = re.compile(r"^[a-z][a-z_]*/[A-Za-z0-9_.\-]+$")
+_FACTORY_SCOPE_RE = re.compile(r"^factory:[A-Za-z0-9][A-Za-z0-9_.\-]*$")
 
 
 # ---------------------------------------------------------------------------
@@ -487,16 +496,74 @@ def parse_registry(
     return Registry(path=registry_path, entries=entries, errors=errors)
 
 
-def _readable_affects(fields: dict[str, str]) -> str:
-    """The entry's ``Affects:`` token when it can be read, else ``""``.
+def _known_pak_names() -> frozenset:
+    """Managed-pak names from ``knowledge/context/managed_paks.md``.
 
-    A token is readable when it is present, non-empty, and a single
-    whitespace-free token (the registry's own contract: exactly one token).
-    Anything else, including a missing field or a prose sentence, means the
-    error cannot be attributed to one artifact, so it must block nothing.
+    Consulted only to attribute a MALFORMED multi-token ``Affects:`` to its
+    first token.  Best effort: an unreadable managed-paks registry yields an
+    empty set, which only means such an entry stays unattributed (reported,
+    blocks nothing) rather than failing closed for a pak.
+    """
+    try:
+        from .managed_paks import load_registry as _load_managed_paks
+        return frozenset(p.name for p in _load_managed_paks())
+    except Exception:
+        return frozenset()
+
+
+def _affects_problem(raw: str) -> Optional[str]:
+    """Why an ``Affects:`` value breaks the one-token contract, else None.
+
+    Two shapes are rejected (#153).  A multi-token value (a token plus a
+    parenthetical note, a wrapped path, prose) can never equal the pak name
+    or ``<type>/<slug>`` a gate matches against, so the entry used to parse
+    as valid and silently block nothing.  A single token carrying a prefix
+    other than ``factory:`` (``pak:synology``) fails the same way.
+    """
+    tokens = raw.split()
+    if len(tokens) != 1:
+        return (
+            f"Affects {_clip(raw)!r} is {len(tokens)} tokens; it must be exactly "
+            f"one scope token (a managed pak name, <type>/<slug>, or "
+            f"factory:<area>). Move notes such as file paths into Summary or "
+            f"Related, and split a multi-artifact entry into one entry each"
+        )
+    if ":" in tokens[0] and not _FACTORY_SCOPE_RE.match(tokens[0]):
+        return (
+            f"Affects {_clip(raw)!r} is not a recognised scope: the only "
+            f"prefixed form is factory:<area>; a pak is named bare (e.g. "
+            f"'synology') and a content item as <type>/<slug>"
+        )
+    return None
+
+
+def _readable_affects(fields: dict[str, str]) -> str:
+    """The entry's ``Affects:`` scope when it can be attributed, else ``""``.
+
+    A single token is readable as-is, unless it carries an unrecognised
+    prefix (``pak:synology``), which names no gateable scope.  A multi-token
+    value breaks the registry's one-token contract; it is attributed to its
+    FIRST token only when that token unambiguously names a scope (a known
+    managed pak, ``<type>/<slug>``, or ``factory:<area>``), so the broken
+    entry still fails closed for what it meant to block (#153).  Anything
+    else, including a missing field or a prose sentence, cannot be
+    attributed to one artifact, so it must block nothing.
     """
     raw = (fields.get("Affects") or "").strip()
-    if not raw or len(raw.split()) != 1:
+    if not raw:
+        return ""
+    tokens = raw.split()
+    if len(tokens) == 1:
+        if ":" in raw and not _FACTORY_SCOPE_RE.match(raw):
+            return ""
+    else:
+        first = tokens[0]
+        if (
+            _ITEM_SCOPE_RE.match(first)
+            or _FACTORY_SCOPE_RE.match(first)
+            or first in _known_pak_names()
+        ):
+            return first
         return ""
     # Returned UNCLIPPED: this value has to compare equal to a real pak name
     # or <type>/<slug> token for the synthetic entry to gate anything, and a
@@ -548,6 +615,13 @@ def _validate_and_emit(
     summary = fields["Summary"].strip()
     closing_evidence = fields.get("Closing-evidence", "").strip()
     related = fields.get("Related", "").strip()
+
+    # --- Affects must be one recognised scope token (#153) ---
+    # Checked before severity/status so the reported reason is the one that
+    # made this entry silently gate nothing.
+    affects_problem = _affects_problem(affects)
+    if affects_problem is not None:
+        return _err(affects_problem)
 
     # --- Severity validation ---
     if severity not in _VALID_SEVERITIES:
