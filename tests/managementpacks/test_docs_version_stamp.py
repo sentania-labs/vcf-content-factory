@@ -81,11 +81,54 @@ def test_docset_override_stamps_given_version(tmp_path: Path) -> None:
 
 @pytest.mark.parametrize("stamped", ["0.0.0.1", "1.0.0.1"])
 def test_build_docs_use_stamped_version(tmp_path: Path, stamped: str) -> None:
-    """build-sdk's doc step stamps docs/ and REFERENCE with the pak version."""
+    """build-sdk's doc step stamps the REGENERATED surfaces (docs/README.md,
+    docs/inventory-tree.md, REFERENCE.generated.md) with the pak version."""
     project_dir = _make_project(tmp_path)
+    (project_dir / "REFERENCE.md").write_text("hand-authored\n", encoding="utf-8")
     _generate_docs(project_dir, stamped)
     readme, tree = _docset_text(project_dir)
     assert f"**Version:** {stamped}" in readme
     assert f"v{stamped}." in tree
+    generated = (project_dir / "REFERENCE.generated.md").read_text(encoding="utf-8")
+    assert f"for build {stamped}." in generated
+    assert (project_dir / "REFERENCE.md").read_text(encoding="utf-8") == "hand-authored\n"
+
+
+def test_first_dev_build_scaffolds_with_declared_version(tmp_path: Path) -> None:
+    """Codex P2 on #188: write-once scaffolds must not keep a dev stamp.
+
+    A project's first build-sdk is a dev build (0.0.0.1). The regenerated
+    README shows 0.0.0.1, but docs/overview.md, docs/installing.md and the
+    first-run REFERENCE.md are never rewritten, so they get the declared
+    1.0.0.1. A later release build then regenerates README to 1.0.0.1 and
+    leaves the scaffolds alone, with no stale 0.x left anywhere.
+    """
+    project_dir = _make_project(tmp_path)
+    docs = project_dir / "docs"
+
+    _generate_docs(project_dir, "0.0.0.1")
+    readme, tree = _docset_text(project_dir)
+    assert "**Version:** 0.0.0.1" in readme
+    assert "v0.0.0.1." in tree
+    overview = (docs / "overview.md").read_text(encoding="utf-8")
+    installing = (docs / "installing.md").read_text(encoding="utf-8")
     reference = (project_dir / "REFERENCE.md").read_text(encoding="utf-8")
-    assert f"for build {stamped}." in reference
+    assert "version 1.0.0.1." in overview
+    assert "for build 1.0.0.1." in reference
+    for text in (overview, installing, reference):
+        assert "0.0.0.1" not in text
+
+    _generate_docs(project_dir, "1.0.0.1")  # later release build
+    readme, tree = _docset_text(project_dir)
+    assert "**Version:** 1.0.0.1" in readme
+    assert (docs / "overview.md").read_text(encoding="utf-8") == overview
+    assert (docs / "installing.md").read_text(encoding="utf-8") == installing
+    assert (project_dir / "REFERENCE.md").read_text(encoding="utf-8") == reference
+
+
+def test_docset_scaffolds_ignore_override(tmp_path: Path) -> None:
+    project_dir = _make_project(tmp_path)
+    results = generate_docset(project_dir, adapter_version="0.0.0.1")
+    assert results["docs/overview.md"] == "scaffolded"
+    overview = (project_dir / "docs" / "overview.md").read_text(encoding="utf-8")
+    assert "version 1.0.0.1." in overview and "0.0.0.1" not in overview

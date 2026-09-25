@@ -3093,9 +3093,11 @@ def _generate_docs(project_dir: Path, version_string: str) -> None:
     # to REFERENCE.generated.md so the author can diff/merge. On first run
     # (file absent) write directly as REFERENCE.md.
     try:
-        ref_content = _generate_reference_md(project_dir, project_name, version_string)
         ref_path = project_dir / "REFERENCE.md"
         if ref_path.is_file():
+            ref_content = _generate_reference_md(
+                project_dir, project_name, version_string
+            )
             gen_path = project_dir / "REFERENCE.generated.md"
             gen_path.write_text(ref_content, encoding="utf-8")
             print(
@@ -3104,6 +3106,12 @@ def _generate_docs(project_dir: Path, version_string: str) -> None:
                 file=sys.stderr,
             )
         else:
+            # First-run bootstrap: REFERENCE.md is never rewritten after
+            # this, so it carries the declared adapter.yaml version, not a
+            # dev build's 0.0.0.N stamp (same rule as the docs/ scaffolds).
+            ref_content = _generate_reference_md(
+                project_dir, project_name, f"{current_version}.{current_build}"
+            )
             ref_path.write_text(ref_content, encoding="utf-8")
             print(f"  docs: wrote {ref_path}", file=sys.stderr)
     except Exception as exc:
