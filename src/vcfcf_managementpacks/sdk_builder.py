@@ -3115,9 +3115,14 @@ def _generate_docs(project_dir: Path, version_string: str) -> None:
 
     # 4. Generate docs/ docset (inventory-tree diagram, per-kind tables, README).
     # Policy mirrors the docset design: regenerate/scaffold as appropriate.
+    # version_string is the version stamped on the pak (0.0.0.<build> on a
+    # dev build, RULE-014), not adapter.yaml's declared version, so the
+    # docset and the pak never disagree.
     try:
         from .docs_gen import generate_docset, DocsGenError
-        results = generate_docset(project_dir, verbose=False)
+        results = generate_docset(
+            project_dir, verbose=False, adapter_version=version_string
+        )
         for rel_path, status in results.items():
             if status.startswith("skipped"):
                 print(f"  docs: {rel_path} — {status}", file=sys.stderr)
