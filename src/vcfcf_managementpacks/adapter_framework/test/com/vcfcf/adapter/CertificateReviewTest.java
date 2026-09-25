@@ -14,14 +14,13 @@ import com.integrien.alive.common.adapter3.config.ResourceIdentifierConfig;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Set;
 
 /**
  * Unit tests for the certificate-review hook on {@link VcfCfAdapter}
- * ({@code certificateCheckUrls}, {@code getConnectionURLs},
- * {@code getCertificateRenewalUrls}), the Test Connection trust-failure
- * message mapping, and {@code parseAllowInsecure} (legacy free-text and
- * enum pulldown values).
+ * ({@code certificateCheckUrls}, {@code getConnectionURLs}; the renewal URL
+ * set deliberately stays at the SDK default), the Test Connection
+ * trust-failure message mapping, and the allowInsecure parsers (strict and
+ * legacy "anything but false", legacy free-text and enum pulldown values).
  *
  * <p>No JUnit required: call via {@code main()}.
  *
@@ -55,8 +54,7 @@ public class CertificateReviewTest {
         testHookNormalisesAndDedupes();
         testHookExceptionIsNoUrls();
         testNullConfigIsSafe();
-        testRenewalUrlsDefaultNull();
-        testRenewalUrlsOptedIn();
+        testRenewalUrlsStaySdkDefault();
         testMessageMappingCustomCertificateException();
         testMessageMappingPkixText();
         testMessageMappingCertPathValidator();
@@ -66,9 +64,12 @@ public class CertificateReviewTest {
         testOnTestUsesReadableMessageWhenPromptAvailable();
         testOnTestUsesReadableMessageWhenNoPrompt();
         testOnTestKeepsRawMessageForOtherFailures();
+        testOnTestSkipsHookForOtherFailures();
+        testOnTestHookErrorDoesNotEscape();
         testParseAllowInsecureLegacyAndEnum();
-        testParseAllowInsecureBlankDefault();
+        testParseAllowInsecureLegacyNotFalseMatchesSynology();
         testIsAllowInsecureReadsIdentifier();
+        testIsAllowInsecureLegacyNotFalse();
         report();
     }
 
@@ -135,6 +136,25 @@ public class CertificateReviewTest {
         @Override
         protected List<String> certificateCheckUrls(ResourceConfig rc) {
             return raw;
+        }
+    }
+
+    /** Counts hook calls. */
+    static class CountingAdapter extends OptedInAdapter {
+        int calls;
+
+        @Override
+        protected List<String> certificateCheckUrls(ResourceConfig rc) {
+            calls++;
+            return super.certificateCheckUrls(rc);
+        }
+    }
+
+    /** Hook throws an Error (for example a missing class in the pak). */
+    static class ErrorAdapter extends PlainAdapter {
+        @Override
+        protected List<String> certificateCheckUrls(ResourceConfig rc) {
+            throw new AssertionError("hook error");
         }
     }
 
@@ -238,29 +258,24 @@ public class CertificateReviewTest {
     }
 
     // -----------------------------------------------------------------------
-    // getCertificateRenewalUrls
+    // getCertificateRenewalUrls: deliberately NOT overridden
     // -----------------------------------------------------------------------
 
-    private static void testRenewalUrlsDefaultNull() throws Exception {
+    private static void testRenewalUrlsStaySdkDefault() throws Exception {
         PlainAdapter a = allocate(PlainAdapter.class);
         a.current = cfg("host", "vc.example.com");
         assertTrue("default hook: getCertificateRenewalUrls is null (SDK default)",
                 a.getCertificateRenewalUrls() == null);
-        a.current = null;
-        assertTrue("no current config: getCertificateRenewalUrls is null",
-                a.getCertificateRenewalUrls() == null);
-    }
-
-    private static void testRenewalUrlsOptedIn() throws Exception {
-        OptedInAdapter a = allocate(OptedInAdapter.class);
-        a.current = cfg("host", "nas.example.com", "port", "5001");
-        Set<String> urls = a.getCertificateRenewalUrls();
-        assertEquals("opted-in: renewal URLs equal the review URLs",
-                List.of("https://nas.example.com:5001"),
-                urls == null ? null : new ArrayList<>(urls));
-        // The collector parses each with new URL(s).getHost(); make sure that works.
-        assertEquals("renewal URL parses to the host the collector matches on",
-                "nas.example.com", new java.net.URL(urls.iterator().next()).getHost());
+        OptedInAdapter b = allocate(OptedInAdapter.class);
+        b.current = cfg("host", "nas.example.com", "port", "5001");
+        assertTrue("opted-in: getCertificateRenewalUrls is still null (renewal protocol is "
+                + "VCF-only, so the framework does not declare renewal URLs)",
+                b.getCertificateRenewalUrls() == null);
+        boolean declared = false;
+        for (java.lang.reflect.Method m : VcfCfAdapter.class.getDeclaredMethods()) {
+            if (m.getName().equals("getCertificateRenewalUrls")) declared = true;
+        }
+        assertFalse("VcfCfAdapter does not override getCertificateRenewalUrls", declared);
     }
 
     // -----------------------------------------------------------------------
@@ -303,7 +318,10 @@ public class CertificateReviewTest {
                 "PKIX path building failed: unable to find valid certification path to requested target");
         String msg = VcfCfAdapter.certificateTrustFailureMessage(e, false);
         assertTrue("JDK PKIX text without a typed cause still maps; got " + msg,
-                msg != null && msg.contains("does not declare its endpoint for certificate review"));
+                msg != null && msg.contains("No endpoint was offered for certificate review"));
+        assertTrue("no-prompt message covers Allow Insecure already true and blank host",
+                msg != null && msg.contains("Allow Insecure SSL is already true")
+                        && msg.contains("host is blank"));
     }
 
     private static void testMessageMappingCertPathValidator() {
@@ -363,7 +381,8 @@ public class CertificateReviewTest {
         a.onTest(p);
         assertTrue("onTest (not opted in): says the pack cannot offer the prompt; got "
                 + p.getErrorMsg(),
-                p.getErrorMsg() != null && p.getErrorMsg().contains("does not declare its endpoint"));
+                p.getErrorMsg() != null
+                        && p.getErrorMsg().contains("No endpoint was offered for certificate review"));
     }
 
     private static void testOnTestKeepsRawMessageForOtherFailures() throws Exception {
@@ -373,6 +392,33 @@ public class CertificateReviewTest {
         a.onTest(p);
         assertEquals("onTest: non-certificate failure keeps its raw message",
                 "HTTP 401 Unauthorized", p.getErrorMsg());
+    }
+
+    private static void testOnTestSkipsHookForOtherFailures() throws Exception {
+        CountingAdapter a = allocate(CountingAdapter.class);
+        a.tester = (cfg, http, param) -> { throw new RuntimeException("HTTP 401 Unauthorized"); };
+        a.onTest(new TestParam(cfg("host", "vc.example.com")));
+        assertEquals("onTest: hook not called for a non-certificate failure", 0, a.calls);
+        a.tester = (cfg, http, param) -> { throw prodStack(); };
+        a.onTest(new TestParam(cfg("host", "vc.example.com")));
+        assertEquals("onTest: hook called once for a trust failure", 1, a.calls);
+    }
+
+    private static void testOnTestHookErrorDoesNotEscape() throws Exception {
+        ErrorAdapter a = allocate(ErrorAdapter.class);
+        a.tester = (cfg, http, param) -> { throw prodStack(); };
+        TestParam p = new TestParam(cfg("host", "vc.example.com"));
+        boolean ok;
+        try {
+            ok = a.onTest(p);
+        } catch (Throwable t) {
+            assertTrue("onTest: an Error from the hook must not escape; got " + t, false);
+            return;
+        }
+        assertFalse("onTest with an Error-throwing hook still returns false", ok);
+        assertTrue("onTest with an Error-throwing hook falls back to the no-prompt message",
+                p.getErrorMsg() != null
+                        && p.getErrorMsg().contains("No endpoint was offered for certificate review"));
     }
 
     // -----------------------------------------------------------------------
@@ -393,15 +439,26 @@ public class CertificateReviewTest {
         assertFalse("blank is secure", VcfCfAdapter.parseAllowInsecure("   "));
     }
 
-    private static void testParseAllowInsecureBlankDefault() {
-        assertTrue("blank with defaultWhenBlank=true is insecure",
-                VcfCfAdapter.parseAllowInsecure("", true));
-        assertTrue("null with defaultWhenBlank=true is insecure",
-                VcfCfAdapter.parseAllowInsecure(null, true));
-        assertFalse("'false' with defaultWhenBlank=true is secure",
-                VcfCfAdapter.parseAllowInsecure("false", true));
-        assertFalse("'no' with defaultWhenBlank=true is secure (non-blank parses strictly)",
-                VcfCfAdapter.parseAllowInsecure("no", true));
+    private static void testParseAllowInsecureLegacyNotFalseMatchesSynology() {
+        // Bit-for-bit parity with synology's shipped parse, for every shape of
+        // stored value, including ones the strict parser reads differently.
+        String[] values = {null, "", "   ", "true", "TRUE", " true", "false", "FALSE",
+                " false", "false ", "yes", "no", "1", "0", "truee"};
+        for (String v : values) {
+            boolean legacy = !"false".equalsIgnoreCase(v);
+            assertEquals("legacy-not-false parse of [" + v + "] matches synology",
+                    legacy, VcfCfAdapter.parseAllowInsecureLegacyNotFalse(v));
+        }
+        // And the strict parser vs the untrimmed "true".equalsIgnoreCase legacy
+        // parse differs ONLY for padded "true".
+        for (String v : values) {
+            boolean legacy = "true".equalsIgnoreCase(v);
+            boolean strict = VcfCfAdapter.parseAllowInsecure(v);
+            boolean paddedTrue = v != null && !v.equals(v.trim())
+                    && "true".equalsIgnoreCase(v.trim());
+            assertEquals("strict parse of [" + v + "] differs from legacy only for padded true",
+                    paddedTrue, legacy != strict);
+        }
     }
 
     private static void testIsAllowInsecureReadsIdentifier() throws Exception {
@@ -411,6 +468,17 @@ public class CertificateReviewTest {
         assertFalse("isAllowInsecure: absent identifier is secure",
                 a.isAllowInsecure(cfg("host", "x").getAdapterInstResource()));
         assertFalse("isAllowInsecure: null config is secure", a.isAllowInsecure(null));
+    }
+
+    private static void testIsAllowInsecureLegacyNotFalse() throws Exception {
+        PlainAdapter a = allocate(PlainAdapter.class);
+        assertTrue("legacy: absent identifier is insecure",
+                a.isAllowInsecureLegacyNotFalse(cfg("host", "x").getAdapterInstResource()));
+        assertTrue("legacy: 'yes' is insecure",
+                a.isAllowInsecureLegacyNotFalse(cfg("allowInsecure", "yes").getAdapterInstResource()));
+        assertFalse("legacy: 'False' is secure",
+                a.isAllowInsecureLegacyNotFalse(cfg("allowInsecure", "False").getAdapterInstResource()));
+        assertFalse("legacy: null config is secure", a.isAllowInsecureLegacyNotFalse(null));
     }
 
     // -----------------------------------------------------------------------

@@ -32,7 +32,6 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -649,10 +648,14 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
             if (msg == null || msg.isEmpty()) {
                 msg = e.getClass().getSimpleName() + " (no message)";
             }
-            String certMsg = certificateTrustFailureMessage(e,
-                    !declaredCertificateUrls(param.getAdapterConfig()).isEmpty());
-            if (certMsg != null) {
-                msg = certMsg;
+            // Only consult the (pak-supplied) hook once the failure is known to
+            // be a certificate-trust failure.
+            if (findCertificateTrustFailure(e) != null) {
+                String certMsg = certificateTrustFailureMessage(e,
+                        certificatePromptAvailable(param));
+                if (certMsg != null) {
+                    msg = certMsg;
+                }
             }
             // §5: populate TestParam — returning false alone gives a blank error.
             param.setErrorMsg(msg);
@@ -1290,8 +1293,14 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
      * loaded into the same {@code CustomTrustManager} that
      * {@link #getPlatformSslContext()} and
      * {@code HttpClientBuilder.platformSsl(this)} use, so collection trusts
-     * them with no transport change. The same URLs are also returned from
-     * {@link #getCertificateRenewalUrls()}.
+     * them with no transport change.
+     *
+     * <p>These URLs are deliberately NOT returned from
+     * {@code getCertificateRenewalUrls()} (the SDK default {@code null} stays):
+     * the collector's renewal handler speaks a VCF-component protocol (signed
+     * {@code jwt_token} JSON) that third-party targets do not serve, and each
+     * attempt costs a throwaway {@code configure()} plus a GET to the target.
+     * See {@code knowledge/context/tier2_architecture.md}, SSL section.
      *
      * <h4>Contract (read before overriding)</h4>
      * <ul>
@@ -1301,8 +1310,9 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
      *       URL from {@code config} (identifiers via
      *       {@link #getIdentifier(ResourceConfig, String)}), never from
      *       {@link #config}, {@link #httpClient}, or any other instance field.
-     *       The platform also calls this on the running instance (Certificates
-     *       page, renewal), again with the config it passes in.</li>
+     *       The platform also calls this on the running instance (the
+     *       collector's certificate-chain task), again with the config it
+     *       passes in.</li>
      *   <li>Return {@code https://host:port} for every endpoint the adapter
      *       dials with {@link #getPlatformSslContext()}. Host and port must be
      *       the ones the client actually connects to, or the accepted
@@ -1313,7 +1323,8 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
      *   <li>Return an empty list when a required identifier (host) is blank;
      *       the tester reports the missing field.</li>
      *   <li>Do not do I/O here and do not throw. A thrown
-     *       {@link RuntimeException} is logged and treated as "no URLs".</li>
+     *       {@link RuntimeException} or {@link LinkageError} is logged and
+     *       treated as "no URLs".</li>
      * </ul>
      *
      * <pre>{@code
@@ -1343,6 +1354,12 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
      * {@code super.getConnectionURLs}, so an adapter that does not override the
      * hook behaves exactly as before (the SDK default yields
      * {@code NOT_SUPPORTED}).
+     *
+     * <p>This method does not itself look at Allow Insecure SSL or at any
+     * identifier. Returning no URLs for an insecure or incomplete config is the
+     * hook's job (see the contract on
+     * {@link #certificateCheckUrls(ResourceConfig)}); whatever the hook
+     * returns, after trimming and de-duplication, is what the platform probes.
      */
     @Override
     public List<String> getConnectionURLs(AdapterConfig adapterConfig) {
@@ -1354,42 +1371,10 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
     }
 
     /**
-     * {@inheritDoc}
-     *
-     * <p>Returns the same URLs as {@link #getConnectionURLs(AdapterConfig)} for
-     * this instance's current config ({@link AdapterBase#getAdapterConfig()}),
-     * mirroring the Broadcom NSX-T adapter. When empty, delegates to
-     * {@code super} ({@code null}, the SDK default).
-     *
-     * <p>Consumer (bytecode, collector 9.1.1
-     * {@code NonDisruptiveCertificateHandler}): on an unknown certificate for a
-     * saved instance, the collector builds a throwaway instance of this class
-     * (no-arg constructor, then {@code configure(adapterConfig)}), calls this
-     * method, keeps the URLs whose host matches the failing endpoint, and GETs
-     * each one expecting a signed JSON {@code jwt_token} carrying the renewed
-     * {@code certificate_chain}. That payload is a VCF-component renewal
-     * protocol; a third-party target (vCenter REST root, DSM, UniFi) is not
-     * expected to serve it, so renewal for those targets fails and the admin
-     * re-accepts the new certificate through Validate Connection. Declaring the
-     * URL still replaces the collector's
-     * {@code "Adapter certificate renewal url set is empty"} error with a real
-     * attempt. An adapter whose target serves a renewal endpoint can override
-     * this method to return that endpoint instead.
-     */
-    @Override
-    public Set<String> getCertificateRenewalUrls() {
-        List<String> urls = declaredCertificateUrls(getAdapterConfig());
-        if (urls.isEmpty()) {
-            return super.getCertificateRenewalUrls();
-        }
-        return new LinkedHashSet<>(urls);
-    }
-
-    /**
      * Resolve {@link #certificateCheckUrls(ResourceConfig)} for an
      * {@link AdapterConfig}: null-safe, trims entries, drops null/blank ones,
-     * de-duplicates in order, and turns a hook {@link RuntimeException} into
-     * "no URLs" (logged). Never returns {@code null}.
+     * de-duplicates in order, and turns a hook {@link RuntimeException} or
+     * {@link LinkageError} into "no URLs" (logged). Never returns {@code null}.
      */
     final List<String> declaredCertificateUrls(AdapterConfig adapterConfig) {
         if (adapterConfig == null) {
@@ -1402,7 +1387,7 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
         List<String> raw;
         try {
             raw = certificateCheckUrls(rc);
-        } catch (RuntimeException e) {
+        } catch (RuntimeException | LinkageError e) {
             logWarnSafe("certificateCheckUrls threw; treating as no certificate URLs: "
                     + e, e);
             return Collections.emptyList();
@@ -1426,48 +1411,57 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
     }
 
     /**
-     * Parse an "Allow Insecure SSL" value. {@code "true"} (case-insensitive,
-     * surrounding whitespace ignored) means insecure; anything else, including
-     * {@code null} and blank, means validate certificates.
+     * Parse an "Allow Insecure SSL" value, strict form. {@code "true"}
+     * (case-insensitive, surrounding whitespace ignored) means insecure;
+     * anything else, including {@code null} and blank, means validate
+     * certificates.
      *
-     * <p>Accepts both storage shapes: the legacy free-text identifier (whatever
-     * the admin typed) and the {@code enum="true"} pulldown ({@code true} /
-     * {@code false}). An existing instance keeps its stored string across the
-     * describe.xml change and parses the same way.
+     * <p>Reads both storage shapes: the legacy free-text identifier and the
+     * {@code enum="true"} pulldown ({@code true} / {@code false}). An existing
+     * instance keeps its stored string across the describe.xml change.
+     *
+     * <p><strong>Exact difference from the legacy
+     * {@code "true".equalsIgnoreCase(v)} parse</strong> (compliance, unifi,
+     * the vcommunity paks, the template): the legacy parse does not trim, so a
+     * stored {@code "true"} with surrounding whitespace ({@code " true"},
+     * {@code "TRUE "}) is secure today and insecure here. Every other stored
+     * value parses identically. For the "anything but false" legacy parse
+     * (synology) use {@link #parseAllowInsecureLegacyNotFalse(String)}.
      *
      * @param raw the stored identifier value
      * @return {@code true} only for a trimmed, case-insensitive {@code "true"}
      */
     public static boolean parseAllowInsecure(String raw) {
-        return parseAllowInsecure(raw, false);
+        return raw != null && "true".equalsIgnoreCase(raw.trim());
     }
 
     /**
-     * As {@link #parseAllowInsecure(String)}, but with an explicit result for a
-     * {@code null} or blank value. For adapters whose shipped default was
-     * insecure (a blank legacy value meant "trust all"), pass {@code true} so
-     * existing instances do not change behaviour. A non-blank value still
-     * parses strictly: only {@code "true"} is insecure.
+     * Parse an "Allow Insecure SSL" value with the "anything but false is
+     * insecure" legacy meaning, bit for bit:
+     * {@code !"false".equalsIgnoreCase(raw)}, untrimmed. {@code null}, blank,
+     * {@code "yes"}, {@code "1"}, {@code " false"} and {@code "true"} are all
+     * insecure; only an exact, case-insensitive {@code "false"} validates.
      *
-     * @param raw              the stored identifier value
-     * @param defaultWhenBlank result when {@code raw} is null or blank
-     * @return whether the instance opted out of certificate validation
+     * <p>For a pak whose shipped parse was this one (synology) and which must
+     * keep every stored value meaning exactly what it means today. With the
+     * pulldown in place, new instances only ever store {@code "true"} or
+     * {@code "false"}, which both parsers read the same way. Switching such a
+     * pak to {@link #parseAllowInsecure(String)} instead flips these stored
+     * values from insecure to secure: {@code null}, blank or whitespace-only,
+     * {@code "false"} with surrounding whitespace, and any other non-"true"
+     * text ({@code "yes"}, {@code "1"}, ...).
+     *
+     * @param raw the stored identifier value
+     * @return {@code false} only for an exact, case-insensitive {@code "false"}
      */
-    public static boolean parseAllowInsecure(String raw, boolean defaultWhenBlank) {
-        if (raw == null) {
-            return defaultWhenBlank;
-        }
-        String t = raw.trim();
-        if (t.isEmpty()) {
-            return defaultWhenBlank;
-        }
-        return "true".equalsIgnoreCase(t);
+    public static boolean parseAllowInsecureLegacyNotFalse(String raw) {
+        return !"false".equalsIgnoreCase(raw);
     }
 
     /**
      * Read the {@link #ALLOW_INSECURE_IDENTIFIER} identifier from {@code rc} and
      * parse it with {@link #parseAllowInsecure(String)}. Safe on an unsaved
-     * config and on {@code null}.
+     * config; {@code null} config is secure.
      *
      * @param rc the adapter-instance resource config (may be unsaved)
      * @return {@code true} only when the instance explicitly opted out
@@ -1477,6 +1471,24 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
             return false;
         }
         return parseAllowInsecure(getIdentifier(rc, ALLOW_INSECURE_IDENTIFIER));
+    }
+
+    /**
+     * As {@link #isAllowInsecure(ResourceConfig)}, but parses with
+     * {@link #parseAllowInsecureLegacyNotFalse(String)} (absent identifier and
+     * blank are insecure). Use only in a pak whose legacy parse was
+     * {@code !"false".equalsIgnoreCase(v)}. A {@code null} config is still
+     * reported secure, since there is nothing to read.
+     *
+     * @param rc the adapter-instance resource config (may be unsaved)
+     * @return {@code false} only when the stored value is exactly "false"
+     */
+    protected boolean isAllowInsecureLegacyNotFalse(ResourceConfig rc) {
+        if (rc == null) {
+            return false;
+        }
+        return parseAllowInsecureLegacyNotFalse(
+                getIdentifier(rc, ALLOW_INSECURE_IDENTIFIER));
     }
 
     /**
@@ -1497,8 +1509,10 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
      * can be the server rejecting us, which accepting a certificate would not fix.
      *
      * @param failure         the exception thrown by the tester
-     * @param promptAvailable whether this adapter declared review URLs for the
-     *        tested config (so VCF Operations can offer the accept dialog)
+     * @param promptAvailable whether review URLs were declared for the tested
+     *        config (so VCF Operations can offer the accept dialog). Not declared
+     *        covers both a pack that does not implement the hook and an opted-in
+     *        pack whose hook returned none (blank host, Allow Insecure true).
      * @return the readable message, or {@code null} if not a trust failure
      */
     static String certificateTrustFailureMessage(Throwable failure,
@@ -1521,11 +1535,14 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
                     + "connects to. To skip certificate validation (lab use only), set "
                     + "Allow Insecure SSL to true.";
         } else {
-            advice = "This management pack does not declare its endpoint for "
-                    + "certificate review, so VCF Operations cannot offer to accept "
-                    + "the certificate. Set Allow Insecure SSL to true to skip "
-                    + "certificate validation (lab use only), or update to a pack "
-                    + "version that supports certificate review.";
+            advice = "No endpoint was offered for certificate review with these "
+                    + "settings, so VCF Operations could not show the certificate for "
+                    + "you to accept. Either this management pack version does not "
+                    + "support certificate review, or the settings rule it out (host "
+                    + "is blank, or Allow Insecure SSL is already true). Fill in the "
+                    + "host and check Allow Insecure SSL; to skip certificate "
+                    + "validation (lab use only) set it to true, otherwise update to "
+                    + "a pack version that supports certificate review.";
         }
         return base + advice + " Detail: " + detail;
     }
@@ -1561,6 +1578,21 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
             }
         }
         return textHit;
+    }
+
+    /**
+     * Whether review URLs are declared for the config under test. Never throws:
+     * any {@link Throwable} from the pak's hook means "no prompt", so a broken
+     * hook cannot replace the tester's own failure.
+     */
+    final boolean certificatePromptAvailable(TestParam param) {
+        try {
+            return param != null
+                    && !declaredCertificateUrls(param.getAdapterConfig()).isEmpty();
+        } catch (Throwable t) {
+            logWarnSafe("certificateCheckUrls failed during Test Connection: " + t, t);
+            return false;
+        }
     }
 
     /** {@link #logWarn(String, Throwable)} that never throws (logger may be unavailable). */

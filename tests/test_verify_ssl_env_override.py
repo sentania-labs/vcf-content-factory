@@ -13,8 +13,8 @@ the transport, with no network.
 """
 from __future__ import annotations
 
+import ast
 import importlib.util
-import re
 import sys
 from pathlib import Path
 
@@ -109,18 +109,57 @@ def test_vcfops_client_session_respects_verify_false(ca_bundle_env):
     assert _verify_sent(c._session) is False
 
 
+_MODULE_VERBS = {"get", "post", "put", "delete", "patch", "head", "options", "request"}
+
+
+def _requests_misuse(tree):
+    """Yield (lineno, text) for every requests usage that bypasses the helper."""
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module in ("requests", "requests.sessions"):
+            for alias in node.names:
+                if alias.name in ("Session", "session"):
+                    yield node.lineno, f"from {node.module} import {alias.name}"
+        if not isinstance(node, ast.Call):
+            continue
+        f = node.func
+        if not (isinstance(f, ast.Attribute) and isinstance(f.value, ast.Name)
+                and f.value.id == "requests"):
+            continue
+        if f.attr in ("Session", "session"):
+            yield node.lineno, f"requests.{f.attr}()"
+        elif f.attr in _MODULE_VERBS:
+            if not any(k.arg == "verify" for k in node.keywords):
+                yield node.lineno, f"requests.{f.attr}(...) without verify="
+
+
 def test_no_bare_requests_session_in_src():
     """Regression guard: every session in src/vcfcf_* goes through the
-    verify-respecting helper. The only allowed ``requests.Session`` references
-    are the helper definitions themselves and type annotations."""
+    verify-respecting helper, and every module-level requests call passes
+    verify= explicitly (a per-request verify=False is not overridden by the
+    env bundle). Subclassing requests.Session (the helpers themselves) is
+    fine; constructing one is not."""
     offenders = []
     for py in (REPO / "src").rglob("*.py"):
         if "adapter_runtime" in py.parts:
             continue
-        for n, line in enumerate(py.read_text(encoding="utf-8").splitlines(), 1):
-            if re.search(r"requests\.Session\(\)", line):
-                offenders.append(f"{py.relative_to(REPO)}:{n}: {line.strip()}")
-    assert offenders == [], "bare requests.Session() found:\n" + "\n".join(offenders)
+        tree = ast.parse(py.read_text(encoding="utf-8"), filename=str(py))
+        for lineno, what in _requests_misuse(tree):
+            offenders.append(f"{py.relative_to(REPO)}:{lineno}: {what}")
+    assert offenders == [], "requests usage bypassing new_session:\n" + "\n".join(offenders)
+
+
+@pytest.mark.parametrize("src, expect", [
+    ("import requests\ns = requests.Session()\n", 1),
+    ("import requests\ns = requests.session()\n", 1),
+    ("from requests import Session\n", 1),
+    ("from requests.sessions import session\n", 1),
+    ("import requests\nrequests.get('https://x')\n", 1),
+    ("import requests\nrequests.post(\n  'https://x',\n  json={},\n)\n", 1),
+    ("import requests\nrequests.post('https://x', verify=False)\n", 0),
+    ("import requests\nclass S(requests.Session):\n    pass\n", 0),
+])
+def test_guard_detects_each_bypass_shape(src, expect):
+    assert len(list(_requests_misuse(ast.parse(src)))) == expect
 
 
 @pytest.fixture(scope="module")
