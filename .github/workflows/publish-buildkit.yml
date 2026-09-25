@@ -178,7 +178,7 @@ jobs:
           git tag -f "$FLOATING" "${{ github.sha }}"
           git push origin "$FLOATING" --force
 
-          FLOAT_NOTES="$(printf 'Floating major pointer \xe2\x80\x94 always the latest backwards-compatible release.\nCurrently: v%s (%s).\nPin to `%s` for a reproducible exact version.' \
+          FLOAT_NOTES="$(printf 'Floating major pointer: always the latest backwards-compatible release.\nCurrently: v%s (%s).\nPin to `%s` for a reproducible exact version.' \
             '${{ steps.ver.outputs.version }}' \
             '${{ github.ref_name }}' \
             '${{ github.ref_name }}')"
@@ -187,15 +187,41 @@ jobs:
           # Try to upload (clobber) onto an existing release; if the release
           # does not exist yet, create it.
           if gh release view "$FLOATING" --repo "${{ github.repository }}" > /dev/null 2>&1; then
-            echo "Floating release ${FLOATING} exists — clobbering tarball."
-            # Upload FIRST, prune stale assets only after a successful upload:
-            # if the upload fails (network/API/runner), the release must still
-            # hold the previous working kit for sdk-buildkit-v1 consumers.
-            gh release upload "$FLOATING" "$TARBALL" "${TARBALL}.sha256" \
-              --repo "${{ github.repository }}" \
-              --clobber
-            # --clobber only replaces an asset with the SAME filename. The
-            # tarball name is version-stamped (sdk-buildkit-X.Y.Z.tgz), so
+            echo "Floating release ${FLOATING} exists: adding the new kit, then pruning the old one."
+            # Failure-atomic as far as the release API allows: consumers must
+            # never be left with a new tarball and no matching checksum, or with
+            # two tarballs and no prune. The tarball and its sidecar are
+            # uploaded one at a time; if either upload fails, every asset THIS
+            # run added is deleted again, so the release goes back to exactly
+            # the previous working pair, and the step fails. Old assets are only
+            # pruned after both new ones are up. No --clobber: it deletes the
+            # existing same-name asset before uploading, so a failed upload
+            # would lose it (see `gh release upload --help`).
+            REPO="${{ github.repository }}"
+            NEW_TGZ="$(basename "$TARBALL")"
+            NEW_SHA="${NEW_TGZ}.sha256"
+            EXISTING="$(gh release view "$FLOATING" --repo "$REPO" --json assets --jq '.assets[].name')"
+            if printf '%s\n' "$EXISTING" | grep -qxF -e "$NEW_TGZ" -e "$NEW_SHA"; then
+              echo "::error::${NEW_TGZ} or its sidecar is already on ${FLOATING}; refusing to overwrite a published kit. Remove it deliberately if a rebuild is intended."
+              exit 1
+            fi
+            rollback() {
+              for A in "$@"; do
+                gh release delete-asset "$FLOATING" "$A" --repo "$REPO" --yes \
+                  || echo "::warning::rollback could not delete ${A} from ${FLOATING} (it may not have been created)"
+              done
+            }
+            if ! gh release upload "$FLOATING" "$TARBALL" --repo "$REPO"; then
+              echo "::error::tarball upload to ${FLOATING} failed; rolling back"
+              rollback "$NEW_TGZ"
+              exit 1
+            fi
+            if ! gh release upload "$FLOATING" "${TARBALL}.sha256" --repo "$REPO"; then
+              echo "::error::sidecar upload to ${FLOATING} failed; rolling back the new tarball"
+              rollback "$NEW_TGZ" "$NEW_SHA"
+              exit 1
+            fi
+            # The tarball name is version-stamped (sdk-buildkit-X.Y.Z.tgz), so
             # prior versions' assets accumulate on the floating release and
             # consumers that glob sdk-buildkit-*.tgz extract two files (this
             # broke every pak repo's release CI on the 1.0.5→1.0.6 bump).
@@ -216,7 +242,7 @@ jobs:
               --title "sdk-buildkit ${FLOATING} (→ v${{ steps.ver.outputs.version }})" \
               --notes "$FLOAT_NOTES"
           else
-            echo "Floating release ${FLOATING} does not exist — creating."
+            echo "Floating release ${FLOATING} does not exist: creating."
             gh release create "$FLOATING" "$TARBALL" "${TARBALL}.sha256" \
               --repo "${{ github.repository }}" \
               --title "sdk-buildkit ${FLOATING} (→ v${{ steps.ver.outputs.version }})" \
