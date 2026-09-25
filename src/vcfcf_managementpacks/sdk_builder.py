@@ -225,6 +225,7 @@ def _ensure_framework_jar() -> None:
         cmd = [
             javac,
             "-source", "11", "-target", "11",
+            "-proc:none",  # no classpath annotation processors (sdk-runtime#1)
             "-cp", fw_classpath,
             "-d", str(build_dir),
         ] + [str(s) for s in sources]
@@ -494,6 +495,10 @@ def _compile(javac: str, classpath: str, sources: List[Path],
     cmd = [
         javac,
         "-source", "11", "-target", "11",
+        # -proc:none: never auto-run annotation processors discovered in
+        # classpath jars (sdk-runtime#1). Adapters use none; a processor in
+        # a third-party jar would otherwise execute code at compile time.
+        "-proc:none",
         "-cp", classpath,
         "-d", str(build_dir),
     ] + [str(s) for s in sources]
@@ -2337,59 +2342,85 @@ def _write_outer_pak(
     return pak_path
 
 
-def _run_pak_compare(pak_path: Path) -> None:
-    """Run pak-compare against SDK reference paks if available.
+class PakCompareGateError(SdkBuildError):
+    """Raised when the post-build pak-compare gate fails (#181).
 
-    Logs a warning (does not fail) if no reference paks are found.
+    Either the comparison found BLOCKING divergences, or it could not run
+    at all (reference pak missing on a release build, compare crashed).
+    Subclasses SdkBuildError so every existing caller that maps
+    SdkBuildError to a non-zero exit fails the build without new wiring.
     """
-    if not _REFERENCES_DIR.is_dir():
-        print(
-            f"  pak-compare: reference directory not found ({_REFERENCES_DIR}); "
-            "skipping comparison.",
-            file=sys.stderr,
-        )
-        return
 
-    sdk_paks = list(_REFERENCES_DIR.glob("*.pak"))
+
+def _run_pak_compare(pak_path: Path, *, release_build: bool = False,
+                     warn_only: bool = False) -> None:
+    """Run pak-compare against the SDK reference pak and gate on the result.
+
+    Fail-closed by default (#181): any BLOCKING finding, or a compare that
+    raised, raises PakCompareGateError.  ``warn_only`` (dev builds only;
+    build_sdk_pak rejects it together with a release build) downgrades
+    both to a printed warning.
+
+    A missing reference pak is a hard failure on a release build (the gate
+    cannot run, and the buildkit always ships one).  On a dev build it is
+    logged and skipped, because a factory checkout has no reference pak
+    until one is placed under tmp/reference_paks/.
+    """
+    sdk_paks = sorted(_REFERENCES_DIR.glob("*.pak")) if _REFERENCES_DIR.is_dir() else []
     if not sdk_paks:
-        print(
-            f"  pak-compare: no .pak files found in {_REFERENCES_DIR}; "
-            "skipping comparison.",
-            file=sys.stderr,
+        msg = (
+            f"pak-compare: no reference .pak found in {_REFERENCES_DIR}"
         )
+        if release_build:
+            raise PakCompareGateError(
+                f"{msg}; a release build cannot skip the pak-compare gate."
+            )
+        print(f"  {msg}; skipping comparison (dev build).", file=sys.stderr)
         return
 
+    best_ref = sdk_paks[0]
+    print(
+        f"  pak-compare: comparing against {best_ref.name}...", file=sys.stderr
+    )
     try:
-        from .pak_compare import compare_paks, format_report
+        from .pak_compare import compare_paks
 
-        best_ref = sdk_paks[0]
-        print(
-            f"  pak-compare: comparing against {best_ref.name}...", file=sys.stderr
-        )
         result = compare_paks(pak_path, best_ref)
-        # Print a summary — only show BLOCKINGs and WARNINGs
-        blockings = result.blocking()
-        warning_list = result.warnings()
-        if blockings:
+    except Exception as exc:
+        msg = f"pak-compare: failed to run comparison: {exc}"
+        if warn_only:
+            print(f"  WARNING (warn-only): {msg}", file=sys.stderr)
+            return
+        raise PakCompareGateError(msg) from exc
+
+    blockings = result.blocking()
+    warning_list = result.warnings()
+    if blockings:
+        print(
+            f"  pak-compare: {len(blockings)} BLOCKING(s) found!", file=sys.stderr
+        )
+        for item in blockings:
+            print(f"    BLOCKING: {item.message}", file=sys.stderr)
+        if warn_only:
             print(
-                f"  pak-compare: {len(blockings)} BLOCKING(s) found!", file=sys.stderr
-            )
-            for item in blockings:
-                print(f"    BLOCKING: {item.message}", file=sys.stderr)
-        elif warning_list:
-            print(
-                f"  pak-compare: {len(warning_list)} WARNING(s) (no BLOCKINGs); "
-                "install gate passed.",
+                "  pak-compare: warn-only mode, build NOT failed. This pak "
+                "failed the install gate and must not be installed or shipped.",
                 file=sys.stderr,
             )
-        else:
-            print("  pak-compare: OK (no BLOCKINGs or WARNINGs).", file=sys.stderr)
-
-    except Exception as exc:
+            return
+        raise PakCompareGateError(
+            f"pak-compare gate failed: {len(blockings)} BLOCKING finding(s) "
+            f"against {best_ref.name}: "
+            + "; ".join(item.message for item in blockings)
+        )
+    if warning_list:
         print(
-            f"  pak-compare: failed to run comparison: {exc}; skipping.",
+            f"  pak-compare: {len(warning_list)} WARNING(s) (no BLOCKINGs); "
+            "install gate passed.",
             file=sys.stderr,
         )
+    else:
+        print("  pak-compare: OK (no BLOCKINGs or WARNINGs).", file=sys.stderr)
 
 
 def _load_properties(path: Path) -> Dict[str, str]:
@@ -3129,12 +3160,16 @@ def _generate_docs(project_dir: Path, version_string: str) -> None:
         print(f"  docs: warning — docs/ generation error: {exc}", file=sys.stderr)
 
 
-def build_sdk_pak(project_dir: Path, output_dir: Optional[Path] = None) -> Path:
+def build_sdk_pak(project_dir: Path, output_dir: Optional[Path] = None,
+                  *, pak_compare_warn_only: bool = False) -> Path:
     """End-to-end Tier 2 SDK adapter build pipeline.
 
     Args:
         project_dir:  path to the adapter project directory (contains adapter.yaml)
         output_dir:   destination for the .pak file (default: dist/ relative to repo root)
+        pak_compare_warn_only: dev builds only.  Report pak-compare BLOCKING
+                      findings as warnings instead of failing the build.
+                      Rejected on a release build.
 
     Returns:
         Path to the produced .pak file.
@@ -3163,7 +3198,13 @@ def build_sdk_pak(project_dir: Path, output_dir: Optional[Path] = None) -> Path:
 
     # Step 1a: stamp the effective build version (dev preview 0.0.0.N by
     # default; adapter.yaml's real version only on explicit release opt-in).
-    _stamp_build_version(project, _is_release_build())
+    release_build = _is_release_build()
+    if release_build and pak_compare_warn_only:
+        raise SdkBuildError(
+            "pak-compare warn-only mode is not allowed on a release build: "
+            "a release must pass the pak-compare gate."
+        )
+    _stamp_build_version(project, release_build)
 
     # Step 1b: parse bundled_content (optional) — must happen before compile so
     # content load errors fail fast, before the expensive Java build steps.
@@ -3293,10 +3334,44 @@ def build_sdk_pak(project_dir: Path, output_dir: Optional[Path] = None) -> Path:
 
     print(f"Built: {pak_path}", file=sys.stderr)
 
-    # Step 12: pak-compare (best-effort)
-    _run_pak_compare(pak_path)
+    # Step 12: pak-compare gate (fail-closed, #181).
+    _gate_built_pak(
+        pak_path,
+        release_build=release_build,
+        warn_only=pak_compare_warn_only,
+    )
 
     return pak_path
+
+
+def _gate_built_pak(pak_path: Path, *, release_build: bool,
+                    warn_only: bool) -> None:
+    """Run the pak-compare gate on a freshly built pak.
+
+    On failure a release build's pak is deleted, so no later CI step (an
+    upload glob, a retry) can publish a pak that failed the gate; a dev
+    build's pak is left in place for inspection.  Re-raises either way.
+    """
+    try:
+        _run_pak_compare(
+            pak_path,
+            release_build=release_build,
+            warn_only=warn_only,
+        )
+    except PakCompareGateError:
+        if release_build:
+            pak_path.unlink(missing_ok=True)
+            print(
+                f"  pak-compare: removed {pak_path.name} (release build failed the gate).",
+                file=sys.stderr,
+            )
+        else:
+            print(
+                f"  pak-compare: {pak_path} left for inspection; it failed the "
+                "gate and must not be installed.",
+                file=sys.stderr,
+            )
+        raise
 
 
 def _validate_localization_key_contract(views: list, sm_scope: Optional[List[Path]] = None) -> List[str]:

@@ -82,7 +82,7 @@ from typing import Optional
 # Version constant: bump when kit contents change in a meaningful way
 # ---------------------------------------------------------------------------
 
-BUILDKIT_VERSION = "1.0.9"
+BUILDKIT_VERSION = "1.0.11"
 
 # ---------------------------------------------------------------------------
 # Source paths (relative to this file's parent = vcfcf_managementpacks/)
@@ -435,6 +435,17 @@ def _build_parser() -> argparse.ArgumentParser:
             "this for a hand-built / local dev build."
         ),
     )
+    pbsdk.add_argument(
+        "--pak-compare-warn-only",
+        dest="pak_compare_warn_only",
+        action="store_true",
+        default=False,
+        help=(
+            "dev builds only: report pak-compare BLOCKING findings as "
+            "warnings instead of failing the build (default: fail). "
+            "Rejected together with --release."
+        ),
+    )
 
     # ----- validate-sdk -----
     pvsdk = sub.add_parser(
@@ -500,7 +511,10 @@ def main() -> int:
         project_dir = Path(args.project_dir)
         output_dir = Path(args.output)
         try:
-            pak_path = build_sdk_pak(project_dir, output_dir)
+            pak_path = build_sdk_pak(
+                project_dir, output_dir,
+                pak_compare_warn_only=args.pak_compare_warn_only,
+            )
             print(f"Built: {pak_path}")
             return 0
         except (SdkBuildError, SdkProjectError) as exc:
@@ -528,45 +542,67 @@ def main() -> int:
         return 0
 
     elif args.cmd == "pak-compare":
-        from .pak_compare import compare_paks, compare_pak_directory, format_report
-        factory = Path(args.factory_pak)
-        if not factory.exists():
-            print(f"ERROR: factory pak not found: {factory}", file=sys.stderr)
+        # Exit status is the gate (#181): 0 only when every comparison ran
+        # and reported zero BLOCKING findings.
+        try:
+            return _pak_compare(args)
+        except Exception as exc:
+            print(f"ERROR: pak-compare could not run: {exc}", file=sys.stderr)
+            print("pak-compare gate: FAIL (comparison did not run)", file=sys.stderr)
             return 1
 
-        output_file = getattr(args, "output", None)
-        out_lines: list = []
+    return 0
 
-        def _emit(text: str) -> None:
-            print(text, end="")
-            if output_file:
-                out_lines.append(text)
 
-        if args.reference_dir:
-            ref_dir = Path(args.reference_dir)
-            if not ref_dir.is_dir():
-                print(f"ERROR: --reference-dir not a directory: {ref_dir}", file=sys.stderr)
-                return 1
-            results = compare_pak_directory(factory, ref_dir)
-            if not results:
-                print(f"No .pak files found in {ref_dir}", file=sys.stderr)
-                return 1
-            _emit(f"\\n=== PAK COMPARE: {factory.name} vs {ref_dir} ===\\n")
-            for ref_path, result in results:
-                _emit(format_report(result))
-        else:
-            ref = Path(args.reference_pak)
-            if not ref.exists():
-                print(f"ERROR: reference pak not found: {ref}", file=sys.stderr)
-                return 1
-            result = compare_paks(factory, ref)
-            _emit(format_report(result))
+def _pak_compare(args) -> int:
+    """pak-compare body; main() maps any exception to a gate failure."""
+    from .pak_compare import compare_paks, compare_pak_directory, format_report
+    factory = Path(args.factory_pak)
+    if not factory.exists():
+        print(f"ERROR: factory pak not found: {factory}", file=sys.stderr)
+        return 1
 
+    output_file = getattr(args, "output", None)
+    out_lines: list = []
+
+    def _emit(text: str) -> None:
+        print(text, end="")
         if output_file:
-            Path(output_file).write_text("".join(out_lines))
-            print(f"Report written to: {output_file}", file=sys.stderr)
-        return 0
+            out_lines.append(text)
 
+    if args.reference_dir:
+        ref_dir = Path(args.reference_dir)
+        if not ref_dir.is_dir():
+            print(f"ERROR: --reference-dir not a directory: {ref_dir}", file=sys.stderr)
+            return 1
+        results = compare_pak_directory(factory, ref_dir)
+        if not results:
+            print(f"No .pak files found in {ref_dir}", file=sys.stderr)
+            return 1
+        _emit(f"\\n=== PAK COMPARE: {factory.name} vs {ref_dir} ===\\n")
+        for ref_path, result in results:
+            _emit(format_report(result))
+    else:
+        ref = Path(args.reference_pak)
+        if not ref.exists():
+            print(f"ERROR: reference pak not found: {ref}", file=sys.stderr)
+            return 1
+        result = compare_paks(factory, ref)
+        _emit(format_report(result))
+        results = [(ref, result)]
+
+    if output_file:
+        Path(output_file).write_text("".join(out_lines))
+        print(f"Report written to: {output_file}", file=sys.stderr)
+
+    blocking_total = sum(len(r.blocking()) for _, r in results)
+    if blocking_total:
+        print(
+            f"pak-compare gate: FAIL ({blocking_total} BLOCKING finding(s))",
+            file=sys.stderr,
+        )
+        return 1
+    print("pak-compare gate: PASS (0 BLOCKING)", file=sys.stderr)
     return 0
 
 
@@ -659,7 +695,8 @@ def assemble_buildkit(
         verbose:       Print progress messages to stdout.
 
     Returns:
-        Path to the produced .tgz file.
+        Path to the produced .tgz file.  A `<tarball>.sha256` sidecar
+        (sha256sum format) is written next to it.
 
     Raises:
         FileNotFoundError: if a required source file is missing.
@@ -822,6 +859,25 @@ def assemble_buildkit(
 
         _log(f"  packed tarball: {tarball_path}")
 
+    # SHA-256 sidecar in `sha256sum` format, so a consumer can verify the
+    # downloaded kit with `sha256sum -c sdk-buildkit-X.Y.Z.tgz.sha256`.
+    # The publish workflow attaches it next to the tarball.
+    digest = _sha256_file(tarball_path)
+    sha_path = tarball_path.with_name(tarball_path.name + ".sha256")
+    sha_path.write_text(f"{digest}  {tarball_path.name}\n", encoding="utf-8")
+    _log(f"  sha256: {digest} ({sha_path.name})")
+
     size_kb = tarball_path.stat().st_size // 1024
     _log(f"Done: {tarball_path}  ({size_kb:,} KB)")
     return tarball_path
+
+
+def _sha256_file(path: Path) -> str:
+    """Return the hex SHA-256 of a file, read in chunks."""
+    import hashlib
+
+    h = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()

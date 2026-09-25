@@ -188,6 +188,24 @@ After every build, run `pak-compare` against an SDK reference pak (e.g.
 HPE SimpliVity, Pure Storage). Zero BLOCKINGs is the install gate, same
 as Tier 1.
 
+The gate is enforced by exit code (#181), in both the factory CLI and the
+buildkit (`python3 -m sdk_buildkit`), from buildkit 1.0.11:
+
+- `pak-compare` exits 1 on any BLOCKING finding (in directory mode, against
+  any reference) or when the comparison cannot run; 0 only on a clean run.
+  CI gates on the exit code, not on grepping the report.
+- `build-sdk` runs the same comparison after assembling the pak and fails
+  the build on a BLOCKING or a crashed compare. With `--release` it also
+  fails when no reference pak is available, and deletes the failed pak so
+  no later step can publish it.
+- `build-sdk --pak-compare-warn-only` downgrades the gate to warnings for a
+  dev build only; it is refused together with `--release`.
+- A factory checkout has no reference pak unless one is placed under
+  `tmp/reference_paks/`; a dev build there logs the skip. The buildkit
+  always bundles one under `sdk_buildkit/reference_paks/`.
+- `javac` runs with `-proc:none` (framework and adapter compiles), so an
+  annotation processor inside a classpath jar never executes at build time.
+
 ## Agent roster additions for Tier 2
 
 | Agent | Posture | Spawn when |
