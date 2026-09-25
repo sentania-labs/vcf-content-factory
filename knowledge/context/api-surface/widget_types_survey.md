@@ -838,6 +838,13 @@ different instance.
 `resourceKindId` fields in metric configs follow a different encoding:
 `"<6-digit-adapter-prefix><adapter-kind><resource-kind>"` — e.g.
 `"002006VMWAREVirtualMachine"` where `002006` is the VMWARE adapter prefix.
+The prefix is `"0020"` + the adapter-kind key length as two digits
+(`VMWARE` is 6 characters, so `002006`); it is not a per-adapter lookup.
+Verified 2026-09-25 against every entry of the renderer's former closed
+table, every `0020NN<adapterKind>` string in `reference/references/`,
+`third_party/` and `knowledge/context/` (12 adapter kinds, lengths 6 to
+32, including MPB kinds like `mpb_ubiquiti_unifi`), and the 363-kind
+check in `summary_dashboard_assignment.md`.
 
 ## What renderer v1 (this repo) currently supports
 

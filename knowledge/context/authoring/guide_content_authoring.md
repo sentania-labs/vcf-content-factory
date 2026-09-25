@@ -135,7 +135,10 @@ container (e.g., `{VMWARE, vSphere World}`).
 ### Dashboard pin prefix is per-adapter
 `resourceKindId` format: `<6-digit prefix><adapterKey><resourceKey>`.
 Wrong prefix installs cleanly but widget silently fails to render.
-Known prefixes: VMWARE=002006, Container=002009, NSXTAdapter=002011.
+The prefix is computed: `"0020"` + the adapter-kind key length as two
+digits (VMWARE=002006, NSXTAdapter=002011, unifi_controller=002016), so
+any adapter kind works, including an SDK pak's own. The renderer does
+this in `adapter_kind_prefix` (`src/vcfcf_core/dashboards/render.py`).
 Dashboards default to `shared: true`.
 
 ### Heatmap — omit max_value

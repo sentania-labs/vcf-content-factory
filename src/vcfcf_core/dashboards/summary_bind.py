@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from typing import Iterable, Optional
 
 from .loader import Dashboard
+from .render import adapter_kind_prefix
 
 
 def resource_kind_id(adapter_kind: str, resource_kind: str) -> str:
@@ -25,7 +26,7 @@ def resource_kind_id(adapter_kind: str, resource_kind: str) -> str:
     kind``; identical to the server's ``IdGeneratorUtil.toID`` used by the
     pak installer.
     """
-    return f"0020{len(adapter_kind):02d}{adapter_kind}{resource_kind}"
+    return f"{adapter_kind_prefix(adapter_kind)}{adapter_kind}{resource_kind}"
 
 
 @dataclass
