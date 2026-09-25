@@ -94,14 +94,15 @@ def test_build_docs_use_stamped_version(tmp_path: Path, stamped: str) -> None:
     assert (project_dir / "REFERENCE.md").read_text(encoding="utf-8") == "hand-authored\n"
 
 
-def test_first_dev_build_scaffolds_with_declared_version(tmp_path: Path) -> None:
-    """Codex P2 on #188: write-once scaffolds must not keep a dev stamp.
+def test_first_dev_build_write_once_files_carry_no_version(tmp_path: Path) -> None:
+    """Write-once files carry no build version at all.
 
-    A project's first build-sdk is a dev build (0.0.0.1). The regenerated
-    README shows 0.0.0.1, but docs/overview.md, docs/installing.md and the
-    first-run REFERENCE.md are never rewritten, so they get the declared
-    1.0.0.1. A later release build then regenerates README to 1.0.0.1 and
-    leaves the scaffolds alone, with no stale 0.x left anywhere.
+    Codex P2 on #188: docs/overview.md, docs/installing.md and the first-run
+    REFERENCE.md are never rewritten, so a dev stamp (0.0.0.N) written by a
+    project's first build would go stale. framework-reviewer round 2: the
+    declared 1.x version is no answer either, since RULE-014 forbids a 1.x
+    stamp from a local build. So neither version appears in them, while the
+    regenerated docs/README.md still shows the dev stamp.
     """
     project_dir = _make_project(tmp_path)
     docs = project_dir / "docs"
@@ -113,10 +114,11 @@ def test_first_dev_build_scaffolds_with_declared_version(tmp_path: Path) -> None
     overview = (docs / "overview.md").read_text(encoding="utf-8")
     installing = (docs / "installing.md").read_text(encoding="utf-8")
     reference = (project_dir / "REFERENCE.md").read_text(encoding="utf-8")
-    assert "version 1.0.0.1." in overview
-    assert "for build 1.0.0.1." in reference
+    assert "docs/README.md" in overview  # points readers at the version
+    assert "for build" not in reference
     for text in (overview, installing, reference):
         assert "0.0.0.1" not in text
+        assert "1.0.0.1" not in text
 
     _generate_docs(project_dir, "1.0.0.1")  # later release build
     readme, tree = _docset_text(project_dir)
@@ -126,9 +128,11 @@ def test_first_dev_build_scaffolds_with_declared_version(tmp_path: Path) -> None
     assert (project_dir / "REFERENCE.md").read_text(encoding="utf-8") == reference
 
 
-def test_docset_scaffolds_ignore_override(tmp_path: Path) -> None:
+def test_docset_scaffolds_carry_no_version(tmp_path: Path) -> None:
     project_dir = _make_project(tmp_path)
     results = generate_docset(project_dir, adapter_version="0.0.0.1")
     assert results["docs/overview.md"] == "scaffolded"
-    overview = (project_dir / "docs" / "overview.md").read_text(encoding="utf-8")
-    assert "version 1.0.0.1." in overview and "0.0.0.1" not in overview
+    docs = project_dir / "docs"
+    for name in ("overview.md", "installing.md"):
+        text = (docs / name).read_text(encoding="utf-8")
+        assert "0.0.0.1" not in text and "1.0.0.1" not in text

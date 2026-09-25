@@ -29,7 +29,7 @@ import json
 import math
 import re
 import xml.etree.ElementTree as ET
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -82,9 +82,6 @@ class AdapterDocModel:
     cross_mp_edges: List[CrossMpEdgeInfo] = field(default_factory=list)  # runtime-only, from adapter.yaml
     # derived
     kind_map: Dict[str, KindInfo] = field(default_factory=dict)
-    # adapter.yaml's own <version>.<build_number>, even when adapter_version
-    # carries a build-sdk stamp. Write-once scaffold outputs use this.
-    declared_version: str = ""
 
 
 # ---------------------------------------------------------------------------
@@ -260,9 +257,8 @@ def build_doc_model(
 
     adapter_kind = raw.get("adapter_kind", "unknown")
     adapter_name = raw.get("name", adapter_kind)
-    declared_version = f"{raw.get('version', '1.0.0')}.{raw.get('build_number', 0)}"
     if adapter_version is None:
-        adapter_version = declared_version
+        adapter_version = f"{raw.get('version', '1.0.0')}.{raw.get('build_number', 0)}"
     adapter_description = (raw.get("description") or "").strip()
 
     kinds, traversal_name, edges, config_fields = parse_describe_xml(project_dir)
@@ -285,7 +281,6 @@ def build_doc_model(
         config_fields=config_fields,
         cross_mp_edges=cross_mp_edges,
         kind_map=kind_map,
-        declared_version=declared_version,
     )
 
 
@@ -981,7 +976,7 @@ def generate_overview_md(model: AdapterDocModel) -> str:
 
 ## What's in the Pack
 
-{model.adapter_name} version {model.adapter_version}.
+{model.adapter_name}. For the version, see [docs/README.md](README.md) (regenerated on every build) or the GitHub release.
 
 {model.adapter_description}
 
@@ -1124,9 +1119,9 @@ def generate_docset(
     SCAFFOLD policy (only written if the file does not already exist):
       docs/overview.md
       docs/installing.md
-    Scaffold outputs always use adapter.yaml's declared version, never the
-    ``adapter_version`` override: they are never rewritten, so a dev stamp
-    would outlive the dev build.
+    Scaffold outputs carry no build version: they are never rewritten, so
+    any version written into them would go stale (and a 1.x one from a
+    local build would break RULE-014).
 
     Args:
         project_dir: Path to the adapter project directory (contains adapter.yaml).
@@ -1189,17 +1184,14 @@ def generate_docset(
     # ------------------------------------------------------------------
     # SCAFFOLD outputs (only if missing)
     # ------------------------------------------------------------------
-    # Write-once files never get regenerated, so a build-sdk stamp (a dev
-    # build's 0.0.0.N) would stay in them forever. They always carry the
-    # declared adapter.yaml version; only the regenerated outputs above
-    # take the stamp.
-    scaffold_model = replace(
-        model, adapter_version=model.declared_version or model.adapter_version
-    )
+    # Write-once files carry no build version at all: they are never
+    # regenerated, so a dev stamp (0.0.0.N) would go stale, and a declared
+    # 1.x version written by a local build would break RULE-014. Only the
+    # regenerated outputs above carry a version.
 
     overview_path = docs_dir / "overview.md"
     if not overview_path.is_file():
-        overview_md = generate_overview_md(scaffold_model)
+        overview_md = generate_overview_md(model)
         overview_path.write_text(overview_md, encoding="utf-8")
         results["docs/overview.md"] = "scaffolded"
         _log("  scaffolded docs/overview.md")
@@ -1209,7 +1201,7 @@ def generate_docset(
 
     installing_path = docs_dir / "installing.md"
     if not installing_path.is_file():
-        installing_md = generate_installing_md(scaffold_model)
+        installing_md = generate_installing_md(model)
         installing_path.write_text(installing_md, encoding="utf-8")
         results["docs/installing.md"] = "scaffolded"
         _log("  scaffolded docs/installing.md")
