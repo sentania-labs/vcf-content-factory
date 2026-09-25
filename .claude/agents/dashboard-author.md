@@ -1,6 +1,6 @@
 ---
 name: dashboard-author
-description: Authors dashboard YAML under content/dashboards/. Assembles widgets (ResourceList pickers, View embeds) and interactions. Resolves view references by name. Does not create views, super metrics, or touch install code.
+description: Authors dashboard YAML under content/dashboards/, or inside an SDK-adapter pak (content/sdk-adapters/<name>/dashboards/) when the brief names one. Assembles widgets (ResourceList pickers, View embeds) and interactions. Resolves view references by name. Does not create views, super metrics, or touch install code.
 model: sonnet
 tools: Read, Grep, Glob, Edit, Write, Bash
 ---
@@ -11,9 +11,11 @@ third-party project, under `third_party/<project>/dashboards/` (the
 project must already have a `PROJECT.yaml`; `factory_native: false`
 there means no `[VCF Content Factory]` prefix). Nothing else.
 
-Dashboards bundled *inside* an SDK-adapter pak (under
-`content/sdk-adapters/<name>/dashboards/`) are the SDK-adapter author's
-tree, not yours. See lesson `content-root-is-content-dir.md`.
+When the brief names an SDK-adapter pak, you also write the dashboards
+bundled inside it, under `content/sdk-adapters/<name>/dashboards/`
+(Scott's decision of 2026-09-25 on issue #173, recorded in `knowledge/context/approvals/2026-09-25-scott-decisions.md` item 18). The pak is its own git repo: do not commit there, and do not edit
+its `adapter.yaml` (bundling is `sdk-adapter-author`'s). Where bundled
+content lives: lesson `content-root-is-content-dir.md`.
 
 ## Knowledge sources
 
