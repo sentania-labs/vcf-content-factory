@@ -44,3 +44,14 @@ Two false alarms in one install, both from checking too early.
 Evidence: `knowledge/context/api-surface/compliance_per_control_alert_first_sample_lag.md`,
 `knowledge/context/api-surface/pak_dashboard_import_race.md`,
 `knowledge/context/api-surface/dashboard_import_two_phase_materialization.md`.
+
+## Addendum (same day, build 69): renaming a pak dashboard orphans the old one
+
+Pak installs import bundled dashboards with `ForceByID: false,
+ForceByName: true` (devel audit log, 2:12 PM CDT). Matching is by name,
+so renaming a dashboard in the pak ("Compliance ESXi Hosts" to
+"Compliance ESX Hosts", same id in the YAML) created a new record under
+a new id and left the old-named one live beside it. Any instance that
+already has the old name keeps a stale copy after upgrade. Before
+renaming a shipped dashboard, plan its removal on installed instances
+(a delete, which needs the owner's go) and say so in the release notes.

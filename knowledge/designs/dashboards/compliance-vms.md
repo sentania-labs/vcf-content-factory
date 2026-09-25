@@ -17,7 +17,7 @@ See the parent design note for the verbatim prompts. The relevant ask
 
 ## Vision
 
-The ESXi Hosts pattern applied to VMs, sized for thousands of objects:
+The ESX Hosts pattern applied to VMs, sized for thousands of objects:
 pick a scope, see the VMs in it worst first, select one to see its
 failing controls with runbooks. No heatmap: at VM counts it stops being
 readable; the sorted list and its totals row carry the overview.
@@ -34,7 +34,7 @@ Adapter v3 build 60 key list (per-object, on `VMWARE / VirtualMachine`):
 
 | # | Widget | Type | Grid (col, row, w, h) | Subject | Metrics / content |
 |---|---|---|---|---|---|
-| W1 | Scope | ResourceList | 1, 1, 3, 12 | `vSphere World`, `VMwareAdapter Instance`, `ClusterComputeResource`, `HostSystem` | Picker, default vSphere World. Drives W2 |
+| W1 | Scope | ResourceList | 1, 1, 3, 12 | `vSphere World`, `VMwareAdapter Instance` | Picker, name column only (`column_preset: name-only`). Drives W2 |
 | W2 | VM Compliance | View | 4, 1, 9, 12 | driven by W1, descendants of kind `VirtualMachine` | New view (below), score ascending. Selection drives W3, W4, W5 |
 | W3 | Failing Controls on Selected VM | AlertList | 1, 13, 7, 8 | driven by W2 | explicit `alert_definitions` list of the generated `vm.*` alert definitions, criticality warning and up |
 | W4 | Compliance Details | PropertyList | 8, 13, 5, 8 | driven by W2 | `summary\|parentHost`, `VCF-CF Compliance\|profile_name`, `\|total_count`, `\|pass_count`, `\|fail_count`, `\|unreadable_count` |
@@ -47,7 +47,7 @@ Interactions: W1 drives W2; W2 row selection drives W3, W4, W5.
 | Column | Key | Notes |
 |---|---|---|
 | VM | name | |
-| Host | `summary\|parentHost` | the SCG follows this host's ESXi version |
+| Host | `summary\|parentHost` | the SCG follows this host's ESX version |
 | Cluster | `summary\|parentCluster` | |
 | vCenter | `summary\|parentVcenter` | |
 | SCG applied | `VCF-CF Compliance\|profile_name` | |
@@ -90,9 +90,13 @@ No SCG. Score columns filtered to `no_benchmark = 0` and
 - **Retained scores (owner decision 2026-09-23, Option A).** Ops keeps
   a metric's last value when pushes stop. Score columns list every row
   and rely on the No SCG flag column beside them instead of hiding the
-  score (views can only filter whole rows). The ESXi heatmap has no flag
+  score (views can only filter whole rows). The ESX heatmap has no flag
   column and may color a host by a retained score after it moves to a
   version with no SCG; accepted as rare.
 - **Unreadable counts as failing** (owner decision 2026-09-23,
   build 63): unreadable controls lower the score, and a per-object
   "Compliance data not collected" alert says why.
+- **Scope pickers (owner change 2026-09-23):** every compliance scope
+  picker lists only vSphere World and the vCenters, and shows the name
+  column only (no adapter type, object type or other columns). The
+  ESX Hosts dashboard is renamed "Compliance ESX Hosts".

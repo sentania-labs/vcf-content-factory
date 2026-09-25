@@ -24,11 +24,11 @@ Scott, 2026-09-23 (verbatim):
 > Let's brainstorm and plan here.
 
 Orchestrator proposed (same session): per-object version detection (host
-by its ESXi version, VM by its host, vCenter/cluster/vDS/portgroup by
+by its ESX version, VM by its host, vCenter/cluster/vDS/portgroup by
 vCenter version, unmapped version = "no benchmark", unscored); drop the
 profile from per-control metric keys; failing-control exposure via
 native compliance alerts (Option A); four dashboards (Environment
-Overview, ESXi Hosts, VMs, vCenter & Networking).
+Overview, ESX Hosts, VMs, vCenter & Networking).
 
 Scott's decisions (verbatim):
 
@@ -50,15 +50,15 @@ Scott, follow-up (verbatim):
 >
 > we probably should put the dashboards first, otherwise we are just building paks without the dashboards - at least the previews, and then interweave it.
 
-Scott, on testing (verbatim, after recon showed a single ESXi build in both labs):
+Scott, on testing (verbatim, after recon showed a single ESX build in both labs):
 
 > tests to fake is good, and then once built we can test in different environments, and assume the bones are good, and work from there
 
 ## Vision
 
 1. **Version-aware benchmark selection.** Each object is scored against
-   the SCG matching its own version: HostSystem by its ESXi version,
-   VirtualMachine by its host's ESXi version, vCenter / cluster / vDS /
+   the SCG matching its own version: HostSystem by its ESX version,
+   VirtualMachine by its host's ESX version, vCenter / cluster / vDS /
    portgroup by the vCenter version. An object whose version has no SCG
    gets `profile_name` = "no benchmark for <product> X.Y" and no score.
    Connection setting gains `Auto (by version)` as the default; the
@@ -87,7 +87,7 @@ Scott, on testing (verbatim, after recon showed a single ESXi build in both labs
    last_scan_timestamp).
 6. **Dashboards bundled in the pak** via `adapter.yaml`
    `bundled_content` (build-sdk already bundles views, dashboards,
-   symptoms, alerts, recommendations): Environment Overview, ESXi Hosts,
+   symptoms, alerts, recommendations): Environment Overview, ESX Hosts,
    VMs, vCenter & Networking. Each passes the RULE-011 wireframe gate.
 7. **Fixes carried in:** `detectProfileChange` counts resources under
    wrong kind names; README and adapter.yaml description still say
@@ -115,7 +115,7 @@ Scott, on testing (verbatim, after recon showed a single ESXi build in both labs
 - **Version unreadable is not "no benchmark"** (review 57 B2, build 58):
   the object reuses last cycle's SCG, else counts as non-compliant in
   the `unknown` benchmark bucket.
-- **Dashboard set approved:** Environment Overview, ESXi Hosts, VMs,
+- **Dashboard set approved:** Environment Overview, ESX Hosts, VMs,
   vCenter & Networking (mocks and tables under designs/dashboards/).
 - **Order:** dashboard mocks (RULE-011) first, then the adapter work
   interleaved with authoring, so no pak is built without its
@@ -206,7 +206,7 @@ Scott, 2026-09-23 (verbatim), on the retained-score question (review
 > 3: Option A.
 
 Effect: score columns keep every row and rely on the No SCG flag
-beside them; the ESXi heatmap may color a host by a retained score
+beside them; the ESX heatmap may color a host by a retained score
 after it moves to a version with no SCG (rare: only after an upgrade
 to an unsupported release). Recorded as an accepted constraint in the
 dashboard notes.
@@ -237,7 +237,7 @@ back to auto").
   connections kept VMware_SCG_9.1. Super metrics arrived disabled;
   enabled in vSphere Solution's Default Policy (active on vSphere
   World). Average Score showed no data before the first cycle.
-- **Dashboards:** ESXi Hosts was created then lost about 5 s later to
+- **Dashboards:** ESX Hosts was created then lost about 5 s later to
   Ops's phase-2 background pass (knowledge/context/api-surface/
   pak_dashboard_import_race.md); re-imported alone at 12:14 PM and fully
   bound by 12:27 PM. The other three bound on their own within 15 min.
@@ -255,3 +255,65 @@ back to auto").
   because cleanup set its control to -1 (the 8.0-only alerts never
   opened, per the first-sample lag). Visual check of the dashboards and
   the vSphere World super metric values pending.
+
+## Owner change after seeing devel (verbatim, 2026-09-23)
+
+> Compliance VMS; the scope selection should be jsut vcenters - on all object lists for this remove: adapter type, object type, etc - only display object anme.
+>
+> for compliance VMs: object types: vSPhere world + vCenter, same on esxi (rename to ESX)
+
+> Yes change all references to ESXi to ESX
+
+Effect: every compliance scope picker lists vSphere World and the
+vCenters only, name column only (superseded below: default columns for now, FB-021); "ESXi" becomes "ESX" in every string
+we author (dashboards, views, adapter-written alert names and labels,
+docs). Vendor SCG text, metric keys, file names and ids unchanged.
+Mocks re-approved in plan mode.
+
+Scott, 2026-09-23 (verbatim), on the name-only picker (FB-021 blocks
+the column preset from rendering):
+
+> okay for now lets roll witha an object and all the columns and when we get to the next review of it - we'll iterate on it - after we get a beta build finally released
+
+Effect: pickers ship as ResourceList with the default columns (the
+name-only preset stays in the YAML, harmless); revisit after the beta
+release.
+
+Scott, 2026-09-23 (verbatim), on the release version:
+
+> perfect - just keep it that way so this would be v1.0.0.69
+
+Effect: adapter.yaml stays version 1.0.0; the release tag is v1.0.0.69
+(the tag workflow requires v<version>.<build_number>).
+
+## Release and cleanup go (verbatim, 2026-09-23)
+
+Orchestrator asked for a go to push feat/v3-version-aware, open the PR,
+handle the Codex round, run the defect gate, merge and tag v1.0.0.69,
+and whether to delete the stale "Compliance ESXi Hosts" dashboard
+(id e2e42416-53d7-49fb-85d6-68bd9323aae8) on devel. Scott:
+
+> go ahead and tag it, delete it
+
+Scott, 2026-09-23 (verbatim), on the "Read vCenter appliance settings"
+default and granting SystemConfiguration.Administrators in the lab:
+
+> Off.
+>
+> Agreed not yet
+
+Effect: read_appliance_settings ships default off; no SSO group change
+in the lab for now.
+
+## Devel acceptance, build 79 (2026-09-23)
+
+Installed 5:09 PM CDT; checks after the 6:09 PM cycle: host encryption
+reads real values via esxcli on all healthy hosts (mgmt-esx01 fails, no
+TPM; wld hosts pass); wld01-cl01 and wld02-cl01 log "vSAN not enabled"
+and read -1 on vSAN controls, mgmt-cl01 still scored; healthy hosts and
+vCenters unreadable_count 0; the three vCenter "not collected" alerts
+(since 11:51 AM) canceled at 5:13 PM; Rollup|incomplete 0; disconnected
+wld01-esx02 scores 0 with both alerts, reason host-not-connected=48;
+all four dashboards bound; environment: 155 scored, 126 non-compliant,
+0 without benchmark, average 84.32. read_appliance_settings shows on
+existing instances as false.

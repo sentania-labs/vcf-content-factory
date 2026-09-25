@@ -22,7 +22,7 @@ The top-level page of the four-dashboard set. It answers three
 questions without a click: how compliant is the environment, which
 object types and which vCenters drag it down, and which SCG versions
 are in play (including objects with no matching SCG). The per-kind
-dashboards (ESXi Hosts, VMs, vCenter & Networking) are where a user
+dashboards (ESX Hosts, VMs, vCenter & Networking) are where a user
 goes to act on a single object.
 
 ## Model decisions this dashboard depends on (adapter v3)
@@ -103,7 +103,7 @@ vCenter name, then `Rollup|Benchmark|<B>|objects` for SCG 6.7, 7.0,
 
 ## Known constraints
 
-- The lab runs one ESXi build (9.1.1) on all hosts in both instances,
+- The lab runs one ESX build (9.1.1) on all hosts in both instances,
   so the SCG-version view will show a single populated column until a
   mixed-version environment is available; mixed versions are tested
   with simulated input in the adapter tests.

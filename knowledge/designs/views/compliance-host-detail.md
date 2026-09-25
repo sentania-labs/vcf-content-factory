@@ -18,5 +18,5 @@ approved layout and keys in `knowledge/designs/dashboards/compliance-esxi-hosts.
 
 ## Vision
 
-Feeds ESXi Hosts W2. Spec: see the ESXi Hosts note section New view; replaces Compliance Host Overview. Keys are the adapter v3 build 60 key list
+Feeds ESX Hosts W2. Spec: see the ESX Hosts note section New view; replaces Compliance Host Overview. Keys are the adapter v3 build 60 key list
 (content/sdk-adapters/compliance/README.md and docs/overview.md).

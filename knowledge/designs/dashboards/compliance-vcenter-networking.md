@@ -39,7 +39,7 @@ and on the vDS (vDS reports its own 9.0.0 under vCenter 9.1.1).
 
 | # | Widget | Type | Grid (col, row, w, h) | Subject | Metrics / content |
 |---|---|---|---|---|---|
-| W1 | Scope | ResourceList | 1, 1, 3, 12 | `vSphere World`, `VMwareAdapter Instance` | Picker, default vSphere World. Drives W2 to W5 |
+| W1 | Scope | ResourceList | 1, 1, 3, 12 | `vSphere World`, `VMwareAdapter Instance` | Picker, name column only (`column_preset: name-only`). Drives W2 to W5 |
 | W2 | vCenter Servers | View | 4, 1, 9, 5 | driven by W1, `VMwareAdapter Instance` | name, `summary\|version`, SCG applied, score, failing, unreadable |
 | W3 | Clusters | View | 4, 6, 9, 7 | driven by W1, `ClusterComputeResource` | name, SCG applied, score, failing, unreadable |
 | W4 | Distributed Switches | View | 1, 13, 6, 7 | driven by W1, `VmwareDistributedVirtualSwitch` | name, `summary\|version` (switch version, shown for context), SCG applied, score, failing, unreadable |
@@ -83,9 +83,13 @@ widget into one receiver (e.g. vSphere Network Configuration 2.0).
 - **Retained scores (owner decision 2026-09-23, Option A).** Ops keeps
   a metric's last value when pushes stop. Score columns list every row
   and rely on the No SCG flag column beside them instead of hiding the
-  score (views can only filter whole rows). The ESXi heatmap has no flag
+  score (views can only filter whole rows). The ESX heatmap has no flag
   column and may color a host by a retained score after it moves to a
   version with no SCG; accepted as rare.
 - **Unreadable counts as failing** (owner decision 2026-09-23,
   build 63): unreadable controls lower the score, and a per-object
   "Compliance data not collected" alert says why.
+- **Scope pickers (owner change 2026-09-23):** every compliance scope
+  picker lists only vSphere World and the vCenters, and shows the name
+  column only (no adapter type, object type or other columns). The
+  ESX Hosts dashboard is renamed "Compliance ESX Hosts".

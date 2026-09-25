@@ -1,4 +1,4 @@
-# [VCF Content Factory] Compliance ESXi Hosts
+# [VCF Content Factory] Compliance ESX Hosts
 
 - **Type:** dashboard (bundled in the compliance pak)
 - **Slug:** compliance-esxi-hosts
@@ -49,7 +49,7 @@ Known-good VMWARE keys (used across reference content):
 
 | # | Widget | Type | Grid (col, row, w, h) | Subject | Metrics / content |
 |---|---|---|---|---|---|
-| W1 | Scope | ResourceList | 1, 1, 3, 12 | `vSphere World`, `VMwareAdapter Instance`, `ClusterComputeResource` | Object picker; default selection vSphere World. Drives W2 and W3 |
+| W1 | Scope | ResourceList | 1, 1, 3, 12 | `vSphere World`, `VMwareAdapter Instance` | Object picker, name column only (`column_preset: name-only`). Drives W2 and W3 |
 | W2 | Host Compliance | View | 4, 1, 9, 12 | driven by W1, descendants of kind `HostSystem` | New view (below), sorted by score ascending. Selection drives W4, W5, W6 |
 | W3 | Host Score Heatmap | Heatmap | 1, 13, 5, 8 | driven by W1, `HostSystem` | Color by `VCF-CF Compliance\|score` (red 0, green 100), group by parent cluster, fixed size |
 | W4 | Failing Controls on Selected Host | AlertList | 6, 13, 7, 8 | driven by W2 | Explicit `alert_definitions` list of the generated per-control definitions (type 15, subType 21), on the selected host: control ID and title, criticality, recommendation (runbook), since |
@@ -70,8 +70,8 @@ Compliance Host Overview view:
 | Host | name | |
 | Cluster | `summary\|parentCluster` | |
 | vCenter | `summary\|parentVcenter` | |
-| ESXi version | `summary\|version` | |
-| SCG applied | `VCF-CF Compliance\|profile_name` | "no benchmark for ESXi X.Y" when unmapped |
+| ESX version | `summary\|version` | |
+| SCG applied | `VCF-CF Compliance\|profile_name` | "no benchmark for ESX X.Y" when unmapped |
 | Score (%) | `VCF-CF Compliance\|score` | red < 80, orange < 90, yellow < 95 |
 | Failing | `VCF-CF Compliance\|fail_count` | |
 | Unreadable | `VCF-CF Compliance\|unreadable_count` | |
@@ -88,7 +88,7 @@ Non-compliant (= non-compliant hosts in scope), sum of No SCG.
   work (multi-kind ResourceList is in the renderer) but is confirmed at
   the first devel install; fallback is vCenters and clusters only with
   "all hosts" as the no-selection default.
-- The lab has one ESXi build, so the SCG applied column shows 9.1 on
+- The lab has one ESX build, so the SCG applied column shows 9.1 on
   every host until a mixed environment is available.
 - Ops keeps a metric's last value when pushes stop. A host with no
   benchmark or nothing evaluated gets zeroed counters from the adapter
@@ -114,9 +114,13 @@ Non-compliant (= non-compliant hosts in scope), sum of No SCG.
 - **Retained scores (owner decision 2026-09-23, Option A).** Ops keeps
   a metric's last value when pushes stop. Score columns list every row
   and rely on the No SCG flag column beside them instead of hiding the
-  score (views can only filter whole rows). The ESXi heatmap has no flag
+  score (views can only filter whole rows). The ESX heatmap has no flag
   column and may color a host by a retained score after it moves to a
   version with no SCG; accepted as rare.
 - **Unreadable counts as failing** (owner decision 2026-09-23,
   build 63): unreadable controls lower the score, and a per-object
   "Compliance data not collected" alert says why.
+- **Scope pickers (owner change 2026-09-23):** every compliance scope
+  picker lists only vSphere World and the vCenters, and shows the name
+  column only (no adapter type, object type or other columns). The
+  ESX Hosts dashboard is renamed "Compliance ESX Hosts".
