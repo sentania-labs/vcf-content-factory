@@ -225,6 +225,7 @@ def _ensure_framework_jar() -> None:
         cmd = [
             javac,
             "-source", "11", "-target", "11",
+            "-proc:none",  # no classpath annotation processors (sdk-runtime#1)
             "-cp", fw_classpath,
             "-d", str(build_dir),
         ] + [str(s) for s in sources]
@@ -494,6 +495,10 @@ def _compile(javac: str, classpath: str, sources: List[Path],
     cmd = [
         javac,
         "-source", "11", "-target", "11",
+        # -proc:none: never auto-run annotation processors discovered in
+        # classpath jars (sdk-runtime#1). Adapters use none; a processor in
+        # a third-party jar would otherwise execute code at compile time.
+        "-proc:none",
         "-cp", classpath,
         "-d", str(build_dir),
     ] + [str(s) for s in sources]
@@ -2337,59 +2342,93 @@ def _write_outer_pak(
     return pak_path
 
 
-def _run_pak_compare(pak_path: Path) -> None:
-    """Run pak-compare against SDK reference paks if available.
+class PakCompareGateError(SdkBuildError):
+    """Raised when the post-build pak-compare gate fails (#181).
 
-    Logs a warning (does not fail) if no reference paks are found.
+    Either the comparison found BLOCKING divergences, or it could not run
+    at all (reference pak missing on a release build, compare crashed).
+    Subclasses SdkBuildError so every existing caller that maps
+    SdkBuildError to a non-zero exit fails the build without new wiring.
     """
-    if not _REFERENCES_DIR.is_dir():
-        print(
-            f"  pak-compare: reference directory not found ({_REFERENCES_DIR}); "
-            "skipping comparison.",
-            file=sys.stderr,
-        )
-        return
 
-    sdk_paks = list(_REFERENCES_DIR.glob("*.pak"))
+
+def _run_pak_compare(pak_path: Path, *, release_build: bool = False,
+                     warn_only: bool = False) -> None:
+    """Run pak-compare against the SDK reference paks and gate on the result.
+
+    Every ``*.pak`` under the reference directory is compared and the gate
+    is judged against the closest one (fewest BLOCKING, then WARNING, then
+    INFO), the same rule as the pak-compare CLIs.
+
+    Fail-closed by default (#181): any BLOCKING finding, or a compare that
+    raised, raises PakCompareGateError.  ``warn_only`` (dev builds only;
+    build_sdk_pak rejects it together with a release build) downgrades
+    both to a printed warning.
+
+    A missing reference pak is a hard failure on a release build (the gate
+    cannot run, and the buildkit always ships one).  On a dev build it is
+    logged and skipped, because a factory checkout has no reference pak
+    until one is placed under tmp/reference_paks/.
+    """
+    sdk_paks = sorted(_REFERENCES_DIR.glob("*.pak")) if _REFERENCES_DIR.is_dir() else []
     if not sdk_paks:
-        print(
-            f"  pak-compare: no .pak files found in {_REFERENCES_DIR}; "
-            "skipping comparison.",
-            file=sys.stderr,
+        msg = (
+            f"pak-compare: no reference .pak found in {_REFERENCES_DIR}"
         )
+        if release_build:
+            raise PakCompareGateError(
+                f"{msg}; a release build cannot skip the pak-compare gate."
+            )
+        print(f"  {msg}; skipping comparison (dev build).", file=sys.stderr)
         return
 
+    print(
+        f"  pak-compare: comparing against {len(sdk_paks)} reference pak(s) "
+        f"in {_REFERENCES_DIR}...",
+        file=sys.stderr,
+    )
     try:
-        from .pak_compare import compare_paks, format_report
+        from .pak_compare import compare_pak_directory
 
-        best_ref = sdk_paks[0]
+        # Gate on the CLOSEST reference (compare_pak_directory sorts
+        # closest-first), the same rule the pak-compare CLIs use.
+        best_ref, result = compare_pak_directory(pak_path, _REFERENCES_DIR)[0]
+        print(f"  pak-compare: closest reference {best_ref.name}", file=sys.stderr)
+    except Exception as exc:
+        msg = f"pak-compare: failed to run comparison: {exc}"
+        if warn_only:
+            print(f"  WARNING (warn-only): {msg}", file=sys.stderr)
+            return
+        raise PakCompareGateError(msg) from exc
+
+    blockings = result.blocking()
+    warning_list = result.warnings()
+    if blockings:
         print(
-            f"  pak-compare: comparing against {best_ref.name}...", file=sys.stderr
+            f"  pak-compare: {len(blockings)} BLOCKING(s) found!", file=sys.stderr
         )
-        result = compare_paks(pak_path, best_ref)
-        # Print a summary — only show BLOCKINGs and WARNINGs
-        blockings = result.blocking()
-        warning_list = result.warnings()
-        if blockings:
+        for item in blockings:
+            print(f"    BLOCKING: {item.message}", file=sys.stderr)
+        if warn_only:
             print(
-                f"  pak-compare: {len(blockings)} BLOCKING(s) found!", file=sys.stderr
-            )
-            for item in blockings:
-                print(f"    BLOCKING: {item.message}", file=sys.stderr)
-        elif warning_list:
-            print(
-                f"  pak-compare: {len(warning_list)} WARNING(s) (no BLOCKINGs); "
-                "install gate passed.",
+                "  pak-compare: warn-only mode, build NOT failed. This pak "
+                "failed the install gate and must not be installed or shipped.",
                 file=sys.stderr,
             )
-        else:
-            print("  pak-compare: OK (no BLOCKINGs or WARNINGs).", file=sys.stderr)
-
-    except Exception as exc:
+            return
+        raise PakCompareGateError(
+            f"pak-compare gate failed: {len(blockings)} BLOCKING finding(s) "
+            f"against {best_ref.name}: "
+            + "; ".join(item.message for item in blockings)
+        )
+    if warning_list:
         print(
-            f"  pak-compare: failed to run comparison: {exc}; skipping.",
+            f"  pak-compare: {len(warning_list)} WARNING(s) (no BLOCKINGs); "
+            "install gate passed.",
             file=sys.stderr,
         )
+    else:
+        print("  pak-compare: OK (no BLOCKINGs or WARNINGs).", file=sys.stderr)
 
 
 def _load_properties(path: Path) -> Dict[str, str]:
@@ -3134,12 +3173,16 @@ def _generate_docs(project_dir: Path, version_string: str) -> None:
         print(f"  docs: warning — docs/ generation error: {exc}", file=sys.stderr)
 
 
-def build_sdk_pak(project_dir: Path, output_dir: Optional[Path] = None) -> Path:
+def build_sdk_pak(project_dir: Path, output_dir: Optional[Path] = None,
+                  *, pak_compare_warn_only: bool = False) -> Path:
     """End-to-end Tier 2 SDK adapter build pipeline.
 
     Args:
         project_dir:  path to the adapter project directory (contains adapter.yaml)
         output_dir:   destination for the .pak file (default: dist/ relative to repo root)
+        pak_compare_warn_only: dev builds only.  Report pak-compare BLOCKING
+                      findings as warnings instead of failing the build.
+                      Rejected on a release build.
 
     Returns:
         Path to the produced .pak file.
@@ -3168,7 +3211,13 @@ def build_sdk_pak(project_dir: Path, output_dir: Optional[Path] = None) -> Path:
 
     # Step 1a: stamp the effective build version (dev preview 0.0.0.N by
     # default; adapter.yaml's real version only on explicit release opt-in).
-    _stamp_build_version(project, _is_release_build())
+    release_build = _is_release_build()
+    if release_build and pak_compare_warn_only:
+        raise SdkBuildError(
+            "pak-compare warn-only mode is not allowed on a release build: "
+            "a release must pass the pak-compare gate."
+        )
+    _stamp_build_version(project, release_build)
 
     # Step 1b: parse bundled_content (optional) — must happen before compile so
     # content load errors fail fast, before the expensive Java build steps.
@@ -3298,10 +3347,44 @@ def build_sdk_pak(project_dir: Path, output_dir: Optional[Path] = None) -> Path:
 
     print(f"Built: {pak_path}", file=sys.stderr)
 
-    # Step 12: pak-compare (best-effort)
-    _run_pak_compare(pak_path)
+    # Step 12: pak-compare gate (fail-closed, #181).
+    _gate_built_pak(
+        pak_path,
+        release_build=release_build,
+        warn_only=pak_compare_warn_only,
+    )
 
     return pak_path
+
+
+def _gate_built_pak(pak_path: Path, *, release_build: bool,
+                    warn_only: bool) -> None:
+    """Run the pak-compare gate on a freshly built pak.
+
+    On failure a release build's pak is deleted, so no later CI step (an
+    upload glob, a retry) can publish a pak that failed the gate; a dev
+    build's pak is left in place for inspection.  Re-raises either way.
+    """
+    try:
+        _run_pak_compare(
+            pak_path,
+            release_build=release_build,
+            warn_only=warn_only,
+        )
+    except PakCompareGateError:
+        if release_build:
+            pak_path.unlink(missing_ok=True)
+            print(
+                f"  pak-compare: removed {pak_path.name} (release build failed the gate).",
+                file=sys.stderr,
+            )
+        else:
+            print(
+                f"  pak-compare: {pak_path} left for inspection; it failed the "
+                "gate and must not be installed.",
+                file=sys.stderr,
+            )
+        raise
 
 
 def _validate_localization_key_contract(views: list, sm_scope: Optional[List[Path]] = None) -> List[str]:
@@ -3527,7 +3610,9 @@ def scaffold_sdk_project(name: str, output_base: Path) -> Path:
         raise SdkBuildError(f"Project directory already exists: {project_dir}")
 
     # Derive class name stem
-    camel = "".join(part.capitalize() for part in slug.lstrip("vcfcf_").split("_"))
+    # removeprefix, not lstrip: lstrip("vcfcf_") strips any of the characters
+    # v/c/f/_ from the left, so "cert_demo" became "ErtDemo".
+    camel = "".join(part.capitalize() for part in slug.removeprefix("vcfcf_").split("_"))
     class_name = f"{camel}Adapter"
     package = f"com.vcfcf.adapters.{slug}"
     package_path = package.replace(".", "/")
@@ -3548,69 +3633,72 @@ def scaffold_sdk_project(name: str, output_base: Path) -> Path:
         encoding="utf-8",
     )
 
-    # Skeleton adapter class
+    # Skeleton adapter class (framework v2: VcfCfAdapter + com.vcfcf.adapter.spi).
+    # Ships the TLS conventions every framework adapter follows: the
+    # allowInsecure pulldown read with isAllowInsecure(rc), platformSsl(this)
+    # otherwise, and a certificateCheckUrls override so Validate Connection
+    # offers VCF Operations' "Review and accept certificate" dialog.
     (src_dir / f"{class_name}.java").write_text(
         f"package {package};\n\n"
         f"import com.vcfcf.adapter.VcfCfAdapter;\n"
+        f"import com.vcfcf.adapter.spi.VcfCfCollector;\n"
+        f"import com.vcfcf.adapter.spi.VcfCfTester;\n"
         f"import com.integrien.alive.common.adapter3.ResourceStatus;\n"
-        f"import com.integrien.alive.common.adapter3.config.ResourceConfig;\n"
-        f"import com.vmware.tvs.vrealize.adapter.core.collection.CollectionException;\n"
-        f"import com.vmware.tvs.vrealize.adapter.core.collection.live.LiveCollector;\n"
-        f"import com.vmware.tvs.vrealize.adapter.core.data.ResourceCollection;\n"
-        f"import com.vmware.tvs.vrealize.adapter.core.discovery.Discoverer;\n"
-        f"import com.vmware.tvs.vrealize.adapter.core.test.Tester;\n\n"
+        f"import com.integrien.alive.common.adapter3.config.ResourceConfig;\n\n"
+        f"import java.util.List;\n\n"
         f"// TODO: replace Object with your typed config POJO\n"
         f"public final class {class_name} extends VcfCfAdapter<Object> {{\n\n"
-        f"\t/** No-arg constructor — required by the analytics engine (Class.newInstance()). */\n"
+        f"\t/** Must equal the AdapterKind key in describe.xml. */\n"
+        f"\tprivate static final String ADAPTER_KIND = \"{slug}\";\n\n"
+        f"\t/** No-arg constructor: controller-side describe (bare instantiation). */\n"
         f"\tpublic {class_name}() {{\n"
-        f"\t\tsuper();\n"
+        f"\t\tsuper(ADAPTER_KIND);\n"
         f"\t}}\n\n"
-        f"\t/** Two-arg constructor — used by the collector at instance startup. */\n"
+        f"\t/** Two-arg constructor: used by the collector at instance startup. */\n"
         f"\tpublic {class_name}(String adapterDir, Integer adapterInstanceId) {{\n"
-        f"\t\tsuper(adapterDir, adapterInstanceId);\n"
+        f"\t\tsuper(ADAPTER_KIND, adapterDir, adapterInstanceId);\n"
         f"\t}}\n\n"
         f"\t@Override\n"
-        f"\tprotected String getAdapterDirectory() {{ return \"{slug}\"; }}\n\n"
+        f"\tprotected void configureAdapter(ResourceStatus status, ResourceConfig rc) {{\n"
+        f"\t\t// TODO: read identifiers (getIdentifier) and credentials\n"
+        f"\t\t// (getCredentialField) from rc, build this.config and this.httpClient.\n"
+        f"\t\t// TLS: isAllowInsecure(rc) ? builder.allowInsecure(true)\n"
+        f"\t\t//                            : builder.platformSsl(this)\n"
+        f"\t}}\n\n"
+        f"\t/**\n"
+        f"\t * Endpoint(s) VCF Operations reviews on Validate Connection. Called on an\n"
+        f"\t * UNSAVED config: read everything from rc, never from instance fields.\n"
+        f"\t * Must match the host and port the client dials with platformSsl(this).\n"
+        f"\t */\n"
         f"\t@Override\n"
-        f"\tpublic void configure(ResourceStatus status, ResourceConfig rc) {{\n"
-        f"\t\t// TODO: read credentials and identifiers from rc, build this.config\n"
+        f"\tprotected List<String> certificateCheckUrls(ResourceConfig rc) {{\n"
+        f"\t\tString host = getIdentifier(rc, \"host\");\n"
+        f"\t\tif (host == null || host.isBlank() || isAllowInsecure(rc)) {{\n"
+        f"\t\t\treturn List.of();\n"
+        f"\t\t}}\n"
+        f"\t\tString port = getIdentifier(rc, \"port\");\n"
+        f"\t\treturn List.of(\"https://\" + host.trim() + \":\"\n"
+        f"\t\t\t\t+ (port == null || port.isBlank() ? \"443\" : port.trim()));\n"
         f"\t}}\n\n"
         f"\t@Override\n"
-        f"\tpublic Tester getTester(ResourceStatus s, ResourceConfig rc) {{\n"
-        f"\t\treturn param -> {{ /* TODO: validate connectivity */ }};\n"
+        f"\t@SuppressWarnings(\"rawtypes\")\n"
+        f"\tprotected VcfCfTester getTester() {{\n"
+        f"\t\t// TODO: validate connectivity; throw to fail Test Connection. Build the\n"
+        f"\t\t// client from param.getAdapterConfig() (the unsaved config), not this.config.\n"
+        f"\t\treturn (cfg, http, param) -> {{ }};\n"
         f"\t}}\n\n"
         f"\t@Override\n"
-        f"\tpublic Discoverer getDiscoverer(ResourceStatus s, ResourceConfig rc) {{\n"
-        f"\t\t// TODO: return discovered resources\n"
-        f"\t\treturn param -> new ResourceCollection();\n"
-        f"\t}}\n\n"
-        f"\t@Override\n"
-        f"\tpublic LiveCollector getLiveDataCollector(ResourceStatus s, ResourceConfig rc) {{\n"
-        f"\t\treturn new LiveCollector() {{\n"
-        f"\t\t\t@Override public ResourceCollection getCurrentMetrics(\n"
-        f"\t\t\t\t\tResourceConfig rc, ResourceCollection acc)\n"
-        f"\t\t\t\t\tthrows CollectionException, InterruptedException {{\n"
-        f"\t\t\t\t// TODO: collect metrics and return them\n"
-        f"\t\t\t\treturn new ResourceCollection();\n"
-        f"\t\t\t}}\n"
-        f"\t\t\t@Override public ResourceCollection getEvents(\n"
-        f"\t\t\t\t\tResourceConfig rc, ResourceCollection acc)\n"
-        f"\t\t\t\t\tthrows CollectionException, InterruptedException {{\n"
-        f"\t\t\t\treturn new ResourceCollection();\n"
-        f"\t\t\t}}\n"
-        f"\t\t\t@Override public ResourceCollection getRelationships(\n"
-        f"\t\t\t\t\tResourceConfig rc, ResourceCollection acc)\n"
-        f"\t\t\t\t\tthrows CollectionException, InterruptedException {{\n"
-        f"\t\t\t\treturn new ResourceCollection();\n"
-        f"\t\t\t}}\n"
-        f"\t\t\t@Override public boolean shouldForceUpdateRelationships() {{ return false; }}\n"
-        f"\t\t}};\n"
+        f"\t@SuppressWarnings(\"rawtypes\")\n"
+        f"\tprotected VcfCfCollector getCollector() {{\n"
+        f"\t\t// TODO: return the collector; null marks every resource NO_DATA_RECEIVING.\n"
+        f"\t\treturn null;\n"
         f"\t}}\n"
         f"}}\n",
         encoding="utf-8",
     )
 
-    # Skeleton describe.xml
+    # Skeleton describe.xml. allowInsecure is a pulldown (enum="true"); the
+    # framework parses stored values with parseAllowInsecure ("true" only).
     (project_dir / "describe.xml").write_text(
         f'<?xml version="1.0" encoding="UTF-8"?>\n'
         f'<AdapterKind xmlns="http://schemas.vmware.com/vcops/schema"\n'
@@ -3620,8 +3708,19 @@ def scaffold_sdk_project(name: str, output_base: Path) -> Path:
         f'             version="1"\n'
         f'             xsi:schemaLocation="http://schemas.vmware.com/vcops/schema describeSchema.xsd">\n\n'
         f'\t<ResourceKinds>\n'
-        f'\t\t<!-- TODO: add adapter instance (type=7) and data resource kinds -->\n'
-        f'\t\t<ResourceKind key="{slug}" nameKey="2" type="7" monitoringInterval="5"/>\n'
+        f'\t\t<!-- TODO: add credentialKind and data resource kinds -->\n'
+        f'\t\t<ResourceKind key="{slug}" nameKey="2" type="7" monitoringInterval="5">\n'
+        f'\t\t\t<ResourceIdentifier key="host" nameKey="3" type="string"\n'
+        f'\t\t\t                    required="true" dispOrder="1"/>\n'
+        f'\t\t\t<ResourceIdentifier key="port" nameKey="4" type="string"\n'
+        f'\t\t\t                    required="false" dispOrder="2" default="443"/>\n'
+        f'\t\t\t<ResourceIdentifier key="allowInsecure" nameKey="5" type="string"\n'
+        f'\t\t\t                    required="false" dispOrder="3" default="false"\n'
+        f'\t\t\t                    enum="true">\n'
+        f'\t\t\t\t<enum value="false" displayOrder="1"/>\n'
+        f'\t\t\t\t<enum value="true" displayOrder="2"/>\n'
+        f'\t\t\t</ResourceIdentifier>\n'
+        f'\t\t</ResourceKind>\n'
         f'\t</ResourceKinds>\n\n'
         f'\t<LicenseConfig enabled="false"/>\n'
         f'</AdapterKind>\n',
@@ -3630,9 +3729,12 @@ def scaffold_sdk_project(name: str, output_base: Path) -> Path:
 
     # resources.properties
     (project_dir / "resources" / "resources.properties").write_text(
-        f"# resources.properties — i18n strings for {name}\n"
+        f"# resources.properties: i18n strings for {name}\n"
         f"1={name}\n"
-        f"2={name} Adapter Instance\n",
+        f"2={name} Adapter Instance\n"
+        f"3=Host\n"
+        f"4=Port\n"
+        f"5=Allow Insecure SSL\n",
         encoding="utf-8",
     )
 

@@ -98,8 +98,10 @@ def _build_ui_client(host: str, user: str, password: str, verify_ssl: bool):
     if not verify_ssl:
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-    s = requests.Session()
-    s.verify = verify_ssl
+    from vcfcf_common.client import new_session
+
+    # new_session: an explicit verify_ssl=False must beat REQUESTS_CA_BUNDLE (#174).
+    s = new_session(verify_ssl)
 
     # Step 1: seed JSESSIONID
     try:
