@@ -41,3 +41,14 @@ is `2026-09-25-scott-decisions.md`.
 8. Compliance #28 follow-up question.
    > #11 - what jar?
    (Explanation owed; no action.)
+9. Compliance #28: rewrite the public compliance repo's git history to
+   remove `lib/vim25.jar` and `lib/vim-vmodl-bindings-8.0.2.jar` from every
+   commit and force-push, with the plan presented: mirror backup first,
+   git filter-repo on those two paths only, release workflow disabled and
+   main force-push protection lifted only for the push, all branches and
+   the 7 tags pushed, protection and workflow restored, releases and CI
+   verified, PR #35 rebased, local clone reset, GitHub Support ticket
+   drafted for the 12 refs/pull references. Scott's context: "they aren't
+   hard to find, so it probably falls into a grey area, and I lean towards
+   rewriting them, especially sine we just pulled back the VDDK."
+   > DO the rewrite
