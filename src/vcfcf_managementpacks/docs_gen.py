@@ -233,8 +233,18 @@ def parse_describe_xml(project_dir: Path) -> Tuple[List[KindInfo], str, List[Tra
     return kinds, traversal_name, edges, config_fields
 
 
-def build_doc_model(project_dir: Path) -> AdapterDocModel:
-    """Load adapter.yaml + describe.xml and build the AdapterDocModel."""
+def build_doc_model(
+    project_dir: Path, adapter_version: Optional[str] = None
+) -> AdapterDocModel:
+    """Load adapter.yaml + describe.xml and build the AdapterDocModel.
+
+    ``adapter_version`` overrides the ``<version>.<build_number>`` read from
+    adapter.yaml. ``build-sdk`` passes the version it actually stamped on
+    the pak, so a dev build's docs carry the same ``0.0.0.<build_number>``
+    line as the pak (RULE-014: generated docs are a version surface). The
+    standalone ``docs-gen`` command passes nothing and keeps the declared
+    version.
+    """
     adapter_yaml = project_dir / "adapter.yaml"
     if not adapter_yaml.is_file():
         raise ValueError(f"adapter.yaml not found in {project_dir}")
@@ -247,7 +257,8 @@ def build_doc_model(project_dir: Path) -> AdapterDocModel:
 
     adapter_kind = raw.get("adapter_kind", "unknown")
     adapter_name = raw.get("name", adapter_kind)
-    adapter_version = f"{raw.get('version', '1.0.0')}.{raw.get('build_number', 0)}"
+    if adapter_version is None:
+        adapter_version = f"{raw.get('version', '1.0.0')}.{raw.get('build_number', 0)}"
     adapter_description = (raw.get("description") or "").strip()
 
     kinds, traversal_name, edges, config_fields = parse_describe_xml(project_dir)
@@ -965,7 +976,7 @@ def generate_overview_md(model: AdapterDocModel) -> str:
 
 ## What's in the Pack
 
-{model.adapter_name} version {model.adapter_version}.
+{model.adapter_name}. For the version, see [docs/README.md](README.md) (regenerated on every build) or the GitHub release.
 
 {model.adapter_description}
 
@@ -1092,7 +1103,11 @@ class DocsGenError(ValueError):
     """Raised when docs-gen encounters an unrecoverable error."""
 
 
-def generate_docset(project_dir: Path, verbose: bool = False) -> Dict[str, str]:
+def generate_docset(
+    project_dir: Path,
+    verbose: bool = False,
+    adapter_version: Optional[str] = None,
+) -> Dict[str, str]:
     """Generate the docs/ docset for a Tier 2 SDK adapter project.
 
     REGENERATE policy (always overwritten):
@@ -1104,10 +1119,16 @@ def generate_docset(project_dir: Path, verbose: bool = False) -> Dict[str, str]:
     SCAFFOLD policy (only written if the file does not already exist):
       docs/overview.md
       docs/installing.md
+    Scaffold outputs carry no build version: they are never rewritten, so
+    any version written into them would go stale (and a 1.x one from a
+    local build would break RULE-014).
 
     Args:
         project_dir: Path to the adapter project directory (contains adapter.yaml).
         verbose:     Print progress messages.
+        adapter_version: Version string to stamp (e.g. "0.0.0.14"); defaults
+                     to adapter.yaml's ``<version>.<build_number>``. See
+                     ``build_doc_model``.
 
     Returns:
         Dict mapping relative path (e.g. "docs/README.md") → "generated" | "scaffolded" | "skipped".
@@ -1125,7 +1146,7 @@ def generate_docset(project_dir: Path, verbose: bool = False) -> Dict[str, str]:
     docs_dir.mkdir(exist_ok=True)
 
     try:
-        model = build_doc_model(project_dir)
+        model = build_doc_model(project_dir, adapter_version=adapter_version)
     except (ValueError, RuntimeError) as exc:
         raise DocsGenError(str(exc)) from exc
 
@@ -1163,6 +1184,10 @@ def generate_docset(project_dir: Path, verbose: bool = False) -> Dict[str, str]:
     # ------------------------------------------------------------------
     # SCAFFOLD outputs (only if missing)
     # ------------------------------------------------------------------
+    # Write-once files carry no build version at all: they are never
+    # regenerated, so a dev stamp (0.0.0.N) would go stale, and a declared
+    # 1.x version written by a local build would break RULE-014. Only the
+    # regenerated outputs above carry a version.
 
     overview_path = docs_dir / "overview.md"
     if not overview_path.is_file():

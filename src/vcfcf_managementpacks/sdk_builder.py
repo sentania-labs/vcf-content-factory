@@ -2666,9 +2666,13 @@ def _build_traversal_tree(paths: List[str], props: Dict[str, str],
 def _generate_reference_md(
     project_dir: Path,
     project_name: str,
-    version_string: str,
+    version_string: Optional[str],
 ) -> str:
-    """Generate REFERENCE.md content from describe.xml and resources.properties."""
+    """Generate REFERENCE.md content from describe.xml and resources.properties.
+
+    ``version_string`` None omits the "for build ..." suffix; used for the
+    write-once first-run REFERENCE.md, which must not carry a version.
+    """
     describe_xml = project_dir / "describe.xml"
     res_props = project_dir / "resources" / "resources.properties"
 
@@ -2684,10 +2688,15 @@ def _generate_reference_md(
     # Title and subtitle
     lines.append(f"# {project_name} — Reference")
     lines.append("")
-    lines.append(
-        f"Generated from `describe.xml` and `resources.properties` "
-        f"for build {version_string}."
-    )
+    if version_string:
+        lines.append(
+            f"Generated from `describe.xml` and `resources.properties` "
+            f"for build {version_string}."
+        )
+    else:
+        lines.append(
+            "Generated from `describe.xml` and `resources.properties`."
+        )
     lines.append("")
 
     # Adapter section
@@ -3093,9 +3102,11 @@ def _generate_docs(project_dir: Path, version_string: str) -> None:
     # to REFERENCE.generated.md so the author can diff/merge. On first run
     # (file absent) write directly as REFERENCE.md.
     try:
-        ref_content = _generate_reference_md(project_dir, project_name, version_string)
         ref_path = project_dir / "REFERENCE.md"
         if ref_path.is_file():
+            ref_content = _generate_reference_md(
+                project_dir, project_name, version_string
+            )
             gen_path = project_dir / "REFERENCE.generated.md"
             gen_path.write_text(ref_content, encoding="utf-8")
             print(
@@ -3104,6 +3115,13 @@ def _generate_docs(project_dir: Path, version_string: str) -> None:
                 file=sys.stderr,
             )
         else:
+            # First-run bootstrap: REFERENCE.md is never rewritten after
+            # this, so it carries no build version (a 0.x stamp would go
+            # stale; a 1.x one from a local build breaks RULE-014). Same
+            # rule as the docs/ scaffolds.
+            ref_content = _generate_reference_md(
+                project_dir, project_name, None
+            )
             ref_path.write_text(ref_content, encoding="utf-8")
             print(f"  docs: wrote {ref_path}", file=sys.stderr)
     except Exception as exc:
@@ -3154,9 +3172,14 @@ def _generate_docs(project_dir: Path, version_string: str) -> None:
 
     # 4. Generate docs/ docset (inventory-tree diagram, per-kind tables, README).
     # Policy mirrors the docset design: regenerate/scaffold as appropriate.
+    # version_string is the version stamped on the pak (0.0.0.<build> on a
+    # dev build, RULE-014), not adapter.yaml's declared version, so the
+    # docset and the pak never disagree.
     try:
         from .docs_gen import generate_docset, DocsGenError
-        results = generate_docset(project_dir, verbose=False)
+        results = generate_docset(
+            project_dir, verbose=False, adapter_version=version_string
+        )
         for rel_path, status in results.items():
             if status.startswith("skipped"):
                 print(f"  docs: {rel_path} — {status}", file=sys.stderr)

@@ -50,7 +50,8 @@ Hard-coded resource UUIDs: **none**. All resource references go through the synt
 of the `002019VMWARE_INFRA_HEALTHLICENSE_USAGE_WORLD` / `002011NSXTAdapterNSXT World` /
 `002010CASAdapterCAS World` form appear on View widget `resource` blocks and on the
 `resourceMetrics` entries; the factory renderer already knows these three prefixes
-(`_ADAPTER_KIND_PREFIX` in `src/vcfops_dashboards/render.py`).
+(then a closed `_ADAPTER_KIND_PREFIX` table; since 2026-09-25 computed for any
+adapter kind by `adapter_kind_prefix` in `src/vcfcf_core/dashboards/render.py`).
 
 ### 1.2 Widgets (grid order, y then x)
 

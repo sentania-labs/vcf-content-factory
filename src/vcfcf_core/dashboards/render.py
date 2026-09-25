@@ -45,21 +45,51 @@ class UnresolvedViewReferenceError(ValueError):
     """
 
 
-# Stable per-adapter-kind prefix used in `resourceKindId` fields inside
-# dashboard widget configs. Harvested from reference bundles under
-# `reference/references/`, the value is the same on every Ops instance for a
-# given adapter. Extend as new adapter kinds get pinned; there is no
-# API to derive these at runtime (checked /api/adapterkinds and
-# /api/adapterkinds/*/resourcekinds; no numeric id is exposed).
-_ADAPTER_KIND_PREFIX = {
-    "VMWARE": "002006",
-    "Container": "002009",
-    "CASAdapter": "002010",
-    "NSXTAdapter": "002011",
-    "KubernetesAdapter": "002017",
-    "VMWARE_INFRA_HEALTH": "002019",
-    "VrAdapter": "002009",
-}
+def adapter_kind_prefix(adapter_kind: str) -> str:
+    """The six-character numeric prefix that leads every ``resourceKindId``.
+
+    ``"0020"`` plus the adapter-kind key length as two digits (``VMWARE``
+    -> ``002006``, ``unifi_controller`` -> ``002016``), identical to the
+    server's ``IdGeneratorUtil.toID``. Used by pinned View / Scoreboard
+    widgets, Heatmap ``groupBy.id`` and (via ``summary_bind``) Summary-tab
+    bindings.
+
+    This replaced a closed table harvested from reference bundles, which
+    broke every render naming an adapter kind outside it (an SDK pak's own
+    kind). Every harvested entry (VMWARE 002006, Container 002009,
+    CASAdapter 002010, NSXTAdapter 002011, KubernetesAdapter 002017,
+    VMWARE_INFRA_HEALTH 002019, VrAdapter 002009) matches the formula, as
+    do all 363 resource kinds on the devel instance
+    (knowledge/context/api-surface/summary_dashboard_assignment.md). In the
+    reference corpus (files and nested pak/zip members) 50 of 51 adapter
+    kinds match; the one exception is a vendor typo in the DellEMC
+    OpenManage Enterprise pak (``002015`` for the 18-character
+    ``DELLEMCOME_ADAPTER``), outranked by the server's own generator and
+    the 363-kind devel check.
+
+    Lives here rather than in summary_bind so the sdk-buildkit's flat copy
+    of this module (dashboard_render.py) needs no extra sibling.
+
+    Unverified above 99 characters (the ``004null`` groupBy form hints at a
+    three-digit length encoding server-side), and ASCII keys are assumed:
+    Python ``len`` counts code points where Java counts UTF-16 units.
+    Raises ``ValueError`` for an empty key, a non-ASCII key, or one longer
+    than 99 characters rather than guess.
+    """
+    if not adapter_kind:
+        raise ValueError("resourceKindId prefix: adapter kind is empty")
+    if not adapter_kind.isascii():
+        raise ValueError(
+            f"resourceKindId prefix: adapter kind {adapter_kind!r} is not "
+            f"ASCII; the length encoding is only verified for ASCII keys"
+        )
+    if len(adapter_kind) > 99:
+        raise ValueError(
+            f"resourceKindId prefix: adapter kind {adapter_kind!r} is "
+            f"{len(adapter_kind)} characters; the encoding is only "
+            f"verified for the two-digit length field (at most 99)"
+        )
+    return f"0020{len(adapter_kind):02d}"
 
 # When a self-provider View (or ProblemAlertsList) widget is pinned to a leaf
 # resource kind, one where no single resource carries the kind name as its
@@ -1279,13 +1309,7 @@ def _view_widget(w: Widget, view: "ViewDef | str", kind_index: dict[tuple[str, s
             w.pin.adapter_kind, w.pin.resource_kind, w.pin.name
         )
         container_key = (c_adapter, c_kind, c_name)
-        prefix = _ADAPTER_KIND_PREFIX.get(c_adapter)
-        if prefix is None:
-            raise ValueError(
-                f"no known resourceKindId prefix for adapter kind "
-                f"{c_adapter!r}, extend _ADAPTER_KIND_PREFIX "
-                f"after harvesting from an exported reference dashboard"
-            )
+        prefix = adapter_kind_prefix(c_adapter)
         # Widget config.resource.resourceId is 0-indexed, matching the
         # entries.resource[].internalId values (resource:id:0_::_, etc.).
         # The Ext.vcops.chrome.model.Resource-N id is 1-based in exports
@@ -1416,13 +1440,7 @@ def _render_resource_metric_spec(
     export (knowledge/context/wire-formats/wire_formats.md §Scoreboard
     resource mode).
     """
-    prefix = _ADAPTER_KIND_PREFIX.get(resource.adapter_kind)
-    if prefix is None:
-        raise ValueError(
-            f"no known resourceKindId prefix for adapter kind "
-            f"{resource.adapter_kind!r}, extend _ADAPTER_KIND_PREFIX "
-            f"after harvesting from an exported reference dashboard"
-        )
+    prefix = adapter_kind_prefix(resource.adapter_kind)
     res_idx = resource_index[(resource.adapter_kind, resource.resource_kind, resource.name)]
     res_metrics = []
     for seq, spec in enumerate(specs, start=1):
@@ -2023,8 +2041,8 @@ def _heatmap_widget(
 
     3. ``groupBy.id`` format is ``004null<6-digit-prefix><adapterKind><resourceKind>``.
        The ``004null`` prefix is fixed. The 6-digit numeric prefix is the same
-       per-adapter-kind constant used in other widget types (see
-       ``_ADAPTER_KIND_PREFIX``). Example: ``004null002006VMWAREClusterComputeResource``.
+       per-adapter-kind value used in other widget types (computed by
+       ``adapter_kind_prefix``). Example: ``004null002006VMWAREClusterComputeResource``.
 
     4. ``groupBy.typeId`` uses ``resourceKind:id:N_::_`` and MUST appear in
        ``entries.resourceKind[]``, the kind_index pass adds it automatically.
@@ -2077,13 +2095,7 @@ def _heatmap_widget(
             # Self-grouping: use the subject kind as the single swim-lane group.
             gb_adapter = tab.adapter_kind
             gb_kind = tab.resource_kind
-        gb_prefix = _ADAPTER_KIND_PREFIX.get(gb_adapter)
-        if gb_prefix is None:
-            raise ValueError(
-                f"Heatmap groupBy: no known resourceKindId prefix for adapter kind "
-                f"{gb_adapter!r}, extend _ADAPTER_KIND_PREFIX after harvesting "
-                f"from an exported reference dashboard"
-            )
+        gb_prefix = adapter_kind_prefix(gb_adapter)
         gb_key = (gb_adapter, gb_kind)
         gb_rk_id = f"resourceKind:id:{kind_index[gb_key]}_::_"
         # groupBy.id format: 004null + 6-digit adapter prefix + adapterKind + resourceKind
