@@ -1,4 +1,4 @@
-# [VCF Content Factory] UniFi Wireless Summary Summary
+# [VCF Content Factory] UniFi Wireless Summary
 
 - **Type:** dashboard (summary dashboard, bundled in the pak)
 - **Slug:** unifi-summary-wireless-summary

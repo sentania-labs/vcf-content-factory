@@ -1,4 +1,4 @@
-# [VCF Content Factory] Synology Diskstation Summary
+# [VCF Content Factory] Synology DiskStation Summary
 
 - **Type:** dashboard (summary dashboard, bundled in the pak)
 - **Slug:** synology-summary-diskstation
