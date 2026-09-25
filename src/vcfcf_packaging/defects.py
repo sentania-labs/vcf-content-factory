@@ -563,13 +563,38 @@ def _affects_problem(raw: str) -> Optional[str]:
 
 
 def _affects_candidate(fields: dict[str, str]) -> str:
-    """First token of a multi-token ``Affects:``, else ``""``.
+    """The pak an unattributable ``Affects:`` most plausibly names, else ``""``.
+
+    - multi-token: its first token (``synology (note)`` -> ``synology``);
+    - one token with an unrecognised prefix: the text after the first
+      colon (``pak:synology`` -> ``synology``).
 
     Not an attribution on its own (prose starts with a word too); see
-    ``ParseError.candidate`` for the one place it is used.
+    ``ParseError.candidate`` and :func:`_candidate_entries` for how it is
+    used: only to fail closed for a pak gated by exactly this name.
     """
     tokens = (fields.get("Affects") or "").split()
-    return tokens[0] if len(tokens) > 1 else ""
+    if len(tokens) > 1:
+        return tokens[0]
+    if len(tokens) == 1 and ":" in tokens[0] and not _FACTORY_SCOPE_RE.match(tokens[0]):
+        return tokens[0].split(":", 1)[1]
+    return ""
+
+
+def _candidate_entries(
+    registry: "Registry", pak_name: Optional[str] = None,
+) -> List[DefectEntry]:
+    """Synthetic blockers for unscoped parse errors that carry a candidate.
+
+    ``gate_pak`` passes the pak being gated and gets only the matching
+    ones; ``gate_all`` passes nothing and gets every one, each labelled
+    with its candidate, so ``--all`` agrees with ``--pak <candidate>``.
+    """
+    return [
+        _synthetic_entry(replace(err, affects=err.candidate), registry.path)
+        for err in registry.unscoped_errors
+        if err.candidate and (pak_name is None or err.candidate == pak_name)
+    ]
 
 
 def _readable_affects(fields: dict[str, str]) -> str:
@@ -837,14 +862,10 @@ def gate_pak(
             so neither raises out of this function.
     """
     registry = _read_registry_for_gate(registry_path)
-    entries = registry.gate_entries + [
-        # A malformed multi-token Affects whose first token IS this pak: the
-        # caller has just told us that token is a pak, so fail closed for it
-        # even when the managed-paks lookup is unavailable (script mode).
-        _synthetic_entry(replace(err, affects=pak_name), registry.path)
-        for err in registry.unscoped_errors
-        if err.candidate and err.candidate == pak_name
-    ]
+    # A malformed Affects whose candidate IS this pak: the caller has just
+    # told us that name is a pak, so fail closed for it even when the
+    # managed-paks lookup is unavailable (script mode).
+    entries = registry.gate_entries + _candidate_entries(registry, pak_name)
     return [
         e for e in entries
         if e.severity == "blocking"
@@ -910,7 +931,10 @@ def gate_all(
             check), and a malformed ENTRY is isolated to the scope it names,
             so neither raises out of this function.
     """
-    entries = _read_registry_for_gate(registry_path).gate_entries
+    registry = _read_registry_for_gate(registry_path)
+    # Include partially attributed malformed entries, labelled with their
+    # candidate, so `--all` agrees with `--pak <candidate>`.
+    entries = registry.gate_entries + _candidate_entries(registry)
     return [
         e for e in entries
         if e.severity == "blocking"

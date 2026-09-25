@@ -112,7 +112,9 @@ class TestMultiTokenIsMalformed:
         reg = _write(tmp_path, _entry("all of the dashboards, probably"))
         registry = parse_registry(reg)
         assert len(registry.unscoped_errors) == 1
-        assert gate_all(reg) == []
+        # Listed by --all only under its first-word candidate, which matches
+        # what --pak all would do; no real pak is gated.
+        assert [e.affects for e in gate_all(reg)] == ["all"]
         assert gate_pak("fixturepak", reg) == []
         err = capsys.readouterr().err
         assert "WARNING" in err and "DEF-001" in err and "could not be confirmed" in err
@@ -160,14 +162,26 @@ class TestSingleToken:
         reg = _write(tmp_path, _entry("factory:packaging-cli"))
         assert parse_registry(reg).errors == []
 
-    def test_unrecognised_prefix_is_malformed_and_unscoped(self, tmp_path, capsys):
+    def test_unrecognised_prefix_is_malformed_and_fails_closed(self, tmp_path, capsys):
+        """`pak:fixturepak`: malformed and warned, but gating fixturepak refuses."""
         reg = _write(tmp_path, _entry("pak:fixturepak"))
         registry = parse_registry(reg)
         assert registry.entries == []
         assert len(registry.unscoped_errors) == 1
         assert "not a recognised scope" in registry.errors[0].reason
-        assert gate_pak("fixturepak", reg) == []
-        assert "DEF-001" in capsys.readouterr().err
+        assert registry.errors[0].candidate == "fixturepak"
+        blockers = gate_pak("fixturepak", reg)
+        assert len(blockers) == 1 and blockers[0].synthetic is True
+        assert gate_pak("other-pak", reg) == []
+        assert [e.affects for e in gate_all(reg)] == ["fixturepak"]
+        err = capsys.readouterr().err
+        assert "DEF-001" in err and "WARNING" in err
+
+    def test_empty_suffix_after_prefix_has_no_candidate(self, tmp_path):
+        reg = _write(tmp_path, _entry("pak:"))
+        registry = parse_registry(reg)
+        assert registry.errors[0].candidate == ""
+        assert gate_all(reg) == []
 
 
 def test_known_pak_names_survives_unreadable_managed_paks(monkeypatch):
@@ -205,6 +219,59 @@ def test_known_pak_names_failure_warns_once(monkeypatch, capsys):
 # ---------------------------------------------------------------------------
 
 _SCRIPT_REGISTRY = _entry("synology (the storage adapter)").replace("DEF-001", "DEF-900")
+
+
+def _run_script(tmp_path: Path, vendored: bool, registry_text: str, *argv: str):
+    import shutil
+    import subprocess
+    import sys
+
+    script = Path(defects.__file__)
+    if vendored:
+        ci = tmp_path / "ci"
+        ci.mkdir(exist_ok=True)
+        script = Path(shutil.copy(script, ci / "defect_gate.py"))
+    reg = _write(tmp_path, registry_text)
+    env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+    return subprocess.run(
+        [sys.executable, str(script), *argv, "--registry", str(reg)],
+        capture_output=True, text=True, cwd=str(tmp_path), env=env, timeout=60,
+    )
+
+
+@pytest.mark.parametrize("vendored", [False, True], ids=["in-tree", "vendored-copy"])
+def test_script_mode_all_agrees_with_pak(tmp_path, vendored):
+    """`--all` lists the partially attributed entry that `--pak synology` refuses on."""
+    result = _run_script(tmp_path, vendored, _SCRIPT_REGISTRY, "--all")
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert "DEF-900" in result.stdout and "synology" in result.stdout
+
+
+_PREFIX_REGISTRY = _entry("pak:synology").replace("DEF-001", "DEF-901")
+
+
+@pytest.mark.parametrize("vendored", [False, True], ids=["in-tree", "vendored-copy"])
+def test_script_mode_prefixed_token_blocks_the_named_pak(tmp_path, vendored):
+    blocked = _run_script(tmp_path, vendored, _PREFIX_REGISTRY, "--pak", "synology")
+    assert blocked.returncode == 2, blocked.stdout + blocked.stderr
+    assert "DEF-901" in blocked.stdout + blocked.stderr
+    assert "not a recognised scope" in blocked.stderr
+    clean = _run_script(tmp_path, vendored, _PREFIX_REGISTRY, "--pak", "unifi")
+    assert clean.returncode == 0, clean.stdout + clean.stderr
+
+
+def test_package_mode_prefixed_token_blocks_the_named_pak(tmp_path, monkeypatch):
+    """Package mode with the REAL managed-paks lookup (autouse stub removed).
+
+    The factory CLI's defect-gate takes no --registry flag, so this drives
+    the same gate_pak/gate_all functions it calls, in-process.
+    """
+    monkeypatch.undo()
+    reset_warning_state()
+    reg = _write(tmp_path, _PREFIX_REGISTRY)
+    assert [e.id for e in gate_pak("synology", reg)] == ["DEF-901"]
+    assert gate_pak("unifi", reg) == []
+    assert [e.affects for e in gate_all(reg)] == ["synology"]
 
 
 @pytest.mark.parametrize("vendored", [False, True], ids=["in-tree", "vendored-copy"])

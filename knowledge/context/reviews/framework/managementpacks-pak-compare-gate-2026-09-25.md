@@ -91,3 +91,33 @@ FRAMEWORK REVIEW
 - BUILDKIT_VERSION 1.0.11 correct (v1.0.10 tag exists). No em-dashes.
 - Test count: 1919 pass with pak clones linked (claimed 1902); 6
   environmental failures in a bare worktree.
+
+## Round 2 (commit ad7cac0): APPROVE, 0 BLOCKING / 0 WARNING / 2 NIT
+
+Checks re-run: validate chain (7 packages + packaging) pass; tests 1928
+passed / 0 failed / 8 skipped with pak clones linked; pak-compare exit 0
+on clean paks and exit 1 on every negative case, rebuilt 1.0.11 kit
+included (`sha256sum -c` OK; consumer gate step under `pipefail` gives 0
+clean, 1 on both broken paks).
+
+Round 1 status: BLOCKING 1 fixed (copied `ci/defect_gate.py` and in-tree
+script both exit 2 for `Affects: synology (the storage adapter)` gated as
+synology; unifi exits 0, so not over-broad). WARNING 1 fixed on all three
+paths. WARNING 2 recorded in `tier2_architecture.md`. WARNING 3 fixed
+(approvals file identical to 10f526f). NITs 1 to 4 done.
+
+Tooling's behaviour notes judged acceptable: every reference is reported
+but only the closest decides (pak-only checks still fail against every
+reference, and CI ships exactly one reference); prose Affects blocks only
+a pak literally named after its first word, with a warning.
+
+Remaining NITs:
+1. `defects.py gate_all` in script mode prints "no open blocking defects"
+   for the partially attributed malformed entry while `--pak synology`
+   refuses. List partially attributed malformed entries in `--all`,
+   labelled with their first token.
+2. `_readable_affects` / `_affects_candidate`: an open blocking
+   `Affects: pak:synology` still blocks nothing (now with a warning). Use
+   the text after the colon as the first-token candidate for a single
+   token with an unrecognised prefix, so gating that pak fails closed.
+   Add a test.

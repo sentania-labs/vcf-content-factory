@@ -36,9 +36,11 @@ rule: `knowledge/rules/release-gate-defects.md` (RULE-012).
   or a single token with a prefix other than `factory:` (such as
   `pak:synology`), is a parse error, reported on every gate run. A
   multi-token value fails closed for its first token when that token is
-  a known managed pak, `<type>/<slug>`, or `factory:<area>`, and for any
-  pak gated by exactly that first token; otherwise it blocks nothing.
-  Put locations and notes in `Summary`.
+  a known managed pak, `<type>/<slug>`, or `factory:<area>`. Otherwise
+  its candidate name (the first token, or the text after the colon for
+  `pak:synology`) still fails closed for a pak gated by exactly that
+  name, and `defect-gate --all` lists it under that name. Put locations
+  and notes in `Summary`.
 - **The reviewer re-asserts.** `sdk-adapter-reviewer` reads this file
   every review and re-asserts each open defect affecting the pak under
   review; if a build resolves one, the verdict *proposes* closure with
