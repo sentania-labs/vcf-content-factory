@@ -70,6 +70,47 @@ def _write_pak(path: Path, *, manifest: bool = True) -> Path:
     return path
 
 
+def _write_mpb_pak(path: Path) -> Path:
+    """An MPB-shaped (Tier 1, _adapter3 layout) pak: an unrelated reference."""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr(
+            "mpb_other_adapter3/conf/describe.xml",
+            '<?xml version="1.0"?><AdapterKind key="mpb_other" nameKey="1" '
+            'version="1"><ResourceKinds><ResourceKind key="w" nameKey="2" '
+            'type="1"/></ResourceKinds></AdapterKind>',
+        )
+        zf.writestr("mpb_other_adapter3/conf/export.json", "{}")
+        zf.writestr("mpb_adapter3.jar", b"x")
+    with zipfile.ZipFile(path, "w") as zf:
+        zf.writestr("manifest.txt", json.dumps({
+            "display_name": "mpb", "name": "mpb_other", "version": "1.0.0.1",
+            "adapter_kinds": ["mpb_other"], "adapters": ["adapters.zip"],
+            "pak_validation_script": {"script": "validate.py"},
+            "vcops_minimum_version": "8.10.0",
+        }))
+        zf.writestr("adapters.zip", buf.getvalue())
+        zf.writestr("validate.py", "")
+        zf.writestr("resources/resources.properties", "")
+    return path
+
+
+def _mixed_reference_dir(base: Path) -> Path:
+    """The reviewer's repro shape: a passing SDK reference plus an MPB one
+    that sorts FIRST alphabetically and reports BLOCKING for an SDK pak."""
+    from vcfcf_managementpacks.pak_compare import compare_paks
+
+    d = base / "mixed_refs"
+    d.mkdir()
+    sdk_ref = _write_pak(d / "zz_sdk_ref.pak")
+    mpb_ref = _write_mpb_pak(d / "aa_mpb_ref.pak")
+    probe = _write_pak(base / "probe.pak")
+    # Preconditions, so the test cannot pass vacuously.
+    assert compare_paks(probe, mpb_ref).blocking(), "MPB ref must block an SDK pak"
+    assert not compare_paks(probe, sdk_ref).blocking()
+    return d
+
+
 @pytest.fixture
 def paks(tmp_path):
     good = _write_pak(tmp_path / "good.pak")
@@ -126,6 +167,15 @@ class TestFactoryCliExitCodes:
         assert cli.cmd_pak_compare(_args(paks["good"], reference_dir=ref_dir)) == 0
         assert cli.cmd_pak_compare(
             _args(paks["no_manifest"], reference_dir=ref_dir)
+        ) == 1
+
+    def test_directory_mode_gates_on_closest_reference(self, paks, tmp_path, capsys):
+        """An unrelated MPB reference must not fail an SDK pak (WARNING 1)."""
+        mixed = _mixed_reference_dir(tmp_path)
+        assert cli.cmd_pak_compare(_args(paks["good"], reference_dir=mixed)) == 0
+        assert "closest reference zz_sdk_ref.pak" in capsys.readouterr().err
+        assert cli.cmd_pak_compare(
+            _args(paks["no_manifest"], reference_dir=mixed)
         ) == 1
 
     def test_compare_raising_exits_nonzero(self, paks, monkeypatch, capsys):
@@ -197,6 +247,14 @@ class TestKitCliExitCodes:
         result = _run_kit(kit_env, paks["corrupt"], paks["ref"])
         assert result.returncode == 1
 
+    def test_directory_mode_gates_on_closest_reference(self, kit_env, paks, tmp_path):
+        mixed = _mixed_reference_dir(tmp_path)
+        ok = _run_kit(kit_env, paks["good"], "--reference-dir", mixed)
+        assert ok.returncode == 0, ok.stdout + ok.stderr
+        assert "closest reference zz_sdk_ref.pak" in ok.stderr
+        bad = _run_kit(kit_env, paks["no_manifest"], "--reference-dir", mixed)
+        assert bad.returncode == 1
+
 
 # ---------------------------------------------------------------------------
 # build-sdk's post-build gate: sdk_builder._run_pak_compare
@@ -244,6 +302,14 @@ class TestBuildGate:
             sdk_builder._run_pak_compare(paks["good"])
         # warn-only downgrades a crash too (dev builds only)
         sdk_builder._run_pak_compare(paks["good"], warn_only=True)
+
+    def test_gates_on_closest_not_alphabetical_reference(self, tmp_path, monkeypatch, paks):
+        """build-sdk used sorted(...)[0]: an MPB pak sorting first failed an SDK pak."""
+        mixed = _mixed_reference_dir(tmp_path)
+        monkeypatch.setattr(sdk_builder, "_REFERENCES_DIR", mixed)
+        sdk_builder._run_pak_compare(paks["good"], release_build=True)
+        with pytest.raises(PakCompareGateError, match="zz_sdk_ref.pak"):
+            sdk_builder._run_pak_compare(paks["no_manifest"], release_build=True)
 
     def test_no_reference_fails_release(self, tmp_path, monkeypatch, paks):
         monkeypatch.setattr(sdk_builder, "_REFERENCES_DIR", tmp_path / "absent")
@@ -337,6 +403,33 @@ def test_compile_disables_annotation_processing(tmp_path, monkeypatch):
     src.write_text("class A {}", encoding="utf-8")
     sdk_builder._compile("javac", "cp.jar", [src], tmp_path / "classes")
     assert seen and "-proc:none" in seen[0], seen
+
+
+def test_framework_compile_disables_annotation_processing(tmp_path, monkeypatch):
+    """The framework jar compile (_ensure_framework_jar) passes -proc:none too."""
+    seen = []
+
+    def _fake_run(cmd, **_kw):
+        seen.append(list(cmd))
+        if cmd and cmd[0].endswith("jar") and "cf" in cmd:
+            Path(cmd[2]).write_bytes(b"jar")
+        return _Done()
+
+    src = tmp_path / "fw" / "src" / "com" / "x"
+    src.mkdir(parents=True)
+    (src / "A.java").write_text("package com.x; class A {}", encoding="utf-8")
+    sdk_jar = tmp_path / "vrops-adapters-sdk-2.2.jar"
+    sdk_jar.write_bytes(b"jar")
+    runtime = tmp_path / "adapter_runtime"
+    monkeypatch.setattr(sdk_builder, "_ADAPTER_FRAMEWORK_SRC_DIR", tmp_path / "fw" / "src")
+    monkeypatch.setattr(sdk_builder, "_ADAPTER_RUNTIME_DIR", runtime)
+    monkeypatch.setenv("VCFCF_SDK_JAR", str(sdk_jar))
+    monkeypatch.setattr(sdk_builder.subprocess, "run", _fake_run)
+    monkeypatch.setattr(sdk_builder.shutil, "which", lambda name: f"/usr/bin/{name}")
+    sdk_builder._ensure_framework_jar()
+    javac_calls = [c for c in seen if c and c[0].endswith("javac")]
+    assert javac_calls, f"framework was not compiled; calls: {seen}"
+    assert "-proc:none" in javac_calls[0], javac_calls[0]
 
 
 # ---------------------------------------------------------------------------

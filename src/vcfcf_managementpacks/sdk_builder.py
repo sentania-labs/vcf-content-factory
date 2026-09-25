@@ -2354,7 +2354,11 @@ class PakCompareGateError(SdkBuildError):
 
 def _run_pak_compare(pak_path: Path, *, release_build: bool = False,
                      warn_only: bool = False) -> None:
-    """Run pak-compare against the SDK reference pak and gate on the result.
+    """Run pak-compare against the SDK reference paks and gate on the result.
+
+    Every ``*.pak`` under the reference directory is compared and the gate
+    is judged against the closest one (fewest BLOCKING, then WARNING, then
+    INFO), the same rule as the pak-compare CLIs.
 
     Fail-closed by default (#181): any BLOCKING finding, or a compare that
     raised, raises PakCompareGateError.  ``warn_only`` (dev builds only;
@@ -2378,14 +2382,18 @@ def _run_pak_compare(pak_path: Path, *, release_build: bool = False,
         print(f"  {msg}; skipping comparison (dev build).", file=sys.stderr)
         return
 
-    best_ref = sdk_paks[0]
     print(
-        f"  pak-compare: comparing against {best_ref.name}...", file=sys.stderr
+        f"  pak-compare: comparing against {len(sdk_paks)} reference pak(s) "
+        f"in {_REFERENCES_DIR}...",
+        file=sys.stderr,
     )
     try:
-        from .pak_compare import compare_paks
+        from .pak_compare import compare_pak_directory
 
-        result = compare_paks(pak_path, best_ref)
+        # Gate on the CLOSEST reference (compare_pak_directory sorts
+        # closest-first), the same rule the pak-compare CLIs use.
+        best_ref, result = compare_pak_directory(pak_path, _REFERENCES_DIR)[0]
+        print(f"  pak-compare: closest reference {best_ref.name}", file=sys.stderr)
     except Exception as exc:
         msg = f"pak-compare: failed to run comparison: {exc}"
         if warn_only:

@@ -542,8 +542,8 @@ def main() -> int:
         return 0
 
     elif args.cmd == "pak-compare":
-        # Exit status is the gate (#181): 0 only when every comparison ran
-        # and reported zero BLOCKING findings.
+        # Exit status is the gate (#181): 0 only when the comparison ran
+        # and the closest reference reported zero BLOCKING findings.
         try:
             return _pak_compare(args)
         except Exception as exc:
@@ -595,14 +595,22 @@ def _pak_compare(args) -> int:
         Path(output_file).write_text("".join(out_lines))
         print(f"Report written to: {output_file}", file=sys.stderr)
 
-    blocking_total = sum(len(r.blocking()) for _, r in results)
+    # Gate on the CLOSEST reference only (results[0], closest-first), the
+    # same rule as build-sdk and the factory CLI.
+    gate_ref, gate_result = results[0]
+    blocking_total = len(gate_result.blocking())
     if blocking_total:
         print(
-            f"pak-compare gate: FAIL ({blocking_total} BLOCKING finding(s))",
+            f"pak-compare gate: FAIL ({blocking_total} BLOCKING finding(s) "
+            f"against closest reference {Path(gate_ref).name})",
             file=sys.stderr,
         )
         return 1
-    print("pak-compare gate: PASS (0 BLOCKING)", file=sys.stderr)
+    print(
+        f"pak-compare gate: PASS (0 BLOCKING against closest reference "
+        f"{Path(gate_ref).name})",
+        file=sys.stderr,
+    )
     return 0
 
 

@@ -3,7 +3,7 @@ Portable Tier 2 SDK adapter build toolchain (jar-free).
 ## Consumer contract
 
 The kit compiles adapters against `vrops-adapters-sdk-2.2.jar` which
-**you must supply** — it is a Broadcom internal build artifact with no
+**you must supply**. It is a Broadcom internal build artifact with no
 public redistribution channel and must not ship in a public toolchain
 tarball (see redistribution survey 2026-06-09).
 
@@ -22,7 +22,8 @@ tarball (see redistribution survey 2026-06-09).
   run: |
     gh release download @FLOATING_TAG@ \
       --repo sentania-labs/vcf-content-factory \
-      --pattern '*.tgz'
+      --pattern 'sdk-buildkit-*.tgz*'
+    sha256sum -c sdk-buildkit-*.tgz.sha256   # verify before use
     tar xzf sdk-buildkit-*.tgz
 
 - name: Build adapter pak
@@ -35,3 +36,27 @@ tarball (see redistribution survey 2026-06-09).
 - **Exact pin**: `@REF_NAME@`
 - **Floating major**: `@FLOATING_TAG@`
   (always points at the latest backwards-compatible release of this major)
+
+## Checksum
+
+Each release carries `sdk-buildkit-<version>.tgz.sha256` (sha256sum
+format) next to the tarball. Download both and run `sha256sum -c` before
+extracting. A pattern of `sdk-buildkit-*.tgz` alone does not fetch the
+checksum file.
+
+## Behavior since 1.0.11
+
+- `pak-compare` gates against the closest reference pak: it exits 1 when
+  that reference reports any BLOCKING finding, or when the comparison
+  cannot run.
+- `build-sdk` applies the same rule and fails the build on a BLOCKING
+  finding by default. `--pak-compare-warn-only` restores the old
+  warn-and-continue behavior for local experiments and is refused
+  together with `--release`; `--release` builds also fail when no
+  reference pak is available.
+- javac runs with `-proc:none`: annotation processors in classpath jars
+  never run.
+
+A workflow that ran the old kit and relied on grepping the compare output
+for "0 BLOCKING" now also fails on the exit code; under `set -o pipefail`
+that is the intended gate.

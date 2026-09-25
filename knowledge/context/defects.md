@@ -27,6 +27,18 @@ rule: `knowledge/rules/release-gate-defects.md` (RULE-012).
   `Affects:` is readable gates that artifact, one whose `Affects:` is
   unreadable gates nothing, and both are reported. Keep the shape exact
   anyway; a broken entry still stops gating what it names.
+- **A malformed entry blocks as open, whatever it says.** Its fields
+  cannot be trusted, so an entry that fails to parse is treated as an
+  OPEN BLOCKING defect against its scope even when it reads
+  `Status: closed` or `Severity: tracked`. Fix the entry to clear it.
+- **An `Affects:` that is not one scope token is malformed.** More than
+  one token (a scope plus a parenthetical note, a wrapped path, prose),
+  or a single token with a prefix other than `factory:` (such as
+  `pak:synology`), is a parse error, reported on every gate run. A
+  multi-token value fails closed for its first token when that token is
+  a known managed pak, `<type>/<slug>`, or `factory:<area>`, and for any
+  pak gated by exactly that first token; otherwise it blocks nothing.
+  Put locations and notes in `Summary`.
 - **The reviewer re-asserts.** `sdk-adapter-reviewer` reads this file
   every review and re-asserts each open defect affecting the pak under
   review; if a build resolves one, the verdict *proposes* closure with
@@ -46,12 +58,13 @@ reused. Field lines are `- **Field:** value` (parsed by
 | `Title` | One line; refusal messages quote it. |
 | `Severity` | `blocking` (gates releases of affected artifacts) or `tracked` (must converge, re-asserted every review, but ships). |
 | `Status` | `open` or `closed`. **No `waived`.** A conscious decision to ship is a severity downgrade with a dated note — the diff is the audit trail. |
-| `Affects` | Exactly one artifact scope per entry: a managed pak name from `knowledge/context/managed_paks.md` (e.g. `synology`), a content item as `<type>/<slug>` (e.g. `dashboard/demand_driven_capacity_v2`), or `factory:<area>` for framework code. One issue on N artifacts = N entries, cross-linked via `Related:`. |
+| `Affects` | Exactly one artifact scope per entry: a managed pak name from `knowledge/context/managed_paks.md` (e.g. `synology`), a content item as `<type>/<slug>` (e.g. `dashboard/demand_driven_capacity_v2`), or `factory:<area>` for framework code. One issue on N artifacts = N entries, cross-linked via `Related:`. Anything else (a second token, a note, a prefix other than `factory:`) makes the entry malformed; see "How it works". |
 | `First-seen` | Build (or commit) + date where the defect first appeared. |
 | `Source` | The review / lesson / investigation that found it, by path (+ finding label). |
 | `Summary` | 2–4 lines: what it is, why it matters, smallest correct fix. Enough for a reviewer to re-assert without re-reading the source. |
 | `Closing-evidence` | **Required when `Status: closed`** — concrete proof (fix commit/build, devel proof, lesson), not assertion. Omitted while open. A close without evidence is invalid. |
 | `Related` | Optional cross-links to sibling entries / lessons. |
+| `Severity-note` | Optional. The dated reason for a severity change (for example a downgrade from `blocking` to `tracked`), with the decision it rests on. Not parsed; the diff plus this line is the audit trail. |
 
 ## Defects
 

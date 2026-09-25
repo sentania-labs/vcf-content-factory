@@ -563,9 +563,9 @@ def cmd_install(args) -> int:
 def cmd_pak_compare(args) -> int:
     """Structurally compare a factory-built .pak against one or more reference paks.
 
-    Exit status is the gate (#181): 0 only when every comparison ran and
-    reported zero BLOCKING findings; 1 otherwise, including when the
-    comparison itself could not run.
+    Exit status is the gate (#181): 0 only when the comparison ran and the
+    closest reference reported zero BLOCKING findings; 1 otherwise,
+    including when the comparison itself could not run.
     """
     try:
         return _cmd_pak_compare_inner(args)
@@ -617,16 +617,25 @@ def _cmd_pak_compare_inner(args) -> int:
         Path(output_file).write_text("".join(out_lines))
         print(f"Report written to: {output_file}", file=sys.stderr)
 
-    # Gate (#181): non-zero on any BLOCKING finding in any compared
-    # reference.  A pak that cannot be opened is already a BLOCKING (F0/F1).
-    blocking_total = sum(len(r.blocking()) for _, r in results)
+    # Gate (#181): judged against the CLOSEST reference only (results[0];
+    # compare_pak_directory sorts closest-first), the same rule build-sdk
+    # uses, so an unrelated reference in the directory (an MPB pak next to
+    # SDK paks) cannot fail an SDK pak.  A pak that cannot be opened is
+    # already a BLOCKING (F0/F1).
+    gate_ref, gate_result = results[0]
+    blocking_total = len(gate_result.blocking())
     if blocking_total:
         print(
-            f"pak-compare gate: FAIL ({blocking_total} BLOCKING finding(s))",
+            f"pak-compare gate: FAIL ({blocking_total} BLOCKING finding(s) "
+            f"against closest reference {Path(gate_ref).name})",
             file=sys.stderr,
         )
         return 1
-    print("pak-compare gate: PASS (0 BLOCKING)", file=sys.stderr)
+    print(
+        f"pak-compare gate: PASS (0 BLOCKING against closest reference "
+        f"{Path(gate_ref).name})",
+        file=sys.stderr,
+    )
     return 0
 
 

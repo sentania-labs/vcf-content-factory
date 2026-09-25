@@ -19,6 +19,7 @@ Contract under test:
 """
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
@@ -106,13 +107,32 @@ class TestMultiTokenIsMalformed:
         assert [b.affects for b in blockers] == ["factory:dashboards"]
 
     def test_unknown_first_token_is_unscoped_and_loud(self, tmp_path, capsys):
-        """Prose must not be guessed into a scope; it blocks nothing, loudly."""
+        """Prose must not be guessed into a scope: unscoped, loud, and it
+        blocks only a pak gated by exactly its first word."""
         reg = _write(tmp_path, _entry("all of the dashboards, probably"))
         registry = parse_registry(reg)
         assert len(registry.unscoped_errors) == 1
         assert gate_all(reg) == []
+        assert gate_pak("fixturepak", reg) == []
         err = capsys.readouterr().err
-        assert "WARNING" in err and "DEF-001" in err and "blocks nothing" in err
+        assert "WARNING" in err and "DEF-001" in err and "could not be confirmed" in err
+
+    def test_unknown_first_token_fails_closed_for_that_pak(self, tmp_path, monkeypatch):
+        """No managed-paks lookup needed: gating pak X fails closed on an
+        entry whose Affects starts with X (the script-mode path, #153)."""
+        monkeypatch.setattr(defects, "_known_pak_names", lambda: frozenset())
+        reg = _write(tmp_path, _entry("unlisted-pak (the storage adapter)"))
+        blockers = gate_pak("unlisted-pak", reg)
+        assert len(blockers) == 1 and blockers[0].synthetic is True
+        assert blockers[0].affects == "unlisted-pak"
+        assert gate_pak("unlisted", reg) == []
+        assert gate_pak("other-pak", reg) == []
+
+    def test_bad_heading_candidate_fails_closed_for_that_pak(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(defects, "_known_pak_names", lambda: frozenset())
+        text = _entry("unlisted-pak (note)").replace("### DEF-001", "### DEF-1O1")
+        reg = _write(tmp_path, text)
+        assert len(gate_pak("unlisted-pak", reg)) == 1
 
     def test_the_original_def020_value_is_reported(self, tmp_path, capsys):
         """`pak:` prefix plus a note: unattributable, but never silent."""
@@ -152,14 +172,70 @@ class TestSingleToken:
 
 def test_known_pak_names_survives_unreadable_managed_paks(monkeypatch):
     """Best effort: a broken managed-paks registry means no attribution, not a crash."""
-    monkeypatch.undo()
+    monkeypatch.undo()  # drop the autouse stub so the real lookup runs
     import vcfcf_packaging.managed_paks as mp
 
     def _boom(*_a, **_k):
         raise OSError("synthetic")
 
     monkeypatch.setattr(mp, "load_registry", _boom)
+    reset_warning_state()
     assert defects._known_pak_names() == frozenset()
+    assert defects._known_pak_names() == frozenset()
+
+
+def test_known_pak_names_failure_warns_once(monkeypatch, capsys):
+    import vcfcf_packaging.managed_paks as mp
+
+    monkeypatch.undo()  # drop the autouse stub so the real lookup runs
+
+    def _boom(*_a, **_k):
+        raise OSError("synthetic")
+
+    monkeypatch.setattr(mp, "load_registry", _boom)
+    reset_warning_state()
+    defects._known_pak_names()
+    defects._known_pak_names()
+    err = capsys.readouterr().err
+    assert err.count("managed-paks registry unavailable") == 1, err
+
+
+# ---------------------------------------------------------------------------
+# Script mode: how pak repos run the gate (vendored as ci/defect_gate.py)
+# ---------------------------------------------------------------------------
+
+_SCRIPT_REGISTRY = _entry("synology (the storage adapter)").replace("DEF-001", "DEF-900")
+
+
+@pytest.mark.parametrize("vendored", [False, True], ids=["in-tree", "vendored-copy"])
+def test_script_mode_malformed_entry_blocks_the_gated_pak(tmp_path, vendored):
+    """The reviewer's repro: package mode blocked, script mode passed (rc 0)."""
+    import shutil
+    import subprocess
+    import sys
+
+    script = Path(defects.__file__)
+    if vendored:
+        ci = tmp_path / "ci"
+        ci.mkdir()
+        script = Path(shutil.copy(script, ci / "defect_gate.py"))
+    reg = _write(tmp_path, _SCRIPT_REGISTRY)
+    env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+    result = subprocess.run(
+        [sys.executable, str(script), "--pak", "synology", "--registry", str(reg)],
+        capture_output=True, text=True, cwd=str(tmp_path), env=env, timeout=60,
+    )
+    assert result.returncode == 2, (
+        f"rc={result.returncode}\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+    )
+    assert "DEF-900" in result.stdout + result.stderr
+    assert "managed-paks registry unavailable" in result.stderr
+
+    clean = subprocess.run(
+        [sys.executable, str(script), "--pak", "unifi", "--registry", str(reg)],
+        capture_output=True, text=True, cwd=str(tmp_path), env=env, timeout=60,
+    )
+    assert clean.returncode == 0, clean.stdout + clean.stderr
 
 
 def test_shipped_registry_has_no_parse_errors():
