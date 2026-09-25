@@ -68,3 +68,25 @@ def test_scaffold_compiles_against_framework(project, capsys):
         pytest.skip("SDK jar not present (not redistributable)")
     errors = sdk_builder.validate_sdk_project(project)
     assert errors == []
+
+
+@pytest.mark.parametrize(
+    "name, expected_class",
+    [
+        # Names whose slug starts with letters in "vcfcf_": the old
+        # slug.lstrip("vcfcf_") ate them ("Cert Demo" -> ErtDemoAdapter).
+        ("Cert Demo", "CertDemoAdapter"),
+        ("Synology", "SynologyAdapter"),
+        ("Unifi", "UnifiAdapter"),
+        ("Foo Bar", "FooBarAdapter"),
+        ("fcv Monitor", "FcvMonitorAdapter"),
+        # The real prefix is still removed exactly once.
+        ("vcfcf cert", "CertAdapter"),
+        ("Victor", "VictorAdapter"),
+    ],
+)
+def test_scaffold_class_name_keeps_leading_letters(tmp_path, capsys, name, expected_class):
+    d = sdk_builder.scaffold_sdk_project(name, tmp_path)
+    capsys.readouterr()
+    classes = [p.stem for p in (d / "src").rglob("*Adapter.java")]
+    assert classes == [expected_class]

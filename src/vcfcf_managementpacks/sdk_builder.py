@@ -3522,7 +3522,9 @@ def scaffold_sdk_project(name: str, output_base: Path) -> Path:
         raise SdkBuildError(f"Project directory already exists: {project_dir}")
 
     # Derive class name stem
-    camel = "".join(part.capitalize() for part in slug.lstrip("vcfcf_").split("_"))
+    # removeprefix, not lstrip: lstrip("vcfcf_") strips any of the characters
+    # v/c/f/_ from the left, so "cert_demo" became "ErtDemo".
+    camel = "".join(part.capitalize() for part in slug.removeprefix("vcfcf_").split("_"))
     class_name = f"{camel}Adapter"
     package = f"com.vcfcf.adapters.{slug}"
     package_path = package.replace(".", "/")
