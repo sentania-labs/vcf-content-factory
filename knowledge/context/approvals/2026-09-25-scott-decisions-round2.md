@@ -52,3 +52,6 @@ is `2026-09-25-scott-decisions.md`.
    hard to find, so it probably falls into a grey area, and I lean towards
    rewriting them, especially sine we just pulled back the VDDK."
    > DO the rewrite
+   (First force-push attempt at 2:18 PM was denied at the permission check;
+   protection and workflow were restored with nothing pushed.)
+   > YOu can proceed
