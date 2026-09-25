@@ -44,6 +44,9 @@ load_registry(registry_path) -> List[DefectEntry]
       - duplicate IDs
       - missing required fields (Title, Severity, Status, Affects, First-seen,
         Source, Summary)
+      - an ``Affects:`` that is not one scope token (multi-token, or a
+        prefix other than ``factory:``); such an entry used to parse as valid
+        and silently gate nothing (#153)
       - a ``DEF``-prefixed heading whose id is not ``DEF-NNN`` (a typo such as
         ``DEF-1O2``, or trailing text): it always terminates the previous entry,
         so it can never repoint a good entry, and it becomes a parse error of
@@ -89,7 +92,7 @@ from __future__ import annotations
 
 import re
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import List, Optional
 
@@ -152,6 +155,12 @@ class ParseError:
     lineno: int
     reason: str
     affects: str = ""
+    #: First token of a multi-token ``Affects:`` that could not be attributed
+    #: on its own (not a KNOWN pak, not ``<type>/<slug>`` or
+    #: ``factory:<area>``).  ``gate_pak`` still fails closed when this equals
+    #: the pak being gated, which needs no managed-paks lookup and so also
+    #: works when this file runs as a vendored standalone script (#153).
+    candidate: str = ""
 
     @property
     def scoped(self) -> bool:
@@ -236,6 +245,12 @@ _ID_RE = re.compile(r"^DEF-\d+$")
 
 #: Required field names (exact, case-sensitive as they appear in the registry).
 _REQUIRED_FIELDS = ("Title", "Severity", "Status", "Affects", "First-seen", "Source", "Summary")
+
+#: ``Affects:`` scope shapes that are unambiguous on their own (no registry
+#: lookup needed): a content item ``<type>/<slug>`` and ``factory:<area>``.
+#: A bare managed-pak name is the third shape; see :func:`_known_pak_names`.
+_ITEM_SCOPE_RE = re.compile(r"^[a-z][a-z_]*/[A-Za-z0-9_.\-]+$")
+_FACTORY_SCOPE_RE = re.compile(r"^factory:[A-Za-z0-9][A-Za-z0-9_.\-]*$")
 
 
 # ---------------------------------------------------------------------------
@@ -412,6 +427,10 @@ def parse_registry(
                         f"be read"
                     ),
                     affects=_readable_affects(current_fields),
+                    candidate=(
+                        "" if _readable_affects(current_fields)
+                        else _affects_candidate(current_fields)
+                    ),
                 ))
         else:
             err = _validate_and_emit(
@@ -487,16 +506,124 @@ def parse_registry(
     return Registry(path=registry_path, entries=entries, errors=errors)
 
 
-def _readable_affects(fields: dict[str, str]) -> str:
-    """The entry's ``Affects:`` token when it can be read, else ``""``.
+def _known_pak_names() -> frozenset:
+    """Managed-pak names from ``knowledge/context/managed_paks.md``.
 
-    A token is readable when it is present, non-empty, and a single
-    whitespace-free token (the registry's own contract: exactly one token).
-    Anything else, including a missing field or a prose sentence, means the
-    error cannot be attributed to one artifact, so it must block nothing.
+    Consulted only to attribute a MALFORMED multi-token ``Affects:`` to its
+    first token.  Best effort: an unreadable managed-paks registry yields an
+    empty set, which only means such an entry stays unattributed (reported,
+    blocks nothing) rather than failing closed for a pak.
+    """
+    try:
+        from .managed_paks import load_registry as _load_managed_paks
+        return frozenset(p.name for p in _load_managed_paks())
+    except Exception as exc:
+        # Expected when this file runs as a standalone script (a pak repo's
+        # vendored ci/defect_gate.py): there is no package to import from.
+        # gate_pak still fails closed for the pak it is gating via
+        # ParseError.candidate, so say what is lost rather than go quiet.
+        if not _KNOWN_PAKS_WARNED:
+            _KNOWN_PAKS_WARNED.append(True)
+            _warn(
+                "WARNING: managed-paks registry unavailable "
+                f"({type(exc).__name__}); a malformed multi-token Affects is "
+                "attributed only to the pak being gated, not to any known pak"
+            )
+        return frozenset()
+
+
+#: One-shot flag for the managed-paks lookup warning (list so no ``global``).
+_KNOWN_PAKS_WARNED: list = []
+
+
+def _affects_problem(raw: str) -> Optional[str]:
+    """Why an ``Affects:`` value breaks the one-token contract, else None.
+
+    Two shapes are rejected (#153).  A multi-token value (a token plus a
+    parenthetical note, a wrapped path, prose) can never equal the pak name
+    or ``<type>/<slug>`` a gate matches against, so the entry used to parse
+    as valid and silently block nothing.  A single token carrying a prefix
+    other than ``factory:`` (``pak:synology``) fails the same way.
+    """
+    tokens = raw.split()
+    if len(tokens) != 1:
+        return (
+            f"Affects {_clip(raw)!r} is {len(tokens)} tokens; it must be exactly "
+            f"one scope token (a managed pak name, <type>/<slug>, or "
+            f"factory:<area>). Move notes such as file paths into Summary or "
+            f"Related, and split a multi-artifact entry into one entry each"
+        )
+    if ":" in tokens[0] and not _FACTORY_SCOPE_RE.match(tokens[0]):
+        return (
+            f"Affects {_clip(raw)!r} is not a recognised scope: the only "
+            f"prefixed form is factory:<area>; a pak is named bare (e.g. "
+            f"'synology') and a content item as <type>/<slug>"
+        )
+    return None
+
+
+def _affects_candidate(fields: dict[str, str]) -> str:
+    """The pak an unattributable ``Affects:`` most plausibly names, else ``""``.
+
+    - multi-token: its first token (``synology (note)`` -> ``synology``);
+    - one token with an unrecognised prefix: the text after the first
+      colon (``pak:synology`` -> ``synology``).
+
+    Not an attribution on its own (prose starts with a word too); see
+    ``ParseError.candidate`` and :func:`_candidate_entries` for how it is
+    used: only to fail closed for a pak gated by exactly this name.
+    """
+    tokens = (fields.get("Affects") or "").split()
+    if len(tokens) > 1:
+        return tokens[0]
+    if len(tokens) == 1 and ":" in tokens[0] and not _FACTORY_SCOPE_RE.match(tokens[0]):
+        return tokens[0].split(":", 1)[1]
+    return ""
+
+
+def _candidate_entries(
+    registry: "Registry", pak_name: Optional[str] = None,
+) -> List[DefectEntry]:
+    """Synthetic blockers for unscoped parse errors that carry a candidate.
+
+    ``gate_pak`` passes the pak being gated and gets only the matching
+    ones; ``gate_all`` passes nothing and gets every one, each labelled
+    with its candidate, so ``--all`` agrees with ``--pak <candidate>``.
+    """
+    return [
+        _synthetic_entry(replace(err, affects=err.candidate), registry.path)
+        for err in registry.unscoped_errors
+        if err.candidate and (pak_name is None or err.candidate == pak_name)
+    ]
+
+
+def _readable_affects(fields: dict[str, str]) -> str:
+    """The entry's ``Affects:`` scope when it can be attributed, else ``""``.
+
+    A single token is readable as-is, unless it carries an unrecognised
+    prefix (``pak:synology``), which names no gateable scope.  A multi-token
+    value breaks the registry's one-token contract; it is attributed to its
+    FIRST token only when that token unambiguously names a scope (a known
+    managed pak, ``<type>/<slug>``, or ``factory:<area>``), so the broken
+    entry still fails closed for what it meant to block (#153).  Anything
+    else, including a missing field or a prose sentence, cannot be
+    attributed to one artifact, so it must block nothing.
     """
     raw = (fields.get("Affects") or "").strip()
-    if not raw or len(raw.split()) != 1:
+    if not raw:
+        return ""
+    tokens = raw.split()
+    if len(tokens) == 1:
+        if ":" in raw and not _FACTORY_SCOPE_RE.match(raw):
+            return ""
+    else:
+        first = tokens[0]
+        if (
+            _ITEM_SCOPE_RE.match(first)
+            or _FACTORY_SCOPE_RE.match(first)
+            or first in _known_pak_names()
+        ):
+            return first
         return ""
     # Returned UNCLIPPED: this value has to compare equal to a real pak name
     # or <type>/<slug> token for the synthetic entry to gate anything, and a
@@ -520,10 +647,12 @@ def _validate_and_emit(
     it is not.  Never raises: one bad entry must not take the file down.
     """
     affects_hint = _readable_affects(fields)
+    candidate = "" if affects_hint else _affects_candidate(fields)
 
     def _err(reason: str) -> ParseError:
         return ParseError(
-            entry_id=entry_id, lineno=lineno, reason=reason, affects=affects_hint
+            entry_id=entry_id, lineno=lineno, reason=reason,
+            affects=affects_hint, candidate=candidate,
         )
 
     # --- Duplicate ID check ---
@@ -548,6 +677,13 @@ def _validate_and_emit(
     summary = fields["Summary"].strip()
     closing_evidence = fields.get("Closing-evidence", "").strip()
     related = fields.get("Related", "").strip()
+
+    # --- Affects must be one recognised scope token (#153) ---
+    # Checked before severity/status so the reported reason is the one that
+    # made this entry silently gate nothing.
+    affects_problem = _affects_problem(affects)
+    if affects_problem is not None:
+        return _err(affects_problem)
 
     # --- Severity validation ---
     if severity not in _VALID_SEVERITIES:
@@ -617,6 +753,7 @@ _WARNED_REGISTRIES: set = set()
 def reset_warning_state() -> None:
     """Forget which registries have been warned about (tests, long-lived procs)."""
     _WARNED_REGISTRIES.clear()
+    _KNOWN_PAKS_WARNED.clear()
 
 
 def local_registry_hint(
@@ -685,6 +822,13 @@ def _read_registry_for_gate(
                     f"treated as an open blocking defect against "
                     f"{_clip(err.affects)!r}: {err}"
                 )
+            elif err.candidate:
+                _warn(
+                    f"WARNING: defect registry entry is malformed AND its "
+                    f"'Affects:' scope could not be confirmed; it blocks only "
+                    f"a pak gated by the exact name {_clip(err.candidate)!r}, "
+                    f"and nothing else: {err}"
+                )
             else:
                 _warn(
                     f"WARNING: defect registry entry is malformed AND its "
@@ -717,7 +861,11 @@ def gate_pak(
             check), and a malformed ENTRY is isolated to the scope it names,
             so neither raises out of this function.
     """
-    entries = _read_registry_for_gate(registry_path).gate_entries
+    registry = _read_registry_for_gate(registry_path)
+    # A malformed Affects whose candidate IS this pak: the caller has just
+    # told us that name is a pak, so fail closed for it even when the
+    # managed-paks lookup is unavailable (script mode).
+    entries = registry.gate_entries + _candidate_entries(registry, pak_name)
     return [
         e for e in entries
         if e.severity == "blocking"
@@ -783,7 +931,10 @@ def gate_all(
             check), and a malformed ENTRY is isolated to the scope it names,
             so neither raises out of this function.
     """
-    entries = _read_registry_for_gate(registry_path).gate_entries
+    registry = _read_registry_for_gate(registry_path)
+    # Include partially attributed malformed entries, labelled with their
+    # candidate, so `--all` agrees with `--pak <candidate>`.
+    entries = registry.gate_entries + _candidate_entries(registry)
     return [
         e for e in entries
         if e.severity == "blocking"

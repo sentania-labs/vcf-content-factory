@@ -26,8 +26,12 @@
 #      adapter's own repo; Broadcom JARs are not available in public CI and
 #      must not ship in the buildkit tarball.
 #   5. Run build-buildkit to assemble the tarball (jar-free, see buildkit.py).
-#   6. Create the versioned GitHub Release and attach the tarball.
-#   7. Maintain the floating sdk-buildkit-v1 release (clobber tarball + retag).
+#   6. Create the versioned GitHub Release and attach the tarball and its
+#      SHA-256 sidecar (<tarball>.sha256, sha256sum format).
+#   7. Maintain the floating sdk-buildkit-v1 release (clobber tarball and
+#      sidecar, prune stale ones, retag).
+#
+# Consumers verify a download with: sha256sum -c sdk-buildkit-X.Y.Z.tgz.sha256
 #
 # Note: no JDK setup step — nothing compiles in this workflow.
 
@@ -49,9 +53,12 @@ jobs:
     # a clone pushing a matching tag must not attempt (and on the lab
     # label, silently queue) a release build of its own.
     if: github.repository == 'sentania-labs/vcf-content-factory'
-    # Lab ARC runner pool (homelab-runner docs/ci-consumer-contract.md).
+    # GitHub-hosted, like the pak release jobs. This job reaches only
+    # github.com (checkout, the pinned compliance reference pak, releases),
+    # never the lab, and this repo is public, so hosted minutes are free.
+    # Use `runs-on: lab` only for a job that must reach lab resources.
     # No JDK needed here: this workflow deliberately compiles nothing.
-    runs-on: lab
+    runs-on: ubuntu-latest
     env:
       # vcfcf_managementpacks lives under src/ (see pyproject.toml
       # src-layout). Resolve it via PYTHONPATH — this workflow deliberately
@@ -128,6 +135,14 @@ jobs:
           echo "Tarball contents:"
           tar tzf "$TARBALL"
 
+      - name: Verify SHA-256 sidecar matches the tarball
+        # The builder writes <tarball>.sha256; refuse to publish a kit whose
+        # checksum file is missing or does not match what we are uploading.
+        run: |
+          cd dist/
+          test -f "${{ steps.ver.outputs.tarball }}.sha256"
+          sha256sum -c "${{ steps.ver.outputs.tarball }}.sha256"
+
       - name: Create versioned GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -143,6 +158,7 @@ jobs:
             .github/release-notes-buildkit.md > /tmp/release-notes.md
           gh release create "${{ github.ref_name }}" \
             "dist/${{ steps.ver.outputs.tarball }}" \
+            "dist/${{ steps.ver.outputs.tarball }}.sha256" \
             --repo "${{ github.repository }}" \
             --title "sdk-buildkit v${{ steps.ver.outputs.version }}" \
             --notes-file /tmp/release-notes.md
@@ -162,7 +178,7 @@ jobs:
           git tag -f "$FLOATING" "${{ github.sha }}"
           git push origin "$FLOATING" --force
 
-          FLOAT_NOTES="$(printf 'Floating major pointer \xe2\x80\x94 always the latest backwards-compatible release.\nCurrently: v%s (%s).\nPin to `%s` for a reproducible exact version.' \
+          FLOAT_NOTES="$(printf 'Floating major pointer: always the latest backwards-compatible release.\nCurrently: v%s (%s).\nPin to `%s` for a reproducible exact version.' \
             '${{ steps.ver.outputs.version }}' \
             '${{ github.ref_name }}' \
             '${{ github.ref_name }}')"
@@ -171,23 +187,50 @@ jobs:
           # Try to upload (clobber) onto an existing release; if the release
           # does not exist yet, create it.
           if gh release view "$FLOATING" --repo "${{ github.repository }}" > /dev/null 2>&1; then
-            echo "Floating release ${FLOATING} exists — clobbering tarball."
-            # Upload FIRST, prune stale assets only after a successful upload:
-            # if the upload fails (network/API/runner), the release must still
-            # hold the previous working kit for sdk-buildkit-v1 consumers.
-            gh release upload "$FLOATING" "$TARBALL" \
-              --repo "${{ github.repository }}" \
-              --clobber
-            # --clobber only replaces an asset with the SAME filename. The
-            # tarball name is version-stamped (sdk-buildkit-X.Y.Z.tgz), so
+            echo "Floating release ${FLOATING} exists: adding the new kit, then pruning the old one."
+            # Failure-atomic as far as the release API allows: consumers must
+            # never be left with a new tarball and no matching checksum, or with
+            # two tarballs and no prune. The tarball and its sidecar are
+            # uploaded one at a time; if either upload fails, every asset THIS
+            # run added is deleted again, so the release goes back to exactly
+            # the previous working pair, and the step fails. Old assets are only
+            # pruned after both new ones are up. No --clobber: it deletes the
+            # existing same-name asset before uploading, so a failed upload
+            # would lose it (see `gh release upload --help`).
+            REPO="${{ github.repository }}"
+            NEW_TGZ="$(basename "$TARBALL")"
+            NEW_SHA="${NEW_TGZ}.sha256"
+            EXISTING="$(gh release view "$FLOATING" --repo "$REPO" --json assets --jq '.assets[].name')"
+            if printf '%s\n' "$EXISTING" | grep -qxF -e "$NEW_TGZ" -e "$NEW_SHA"; then
+              echo "::error::${NEW_TGZ} or its sidecar is already on ${FLOATING}; refusing to overwrite a published kit. Remove it deliberately if a rebuild is intended."
+              exit 1
+            fi
+            rollback() {
+              for A in "$@"; do
+                gh release delete-asset "$FLOATING" "$A" --repo "$REPO" --yes \
+                  || echo "::warning::rollback could not delete ${A} from ${FLOATING} (it may not have been created)"
+              done
+            }
+            if ! gh release upload "$FLOATING" "$TARBALL" --repo "$REPO"; then
+              echo "::error::tarball upload to ${FLOATING} failed; rolling back"
+              rollback "$NEW_TGZ"
+              exit 1
+            fi
+            if ! gh release upload "$FLOATING" "${TARBALL}.sha256" --repo "$REPO"; then
+              echo "::error::sidecar upload to ${FLOATING} failed; rolling back the new tarball"
+              rollback "$NEW_TGZ" "$NEW_SHA"
+              exit 1
+            fi
+            # The tarball name is version-stamped (sdk-buildkit-X.Y.Z.tgz), so
             # prior versions' assets accumulate on the floating release and
             # consumers that glob sdk-buildkit-*.tgz extract two files (this
             # broke every pak repo's release CI on the 1.0.5→1.0.6 bump).
             # Now that the new kit is up, delete every stale kit asset.
+            # Checksum sidecars are version-stamped too, so prune them the same way.
             CURRENT="$(basename "$TARBALL")"
             for ASSET in $(gh release view "$FLOATING" --repo "${{ github.repository }}" \
-                --json assets --jq '.assets[].name' | grep -E '^sdk-buildkit-.*\.tgz$' || true); do
-              if [ "$ASSET" != "$CURRENT" ]; then
+                --json assets --jq '.assets[].name' | grep -E '^sdk-buildkit-.*\.tgz(\.sha256)?$' || true); do
+              if [ "$ASSET" != "$CURRENT" ] && [ "$ASSET" != "${CURRENT}.sha256" ]; then
                 echo "Deleting stale floating asset: $ASSET"
                 gh release delete-asset "$FLOATING" "$ASSET" \
                   --repo "${{ github.repository }}" --yes
@@ -199,8 +242,8 @@ jobs:
               --title "sdk-buildkit ${FLOATING} (→ v${{ steps.ver.outputs.version }})" \
               --notes "$FLOAT_NOTES"
           else
-            echo "Floating release ${FLOATING} does not exist — creating."
-            gh release create "$FLOATING" "$TARBALL" \
+            echo "Floating release ${FLOATING} does not exist: creating."
+            gh release create "$FLOATING" "$TARBALL" "${TARBALL}.sha256" \
               --repo "${{ github.repository }}" \
               --title "sdk-buildkit ${FLOATING} (→ v${{ steps.ver.outputs.version }})" \
               --notes "$FLOAT_NOTES"
