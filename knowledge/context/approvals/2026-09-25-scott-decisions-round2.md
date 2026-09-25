@@ -31,3 +31,13 @@ is `2026-09-25-scott-decisions.md`.
    (Not decided; explanation owed. No history rewrite.)
 6. Where the defect gate lives (#153 / #180).
    > Keep it in the pak CI
+
+## Later the same day
+
+7. Merge the framework PRs #183 (certificate-accept hook, allowInsecure
+   pulldown, #174) and #184 (pipeline hardening), both framework-reviewer
+   approved and Codex-reviewed.
+   > 183/184 merge them
+8. Compliance #28 follow-up question.
+   > #11 - what jar?
+   (Explanation owed; no action.)
