@@ -1581,14 +1581,19 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
     }
 
     /**
-     * Whether review URLs are declared for the config under test. Never throws:
-     * any {@link Throwable} from the pak's hook means "no prompt", so a broken
-     * hook cannot replace the tester's own failure.
+     * Whether review URLs are declared for the config under test. Anything the
+     * pak's hook throws means "no prompt", so a broken hook cannot replace the
+     * tester's own failure, except {@link VirtualMachineError} (out of memory,
+     * stack overflow) and {@link ThreadDeath}, which are rethrown: the JVM or
+     * thread is in no state to continue as if nothing happened.
      */
+    @SuppressWarnings("deprecation") // ThreadDeath: deprecated in newer JDKs, still thrown
     final boolean certificatePromptAvailable(TestParam param) {
         try {
             return param != null
                     && !declaredCertificateUrls(param.getAdapterConfig()).isEmpty();
+        } catch (VirtualMachineError | ThreadDeath fatal) {
+            throw fatal;
         } catch (Throwable t) {
             logWarnSafe("certificateCheckUrls failed during Test Connection: " + t, t);
             return false;

@@ -63,3 +63,29 @@ FRAMEWORK REVIEW
   wins; env proxies untouched; install.py stays pure Python (RULE-018).
 - Scaffold compiles; class-name tests pass; `removeprefix` fits Python 3.9.
 - `git merge-tree` with `fix/pipeline-hardening-round`: clean.
+
+## Round 2 (commit 02aed95): APPROVE, 0 BLOCKING / 0 WARNING / 3 NIT
+
+Checks re-run: framework compiles at `-source 11`; CertificateReviewTest
+83/83, VcfCfAdapterTest 11/11, stitch 28/28, 8/8, 18/18; pytest 1909
+passed / 0 failed / 8 skipped with pak clones linked (scaffold compile test
+ran); validate chain 7/7 plus `vcfcf_packaging validate`; `validate-sdk` OK
+on all six adapters; `git merge-tree` with `fix/pipeline-hardening-round`
+clean.
+
+Round 1 status: W1, W2, NIT2, NIT3, NIT4 resolved; W3 resolved as a
+documented tagging rule (1.0.11 only after both branches merge); W4
+handled in the PR body; NIT1 mostly resolved.
+
+Remaining NITs:
+1. `tests/test_verify_ssl_env_override.py` `_requests_misuse` misses
+   `import requests as r; r.Session()`, `from requests import get`,
+   `requests.sessions.Session()`, and `requests.get(url, verify=None)`
+   (none in `src/` today). Resolve aliases, flag any import from
+   `requests`, require a non-None `verify=`.
+2. `VcfCfAdapter.certificatePromptAvailable` catches `Throwable`,
+   swallowing `VirtualMachineError`; rethrow `VirtualMachineError` (and
+   `ThreadDeath`), catch the rest.
+3. `tier2_architecture.md` adoption paragraph: cite
+   `knowledge/context/approvals/2026-09-25-scott-decisions.md` item 15 for
+   the secure-default decision; the file must be present on this branch.

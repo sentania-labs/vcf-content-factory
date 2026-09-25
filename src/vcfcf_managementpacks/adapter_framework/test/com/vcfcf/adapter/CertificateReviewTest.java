@@ -66,6 +66,7 @@ public class CertificateReviewTest {
         testOnTestKeepsRawMessageForOtherFailures();
         testOnTestSkipsHookForOtherFailures();
         testOnTestHookErrorDoesNotEscape();
+        testPromptAvailableRethrowsVirtualMachineError();
         testParseAllowInsecureLegacyAndEnum();
         testParseAllowInsecureLegacyNotFalseMatchesSynology();
         testIsAllowInsecureReadsIdentifier();
@@ -155,6 +156,14 @@ public class CertificateReviewTest {
         @Override
         protected List<String> certificateCheckUrls(ResourceConfig rc) {
             throw new AssertionError("hook error");
+        }
+    }
+
+    /** Hook throws a VirtualMachineError. */
+    static class VmErrorAdapter extends PlainAdapter {
+        @Override
+        protected List<String> certificateCheckUrls(ResourceConfig rc) {
+            throw new StackOverflowError("simulated");
         }
     }
 
@@ -419,6 +428,30 @@ public class CertificateReviewTest {
         assertTrue("onTest with an Error-throwing hook falls back to the no-prompt message",
                 p.getErrorMsg() != null
                         && p.getErrorMsg().contains("No endpoint was offered for certificate review"));
+    }
+
+    private static void testPromptAvailableRethrowsVirtualMachineError() throws Exception {
+        VmErrorAdapter a = allocate(VmErrorAdapter.class);
+        Throwable seen = null;
+        try {
+            a.certificatePromptAvailable(new TestParam(cfg("host", "vc.example.com")));
+        } catch (Throwable t) {
+            seen = t;
+        }
+        assertTrue("certificatePromptAvailable rethrows a VirtualMachineError; got " + seen,
+                seen instanceof StackOverflowError);
+
+        ErrorAdapter b = allocate(ErrorAdapter.class);
+        boolean prompt = true;
+        Throwable other = null;
+        try {
+            prompt = b.certificatePromptAvailable(new TestParam(cfg("host", "vc.example.com")));
+        } catch (Throwable t) {
+            other = t;
+        }
+        assertTrue("certificatePromptAvailable swallows a non-fatal Error; got " + other,
+                other == null);
+        assertFalse("non-fatal Error from the hook means no prompt", prompt);
     }
 
     // -----------------------------------------------------------------------

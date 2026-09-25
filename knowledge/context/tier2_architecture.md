@@ -448,8 +448,9 @@ Pulldown XML used by the framework family:
 
 Pak adoption (sdk-adapter-author; recorded 2026-09-25, not yet applied).
 Default: Scott approved flipping the TLS default to secure for the template,
-synology and unifi (template#8, carried to both paks), so every pulldown
-uses `default="false"`. The default applies to new instances only; stored
+synology and unifi (template#8, carried to both paks; verbatim record:
+`knowledge/context/approvals/2026-09-25-scott-decisions.md` item 15), so
+every pulldown uses `default="false"`. The default applies to new instances only; stored
 values keep their meaning per the Parse column.
 
 | Pak | `certificateCheckUrls` returns | `allowInsecure` describe.xml | Parse (stored values that change meaning) |

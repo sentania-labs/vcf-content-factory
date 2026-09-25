@@ -110,26 +110,69 @@ def test_vcfops_client_session_respects_verify_false(ca_bundle_env):
 
 
 _MODULE_VERBS = {"get", "post", "put", "delete", "patch", "head", "options", "request"}
+_SESSION_NAMES = {"Session", "session"}
+
+
+def _dotted(node):
+    """Return ["a", "b", "c"] for a Name/Attribute chain a.b.c, else None."""
+    parts = []
+    while isinstance(node, ast.Attribute):
+        parts.append(node.attr)
+        node = node.value
+    if isinstance(node, ast.Name):
+        parts.append(node.id)
+        return parts[::-1]
+    return None
+
+
+def _has_real_verify(call):
+    """True when the call passes verify= with something other than None."""
+    for k in call.keywords:
+        if k.arg == "verify":
+            return not (isinstance(k.value, ast.Constant) and k.value.value is None)
+    return False
 
 
 def _requests_misuse(tree):
-    """Yield (lineno, text) for every requests usage that bypasses the helper."""
+    """Yield (lineno, text) for every requests usage that bypasses the helper.
+
+    Resolves import aliases (``import requests as r``, ``import
+    requests.sessions as rs``), flags any from-import of a session class or a
+    module-level verb from ``requests`` or its submodules, flags constructing
+    a session through any path (``requests.Session()``,
+    ``requests.sessions.Session()``), and flags module-level verb calls whose
+    ``verify=`` is missing or ``None``.
+    """
+    # local name -> dotted module path it stands for
+    aliases = {"requests": ["requests"]}
     for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom) and node.module in ("requests", "requests.sessions"):
-            for alias in node.names:
-                if alias.name in ("Session", "session"):
-                    yield node.lineno, f"from {node.module} import {alias.name}"
+        if isinstance(node, ast.Import):
+            for a in node.names:
+                if a.name == "requests" or a.name.startswith("requests."):
+                    if a.asname:
+                        aliases[a.asname] = a.name.split(".")
+                    else:
+                        aliases[a.name.split(".")[0]] = ["requests"]
+        elif isinstance(node, ast.ImportFrom) and node.module and (
+                node.module == "requests" or node.module.startswith("requests.")):
+            for a in node.names:
+                if a.name in _SESSION_NAMES or a.name in _MODULE_VERBS:
+                    yield node.lineno, f"from {node.module} import {a.name}"
+    for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
             continue
-        f = node.func
-        if not (isinstance(f, ast.Attribute) and isinstance(f.value, ast.Name)
-                and f.value.id == "requests"):
+        chain = _dotted(node.func)
+        if not chain or chain[0] not in aliases:
             continue
-        if f.attr in ("Session", "session"):
-            yield node.lineno, f"requests.{f.attr}()"
-        elif f.attr in _MODULE_VERBS:
-            if not any(k.arg == "verify" for k in node.keywords):
-                yield node.lineno, f"requests.{f.attr}(...) without verify="
+        full = aliases[chain[0]] + chain[1:]
+        if full[0] != "requests" or len(full) < 2:
+            continue
+        rest = full[1:]
+        if rest[-1] in _SESSION_NAMES and rest[:-1] in ([], ["sessions"]):
+            yield node.lineno, ".".join(full) + "()"
+        elif rest[-1] in _MODULE_VERBS and rest[:-1] in ([], ["api"]):
+            if not _has_real_verify(node):
+                yield node.lineno, ".".join(full) + "(...) without a non-None verify="
 
 
 def test_no_bare_requests_session_in_src():
@@ -151,12 +194,24 @@ def test_no_bare_requests_session_in_src():
 @pytest.mark.parametrize("src, expect", [
     ("import requests\ns = requests.Session()\n", 1),
     ("import requests\ns = requests.session()\n", 1),
+    ("import requests\ns = requests.sessions.Session()\n", 1),
+    ("import requests as r\ns = r.Session()\n", 1),
+    ("import requests.sessions as rs\ns = rs.Session()\n", 1),
+    ("import requests as r\nr.get('https://x')\n", 1),
     ("from requests import Session\n", 1),
     ("from requests.sessions import session\n", 1),
+    ("from requests import get\n", 1),
+    ("from requests import post as p\n", 1),
+    ("from requests.api import request\n", 1),
     ("import requests\nrequests.get('https://x')\n", 1),
+    ("import requests\nrequests.get('https://x', verify=None)\n", 1),
+    ("import requests\nrequests.api.put('https://x')\n", 1),
     ("import requests\nrequests.post(\n  'https://x',\n  json={},\n)\n", 1),
     ("import requests\nrequests.post('https://x', verify=False)\n", 0),
+    ("import requests\nrequests.post('https://x', verify=flag)\n", 0),
     ("import requests\nclass S(requests.Session):\n    pass\n", 0),
+    ("from requests.adapters import HTTPAdapter\n", 0),
+    ("import requests\nraise requests.exceptions.ConnectionError()\n", 0),
 ])
 def test_guard_detects_each_bypass_shape(src, expect):
     assert len(list(_requests_misuse(ast.parse(src)))) == expect
