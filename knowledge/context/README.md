@@ -126,8 +126,11 @@ cycles because that did not happen.
 | `pak_install_api_exploration.md` | .pak install API exploration |
 | `pak_uninstall_api_exploration.md` | .pak uninstall API exploration |
 | `pak_ui_upload_investigation.md` | .pak UI upload investigation |
+| `mini_app_extension_framework.md` | VCF Ops 9.1.1 Extensions / mini-app framework (VGL-63149): feature flag `fss_extensions_management_ui`, pre-shipped mini-apps, ES-module `bootstrap()` host contract (not Module Federation), SDK/auth/CSP, `/suite-api/internal/ui-extensions` (unsupported), signed-`.pak` install wall, hidden Plugin Registration path, open questions |
 | `compliance_enablement_markers.md` | Compliance enablement markers (per-profile enablement wire state) |
+| `compliance_vami_appliance_api_read_path.md` | Why the five vCenter VAMI controls are unreadable (SSO user not in `SystemConfiguration.Administrators`, VAMI client not using the platform TLS context, two wrong recipes: bare-boolean `access/ssh`, nonexistent `local-accounts/policy`); vCenter 9.1.1 appliance endpoint shapes; fix list |
 | `compliance_per_control_alert_first_sample_lag.md` | Compliance per-control alerts "not firing" on build 67 was timing: a symptom on a newly created pushed metric key skips the key's first sample (hourly adapter, so about 1 h plus 5 min to first alert); keys, `EQ` operator, metric condition type, and policy all verified correct |
+| `compliance_config_encryption_and_vsan_checksum_reads.md` | Why `esx.tpm-configuration` / `secureboot-enforcement` / `tpm-trusted-binaries` and `cluster.object-checksum` read unreadable (no vim25 `config.encryptionState`; unpopulated `checksumEnabled`), esxcli `system.settings.encryption.get` replacement recipes, and the vSAN gate false-positive on non-vSAN clusters |
 | `auth_vidb_oauth_flow.md` | VIDB OAuth flow |
 | `struts_import_endpoints.md` | Struts/Ext.Direct endpoint catalog |
 | `struts_exploration_backlog.md` | Struts exploration backlog |

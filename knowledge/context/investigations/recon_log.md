@@ -4744,3 +4744,117 @@ embargo. They live in `embargo/recon/2026-08-29-recon-log-appends.md`
 multi-subject column binding contract in
 `knowledge/context/wire-formats/view_column_wire_format.md` and the lesson
 `knowledge/lessons/dashboard-import-without-views-corrupts-refs.md`.
+
+## 2026-09-25: recon for UniFi and Synology general-use + per-kind summary dashboards
+
+**Ask:** general-use dashboards plus a Summary-tab dashboard per resource
+kind for the two Tier 2 SDK paks (`unifi_controller`, `synology_diskstation`).
+
+**Object model (from `content/sdk-adapters/{unifi,synology}/describe.xml`):**
+- UniFi: 12 resource kinds — `unifi_controller` (adapter instance),
+  `UniFiWorld`, `UniFiSite`, `UniFiGateway`, `UniFiWanInterface`,
+  `UniFiSwitch`, `UniFiSwitchPort`, `UniFiAccessPoint`, `UniFiRadio`,
+  `UniFiWirelessAggregate`, `UniFiNvr`, `UniFiCamera`. Traversal:
+  World > Site > {Gateway>WAN, Switch>Port, AP>Radio, NVR>Camera,
+  WirelessAggregate}.
+- Synology: 10 resource kinds — `synology_diskstation` (adapter instance),
+  `SynologyWorld`, `SynologyDiskstation`, `SynologyStoragePool`,
+  `SynologyVolume`, `SynologyDisk`, `SynologyIscsiLun`,
+  `SynologyNfsExport`, `SynologyUps`, `SynologySsdCache`. Traversal:
+  World > Diskstation > Pool > {Volume>LUN, Volume>NfsExport,
+  Volume>SsdCache>Disk, Disk}, Diskstation>UPS. Cross-MP foreign edges
+  to `VMWARE::Datastore` on LUN and NfsExport (informational, not
+  summary-dashboard relevant).
+
+**Live data (qa and prod profiles, same host
+`vcf-lab-operations.int.sentania.net`):** both adapters installed with
+one running instance each (`unifi.int.sentania.net`,
+`storage.int.sentania.net`), zero errors. Devel profile host
+(`vcf-lab-operations-devel...`) unreachable this session (TLS cert
+error, not investigated further — not needed, qa/prod had everything).
+Resource counts: UniFi — 1 controller/world/site/gateway/aggregate/nvr,
+2 WAN, 10 switches, 99 ports, 6 APs, 12 radios, 13 cameras. Synology —
+1 diskstation/world/pool/volume/ssd-cache, 7 disks, 2 iSCSI LUNs, 15 NFS
+exports, **0 UPS** (no UPS attached in this lab — kind exists in
+describe.xml, has no live object, summary dashboard for it can be
+authored but never populate on this instance). Sampled `stats/latest`
+on UniFiGateway, UniFiSwitchPort, UniFiCamera, UniFiRadio,
+SynologyDisk, SynologyVolume, SynologyNfsExport, SynologyStoragePool,
+SynologySsdCache — all returned 16-25 populated stat series each,
+confirming both adapters are actively collecting, not just registered.
+
+**Existing content (none found, reuse not possible):**
+- Instance: `/api/supermetrics` has zero unifi/synology-named super
+  metrics; `/api/resources/groups` is empty. No unifi/synology
+  dashboards, views, symptoms, or alerts on the instance.
+- Repo: no hits for "unifi"/"synology" under `content/dashboards/`,
+  `content/views/`, `content/supermetrics/`, `third_party/`; only
+  hits repo-wide are the two release manifests in `bundles/releases/`
+  (MP packaging metadata, not content). Neither
+  `content/sdk-adapters/{unifi,synology}/` has a `dashboards/`
+  directory yet — both are content authors' greenfield.
+- Third `unifi`-adapter-kind solution `mpb_unifi_integration` is
+  installed on qa/prod but has **zero adapter instances** — an
+  unrelated, unused MPB-tier pak, not our Tier 2 adapter. Not a reuse
+  source.
+- Reference allowlist: `jcox-au/vmware` ships a *different*, much
+  smaller MPB-tier UniFi pak (4 INTERNAL + 2 ARIA_OPS objects, 1
+  bundled dashboard) at
+  `reference/references/jcox-au_vmware/aria_operations/unifi_management_pack/`.
+  Object model doesn't match our 12-kind Tier 2 adapter — INSPIRATION
+  only (widget layout pattern), not adaptable content.
+
+**Summary-tab binding mechanism (confirmed working, tooling supports
+it today):** `knowledge/context/api-surface/summary_dashboard_pak_binding.md`
+documents the server-side `content/dashboards/dashboards.properties`
+install-time binding (`<dir>=<AdapterKind>:<ResourceKind>[,...]`), and
+`src/vcfcf_core/dashboards/loader.py` (`summary_for`,
+`parse_summary_for`, `normalize_summary_for`, `check_unique_summary_for`)
+plus `src/vcfcf_managementpacks/sdk_builder.py` (lines ~869-941, ~2034-2038)
+already implement the YAML-side contract end to end: a dashboard's
+`summary_for: ["<AdapterKind>:<ResourceKind>", ...]` field is validated
+(no duplicate claims across dashboards, a summary_for dashboard may not
+carry a pinned/self-provider widget — it must inherit the page object)
+and the SDK builder emits the `dashboards.properties` line automatically
+at pak-build time. Compliance and vcommunity paks ship `dashboards/`
+directories already but neither currently uses `summary_for` (checked:
+zero hits). This will be the **first** use of the mechanism in this
+repo if authored, so watch for build-time surprises even though the
+code path is unit-testable and documented.
+
+**Widget capability (issue #172 correction):**
+`vcfops-content-model` skill undercounts — it says only `ResourceList`
+and `View` are supported; the renderer
+(`src/vcfcf_core/dashboards/render.py`) actually supports 9: ResourceList,
+View, TextDisplay, Scoreboard, MetricChart, HealthChart, AlertList,
+Heatmap, PropertyList. Do not let that skill line block a plan.
+
+**Known open limitations relevant to this authoring pass:**
+- #175 (open): View-widget `sort_by_column`/`sort_by_dir` is silently
+  dropped by the renderer. Any embedded-view widget (e.g. a switch-port
+  or disk list sorted worst-first) will render in product default order
+  until the user clicks the header.
+- #176 (open): Scoreboard/MetricChart metric color bounds only support
+  "higher is worse"; no `ascending_range`/invert for "lower is worse"
+  metrics (e.g. remaining PoE budget, remaining disk life, free bytes)
+  — those tiles would ship uncolored or misleadingly colored.
+- #177 (open): no widget mode for "show all, narrow on selection" —
+  only pinned (self-provider, shows everything) or interaction-driven
+  (auto-selects first row from upstream). Relevant to any nav-tree-style
+  general-use dashboard where the intent is "world view, drill down."
+- #173 (open, unresolved): agent prompts disagree on who writes content
+  under `content/sdk-adapters/<name>/dashboards/` — `dashboard-author.md`
+  says that tree is the SDK-adapter author's, `sdk-adapter-author.md`
+  says the reverse. Needs resolving (or a per-task carve-out like the
+  2026-09-23 compliance-v3 precedent) before delegating dashboard
+  authoring for these two paks.
+
+**Recommendation:** author is required (no exact/partial reuse exists
+anywhere). Per pack: 2-3 general-use dashboards (nav-tree / fleet
+overview style) plus one Summary-tab dashboard per resource kind, bound
+via `summary_for`, following the sdk_builder.py-supported pattern.
+SynologyUps summary dashboard can be authored but will show empty state
+on this instance (0 live objects) — expected, not a blocker. Resolve
+#173 ownership before spawning `dashboard-author`; consider filing
+lesser blockers (#175/#176/#177) as design constraints in the intent
+capture doc rather than gates.
