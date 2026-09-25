@@ -49,8 +49,11 @@ Required shape (all 9 keys must be present):
 }
 ```
 
-`typeId` and `id` use the same `_ADAPTER_KIND_PREFIX` and `kind_index` tables
-as explicit groupBy entries.  The self-grouping path is hit only when
+`typeId` and `id` use the same `adapter_kind_prefix()` and `kind_index` as
+explicit groupBy entries. (`adapter_kind_prefix()` computes "0020" plus the
+two-digit adapter-kind key length; it replaced the closed
+`_ADAPTER_KIND_PREFIX` table on 2026-09-25, after that table blocked the
+UniFi and Synology pak builds.)  The self-grouping path is hit only when
 `group_by_kind` is empty; explicit `group_by_kind` in YAML is unchanged.
 
 Corpus reference: idps-planner "VM by Host PPS" tab — HostSystem subject with
