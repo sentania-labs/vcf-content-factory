@@ -4858,3 +4858,111 @@ on this instance (0 live objects) — expected, not a blocker. Resolve
 #173 ownership before spawning `dashboard-author`; consider filing
 lesser blockers (#175/#176/#177) as design constraints in the intent
 capture doc rather than gates.
+
+---
+
+## 2026-09-25: UniFi/Synology live-data recon (prod, vcf-lab-operations.int.sentania.net)
+
+Settling June v1 dashboard-mock assumptions against current live data.
+Read-only, `/api/resources`, `/api/resources/{id}/stats/latest`, and
+`/api/resources/{id}/stats?begin=&end=` over a ~6h window, 2-4 objects
+per resource kind. `REQUESTS_CA_BUNDLE` unset per issue #174 workaround.
+
+**1. UniFi SwitchPort/Radio/WanInterface traffic+error keys — monotonic
+lifetime counters, not rates**, despite `describe.xml` giving
+`WanInterface.Traffic|tx_bytes`/`rx_bytes` `unit="bytes/s"` (lines
+105-108) while SwitchPort/Radio give the same keys `unit="bytes"`
+(lines 177-180, 273-276). 6h history for one port/radio/WAN each shows
+strictly non-decreasing values (e.g. SwitchPort1 rx_bytes
+37,906,831,900,672 -> 39,436,947,554,304 over 6h; WanInterface1
+rx_bytes 198,672,089,088 -> 202,744,659,968). `SwitchPort.tx_errors`/
+`rx_errors` (no unit, lines 181-184) held flat at 1/2 the whole window
+— consistent with lifetime error counts, not a per-interval rate.
+Dashboard implication: none of these six keys should be charted
+directly as "current throughput/error rate." Chart via a super metric
+delta-over-time (rate-of-change), or keep as sparkline "cumulative
+since collection start" with a relabel. The `unit="bytes/s"` on
+WanInterface is a describe.xml label bug: the adapter emits a lifetime
+counter there, same as the other two kinds.
+
+**2. Synology StoragePool/Volume usage_pct is 100% and it looks like a
+collection bug, not a full volume.** StoragePool1: `Capacity|used_bytes`
+(29,987,679,764,480) is byte-for-byte identical to
+`Capacity|total_bytes` for the full 6h window (min==max==total, 72/72
+samples). Volume1: `Capacity|free_bytes` is exactly 0.0 for all 72
+samples while `total_bytes` stays constant and IO is active
+(`IO|write_iops` up to 216 seen elsewhere on same window class,
+`IO|utilization_pct`=9 at latest). Both resources' `Configuration|status`
+property reads `"normal"` (not full/critical), which DSM would not
+report if the volume/pool were genuinely at capacity. Inferred: the
+adapter is mapping `used_bytes`→`total_bytes` (or `free_bytes` is
+hardcoded/defaulted to 0) rather than reading DSM's real free-space
+field. Dashboard implication: do not gate a "storage full" alert/tile
+on this key as-is; either fix the adapter's used/free mapping (API
+gap — needs Synology-side field verification, out of ops-recon's
+read-only scope against Ops) or hide `usage_pct` and `free_bytes` on
+these two kinds until fixed, relabeling any tile that surfaces them as
+"unverified."
+
+**3. Synology Disk `remain_life`=0 is universal (SATA and NVMe alike);
+`unc_sectors`=-1 is NVMe-specific and looks like an intentional
+"not applicable" sentinel.** 7 disks sampled (5 SATA HDD, 2 M.2 NVMe
+cache): `Health|remain_life` reads exactly 0.0 for every disk of both
+types across the full 6h window (min=max=0.0). `Health|unc_sectors`
+reads real, varying SMART values on the SATA disks (6, 0, 0, 0, 16 —
+i.e., live data) but a flat -1.0 on both NVMe cache disks the whole
+window. Reading: `unc_sectors=-1` is very likely the adapter's explicit
+"NVMe doesn't expose a SATA-style reallocated/uncorrectable-sector
+SMART attribute" sentinel (NVMe has no equivalent counter) — safe to
+treat as "not reported for this drive type," matches expectation. But
+`remain_life=0` is flat across SATA *and* NVMe, which does not match
+the "NVMe-only, not-reported" theory from the mock: if it were
+type-gated we'd expect SATA to read -1/omitted and NVMe to carry a real
+SSD-health percentage. Instead every disk (including the actual SSDs)
+reads a hard 0, which reads more like "never populated by this
+adapter" than "reported and genuinely at 0% life." Unconfirmed without
+DSM-side comparison (out of scope, Ops-only recon). Dashboard
+implication: hide/omit `remain_life` from disk tiles pending adapter
+fix or DSM-side confirmation; keep `unc_sectors` visible for SATA disks
+and either hide or relabel ("n/a — NVMe") for cache disks.
+
+**4. Synology IscsiLun `read_latency`/`write_latency` are flat 0 while
+IO keys move — confirmed collection gap.** 2 LUNs sampled, 6h window:
+`IO|read_latency` and `IO|write_latency` both min=max=0.0 across all 72
+samples on both LUNs, while in the same window `IO|write_iops` ranged
+0-1112, `IO|write_throughput` ranged 102,400-99,188,360 bytes/s, and
+`IO|read_iops` ranged 0-84 — real, moving IO. Latency not tracking
+active IO at all is a clear "not populated" signature, not "genuinely
+zero latency." Dashboard implication: hide both latency keys on the
+IscsiLun tile/chart until the adapter populates them; do not build a
+latency threshold alert on these keys yet.
+
+**5. UniFi `Clients|num_disconnected` lives only on
+`UniFiWirelessAggregate` (not `UniFiSite`) and is schema-grouped with
+client counts, not AP counts — inferred to mean disconnected clients,
+unconfirmed live** (no disconnect event in the observed window). Live
+snapshot: `Performance|num_ap`=6.0 matches the live AP count exactly
+(6 APs, all `resourceStatus=DATA_RECEIVING`/`resourceState=STARTED`,
+none down); `Clients|num_disconnected`=0.0; `Clients|num_user`+`num_guest`
++`num_iot` = 22+0+1=23 vs sum of per-AP `System|num_sta` across all 6
+APs = 22 (close, likely a collection-timing skew between the aggregate
+job and per-AP jobs, not evidence either way). `describe.xml` places
+`num_disconnected` (nameKey 216) inside the `Clients` `ResourceGroup`
+(nameKey 212, alongside `num_user`/`num_guest`/`num_iot`, lines
+294-303) while AP-count tracking (`num_ap`) is a separate `Performance`
+group (nameKey 217, lines 305-312) — structurally this key was
+designed as a client metric, not an AP metric. Could not test against
+a real disconnect because all 6 APs are currently up and no client
+churn was visible in the 6h window; AccessPoint kind has no `state`/
+`status` property in `describe.xml` to cross-check against directly
+(only System perf attrs + Configuration strings — model/firmware/
+serial/ip/mac/name, lines 222-246), so a live AP-down scenario would
+have to be read from `resourceStatusStates` at the resource-list level,
+not a stat key. Dashboard implication: label the tile "disconnected
+clients" per the schema intent, but flag as inferred/unconfirmed until
+an actual AP or client disconnect can be observed live.
+
+Files cited: `content/sdk-adapters/unifi/describe.xml`,
+`content/sdk-adapters/synology/describe.xml` (both in the main
+checkout, not this worktree — `content/sdk-adapters/` is gitignored
+per `knowledge/context/managed_paks.md`).

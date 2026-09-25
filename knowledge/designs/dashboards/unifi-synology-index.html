@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UniFi and Synology Mocks</title>
+<style>
+:root { --bg:#f6f7f9; --panel:#ffffff; --line:#d9dde3; --ink:#1b1f24; --ink-2:#4a5360; --ink-3:#6b7480; --accent:#1f6fd1; --warn:#a65d00; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg:#1b1f24; --panel:#23282f; --line:#363d47; --ink:#f2f4f7; --ink-2:#b7bfca; --ink-3:#8b94a1; --accent:#6aa8f0; --warn:#e5a04e; } }
+:root[data-theme="dark"] { --bg:#1b1f24; --panel:#23282f; --line:#363d47; --ink:#f2f4f7; --ink-2:#b7bfca; --ink-3:#8b94a1; --accent:#6aa8f0; --warn:#e5a04e; }
+* { box-sizing:border-box }
+body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.55 system-ui,"Segoe UI",sans-serif }
+main { max-width:980px; margin:0 auto; padding:28px 16px 60px }
+h1 { font-size:24px; margin:0 0 6px } h2 { font-size:18px; margin:32px 0 10px; padding-bottom:6px; border-bottom:1px solid var(--line) }
+.lede { color:var(--ink-2); margin:0 0 18px }
+.card { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:14px 16px; margin:0 0 12px }
+.card h3 { font-size:16px; margin:0 0 4px } .card p { margin:4px 0; color:var(--ink-2) }
+a { color:var(--accent) } .links { font-size:13px } .links a { margin-right:14px }
+.kinds { font-size:13px; color:var(--ink-3) } code { font-size:12.5px }
+ol li { margin:0 0 8px } .warn { color:var(--warn); font-weight:600 }
+@media (max-width:600px) { body { font-size:14px } }
+</style>
+</head>
+<body>
+<main>
+<h1>UniFi and Synology dashboard mocks</h1>
+<p class="lede">RULE-011 design review, drafted 2026-09-25. Six general-use dashboards and two shared Summary layouts (20 Summary pages; adapter instances keep the native page). All values in the mocks are simulated; keys are real, from each pack's describe.xml. Nothing here is authored or installed yet.</p>
+<h2>UniFi</h2><div class="card"><h3>UniFi Network Overview</h3><p>The first page an admin opens: is every UniFi device up, is the internet link good, and are the cameras recording, for one site at a time.</p><div class="links"><a href="unifi-network-overview.html">Open mock</a><a href="unifi-network-overview.md">Design note and wireframe table</a></div></div><div class="card"><h3>UniFi Wireless Experience</h3><p>Answers &#x27;why is the Wi-Fi bad&#x27;: which APs carry the clients, which radios are congested or retrying, and how that changed over the week.</p><div class="links"><a href="unifi-wireless-experience.html">Open mock</a><a href="unifi-wireless-experience.md">Design note and wireframe table</a></div></div><div class="card"><h3>UniFi Switching and PoE</h3><p>Answers &#x27;can I plug in another PoE device, which port has errors, and which port is my ESXi host on&#x27;: PoE draw against budget per switch, then every port with link, PoE, errors and the LLDP neighbour.</p><div class="links"><a href="unifi-switching-poe.html">Open mock</a><a href="unifi-switching-poe.md">Design note and wireframe table</a></div></div><div class="card"><h3>UniFi Summary pages (one shared layout, 11 kinds)</h3><p>The Summary tab of every object in the pack: identity, health and alerts, key numbers, two trends, related objects and the relationship tree. Pick a kind at the top of the mock to see what fills each slot for it.</p><p class="kinds">Kinds: UniFi World, UniFi Site, UniFi Gateway, UniFi WAN Interface, UniFi Switch, UniFi Switch Port, UniFi Access Point, UniFi Radio, UniFi Wireless Summary, UniFi NVR, UniFi Camera</p><div class="links"><a href="unifi-summary-layout.html">Open mock</a><a href="unifi-summary-layout.md">Design note and wireframe table</a></div></div><p class="links">List views these need: <a href="../views/unifi-gateways.md">UniFi Gateways</a> <a href="../views/unifi-wan-interfaces.md">UniFi WAN Interfaces</a> <a href="../views/unifi-switches.md">UniFi Switches</a> <a href="../views/unifi-switch-ports.md">UniFi Switch Ports</a> <a href="../views/unifi-access-points.md">UniFi Access Points</a> <a href="../views/unifi-radios.md">UniFi Radios</a> <a href="../views/unifi-cameras.md">UniFi Cameras</a></p><p class="links">Super metric intents: <a href="../supermetrics/unifi-switch-port-rx-rate.md">unifi-switch-port-rx-rate</a> <a href="../supermetrics/unifi-switch-port-tx-rate.md">unifi-switch-port-tx-rate</a> <a href="../supermetrics/unifi-switch-port-rx-error-rate.md">unifi-switch-port-rx-error-rate</a> <a href="../supermetrics/unifi-switch-port-tx-error-rate.md">unifi-switch-port-tx-error-rate</a> <a href="../supermetrics/unifi-radio-rx-rate.md">unifi-radio-rx-rate</a> <a href="../supermetrics/unifi-radio-tx-rate.md">unifi-radio-tx-rate</a> <a href="../supermetrics/unifi-wan-rx-rate.md">unifi-wan-rx-rate</a> <a href="../supermetrics/unifi-wan-tx-rate.md">unifi-wan-tx-rate</a> <a href="../supermetrics/unifi-switch-poe-budget-used-pct.md">unifi-switch-poe-budget-used-pct</a>. Only PoE budget used % is authorable; the eight rate intents record that a rate is not expressible in the DSL.</p><h2>Synology</h2><div class="card"><h3>Synology Storage Capacity and Health</h3><p>Answers &#x27;is anything degraded, and (once the adapter is fixed) how full is the NAS&#x27;: pool and volume status, SSD cache state, volume IO, NAS vitals and alerts on one page.</p><div class="links"><a href="synology-storage-capacity.html">Open mock</a><a href="synology-storage-capacity.md">Design note and wireframe table</a></div></div><div class="card"><h3>Synology Disk Health</h3><p>Answers &#x27;which drive is going to fail next&#x27;: every drive&#x27;s SMART status, temperature and uncorrectable sectors in one map and one list, with trends for the one you pick.</p><div class="links"><a href="synology-disk-health.html">Open mock</a><a href="synology-disk-health.md">Design note and wireframe table</a></div></div><div class="card"><h3>Synology NFS and iSCSI</h3><p>The vSphere-facing page: which shares and LUNs back which datastores, how full the shares are against quota, who is mounting them, and how hard vSphere drives each LUN.</p><div class="links"><a href="synology-nfs-iscsi.html">Open mock</a><a href="synology-nfs-iscsi.md">Design note and wireframe table</a></div></div><div class="card"><h3>Synology Summary pages (one shared layout, 9 kinds)</h3><p>The Summary tab of every object in the pack: identity, health and alerts, key numbers, two trends, related objects and the relationship tree. Pick a kind at the top of the mock to see what fills each slot for it.</p><p class="kinds">Kinds: Synology World, Synology Diskstation, Synology Storage Pool, Synology Volume, Synology Disk, Synology iSCSI LUN, Synology NFS Export, Synology UPS, Synology SSD Cache</p><div class="links"><a href="synology-summary-layout.html">Open mock</a><a href="synology-summary-layout.md">Design note and wireframe table</a></div></div><p class="links">List views these need: <a href="../views/synology-diskstations.md">Synology DiskStations</a> <a href="../views/synology-storage-pools.md">Synology Storage Pools</a> <a href="../views/synology-volumes.md">Synology Volumes</a> <a href="../views/synology-disks.md">Synology Disks</a> <a href="../views/synology-ssd-caches.md">Synology SSD Caches</a> <a href="../views/synology-nfs-exports.md">Synology NFS Exports</a> <a href="../views/synology-iscsi-luns.md">Synology iSCSI LUNs</a></p>
+
+<h2>Revised after live recon (2026-09-25, prod)</h2>
+<ul>
+<li>UniFi port, radio and WAN traffic and port error keys are lifetime counters. A rate super metric is not expressible in the DSL, so traffic appears only as labelled cumulative sparklines and errors as labelled lifetime counts.</li>
+<li>Synology pool and volume capacity keys are wrong in the adapter. Capacity widgets keep their slots, greyed and marked BLOCKED.</li>
+<li>Synology disk remaining life and iSCSI LUN latency are never populated and are removed. NVMe uncorrectable sectors (-1) show as n/a.</li>
+<li>Defaults applied: adapter instances keep their native Summary page; the UPS summary ships marked unverified.</li>
+</ul>
+<h2>Decisions still open</h2>
+<ol>
+<li>File an adapter issue to emit UniFi rate fields (the <code>-r</code> fields), which would turn every cumulative sparkline into a real throughput chart?</li>
+<li>File the Synology adapter issue: pool and volume capacity, disk remaining life, LUN latency.</li>
+<li>Approve the PoE budget used % super metric.</li>
+<li>Follow-on issue: symptoms and alerts for both packs. Until they exist, every health and alert slot stays green and empty.</li>
+<li>Ownership of <code>content/sdk-adapters/&lt;name&gt;/dashboards/</code> (#173) must be settled before dashboard-author runs.</li>
+</ol>
+
+</main>
+</body>
+</html>
