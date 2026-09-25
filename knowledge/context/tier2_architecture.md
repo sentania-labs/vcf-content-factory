@@ -366,6 +366,76 @@ v2 lab opt-out: `HttpClientBuilder.allowInsecure(true)` still works
 but is now an explicit, documented opt-out (calls
 `VcfCfAdapter.insecureSslContext()`).
 
+#### Accepting an untrusted target certificate (2026-09-25)
+
+Wire behaviour (bytecode, SDK 2.2 and the prod 9.1.1 appliance jars;
+evidence in `knowledge/context/investigations/tls_certificate_unknown_2026_09_25.md`):
+
+- Validate Connection runs `checkCertificate` before `test()`. The SDK
+  default `onCheckCertificate` probes `getConnectionURLs(adapterConfig)`;
+  the SDK default of that is `singletonList(getConnectionURL(cfg))` and
+  `getConnectionURL` returns `null`, so the result is `NOT_SUPPORTED` and
+  no review dialog appears. A non-empty URL list makes the platform open
+  each URL over its own `HttpsConnection` + instance `CustomTrustManager`
+  and return an untrusted chain to the UI as "Review and accept
+  certificate"; `test()` waits for the accept.
+- The collector's certificate-chain task
+  (`Collector.handleGetAdapterSourceCertificateChain`) also calls
+  `getConnectionURLs` on the running instance.
+- Accepted certs are stored per adapter instance
+  (`ResourceConfig.getTrustedCertificates()`) and loaded into the instance
+  `CustomTrustManager` by `initTrust` before `configure`/`test`/`discover`,
+  so `getPlatformSslContext()` / `platformSsl(this)` trust them with no
+  transport change.
+- `getCertificateRenewalUrls()` is consumed by
+  `NonDisruptiveCertificateHandler`: it builds a throwaway instance (no-arg
+  constructor, then `configure(adapterConfig)`), reads the set (`null` or
+  empty logs `"Adapter certificate renewal url set is empty"`), keeps URLs
+  whose `new URL(u).getHost()` matches the failing endpoint, and GETs each
+  expecting JSON `{"jwt_token": ...}` carrying `certificate_chain` and the
+  old thumbprint. That is a VCF-component renewal protocol; third-party
+  targets (vCenter REST root, DSM, UniFi) are not expected to serve it, so
+  for them renewal fails and the admin re-accepts via Validate Connection.
+- Hostname: `CustomTrustManager` extends `X509ExtendedTrustManager`, so JSSE
+  does not add its endpoint-identity check, and its overloads do PKIX chain
+  validation only. On the `java.net.http.HttpClient` + `platformSsl` path
+  the chain is validated but the name is not matched to the host dialed.
+  The platform's review probe does check the name (`getVerifier()`,
+  `CustomHostnameVerifier`). Not changed by the framework.
+
+Framework surface (`VcfCfAdapter`): `certificateCheckUrls(ResourceConfig)`
+hook (default empty; called on an UNSAVED config, derive everything from
+the argument), `getConnectionURLs` and `getCertificateRenewalUrls`
+overrides fed by it (fall back to the SDK default when empty),
+`onTest` maps a trust failure in the cause chain to a readable message,
+and `parseAllowInsecure(String[, boolean])` / `isAllowInsecure(rc)` parse
+the `allowInsecure` identifier the same way for the legacy free-text
+value and the `enum="true"` pulldown (`true`, trimmed, any case = insecure).
+Pulldown XML used by the framework family:
+
+```xml
+<ResourceIdentifier key="allowInsecure" nameKey="N" type="string"
+                    required="false" dispOrder="N" default="false"
+                    enum="true">
+  <enum value="false" displayOrder="1"/>
+  <enum value="true" displayOrder="2"/>
+</ResourceIdentifier>
+```
+
+Pak adoption (sdk-adapter-author; recorded 2026-09-25, not yet applied):
+
+| Pak | `certificateCheckUrls` returns | `allowInsecure` describe.xml | Parse |
+|---|---|---|---|
+| compliance | `https://<vcenter_host>:443` (REST, VAMI `/api/appliance`, SOAP `/sdk` all on 443) | free text, default `false`: switch to pulldown | `parseAllowInsecure(v)` (same result as today) |
+| synology | `https://<host>:<port>` (port default 5001) | free text, default `true`: switch to pulldown, keep default `true` unless the owner decides otherwise | today `!"false".equalsIgnoreCase(v)` (blank = insecure): use `parseAllowInsecure(v, true)` to keep blank legacy values insecure |
+| unifi | `https://<host>:<port>` (port default 443) | free text, default `true`: switch to pulldown | `parseAllowInsecure(v)` |
+| vcommunity, vcommunity-os, vcommunity-vsphere | `https://<host>:<port>` (vCenter; `port` is an integer identifier, default 443) | already a pulldown | `parseAllowInsecure(v)` |
+| sdk-template repo | `https://<host>:<port>` | free text, default `true`: switch to pulldown | `parseAllowInsecure(v)` |
+
+Every override returns empty when `isAllowInsecure(rc)` (or the pak's own
+parse) says insecure, or when the host identifier is blank, and reads only
+from the passed `ResourceConfig`.
+
 ### ForeignResourceResolver — API changed in v2
 
 v1: `new ForeignResourceResolver(suiteAPIClient, logger)` — required
@@ -498,6 +568,7 @@ Empirical basis: `knowledge/context/investigations/suiteapi_ambient_auth_devel_2
 
 | Date | Change |
 |---|---|
+| 2026-09-25 | **Ops-native accept-certificate flow + `allowInsecure` pulldown.** `VcfCfAdapter` gains `certificateCheckUrls(ResourceConfig)` (protected, default empty, called on an unsaved config) and overrides `getConnectionURLs(AdapterConfig)` and `getCertificateRenewalUrls()` to return it, falling back to the SDK defaults when empty, so a pak that does not opt in behaves exactly as before (`NOT_SUPPORTED`, no dialog). An opted-in pak makes Validate Connection show VCF Operations' "Review and accept certificate" dialog for an untrusted target; accepted certs land in the instance `CustomTrustManager` that `platformSsl(this)` already uses. `onTest` now replaces a raw `certificate_unknown(46)` / PKIX failure with a readable message (different advice for opted-in and not-opted-in paks). New `parseAllowInsecure(String)`, `parseAllowInsecure(String, boolean defaultWhenBlank)`, `isAllowInsecure(ResourceConfig)`, `ALLOW_INSECURE_IDENTIFIER`. Hostname-check finding and renewal-protocol finding documented under SSL above. `scaffold-sdk` now emits a framework-v2 skeleton (the old one used the removed aria-ops-core API) with the `allowInsecure` pulldown and a `certificateCheckUrls` override. New test `adapter_framework/test/.../CertificateReviewTest.java`. `BUILDKIT_VERSION` not bumped in this change (owned by the pipeline-hardening round). **Adapter adoption:** each pak adds a `certificateCheckUrls` override and switches `allowInsecure` to the pulldown; per-pak table under SSL above. |
 | 2026-08-17 | **`insecureSslContext()` hostname-verification fix (issue #82)**: the trust-all manager in `VcfCfAdapter.insecureSslContext()` is reimplemented as `javax.net.ssl.X509ExtendedTrustManager` (no-op `Socket`/`SSLEngine` overloads added for both `checkClientTrusted`/`checkServerTrusted`) instead of the legacy `javax.net.ssl.X509TrustManager`. Root cause: JSSE silently wraps a legacy `X509TrustManager` in `sun.security.ssl.AbstractTrustManagerWrapper`, which re-applies the endpoint identity (hostname) check whenever an endpoint identification algorithm is set. `java.net.http.HttpClient` always sets one, so a user with "Allow Insecure SSL" ticked still got a hostname-mismatch failure (live report against the Synology pack). Measured: this is **not** `HttpClient`-only. It also disables hostname verification on the `HttpsURLConnection` transport, including when the caller uses the JDK's own default `HostnameVerifier` (`HttpsClient` sets an endpoint identification algorithm whenever the verifier in effect is the default one, at which point JSSE decides the outcome instead of the verifier). No non-opt-in caller reaches the changed code (every caller gates on `allowInsecure` or is the vendor-mirror Suite API hop, which already sets an all-true `HostnameVerifier` regardless). Method signature/visibility unchanged; `getPlatformSslContext()` / the TOFU path untouched. `HttpClientBuilder.allowInsecure(boolean)` javadoc corrected to say it disables both chain validation and hostname verification. `SuiteApiStitchClient` keeps `openPlatformConnection()`/`HttpsURLConnection`, not because `HttpClient` still cannot express an unconditional all-true hostname posture (it now can, after this fix), but because matching the vendor `aria-ops-core SuiteAPIClient` transport byte-for-byte remains the goal (DEF-005 "mirror BC exactly"); see the corrected class javadoc and `knowledge/lessons/suite-api-stitch-ssl-tofu-vs-java-http.md`. Regression test added (`VcfCfAdapterTest`): real TLS handshake over `HttpClient` against a hostname-mismatched cert generated fresh per run via `keytool`, asserting `insecureSslContext()` succeeds and a normal validating context fails with the specific `SSLHandshakeException`/`CertificateException` identity failure (not merely "some exception"). `vcfcf-adapter-base.jar` rebuilt. **Adapter adoption:** rebuild and re-release synology, unifi, and compliance (the three paks confirmed on the affected `HttpClient`-transport pattern); the sdk-buildkit tarball must be republished first. |
 | 2026-06-10 | **`setRelationships` on foreign resource is per-adapter scoped (9.0.2 proven)**: synology build-16 devel install confirmed the wld01 iSCSI VMWARE Datastore retained all 22 VMWARE-collected children (HostSystem/VM/Pods/etc.) while gaining the SynologyIscsiLun child edge — closing synology-build-16 WARNING-1. Full-set `parentForeign`+`build()` is safe against foreign parents; no delta/labeled workaround needed. 9.1 unverified (open residual). See "setRelationships on a foreign resource" authoring contract note above and `knowledge/lessons/setrelationships-foreign-adapter-scoped.md`. |
 | 2026-06-10 | **Per-adapter log file appender detaches on hot-reload**: appender re-wires after first configure cycle completes post-reload; `collector.log` is authoritative during the gap. Collector restart eliminates the gap. See Logging authoring contract note above and `knowledge/context/framework_v2_migration.md` §15. |

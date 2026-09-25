@@ -16,9 +16,11 @@ This list is the same one CLAUDE.md carries under "After tooling changes";
 keep the two in step.
 
 History (most recent first):
+  2026-09-25-1  install.py: an explicit --skip-ssl-verify / VCFOPS_VERIFY_SSL=false
+                is no longer overridden by REQUESTS_CA_BUNDLE (issue #174)
   2026-08-29-1  render.py: multi-subject view columns unbound by default,
                 bound only via column `subject:` (view wire format change)
   2026-08-24-2  install.ps1: uninstall residual-else sites warn and continue
 """
 
-CURRENT_TEMPLATE_VERSION = "2026-08-29-1"
+CURRENT_TEMPLATE_VERSION = "2026-09-25-1"

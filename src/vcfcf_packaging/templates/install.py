@@ -124,6 +124,29 @@ import requests  # noqa: E402 -- after bootstrap
 import urllib3   # noqa: E402
 
 
+class _VerifyRespectingSession(requests.Session):
+    """requests.Session whose verify=False is not overridden by the environment.
+
+    Plain requests lets REQUESTS_CA_BUNDLE / CURL_CA_BUNDLE replace
+    Session.verify = False when a request does not pass verify= itself, so
+    --skip-ssl-verify (or VCFOPS_VERIFY_SSL=false) silently turns validation back on
+    against the exported bundle. Here a session set to verify=False stays
+    False; verify=True still honours the env bundle. Mirrors
+    vcfcf_common.client.VerifyRespectingSession (this script is standalone).
+    """
+
+    def merge_environment_settings(self, url, proxies, stream, verify, cert):
+        if verify is None and self.verify is False:
+            verify = False
+        return super().merge_environment_settings(url, proxies, stream, verify, cert)
+
+
+def _new_session(verify_ssl: bool) -> "requests.Session":
+    s = _VerifyRespectingSession()
+    s.verify = verify_ssl
+    return s
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -356,8 +379,7 @@ class Client:
         self._user = user
         self._password = password
         self._auth_source = auth_source
-        self._session = requests.Session()
-        self._session.verify = verify_ssl
+        self._session = _new_session(verify_ssl)
         self._session.headers.update({
             "Accept": "application/json",
             "Content-Type": "application/json",
@@ -982,8 +1004,7 @@ class UIClient:
         self._tid = 1
 
     def login(self) -> None:
-        s = requests.Session()
-        s.verify = self._verify_ssl
+        s = _new_session(self._verify_ssl)
 
         # Step 1: seed JSESSIONID
         s.get(f"https://{self._host}/ui/login.action", params={"vcf": "1"})

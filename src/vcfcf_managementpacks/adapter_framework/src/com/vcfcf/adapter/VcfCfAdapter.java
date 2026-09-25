@@ -18,6 +18,8 @@ import com.integrien.alive.common.adapter3.Relationships;
 import com.integrien.alive.common.adapter3.ResourceKey;
 import com.integrien.alive.common.adapter3.ResourceStatus;
 import com.integrien.alive.common.adapter3.TestParam;
+import com.integrien.alive.common.adapter3.CustomTrustManager;
+import com.integrien.alive.common.adapter3.config.AdapterConfig;
 import com.integrien.alive.common.adapter3.config.CredentialConfig;
 import com.integrien.alive.common.adapter3.config.CredentialFieldConfig;
 import com.integrien.alive.common.adapter3.config.ResourceConfig;
@@ -27,7 +29,10 @@ import com.integrien.alive.common.util.CommonConstants.ResourceStatusEnum;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -621,6 +626,13 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
      * the error message on {@code param} so the UI's "Test Connection" button
      * shows a meaningful message (§5). Never blank-fails. If no tester is
      * configured, returns {@code true}.
+     *
+     * <p>When the failure is an untrusted target certificate (a
+     * {@code CustomTrustManager.CustomCertificateException} or a PKIX chain
+     * failure anywhere in the cause chain), the raw TLS text (for example
+     * {@code org.bouncycastle.tls.TlsFatalAlert: certificate_unknown(46)}) is
+     * replaced with a readable message telling the admin how to proceed. See
+     * {@link #certificateTrustFailureMessage(Throwable, boolean)}.
      */
     @Override
     @SuppressWarnings("unchecked")
@@ -636,6 +648,11 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
             String msg = e.getMessage();
             if (msg == null || msg.isEmpty()) {
                 msg = e.getClass().getSimpleName() + " (no message)";
+            }
+            String certMsg = certificateTrustFailureMessage(e,
+                    !declaredCertificateUrls(param.getAdapterConfig()).isEmpty());
+            if (certMsg != null) {
+                msg = certMsg;
             }
             // §5: populate TestParam — returning false alone gives a blank error.
             param.setErrorMsg(msg);
@@ -971,6 +988,25 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
      * (see the {@link #openPlatformConnection(String)} javadoc and
      * {@code knowledge/context/defects.md} DEF-005).
      *
+     * <p><strong>Accepting a certificate.</strong> Certificates the admin
+     * accepts in the Validate Connection review dialog are loaded into this
+     * trust manager by the platform before {@code configure}/{@code test}, so
+     * this context trusts them with no change here. The dialog only appears
+     * for adapters that declare their endpoints through
+     * {@link #certificateCheckUrls(ResourceConfig)}.
+     *
+     * <p><strong>Hostname checking (bytecode, SDK 2.2 and 9.1.1).</strong>
+     * {@code CustomTrustManager} extends {@link javax.net.ssl.X509ExtendedTrustManager},
+     * so JSSE does not wrap it with its own endpoint-identity check, and its
+     * {@code Socket}/{@code SSLEngine} overloads run PKIX chain validation only
+     * (the peer host is used for renewal bookkeeping, not name matching). On
+     * {@code java.net.http.HttpClient} this context therefore validates the
+     * chain but does not match the certificate name to the host dialed. The
+     * platform's own review probe does check the name (it uses
+     * {@code getVerifier()}, a {@code CustomHostnameVerifier}). Chain
+     * validation stays strict; only {@link #insecureSslContext()} (the
+     * explicit Allow Insecure opt-out) relaxes it.
+     *
      * @return an {@link javax.net.ssl.SSLContext} built from {@code getAdapterTrustManager()}
      *         and {@code getKeyManagers()} — suitable for use with {@code HttpClientBuilder}
      *         on target-system endpoints where the admin has already approved the cert
@@ -1222,6 +1258,317 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
         } catch (Exception e) {
             throw new RuntimeException(
                     "VcfCfAdapter: failed to build insecure SSL context", e);
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Certificate review (VCF Ops "Review and accept certificate" flow)
+    // -----------------------------------------------------------------------
+
+    /**
+     * Identifier key, by framework convention, for the per-instance
+     * "Allow Insecure SSL" setting in {@code describe.xml}. Read it with
+     * {@link #isAllowInsecure(ResourceConfig)}.
+     */
+    public static final String ALLOW_INSECURE_IDENTIFIER = "allowInsecure";
+
+    /**
+     * Target endpoints whose TLS certificate VCF Operations should review when
+     * the admin clicks Validate Connection. Default: empty, which keeps the
+     * platform's certificate check at {@code NOT_SUPPORTED} (the behaviour of
+     * every framework adapter before this hook existed).
+     *
+     * <h4>What returning URLs turns on</h4>
+     * <p>On Validate Connection the platform calls
+     * {@code checkCertificate} before {@code test()}. The SDK's default
+     * {@code onCheckCertificate} opens each URL returned here through the
+     * platform's own {@code HttpsConnection} over the instance
+     * {@code CustomTrustManager}. An untrusted chain comes back to the UI as the
+     * "Review and accept certificate" dialog and {@code test()} is not called
+     * until the admin accepts it. Accepted certificates are stored on the
+     * adapter instance ({@code ResourceConfig.getTrustedCertificates()}) and
+     * loaded into the same {@code CustomTrustManager} that
+     * {@link #getPlatformSslContext()} and
+     * {@code HttpClientBuilder.platformSsl(this)} use, so collection trusts
+     * them with no transport change. The same URLs are also returned from
+     * {@link #getCertificateRenewalUrls()}.
+     *
+     * <h4>Contract (read before overriding)</h4>
+     * <ul>
+     *   <li><strong>Called on an UNSAVED config.</strong> During Validate
+     *       Connection the instance has not been saved and
+     *       {@link #configureAdapter} has not run for these values. Derive every
+     *       URL from {@code config} (identifiers via
+     *       {@link #getIdentifier(ResourceConfig, String)}), never from
+     *       {@link #config}, {@link #httpClient}, or any other instance field.
+     *       The platform also calls this on the running instance (Certificates
+     *       page, renewal), again with the config it passes in.</li>
+     *   <li>Return {@code https://host:port} for every endpoint the adapter
+     *       dials with {@link #getPlatformSslContext()}. Host and port must be
+     *       the ones the client actually connects to, or the accepted
+     *       certificate will not be the one presented at collection time.</li>
+     *   <li>Return an empty list when the instance opted out of verification
+     *       (see {@link #isAllowInsecure(ResourceConfig)}); there is nothing to
+     *       review when the adapter trusts everything.</li>
+     *   <li>Return an empty list when a required identifier (host) is blank;
+     *       the tester reports the missing field.</li>
+     *   <li>Do not do I/O here and do not throw. A thrown
+     *       {@link RuntimeException} is logged and treated as "no URLs".</li>
+     * </ul>
+     *
+     * <pre>{@code
+     * @Override
+     * protected List<String> certificateCheckUrls(ResourceConfig rc) {
+     *     String host = getIdentifier(rc, "host");
+     *     if (host == null || host.isBlank() || isAllowInsecure(rc)) return List.of();
+     *     return List.of("https://" + host.trim() + ":443");
+     * }
+     * }</pre>
+     *
+     * @param config the adapter-instance resource config handed in by the
+     *        platform (possibly unsaved); never {@code null} when called by the
+     *        framework
+     * @return the URLs to review; empty (default) to leave the platform check
+     *         off. {@code null} is treated as empty.
+     */
+    protected List<String> certificateCheckUrls(ResourceConfig config) {
+        return Collections.emptyList();
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>Returns {@link #certificateCheckUrls(ResourceConfig)} for the passed
+     * config's adapter-instance resource. When that is empty, delegates to
+     * {@code super.getConnectionURLs}, so an adapter that does not override the
+     * hook behaves exactly as before (the SDK default yields
+     * {@code NOT_SUPPORTED}).
+     */
+    @Override
+    public List<String> getConnectionURLs(AdapterConfig adapterConfig) {
+        List<String> urls = declaredCertificateUrls(adapterConfig);
+        if (urls.isEmpty()) {
+            return super.getConnectionURLs(adapterConfig);
+        }
+        return urls;
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>Returns the same URLs as {@link #getConnectionURLs(AdapterConfig)} for
+     * this instance's current config ({@link AdapterBase#getAdapterConfig()}),
+     * mirroring the Broadcom NSX-T adapter. When empty, delegates to
+     * {@code super} ({@code null}, the SDK default).
+     *
+     * <p>Consumer (bytecode, collector 9.1.1
+     * {@code NonDisruptiveCertificateHandler}): on an unknown certificate for a
+     * saved instance, the collector builds a throwaway instance of this class
+     * (no-arg constructor, then {@code configure(adapterConfig)}), calls this
+     * method, keeps the URLs whose host matches the failing endpoint, and GETs
+     * each one expecting a signed JSON {@code jwt_token} carrying the renewed
+     * {@code certificate_chain}. That payload is a VCF-component renewal
+     * protocol; a third-party target (vCenter REST root, DSM, UniFi) is not
+     * expected to serve it, so renewal for those targets fails and the admin
+     * re-accepts the new certificate through Validate Connection. Declaring the
+     * URL still replaces the collector's
+     * {@code "Adapter certificate renewal url set is empty"} error with a real
+     * attempt. An adapter whose target serves a renewal endpoint can override
+     * this method to return that endpoint instead.
+     */
+    @Override
+    public Set<String> getCertificateRenewalUrls() {
+        List<String> urls = declaredCertificateUrls(getAdapterConfig());
+        if (urls.isEmpty()) {
+            return super.getCertificateRenewalUrls();
+        }
+        return new LinkedHashSet<>(urls);
+    }
+
+    /**
+     * Resolve {@link #certificateCheckUrls(ResourceConfig)} for an
+     * {@link AdapterConfig}: null-safe, trims entries, drops null/blank ones,
+     * de-duplicates in order, and turns a hook {@link RuntimeException} into
+     * "no URLs" (logged). Never returns {@code null}.
+     */
+    final List<String> declaredCertificateUrls(AdapterConfig adapterConfig) {
+        if (adapterConfig == null) {
+            return Collections.emptyList();
+        }
+        ResourceConfig rc = adapterConfig.getAdapterInstResource();
+        if (rc == null) {
+            return Collections.emptyList();
+        }
+        List<String> raw;
+        try {
+            raw = certificateCheckUrls(rc);
+        } catch (RuntimeException e) {
+            logWarnSafe("certificateCheckUrls threw; treating as no certificate URLs: "
+                    + e, e);
+            return Collections.emptyList();
+        }
+        return normalizeUrls(raw);
+    }
+
+    /** Trim, drop null/blank, de-duplicate preserving order. Never null. */
+    static List<String> normalizeUrls(List<String> raw) {
+        if (raw == null || raw.isEmpty()) {
+            return Collections.emptyList();
+        }
+        LinkedHashSet<String> out = new LinkedHashSet<>();
+        for (String u : raw) {
+            if (u == null) continue;
+            String t = u.trim();
+            if (!t.isEmpty()) out.add(t);
+        }
+        return out.isEmpty() ? Collections.<String>emptyList()
+                : Collections.unmodifiableList(new ArrayList<>(out));
+    }
+
+    /**
+     * Parse an "Allow Insecure SSL" value. {@code "true"} (case-insensitive,
+     * surrounding whitespace ignored) means insecure; anything else, including
+     * {@code null} and blank, means validate certificates.
+     *
+     * <p>Accepts both storage shapes: the legacy free-text identifier (whatever
+     * the admin typed) and the {@code enum="true"} pulldown ({@code true} /
+     * {@code false}). An existing instance keeps its stored string across the
+     * describe.xml change and parses the same way.
+     *
+     * @param raw the stored identifier value
+     * @return {@code true} only for a trimmed, case-insensitive {@code "true"}
+     */
+    public static boolean parseAllowInsecure(String raw) {
+        return parseAllowInsecure(raw, false);
+    }
+
+    /**
+     * As {@link #parseAllowInsecure(String)}, but with an explicit result for a
+     * {@code null} or blank value. For adapters whose shipped default was
+     * insecure (a blank legacy value meant "trust all"), pass {@code true} so
+     * existing instances do not change behaviour. A non-blank value still
+     * parses strictly: only {@code "true"} is insecure.
+     *
+     * @param raw              the stored identifier value
+     * @param defaultWhenBlank result when {@code raw} is null or blank
+     * @return whether the instance opted out of certificate validation
+     */
+    public static boolean parseAllowInsecure(String raw, boolean defaultWhenBlank) {
+        if (raw == null) {
+            return defaultWhenBlank;
+        }
+        String t = raw.trim();
+        if (t.isEmpty()) {
+            return defaultWhenBlank;
+        }
+        return "true".equalsIgnoreCase(t);
+    }
+
+    /**
+     * Read the {@link #ALLOW_INSECURE_IDENTIFIER} identifier from {@code rc} and
+     * parse it with {@link #parseAllowInsecure(String)}. Safe on an unsaved
+     * config and on {@code null}.
+     *
+     * @param rc the adapter-instance resource config (may be unsaved)
+     * @return {@code true} only when the instance explicitly opted out
+     */
+    protected boolean isAllowInsecure(ResourceConfig rc) {
+        if (rc == null) {
+            return false;
+        }
+        return parseAllowInsecure(getIdentifier(rc, ALLOW_INSECURE_IDENTIFIER));
+    }
+
+    /**
+     * Map a Test Connection failure to a readable message when its cause chain
+     * shows the target's certificate chain was not trusted. Returns
+     * {@code null} for any other failure so the caller keeps the raw message.
+     *
+     * <p>Detected (type-based, walking causes and suppressed exceptions, cycle
+     * safe): {@code CustomTrustManager.CustomCertificateException} (the
+     * platform trust manager's rejection, as in the prod
+     * {@code certificate_unknown(46)} stack),
+     * {@link java.security.cert.CertPathBuilderException} and
+     * {@link java.security.cert.CertPathValidatorException} (JDK PKIX,
+     * including {@code SunCertPathBuilderException}), plus the JDK's
+     * {@code "PKIX path building failed"} / {@code "unable to find valid
+     * certification path"} text for wrappers that drop the cause. A bare
+     * {@code certificate_unknown} alert with none of these is NOT matched: that
+     * can be the server rejecting us, which accepting a certificate would not fix.
+     *
+     * @param failure         the exception thrown by the tester
+     * @param promptAvailable whether this adapter declared review URLs for the
+     *        tested config (so VCF Operations can offer the accept dialog)
+     * @return the readable message, or {@code null} if not a trust failure
+     */
+    static String certificateTrustFailureMessage(Throwable failure,
+            boolean promptAvailable) {
+        Throwable hit = findCertificateTrustFailure(failure);
+        if (hit == null) {
+            return null;
+        }
+        String detail = hit.getMessage();
+        if (detail == null || detail.isEmpty()) {
+            detail = hit.getClass().getName();
+        }
+        String base = "The target's TLS certificate is not trusted by this adapter "
+                + "instance. ";
+        String advice;
+        if (promptAvailable) {
+            advice = "Click Validate Connection again and accept the certificate when "
+                    + "VCF Operations shows it for review. If you already accepted it, "
+                    + "check that the host and port match the endpoint the adapter "
+                    + "connects to. To skip certificate validation (lab use only), set "
+                    + "Allow Insecure SSL to true.";
+        } else {
+            advice = "This management pack does not declare its endpoint for "
+                    + "certificate review, so VCF Operations cannot offer to accept "
+                    + "the certificate. Set Allow Insecure SSL to true to skip "
+                    + "certificate validation (lab use only), or update to a pack "
+                    + "version that supports certificate review.";
+        }
+        return base + advice + " Detail: " + detail;
+    }
+
+    /**
+     * Find the first trust-failure throwable in {@code t}'s cause and suppressed
+     * graph, or {@code null}. See
+     * {@link #certificateTrustFailureMessage(Throwable, boolean)}.
+     */
+    static Throwable findCertificateTrustFailure(Throwable t) {
+        java.util.Set<Throwable> seen = java.util.Collections.newSetFromMap(
+                new java.util.IdentityHashMap<>());
+        java.util.ArrayDeque<Throwable> todo = new java.util.ArrayDeque<>();
+        if (t != null) todo.add(t);
+        Throwable textHit = null;
+        while (!todo.isEmpty()) {
+            Throwable cur = todo.poll();
+            if (!seen.add(cur)) continue;
+            if (cur instanceof CustomTrustManager.CustomCertificateException
+                    || cur instanceof java.security.cert.CertPathBuilderException
+                    || cur instanceof java.security.cert.CertPathValidatorException) {
+                return cur;
+            }
+            String m = cur.getMessage();
+            if (textHit == null && m != null
+                    && (m.contains("PKIX path building failed")
+                        || m.contains("unable to find valid certification path"))) {
+                textHit = cur;
+            }
+            if (cur.getCause() != null) todo.add(cur.getCause());
+            for (Throwable s : cur.getSuppressed()) {
+                if (s != null) todo.add(s);
+            }
+        }
+        return textHit;
+    }
+
+    /** {@link #logWarn(String, Throwable)} that never throws (logger may be unavailable). */
+    private void logWarnSafe(String message, Throwable t) {
+        try {
+            logWarn(message, t);
+        } catch (RuntimeException | LinkageError ignored) {
+            // Logging must not turn a certificate-URL lookup into a failure.
         }
     }
 
