@@ -394,13 +394,17 @@ def _apply_sdk_jar_flag(args) -> None:
         _os.environ["VCFCF_SDK_JAR"] = str(sdk_jar)
 
 
-def _cmd_build_sdk_inner(project_dir: Path, output_dir: Path) -> int:
+def _cmd_build_sdk_inner(project_dir: Path, output_dir: Path,
+                         pak_compare_warn_only: bool = False) -> int:
     """Inner helper: build a Tier 2 SDK adapter pak from project_dir."""
     from .sdk_builder import build_sdk_pak, SdkBuildError
     from .sdk_project import SdkProjectError
 
     try:
-        pak_path = build_sdk_pak(project_dir, output_dir)
+        pak_path = build_sdk_pak(
+            project_dir, output_dir,
+            pak_compare_warn_only=pak_compare_warn_only,
+        )
         print(f"Built: {pak_path}")
         return 0
     except (SdkBuildError, SdkProjectError) as exc:
@@ -428,7 +432,10 @@ def cmd_build_sdk(args) -> int:
     """build-sdk <dir> — compile and package a Tier 2 SDK adapter project."""
     _apply_sdk_jar_flag(args)
     _apply_release_flag(args)
-    return _cmd_build_sdk_inner(Path(args.project_dir), Path(args.output))
+    return _cmd_build_sdk_inner(
+        Path(args.project_dir), Path(args.output),
+        pak_compare_warn_only=getattr(args, "pak_compare_warn_only", False),
+    )
 
 
 def cmd_validate_sdk(args) -> int:
@@ -554,7 +561,21 @@ def cmd_install(args) -> int:
 
 
 def cmd_pak_compare(args) -> int:
-    """Structurally compare a factory-built .pak against one or more reference paks."""
+    """Structurally compare a factory-built .pak against one or more reference paks.
+
+    Exit status is the gate (#181): 0 only when the comparison ran and the
+    closest reference reported zero BLOCKING findings; 1 otherwise,
+    including when the comparison itself could not run.
+    """
+    try:
+        return _cmd_pak_compare_inner(args)
+    except Exception as exc:
+        print(f"ERROR: pak-compare could not run: {exc}", file=sys.stderr)
+        print("pak-compare gate: FAIL (comparison did not run)", file=sys.stderr)
+        return 1
+
+
+def _cmd_pak_compare_inner(args) -> int:
     from .pak_compare import compare_paks, compare_pak_directory, format_report
 
     factory = Path(args.factory_pak)
@@ -590,11 +611,31 @@ def cmd_pak_compare(args) -> int:
             return 1
         result = compare_paks(factory, ref)
         _emit(format_report(result))
+        results = [(ref, result)]
 
     if output_file:
         Path(output_file).write_text("".join(out_lines))
         print(f"Report written to: {output_file}", file=sys.stderr)
 
+    # Gate (#181): judged against the CLOSEST reference only (results[0];
+    # compare_pak_directory sorts closest-first), the same rule build-sdk
+    # uses, so an unrelated reference in the directory (an MPB pak next to
+    # SDK paks) cannot fail an SDK pak.  A pak that cannot be opened is
+    # already a BLOCKING (F0/F1).
+    gate_ref, gate_result = results[0]
+    blocking_total = len(gate_result.blocking())
+    if blocking_total:
+        print(
+            f"pak-compare gate: FAIL ({blocking_total} BLOCKING finding(s) "
+            f"against closest reference {Path(gate_ref).name})",
+            file=sys.stderr,
+        )
+        return 1
+    print(
+        f"pak-compare gate: PASS (0 BLOCKING against closest reference "
+        f"{Path(gate_ref).name})",
+        file=sys.stderr,
+    )
     return 0
 
 
@@ -948,6 +989,17 @@ def build_parser() -> argparse.ArgumentParser:
             "line. Reserved for the tag-triggered CI release path — never "
             "pass this for a hand-built / local dev build. Equivalent to "
             "setting VCFCF_RELEASE_BUILD=1."
+        ),
+    )
+    pbsdk.add_argument(
+        "--pak-compare-warn-only",
+        dest="pak_compare_warn_only",
+        action="store_true",
+        default=False,
+        help=(
+            "dev builds only: report pak-compare BLOCKING findings as "
+            "warnings instead of failing the build (default: fail). "
+            "Rejected together with --release."
         ),
     )
     pbsdk.set_defaults(func=cmd_build_sdk)

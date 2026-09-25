@@ -188,6 +188,45 @@ After every build, run `pak-compare` against an SDK reference pak (e.g.
 HPE SimpliVity, Pure Storage). Zero BLOCKINGs is the install gate, same
 as Tier 1.
 
+The gate is enforced by exit code (#181), in both the factory CLI and the
+buildkit (`python3 -m sdk_buildkit`), from buildkit 1.0.11:
+
+- One reference rule everywhere: the gate is judged against the CLOSEST
+  reference pak (fewest BLOCKING, then WARNING, then INFO). In
+  `--reference-dir` mode every pak in the directory is compared and
+  reported, but an unrelated reference (an MPB pak beside SDK paks) cannot
+  fail the build.
+- `pak-compare` exits 1 when the closest reference reports any BLOCKING
+  finding, or when the comparison cannot run; 0 only on a clean run. CI
+  gates on the exit code, not on grepping the report.
+- `build-sdk` compares against every pak in its reference directory after
+  assembling the pak and fails the build on a BLOCKING against the closest
+  one, or on a crashed compare. With `--release` it also
+  fails when no reference pak is available, and deletes the failed pak so
+  no later step can publish it.
+- `build-sdk --pak-compare-warn-only` downgrades the gate to warnings for a
+  dev build only; it is refused together with `--release`.
+- A factory checkout has no reference pak unless one is placed under
+  `tmp/reference_paks/`; a dev build there logs the skip. The buildkit
+  always bundles one under `sdk_buildkit/reference_paks/`.
+- `javac` runs with `-proc:none` (framework and adapter compiles), so an
+  annotation processor inside a classpath jar never executes at build time.
+
+### Defect gate in pak repos (re-vendor pending)
+
+Each pak repo's release CI runs a VENDORED copy of
+`src/vcfcf_packaging/defects.py` as `ci/defect_gate.py` (run as a plain
+script, no package). The copies predate #153, so until they are refreshed a
+registry entry with a multi-token `Affects:` still parses as valid there and
+gates nothing. After #153 lands, every pak repo must re-vendor
+`ci/defect_gate.py` from the current `defects.py`. The re-vendor waits on
+Scott's decision about where the defect gate should live (vendored copy,
+fetched at CI time, or shipped in the buildkit). Script mode is covered by
+`tests/test_defect_affects_single_token.py`: with no managed-paks registry
+importable, a malformed entry still fails closed for the pak being gated
+when its first token names that pak, and the lookup failure is reported on
+stderr.
+
 ## Agent roster additions for Tier 2
 
 | Agent | Posture | Spawn when |

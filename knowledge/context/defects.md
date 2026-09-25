@@ -27,6 +27,20 @@ rule: `knowledge/rules/release-gate-defects.md` (RULE-012).
   `Affects:` is readable gates that artifact, one whose `Affects:` is
   unreadable gates nothing, and both are reported. Keep the shape exact
   anyway; a broken entry still stops gating what it names.
+- **A malformed entry blocks as open, whatever it says.** Its fields
+  cannot be trusted, so an entry that fails to parse is treated as an
+  OPEN BLOCKING defect against its scope even when it reads
+  `Status: closed` or `Severity: tracked`. Fix the entry to clear it.
+- **An `Affects:` that is not one scope token is malformed.** More than
+  one token (a scope plus a parenthetical note, a wrapped path, prose),
+  or a single token with a prefix other than `factory:` (such as
+  `pak:synology`), is a parse error, reported on every gate run. A
+  multi-token value fails closed for its first token when that token is
+  a known managed pak, `<type>/<slug>`, or `factory:<area>`. Otherwise
+  its candidate name (the first token, or the text after the colon for
+  `pak:synology`) still fails closed for a pak gated by exactly that
+  name, and `defect-gate --all` lists it under that name. Put locations
+  and notes in `Summary`.
 - **The reviewer re-asserts.** `sdk-adapter-reviewer` reads this file
   every review and re-asserts each open defect affecting the pak under
   review; if a build resolves one, the verdict *proposes* closure with
@@ -46,12 +60,13 @@ reused. Field lines are `- **Field:** value` (parsed by
 | `Title` | One line; refusal messages quote it. |
 | `Severity` | `blocking` (gates releases of affected artifacts) or `tracked` (must converge, re-asserted every review, but ships). |
 | `Status` | `open` or `closed`. **No `waived`.** A conscious decision to ship is a severity downgrade with a dated note — the diff is the audit trail. |
-| `Affects` | Exactly one artifact scope per entry: a managed pak name from `knowledge/context/managed_paks.md` (e.g. `synology`), a content item as `<type>/<slug>` (e.g. `dashboard/demand_driven_capacity_v2`), or `factory:<area>` for framework code. One issue on N artifacts = N entries, cross-linked via `Related:`. |
+| `Affects` | Exactly one artifact scope per entry: a managed pak name from `knowledge/context/managed_paks.md` (e.g. `synology`), a content item as `<type>/<slug>` (e.g. `dashboard/demand_driven_capacity_v2`), or `factory:<area>` for framework code. One issue on N artifacts = N entries, cross-linked via `Related:`. Anything else (a second token, a note, a prefix other than `factory:`) makes the entry malformed; see "How it works". |
 | `First-seen` | Build (or commit) + date where the defect first appeared. |
 | `Source` | The review / lesson / investigation that found it, by path (+ finding label). |
 | `Summary` | 2–4 lines: what it is, why it matters, smallest correct fix. Enough for a reviewer to re-assert without re-reading the source. |
 | `Closing-evidence` | **Required when `Status: closed`** — concrete proof (fix commit/build, devel proof, lesson), not assertion. Omitted while open. A close without evidence is invalid. |
 | `Related` | Optional cross-links to sibling entries / lessons. |
+| `Severity-note` | Optional. The dated reason for a severity change (for example a downgrade from `blocking` to `tracked`), with the decision it rests on. Not parsed; the diff plus this line is the audit trail. |
 
 ## Defects
 
@@ -787,12 +802,13 @@ reused. Field lines are `- **Field:** value` (parsed by
   re-confirmed in the v4 pass). Regression guarded by
   `tests/test_gridster_coord_floor_def013.py`; all distribution zips
   rebuilt post-change (dashboard payloads byte-identical).
-- **Affects:** factory:dashboards (`src/vcfcf_dashboards/render.py`)
+- **Affects:** factory:dashboards
 - **First-seen:** `content/dashboards/cpu_support_status.yaml` installed on
   devel 2026-07-22 (dashboard UUID `b6796122-4c9b-4770-83d8-10f785755ef2`).
 - **Source:** framework-reviewer-directed investigation, 2026-07-22
   (Playwright screenshot of the installed dashboard on devel).
-- **Summary:** `cpu_support_status.yaml` declares `cluster_picker`
+- **Summary:** Location: `src/vcfcf_dashboards/render.py`.
+  `cpu_support_status.yaml` declares `cluster_picker`
   (ResourceList) first at `coords: {x: 0, y: 0, w: 12, h: 3}` and
   `cpu_support_status_view` (View) second at `{x: 0, y: 3, w: 12, h: 12}`
   — correct declared y-order, picker above view. On devel the UI rendered
@@ -870,13 +886,14 @@ reused. Field lines are `- **Field:** value` (parsed by
   re-entered the deferred window — were races against the platform's
   deferred-import materialization (first-open or ~20-min background
   job). Codified: `knowledge/lessons/dashboard-import-deferred-materialization.md`.
-- **Affects:** factory:dashboards (suspect: render/sync path in
-  `src/vcfcf_dashboards/`; content YAML unchanged in the relevant part)
+- **Affects:** factory:dashboards
 - **First-seen:** devel, 2026-07-22, DEF-013 closure re-install
   (dashboard UUID `b6796122-4c9b-4770-83d8-10f785755ef2`).
 - **Source:** content-installer DEF-013 closure report 2026-07-22;
   investigation `knowledge/context/investigations/def014-view-binding-loss-2026-07-22.md`.
-- **Summary:** The first install of `cpu_support_status.yaml` earlier
+- **Summary:** Location (suspect): render/sync path in
+  `src/vcfcf_dashboards/`; content YAML unchanged in the relevant part.
+  The first install of `cpu_support_status.yaml` earlier
   the same day rendered the embedded view
   ("[VCF Content Factory] CPU Support Status by Host", repo UUID
   `160c5756-1b39-4376-888b-00fad13f1123`) correctly, with live rows and
@@ -1000,7 +1017,7 @@ reused. Field lines are `- **Field:** value` (parsed by
   backing localization bundle — VCF Ops 8.18 hard-rejects the view import
 - **Severity:** tracked
 - **Status:** closed
-- **Affects:** factory:dashboards (`src/vcfcf_dashboards/render.py`)
+- **Affects:** factory:dashboards
 - **First-seen:** shipped `dist/dashboards/vm-snapshot-inventory-dashboard.zip`
   (release 1.0, DEF-016 build); latent in every content-import zip built by
   `vcfcf_dashboards/packager.py`'s `render_views_xml()` since
@@ -1016,7 +1033,8 @@ reused. Field lines are `- **Field:** value` (parsed by
   `knowledge/context/reviews/framework/dashboards-render-localizationkey-2026-08-06.md`):
   every shipped `dist/` zip still reproduces the defect, so an operator
   downloading today still hits it.
-- **Summary:** `_render_view_def_fragment()` in
+- **Summary:** Location: `src/vcfcf_dashboards/render.py`.
+  `_render_view_def_fragment()` in
   `src/vcfcf_dashboards/render.py` emitted
   `<Title localizationKey="title">` and (when non-blank)
   `<Description localizationKey="desc">`, but the content-import zips built
@@ -1096,16 +1114,17 @@ reused. Field lines are `- **Field:** value` (parsed by
   `filter=` and the instanced-group member `isProperty` flag on round-trip
 - **Severity:** tracked
 - **Status:** open
-- **Affects:** factory:extractor (`src/vcfcf_core/extractor/extractor.py`,
-  `src/vcfcf_core/extractor/reverse_local.py`, `src/vcfcf_core/dashboards/reverse.py`;
-  moved into `vcfcf_core` in M2 row 4, old paths alias them)
+- **Affects:** factory:extractor
 - **First-seen:** commit b12bd2a (HEAD baseline of the 2026-08-29
   multi-subject column binding review); pre-existing, date of introduction
   not traced.
 - **Source:** `knowledge/context/reviews/framework/2026-08-29-multi-subject-column-binding.md`
   (NIT 2). Recorded so the loss is not later attributed to the column
   binding diff.
-- **Summary:** Rendering the four multi-subject views of an embargoed third-party project
+- **Summary:** Location: `src/vcfcf_core/extractor/extractor.py`,
+  `src/vcfcf_core/extractor/reverse_local.py`, `src/vcfcf_core/dashboards/reverse.py`
+  (moved into `vcfcf_core` in M2 row 4, old paths alias them).
+  Rendering the four multi-subject views of an embargoed third-party project
   views, parsing them back with either reverse writer, reloading and
   re-rendering loses (a) the `filter=` JSON on `<SubjectType>` and (b)
   `isProperty` on instanced-group member Items (`summaryInfos` also
@@ -1127,7 +1146,8 @@ reused. Field lines are `- **Field:** value` (parsed by
   the sibling `vcommunity-os` pak; every build since the split wrote the
   literal name into `viewDefinitionId`, which renders as "view does not
   exist" on the instance
-- **Severity:** blocking
+- **Severity:** tracked
+- **Severity-note:** 2026-09-25, downgraded from blocking: fix merged on the pak's main (`2ebc967`, PR #19, view referenced by UUID at `VM Details.yaml:606`) but not yet released; Scott, verbatim: "Yes unblock it, i'm not really interested in progressing the vcommunity stuff, it was mostly an exercise, so can we jsut silence it until I pick it up" (`knowledge/context/approvals/2026-09-25-scott-decisions.md` item 14).
 - **Status:** open
 - **Affects:** vcommunity-vsphere
 - **First-seen:** vcommunity-vsphere tag v1.0.0.12 (the os/vsphere split,
@@ -1156,7 +1176,8 @@ reused. Field lines are `- **Field:** value` (parsed by
   `Total Network Configuration Issues`, `Total Non-default Settings`);
   every build shipped the literal string as the column `attributeKey`
   with `rollUpType AVG`, which renders as a blank column on the instance
-- **Severity:** blocking
+- **Severity:** tracked
+- **Severity-note:** 2026-09-25, downgraded from blocking: fix merged on the pak's main (`66daf9e`, PR #21, all four columns quoted) but not yet released; Scott, verbatim: "Yes unblock it, i'm not really interested in progressing the vcommunity stuff, it was mostly an exercise, so can we jsut silence it until I pick it up" (`knowledge/context/approvals/2026-09-25-scott-decisions.md` item 14).
 - **Status:** open
 - **Affects:** vcommunity-vsphere
 - **First-seen:** the build that ported the vendor Distributed Switch
