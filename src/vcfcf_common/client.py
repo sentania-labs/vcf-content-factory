@@ -28,6 +28,39 @@ class VCFOpsError(RuntimeError):
     pass
 
 
+class VerifyRespectingSession(requests.Session):
+    """A ``requests.Session`` whose ``verify=False`` survives the environment.
+
+    Plain ``requests`` lets ``REQUESTS_CA_BUNDLE`` / ``CURL_CA_BUNDLE`` override
+    ``Session.verify = False``: when a request does not pass ``verify=`` itself,
+    ``merge_environment_settings`` swaps in the env bundle path before it merges
+    the session value, so the session's ``False`` loses (issue #174). A profile
+    with ``VERIFY_SSL=false`` then fails against a private-CA appliance whenever
+    the shell exports a CA bundle.
+
+    Here, a session set to ``verify=False`` with no per-request ``verify``
+    stays ``False``. Everything else is unchanged: ``verify=True`` still picks
+    up the env CA bundle, a per-request ``verify=`` still wins, and proxy
+    handling (``trust_env``) is untouched.
+    """
+
+    def merge_environment_settings(self, url, proxies, stream, verify, cert):
+        if verify is None and self.verify is False:
+            verify = False
+        return super().merge_environment_settings(url, proxies, stream, verify, cert)
+
+
+def new_session(verify_ssl: bool = True) -> requests.Session:
+    """Return a :class:`VerifyRespectingSession` with ``verify`` set.
+
+    Use this for every Suite API / UI session in ``src/vcfcf_*`` so an explicit
+    ``VERIFY_SSL=false`` always wins over ``REQUESTS_CA_BUNDLE``.
+    """
+    s = VerifyRespectingSession()
+    s.verify = verify_ssl
+    return s
+
+
 class VCFOpsClient:
     def __init__(
         self,
@@ -41,8 +74,7 @@ class VCFOpsClient:
         self._username = username
         self._password = password
         self._auth_source = auth_source
-        self._session = requests.Session()
-        self._session.verify = verify_ssl
+        self._session = new_session(verify_ssl)
         self._session.headers.update(
             {"Accept": "application/json", "Content-Type": "application/json"}
         )

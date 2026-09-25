@@ -33,6 +33,7 @@ import json
 import requests
 
 from vcfcf_common._env import load_dotenv, resolve_profile_credentials
+from vcfcf_common.client import new_session
 
 
 class UIClientError(RuntimeError):
@@ -131,8 +132,8 @@ class VCFOpsUIClient:
         response from step 3 but CLEARED if the redirect is followed, so we
         must capture it without following the redirect.
         """
-        s = requests.Session()
-        s.verify = self._verify_ssl
+        # new_session: an explicit verify_ssl=False must beat REQUESTS_CA_BUNDLE (#174).
+        s = new_session(self._verify_ssl)
 
         # Step 1: seed JSESSIONID
         s.get(f"https://{self._host}/ui/login.action", params={"vcf": "1"})

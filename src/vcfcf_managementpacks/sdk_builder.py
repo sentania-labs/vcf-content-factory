@@ -3605,7 +3605,9 @@ def scaffold_sdk_project(name: str, output_base: Path) -> Path:
         raise SdkBuildError(f"Project directory already exists: {project_dir}")
 
     # Derive class name stem
-    camel = "".join(part.capitalize() for part in slug.lstrip("vcfcf_").split("_"))
+    # removeprefix, not lstrip: lstrip("vcfcf_") strips any of the characters
+    # v/c/f/_ from the left, so "cert_demo" became "ErtDemo".
+    camel = "".join(part.capitalize() for part in slug.removeprefix("vcfcf_").split("_"))
     class_name = f"{camel}Adapter"
     package = f"com.vcfcf.adapters.{slug}"
     package_path = package.replace(".", "/")
@@ -3626,69 +3628,72 @@ def scaffold_sdk_project(name: str, output_base: Path) -> Path:
         encoding="utf-8",
     )
 
-    # Skeleton adapter class
+    # Skeleton adapter class (framework v2: VcfCfAdapter + com.vcfcf.adapter.spi).
+    # Ships the TLS conventions every framework adapter follows: the
+    # allowInsecure pulldown read with isAllowInsecure(rc), platformSsl(this)
+    # otherwise, and a certificateCheckUrls override so Validate Connection
+    # offers VCF Operations' "Review and accept certificate" dialog.
     (src_dir / f"{class_name}.java").write_text(
         f"package {package};\n\n"
         f"import com.vcfcf.adapter.VcfCfAdapter;\n"
+        f"import com.vcfcf.adapter.spi.VcfCfCollector;\n"
+        f"import com.vcfcf.adapter.spi.VcfCfTester;\n"
         f"import com.integrien.alive.common.adapter3.ResourceStatus;\n"
-        f"import com.integrien.alive.common.adapter3.config.ResourceConfig;\n"
-        f"import com.vmware.tvs.vrealize.adapter.core.collection.CollectionException;\n"
-        f"import com.vmware.tvs.vrealize.adapter.core.collection.live.LiveCollector;\n"
-        f"import com.vmware.tvs.vrealize.adapter.core.data.ResourceCollection;\n"
-        f"import com.vmware.tvs.vrealize.adapter.core.discovery.Discoverer;\n"
-        f"import com.vmware.tvs.vrealize.adapter.core.test.Tester;\n\n"
+        f"import com.integrien.alive.common.adapter3.config.ResourceConfig;\n\n"
+        f"import java.util.List;\n\n"
         f"// TODO: replace Object with your typed config POJO\n"
         f"public final class {class_name} extends VcfCfAdapter<Object> {{\n\n"
-        f"\t/** No-arg constructor — required by the analytics engine (Class.newInstance()). */\n"
+        f"\t/** Must equal the AdapterKind key in describe.xml. */\n"
+        f"\tprivate static final String ADAPTER_KIND = \"{slug}\";\n\n"
+        f"\t/** No-arg constructor: controller-side describe (bare instantiation). */\n"
         f"\tpublic {class_name}() {{\n"
-        f"\t\tsuper();\n"
+        f"\t\tsuper(ADAPTER_KIND);\n"
         f"\t}}\n\n"
-        f"\t/** Two-arg constructor — used by the collector at instance startup. */\n"
+        f"\t/** Two-arg constructor: used by the collector at instance startup. */\n"
         f"\tpublic {class_name}(String adapterDir, Integer adapterInstanceId) {{\n"
-        f"\t\tsuper(adapterDir, adapterInstanceId);\n"
+        f"\t\tsuper(ADAPTER_KIND, adapterDir, adapterInstanceId);\n"
         f"\t}}\n\n"
         f"\t@Override\n"
-        f"\tprotected String getAdapterDirectory() {{ return \"{slug}\"; }}\n\n"
+        f"\tprotected void configureAdapter(ResourceStatus status, ResourceConfig rc) {{\n"
+        f"\t\t// TODO: read identifiers (getIdentifier) and credentials\n"
+        f"\t\t// (getCredentialField) from rc, build this.config and this.httpClient.\n"
+        f"\t\t// TLS: isAllowInsecure(rc) ? builder.allowInsecure(true)\n"
+        f"\t\t//                            : builder.platformSsl(this)\n"
+        f"\t}}\n\n"
+        f"\t/**\n"
+        f"\t * Endpoint(s) VCF Operations reviews on Validate Connection. Called on an\n"
+        f"\t * UNSAVED config: read everything from rc, never from instance fields.\n"
+        f"\t * Must match the host and port the client dials with platformSsl(this).\n"
+        f"\t */\n"
         f"\t@Override\n"
-        f"\tpublic void configure(ResourceStatus status, ResourceConfig rc) {{\n"
-        f"\t\t// TODO: read credentials and identifiers from rc, build this.config\n"
+        f"\tprotected List<String> certificateCheckUrls(ResourceConfig rc) {{\n"
+        f"\t\tString host = getIdentifier(rc, \"host\");\n"
+        f"\t\tif (host == null || host.isBlank() || isAllowInsecure(rc)) {{\n"
+        f"\t\t\treturn List.of();\n"
+        f"\t\t}}\n"
+        f"\t\tString port = getIdentifier(rc, \"port\");\n"
+        f"\t\treturn List.of(\"https://\" + host.trim() + \":\"\n"
+        f"\t\t\t\t+ (port == null || port.isBlank() ? \"443\" : port.trim()));\n"
         f"\t}}\n\n"
         f"\t@Override\n"
-        f"\tpublic Tester getTester(ResourceStatus s, ResourceConfig rc) {{\n"
-        f"\t\treturn param -> {{ /* TODO: validate connectivity */ }};\n"
+        f"\t@SuppressWarnings(\"rawtypes\")\n"
+        f"\tprotected VcfCfTester getTester() {{\n"
+        f"\t\t// TODO: validate connectivity; throw to fail Test Connection. Build the\n"
+        f"\t\t// client from param.getAdapterConfig() (the unsaved config), not this.config.\n"
+        f"\t\treturn (cfg, http, param) -> {{ }};\n"
         f"\t}}\n\n"
         f"\t@Override\n"
-        f"\tpublic Discoverer getDiscoverer(ResourceStatus s, ResourceConfig rc) {{\n"
-        f"\t\t// TODO: return discovered resources\n"
-        f"\t\treturn param -> new ResourceCollection();\n"
-        f"\t}}\n\n"
-        f"\t@Override\n"
-        f"\tpublic LiveCollector getLiveDataCollector(ResourceStatus s, ResourceConfig rc) {{\n"
-        f"\t\treturn new LiveCollector() {{\n"
-        f"\t\t\t@Override public ResourceCollection getCurrentMetrics(\n"
-        f"\t\t\t\t\tResourceConfig rc, ResourceCollection acc)\n"
-        f"\t\t\t\t\tthrows CollectionException, InterruptedException {{\n"
-        f"\t\t\t\t// TODO: collect metrics and return them\n"
-        f"\t\t\t\treturn new ResourceCollection();\n"
-        f"\t\t\t}}\n"
-        f"\t\t\t@Override public ResourceCollection getEvents(\n"
-        f"\t\t\t\t\tResourceConfig rc, ResourceCollection acc)\n"
-        f"\t\t\t\t\tthrows CollectionException, InterruptedException {{\n"
-        f"\t\t\t\treturn new ResourceCollection();\n"
-        f"\t\t\t}}\n"
-        f"\t\t\t@Override public ResourceCollection getRelationships(\n"
-        f"\t\t\t\t\tResourceConfig rc, ResourceCollection acc)\n"
-        f"\t\t\t\t\tthrows CollectionException, InterruptedException {{\n"
-        f"\t\t\t\treturn new ResourceCollection();\n"
-        f"\t\t\t}}\n"
-        f"\t\t\t@Override public boolean shouldForceUpdateRelationships() {{ return false; }}\n"
-        f"\t\t}};\n"
+        f"\t@SuppressWarnings(\"rawtypes\")\n"
+        f"\tprotected VcfCfCollector getCollector() {{\n"
+        f"\t\t// TODO: return the collector; null marks every resource NO_DATA_RECEIVING.\n"
+        f"\t\treturn null;\n"
         f"\t}}\n"
         f"}}\n",
         encoding="utf-8",
     )
 
-    # Skeleton describe.xml
+    # Skeleton describe.xml. allowInsecure is a pulldown (enum="true"); the
+    # framework parses stored values with parseAllowInsecure ("true" only).
     (project_dir / "describe.xml").write_text(
         f'<?xml version="1.0" encoding="UTF-8"?>\n'
         f'<AdapterKind xmlns="http://schemas.vmware.com/vcops/schema"\n'
@@ -3698,8 +3703,19 @@ def scaffold_sdk_project(name: str, output_base: Path) -> Path:
         f'             version="1"\n'
         f'             xsi:schemaLocation="http://schemas.vmware.com/vcops/schema describeSchema.xsd">\n\n'
         f'\t<ResourceKinds>\n'
-        f'\t\t<!-- TODO: add adapter instance (type=7) and data resource kinds -->\n'
-        f'\t\t<ResourceKind key="{slug}" nameKey="2" type="7" monitoringInterval="5"/>\n'
+        f'\t\t<!-- TODO: add credentialKind and data resource kinds -->\n'
+        f'\t\t<ResourceKind key="{slug}" nameKey="2" type="7" monitoringInterval="5">\n'
+        f'\t\t\t<ResourceIdentifier key="host" nameKey="3" type="string"\n'
+        f'\t\t\t                    required="true" dispOrder="1"/>\n'
+        f'\t\t\t<ResourceIdentifier key="port" nameKey="4" type="string"\n'
+        f'\t\t\t                    required="false" dispOrder="2" default="443"/>\n'
+        f'\t\t\t<ResourceIdentifier key="allowInsecure" nameKey="5" type="string"\n'
+        f'\t\t\t                    required="false" dispOrder="3" default="false"\n'
+        f'\t\t\t                    enum="true">\n'
+        f'\t\t\t\t<enum value="false" displayOrder="1"/>\n'
+        f'\t\t\t\t<enum value="true" displayOrder="2"/>\n'
+        f'\t\t\t</ResourceIdentifier>\n'
+        f'\t\t</ResourceKind>\n'
         f'\t</ResourceKinds>\n\n'
         f'\t<LicenseConfig enabled="false"/>\n'
         f'</AdapterKind>\n',
@@ -3708,9 +3724,12 @@ def scaffold_sdk_project(name: str, output_base: Path) -> Path:
 
     # resources.properties
     (project_dir / "resources" / "resources.properties").write_text(
-        f"# resources.properties — i18n strings for {name}\n"
+        f"# resources.properties: i18n strings for {name}\n"
         f"1={name}\n"
-        f"2={name} Adapter Instance\n",
+        f"2={name} Adapter Instance\n"
+        f"3=Host\n"
+        f"4=Port\n"
+        f"5=Allow Insecure SSL\n",
         encoding="utf-8",
     )
 
