@@ -55,3 +55,7 @@ is `2026-09-25-scott-decisions.md`.
    (First force-push attempt at 2:18 PM was denied at the permission check;
    protection and workflow were restored with nothing pushed.)
    > YOu can proceed
+10. Standing merge rule for open PRs (factory #188, compliance #35,
+    runtime #6 and PRs from this work stream): merge once Codex gives a
+    thumbs-up, or once its findings are addressed.
+    > merege on thumbs up or after addressing the findes
