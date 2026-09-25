@@ -101,10 +101,10 @@ pinned `sonnet`. Do not re-add pins without a decision.
 | Agent | Posture | Writes to | Spawn when |
 |---|---|---|---|
 | `ops-recon` | Read-only against live Ops | `knowledge/context/investigations/recon_log.md` on request | **Before every authoring task.** Does this exist? Is it enabled? Does a built-in cover it? |
-| `supermetric-author` | Author | `content/supermetrics/` | After recon. One SM per invocation. |
+| `supermetric-author` | Author | `content/supermetrics/`, or `content/sdk-adapters/<name>/supermetrics/` when the brief names an SDK-adapter pak | After recon. One SM per invocation. |
 | `customgroup-author` | Author | `content/customgroups/` | User needs a dynamic group. Static is out of scope. |
-| `view-author` | Author | `content/views/`, or `third_party/<project>/views/` when the brief names a third-party project | User wants a list view. Blocks if upstream SM/group missing. |
-| `dashboard-author` | Author | `content/dashboards/`, or `third_party/<project>/dashboards/` when the brief names a third-party project | User wants a dashboard. Blocks if upstream views missing. |
+| `view-author` | Author | `content/views/`, or `third_party/<project>/views/` / `content/sdk-adapters/<name>/views/` when the brief names a third-party project or an SDK-adapter pak | User wants a list view. Blocks if upstream SM/group missing. |
+| `dashboard-author` | Author | `content/dashboards/`, or `third_party/<project>/dashboards/` / `content/sdk-adapters/<name>/dashboards/` when the brief names a third-party project or an SDK-adapter pak | User wants a dashboard. Blocks if upstream views missing. |
 | `symptom-author` | Author | `content/symptoms/` | After recon confirms no existing symptom fits. |
 | `alert-author` | Author | `content/alerts/`, `content/recommendations/` | After recon, **and** required symptoms exist. |
 | `report-author` | Author | `content/reports/` | User wants a report. Blocks if upstream views missing. |
