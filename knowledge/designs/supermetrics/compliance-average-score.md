@@ -4,7 +4,7 @@
 - **Slug:** compliance-average-score
 - **Authored YAML:** content/sdk-adapters/compliance/supermetrics/compliance-average-score.yaml
 - **Date:** 2026-09-23
-- **Status:** authored 2026-09-23; ships in adapter build 61
+- **Status:** retired 2026-10-05 (compliance build 86): replaced by the engine-computed `Rollup|Environment|*` metrics on ComplianceWorld, see `knowledge/designs/sdk-adapters/compliance-environment-computed-metrics.md`
 
 ## Initial prompt
 

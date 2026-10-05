@@ -112,7 +112,7 @@ vCenter name, then `Rollup|Benchmark|<B>|objects` for SCG 6.7, 7.0,
   version, and the views show the benchmark applied, not the vDS
   version.
 - View summary rows cannot compute a weighted average; the environment
-  weighted average lives in W1 (super metric), and the view summary
+  weighted average lives in W1 (engine-computed `Rollup|Environment|avg_score` on ComplianceWorld since the 2026-10-05 repoint; was a super metric), and the view summary
   row is labelled "avg of vCenters".
 - Widget availability on Ops 9.0 (devel) vs 9.1 (prod) is not
   checkable by API; verified visually after the first install on each.
