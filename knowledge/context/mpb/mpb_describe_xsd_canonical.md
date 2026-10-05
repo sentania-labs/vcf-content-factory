@@ -270,6 +270,30 @@ Detailed schema for `<PolicySettings>` and `<PackageSettings>` not unpacked here
 
 This is the UI surface for `adapter.discover(DiscoveryParam)` invocation. mpb-adapter had no `<Discoveries>` element; some adapters do.
 
+### `<ComputedMetrics>` on a `<ResourceKind>` (gap closed 2026-10-05)
+
+Missing from the passes above: `ComputedMetrics` is a legal
+`<ResourceKind>` child in the appliance's `describeSchema.xsd` (devel
+copy sha 77e07..., see the 2026-10-01 recon log entry). Each
+`<ComputedMetric key="group|attr" expression="..."/>` takes only `key`
+and `expression`; the key must name a declared attribute of the same
+kind, and the expression uses the super metric form, for example
+`sum(${adapterkind=VMWARE, resourcekind=VMwareAdapter Instance, metric=summary|total_number_vms})`.
+The VMWARE adapter's vSphere World counts are declared this way and
+evaluated by a generic engine (`ComputedMetricsDescriber`,
+`ComputedMetricRegistrator`, the `CM*` expression classes; twelve
+installed describes use it). Proven on a Tier 2 kind
+(`vcfcf_compliance / ComplianceWorld`, compliance build 84, devel): the
+engine sums a foreign kind's pushed metrics across the children one
+collection interval behind, and skips one point on each redescribe.
+Lesson: `knowledge/lessons/environment-totals-are-computed-metrics-not-super-metrics.md`.
+
+Two attributes the XSD declares that the summary above does not list:
+`instanced` and `isAutomaticallyManaged` on `<ResourceAttribute>` /
+`<ResourceGroup>`. The VMWARE describe also uses `rollupType` on
+attributes, which the XSD does not declare; shipped describes are
+evidently not validated against the XSD.
+
 ## Findings summary — what this pass changes about VCF-CF
 
 1. **Target schema 6.3.0** (vim copy). The "schemas are identical" assumption was wrong; pick the newest.

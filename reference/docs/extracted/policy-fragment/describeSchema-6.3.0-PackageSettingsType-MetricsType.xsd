@@ -1,0 +1,80 @@
+	<xs:complexType name="PackageSettingsType">
+		<xs:annotation>
+			<xs:documentation xml:lang="en">
+				Includes all the customized Attributes and Alert/Symptom definitions for this OOTB Policy.
+				An OOTB Policy can be assigned to a Custom Group and become an Active Policy.
+				Note that there is no settings for "Anomaly" and "Fault" except for Badge Scores.
+				Each Policy can include at most one Package Settings.
+			</xs:documentation>
+		</xs:annotation>
+		<xs:choice minOccurs="0" maxOccurs="unbounded">
+			<xs:element name="BadgeSymptoms" type="describe:BadgeSymptomsType" maxOccurs="1" minOccurs="0"/>
+			<xs:element name="Symptoms" type="describe:SymptomsType" maxOccurs="1" minOccurs="0"/>
+			<xs:element name="Alerts" type="describe:AlertsType" maxOccurs="1" minOccurs="0"/>
+			<xs:element name="Metrics" type="describe:MetricsType" maxOccurs="1" minOccurs="0"/>
+		</xs:choice>
+	</xs:complexType>
+
+	<xs:complexType name="MetricsType">
+		<xs:annotation>
+			<xs:documentation xml:lang="en">
+				A collection of Metrics definition policy package settings for an OOTB policy.
+			</xs:documentation>
+		</xs:annotation>
+		<xs:sequence>
+			<xs:element name="Metric" maxOccurs="unbounded" minOccurs="0">
+				<xs:complexType>
+					<xs:annotation>
+						<xs:documentation xml:lang="en">
+							The Metric definition policy package settings.
+							Note that this element is to modify an already defined Metric (ResourceAttribute)
+							for a specific OOTB Policy.
+							Modifications only includes enable/disable the Metric.
+							If enabled, data is collected for the Metric and if disabled,
+							no data would be collected for the Metric.
+						</xs:documentation>
+					</xs:annotation>
+					<xs:attribute type="xs:string" name="id" use="required" >
+						<xs:annotation>
+							<xs:documentation xml:lang="en">
+								The unique id of the defined metric (ResourceAttribute) that this Metric refers to.
+								This is built using the "|" as delimiter between ResourceGroup key and ResourceAttribute key.
+								For example if the ResourceGroup key is "Volume" and the ResourceAttribute key is "RawGB"
+								then the Metric id would be "Volume|RawGB"
+							</xs:documentation>
+						</xs:annotation>
+					</xs:attribute>
+					<xs:attribute type="xs:boolean" name="enabled" use="required" >
+						<xs:annotation>
+							<xs:documentation xml:lang="en">
+								If set to true the data would be collected for this Metric and if set to false
+								no data would be collected for this Metric.
+							</xs:documentation>
+						</xs:annotation>
+					</xs:attribute>
+					<xs:attribute type="xs:boolean" name="kpiEnabled" use="optional" >
+						<xs:annotation>
+							<xs:documentation xml:lang="en">
+								If set to true the metric is set as KPI metric
+								Default is false.
+							</xs:documentation>
+						</xs:annotation>
+					</xs:attribute>
+				</xs:complexType>
+			</xs:element>
+		</xs:sequence>
+		<xs:attribute type="xs:string" name="adapterKind" use="required" >
+			<xs:annotation>
+				<xs:documentation xml:lang="en">
+					The Adapter Kind key for this collection of Metric settings.
+				</xs:documentation>
+			</xs:annotation>
+		</xs:attribute>
+		<xs:attribute type="xs:string" name="resourceKind" use="required" >
+			<xs:annotation>
+				<xs:documentation xml:lang="en">
+					The Resource Kind key for this collection of Metric settings.
+				</xs:documentation>
+			</xs:annotation>
+		</xs:attribute>
+	</xs:complexType>
