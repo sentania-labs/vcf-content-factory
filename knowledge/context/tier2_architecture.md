@@ -104,7 +104,7 @@ All components compile against `vrops-adapters-sdk-2.2.jar` only.
 | `SimpleJson` | `com.vcfcf.adapter.json` | Zero-dep recursive-descent JSON parser. |
 | `AmbientCredential` | `com.vcfcf.adapter.stitch` | Reads `/usr/lib/vmware-vcops/user/conf/maintenanceuser.properties`; decrypts via SDK `Crypt.getDefaultCrypt().decrypt()` — the only FIPS-safe path under `-Dorg.bouncycastle.fips.approved_only=true` (9.1+). Path resolution order: (1) system property `vcfcf.suiteapi.credential.path` if set; (2) hard-wired default `/usr/lib/vmware-vcops/user/conf/maintenanceuser.properties`. **`CommonConstants.VCOPS` is NOT used** — it is a product display-name string (`"VCF Ops"`), not a filesystem path. See `knowledge/lessons/sdk-constants-are-display-names.md`. Never hand-roll the cipher. |
 | `SuiteApiStitchClient` | `com.vcfcf.adapter.stitch` | Framework REST transport for Suite API stitching. Token cached per instance; re-acquired on 401; released on `discard()`. Credential resolution: explicit adapter-config fields > ambient `maintenanceuser.properties` > fail with actionable message. **Unified transport:** ALL calls go through `VcfCfAdapter.openPlatformConnection` (`HttpsURLConnection` + platform `CustomSSLSocketFactory` TOFU-survival intercept + peer-gated hostname verifier — loopback→all-true, non-loopback→JDK strict). No `java.net.http.HttpClient` path. source-11 baseline. |
-| `SuiteApiStitcher` | `com.vcfcf.adapter.stitch` | Thin facade adapter authors hold as a field. Factory methods: `SuiteApiStitcher.create(adapter, logger)` (ambient) and `SuiteApiStitcher.createExplicit(adapter, logger, host, user, pass)` (remote-collector fallback). No transport code required in the adapter. |
+| `SuiteApiStitcher` | `com.vcfcf.adapter.stitch` | Thin facade adapter authors hold as a field. Factory methods: `SuiteApiStitcher.create(adapter, logger)` (ambient) and `SuiteApiStitcher.createExplicit(adapter, logger, host, user, pass)` (remote-collector fallback). No transport code required in the adapter. Surface: `pushProperties`, `pushStats`, `addChild` / `addChildren` (additive Suite API relationship POST, never PUT), `findSingletonResourceId`, `get`, `discard`. |
 
 ## Pak format — hard-won lessons (2026-05-19)
 
@@ -623,10 +623,88 @@ stitcher = SuiteApiStitcher.createExplicit(this, componentLogger(SuiteApiStitche
 // In collect():
 stitcher.pushProperties(foreignResourceUuid, props, System.currentTimeMillis());
 
+// Link a foreign child under the pak's own shared singleton (additive POST).
+// Look the singleton up every cycle (one local GET); never cache its id across
+// cycles. true from addChild means "request accepted", not "linked".
+String worldId = stitcher.findSingletonResourceId(ADAPTER_KIND, "MyWorld");
+if (worldId != null && stitcher.addChild(worldId, foreignChildUuid)) {
+    logger.info("Link to MyWorld requested (accepted by Suite API)");
+}
+
 // In onDiscard():
 if (stitcher != null) stitcher.discard();
 super.onDiscard();
 ```
+
+**Relationships through the Suite API: POST adds, PUT replaces.**
+`addChild(parentId, childId)` / `addChildren(parentId, ids)` issue
+`POST /api/resources/{parentId}/relationships/children` with body
+`{"uuids":["<childId>", ...]}` (operation `addRelationship`; path, verb and
+`uuid-values` body are identical in the 9.0 and 9.1 operations-api specs).
+The `PUT` on the same path (`setRelationship`) removes every existing child
+and substitutes the body, so when several adapter instances share one parent
+(a pak-level singleton each instance links its own vCenter or target to),
+each instance's PUT would wipe the others' links and the last instance to
+collect would win. The stitcher exposes no PUT/replace variant on purpose.
+Spec facts to design around: the add is asynchronous (204 means accepted,
+read `GET .../relationships/children` back to confirm), so a `true` return
+means "request accepted", not "linked", and should be logged that way; children that would
+form a cycle are skipped; 404 only when every UUID in the body is invalid.
+Repeat-add of an existing edge is not described in words by the spec; the
+first live use must confirm one edge remains after several cycles. Error
+posture matches `pushStats`: one 401 retry, every failure logged at WARN and
+swallowed, the call returns `false`. Blank or non-UUID ids are skipped with a
+WARN before anything is sent (logged truncated, control characters stripped);
+ids are trimmed and lowercased before duplicates collapse, and a child equal
+to its parent is skipped with a WARN. Because both calls repeat every
+cycle, an expected failure of `addChild` / `addChildren` or
+`findSingletonResourceId` (an `IOException` such as a non-2xx status, timeout
+or refused connection, or an interrupt) is logged as one WARN line with the
+exception class and message and its stack trace only at DEBUG, while any
+other exception (a malformed response included) keeps its stack trace at
+WARN.
+
+**Known limitation: nothing removes these edges.** An edge added through
+`addChild` / `addChildren` persists until something deletes it with
+`DELETE /api/resources/{parentId}/relationships/children/{childId}`
+(operation `deleteRelationship`; asynchronous, 204/404, identical in the 9.0
+and 9.1 specs). The facade does not wrap that call today. A target dropped
+from an adapter instance's scope (for example a vCenter removed from its
+configuration) therefore stays a child of the shared parent, and any roll-up
+over the parent's children keeps counting it, with no error anywhere. A pak
+whose scope can shrink owns that cleanup, or records the stale edge as a
+known limitation in its design.
+
+`findSingletonResourceId(adapterKind, resourceKind)` runs
+`GET /api/resources?adapterKind=..&resourceKind=..`, keeps entries whose
+`resourceKey` kinds match the trimmed arguments exactly (case-sensitive),
+and returns the `identifier` (lowercase) only when exactly one matches and it
+is a UUID. Zero (normal on the first cycle, before the platform has created a
+newly discovered resource; also a wrong kind key) or more than one (never
+guesses) logs a WARN and returns `null`; so does a partial result page
+(`pageInfo.totalCount` larger than the entries returned, so other matches may
+sit on an unread page) and any query failure. A response with no usable
+`totalCount` (`pageInfo` absent, `totalCount` absent, non-numeric or
+negative) is trusted as complete and its single visible match is returned
+(the server filters by kind and the default `pageSize` is 1000). Look the
+singleton up every cycle and do not cache its id across cycles, as in the
+sample above. A singleton that was deleted and recreated (pak reinstall,
+admin delete) gets a new id, and clearing a cached id only when `addChild`
+returns `false` does not catch that: the add is asynchronous, so a POST to
+the deleted parent's id may be accepted (2xx) and dropped later, leaving the
+stale id cached for the life of the collector while the adapter logs success
+every cycle. The lookup is one GET against the local Suite API, so repeating
+it each cycle costs nothing worth saving. `ForeignResourceResolver` is not used for
+this: its `ResourceEntry` carries no Suite API UUID (it yields SDK
+`ResourceKey`s for the SDK relationship route).
+
+**Which relationship route.** Edges the adapter reports in its own collect
+result go through `RelationshipBuilder` (own parent: `setRelationships`, full
+set per parent; foreign parent: additive). A parent shared across adapter
+instances, linked by each instance to its own child, goes through
+`addChild`. Whether an SDK full set emitted for the same parent removes
+children added through the Suite API is unverified; do not mix the two
+routes on one parent until a live install shows it is safe.
 
 Empirical basis: `knowledge/context/investigations/suiteapi_ambient_auth_devel_2026_06_09.md`
 (devel 9.0.2 + prod 9.1 confirmation). Remote-collector caveat documented in that file.
@@ -635,6 +713,7 @@ Empirical basis: `knowledge/context/investigations/suiteapi_ambient_auth_devel_2
 
 | Date | Change |
 |---|---|
+| 2026-10-02 | **Suite API relationship add + singleton id lookup.** `SuiteApiStitchClient` and the `SuiteApiStitcher` facade gain `addChild(String parentResourceId, String childResourceId)` and `addChildren(String parentResourceId, Collection<String> childResourceIds)` (both return `boolean` accepted), issuing the additive `POST /api/resources/{id}/relationships/children` with `{"uuids":[...]}`; no PUT/replace variant is exposed (PUT replaces the whole child list, last-writer-wins across adapter instances). Also `findSingletonResourceId(String adapterKind, String resourceKind)`: returns the one matching resource UUID, `null` with a WARN on zero, more than one, a partial result page (`pageInfo.totalCount` above the entries returned), or failure; kinds trimmed, non-UUID identifiers dropped. Neither throws into the collect cycle. Callers look the singleton up every cycle rather than caching its id (the add is asynchronous, so a POST to a deleted singleton may be accepted and dropped later, and a cache cleared only on `false` would hold the stale id forever); a `true` from `addChild` means "request accepted", not "linked". An absent or unusable `pageInfo.totalCount` is trusted as complete. Known limitation: no remove (`deleteRelationship`) is wrapped, so edges outlive a shrinking scope. `RelationshipBuilder` Javadoc cross-references the new call for parents shared across instances. New test `adapter_framework/test/.../SuiteApiStitchRelationshipTest.java` (scripted fake `HttpURLConnection` behind an `openPlatformConnection` override; transport group needs log4j-api at runtime, SKIPs without it). Driver: `knowledge/designs/sdk-adapters/compliance-environment-computed-metrics.md` Vision item 2. **Versioning:** `BUILDKIT_VERSION` stays `1.0.11` (not yet tagged), so this ships in 1.0.11 provided it merges before that tag; otherwise bump. **Adapter adoption:** additive API, no existing pak changes behaviour; compliance adopts it. |
 | 2026-09-25 | **Ops-native accept-certificate flow + `allowInsecure` pulldown.** `VcfCfAdapter` gains `certificateCheckUrls(ResourceConfig)` (protected, default empty, called on an unsaved config) and overrides `getConnectionURLs(AdapterConfig)` to return it, falling back to the SDK default when empty, so a pak that does not opt in behaves exactly as before (`NOT_SUPPORTED`, no dialog). An opted-in pak makes Validate Connection show VCF Operations' "Review and accept certificate" dialog for an untrusted target; accepted certs land in the instance `CustomTrustManager` that `platformSsl(this)` already uses. `getCertificateRenewalUrls()` is deliberately not overridden (renewal protocol is VCF-only; see SSL above), so DEF-005's harmless "renewal url set is empty" log line remains. `onTest` now replaces a raw `certificate_unknown(46)` / PKIX failure with a readable message (hook consulted only after a trust failure is detected). New `parseAllowInsecure(String)`, `parseAllowInsecureLegacyNotFalse(String)`, `isAllowInsecure(ResourceConfig)`, `isAllowInsecureLegacyNotFalse(ResourceConfig)`, `ALLOW_INSECURE_IDENTIFIER`. `scaffold-sdk` now emits a framework-v2 skeleton (the old one used the removed aria-ops-core API) with the `allowInsecure` pulldown and a `certificateCheckUrls` override, and derives the class name with `removeprefix` (was `lstrip`). New test `adapter_framework/test/.../CertificateReviewTest.java`. **Versioning:** `BUILDKIT_VERSION` is not bumped here; buildkit 1.0.11 (from `fix/pipeline-hardening-round`) is tagged only after both that branch and this one are merged, so this change ships in 1.0.11. **Adapter adoption:** per-pak table under SSL above. |
 | 2026-08-17 | **`insecureSslContext()` hostname-verification fix (issue #82)**: the trust-all manager in `VcfCfAdapter.insecureSslContext()` is reimplemented as `javax.net.ssl.X509ExtendedTrustManager` (no-op `Socket`/`SSLEngine` overloads added for both `checkClientTrusted`/`checkServerTrusted`) instead of the legacy `javax.net.ssl.X509TrustManager`. Root cause: JSSE silently wraps a legacy `X509TrustManager` in `sun.security.ssl.AbstractTrustManagerWrapper`, which re-applies the endpoint identity (hostname) check whenever an endpoint identification algorithm is set. `java.net.http.HttpClient` always sets one, so a user with "Allow Insecure SSL" ticked still got a hostname-mismatch failure (live report against the Synology pack). Measured: this is **not** `HttpClient`-only. It also disables hostname verification on the `HttpsURLConnection` transport, including when the caller uses the JDK's own default `HostnameVerifier` (`HttpsClient` sets an endpoint identification algorithm whenever the verifier in effect is the default one, at which point JSSE decides the outcome instead of the verifier). No non-opt-in caller reaches the changed code (every caller gates on `allowInsecure` or is the vendor-mirror Suite API hop, which already sets an all-true `HostnameVerifier` regardless). Method signature/visibility unchanged; `getPlatformSslContext()` / the TOFU path untouched. `HttpClientBuilder.allowInsecure(boolean)` javadoc corrected to say it disables both chain validation and hostname verification. `SuiteApiStitchClient` keeps `openPlatformConnection()`/`HttpsURLConnection`, not because `HttpClient` still cannot express an unconditional all-true hostname posture (it now can, after this fix), but because matching the vendor `aria-ops-core SuiteAPIClient` transport byte-for-byte remains the goal (DEF-005 "mirror BC exactly"); see the corrected class javadoc and `knowledge/lessons/suite-api-stitch-ssl-tofu-vs-java-http.md`. Regression test added (`VcfCfAdapterTest`): real TLS handshake over `HttpClient` against a hostname-mismatched cert generated fresh per run via `keytool`, asserting `insecureSslContext()` succeeds and a normal validating context fails with the specific `SSLHandshakeException`/`CertificateException` identity failure (not merely "some exception"). `vcfcf-adapter-base.jar` rebuilt. **Adapter adoption:** rebuild and re-release synology, unifi, and compliance (the three paks confirmed on the affected `HttpClient`-transport pattern); the sdk-buildkit tarball must be republished first. |
 | 2026-06-10 | **`setRelationships` on foreign resource is per-adapter scoped (9.0.2 proven)**: synology build-16 devel install confirmed the wld01 iSCSI VMWARE Datastore retained all 22 VMWARE-collected children (HostSystem/VM/Pods/etc.) while gaining the SynologyIscsiLun child edge — closing synology-build-16 WARNING-1. Full-set `parentForeign`+`build()` is safe against foreign parents; no delta/labeled workaround needed. 9.1 unverified (open residual). See "setRelationships on a foreign resource" authoring contract note above and `knowledge/lessons/setrelationships-foreign-adapter-scoped.md`. |
