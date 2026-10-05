@@ -4,7 +4,7 @@
 - **Slug:** compliance-environment-computed-metrics
 - **Adapter repo:** `content/sdk-adapters/compliance/` (sentania-labs/vcf-content-factory-sdk-compliance)
 - **Date:** 2026-10-01
-- **Status:** drafted (decision taken, implementation not started; devel install waits on Scott's go)
+- **Status:** proven on devel 2026-10-05 (builds 84 to 87); adapter PR pending; factory PR #193 open
 
 ## Initial prompt
 
@@ -150,3 +150,21 @@ devel install, phase 3:
 5. First cycle warns that the world does not exist yet; second cycle
    requests the link.
 6. Zero scored gives no data, not 0.
+
+## Devel result (2026-10-05): pass
+
+Builds 84, 85 and 87 on devel, 2026-10-02 to 10-05. Totals correct every
+cycle (164 / 132 / 0 / 84.64, equal to the three vCenters' sums and to the
+retired super metrics), no policy edit, all three vCenters linked once each
+across every cycle, nothing stomped. Lag is exactly one collection
+interval (an hour at 60 minutes, 5 minutes at 5), and one point is skipped
+on each pak upgrade (redescribe). The 85 to 87 upgrade renamed all 388
+active alerts in place, applied cancel 3 to existing definitions,
+re-imported the Overview onto ComplianceWorld, and removed the four
+retired super metrics from the instance. A pak upgrade does not change an
+existing instance's stored interval; devel's three instances were set to
+5 through the adapter API (collectorId dropped from the PUT body). Steady
+state cycle time at devel size: 4 to 9.5 seconds. Still unproven: zero
+scored giving no data; a deleted instance's vCenter lingering in the
+totals. Lesson:
+`knowledge/lessons/environment-totals-are-computed-metrics-not-super-metrics.md`.
