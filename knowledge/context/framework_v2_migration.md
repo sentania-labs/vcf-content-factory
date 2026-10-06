@@ -494,7 +494,24 @@ stitcher = SuiteApiStitcher.createExplicit(
 
 // In collect():
 stitcher.pushProperties(foreignResourceUuid, props, System.currentTimeMillis());
+// Additive relationship under a parent shared across adapter instances
+// (Suite API POST .../relationships/children, never the replacing PUT).
+// Look the singleton up every cycle (one local GET); never cache its id across
+// cycles. true from addChild means "request accepted", not "linked".
+String worldId = stitcher.findSingletonResourceId(ADAPTER_KIND, "MyWorld");
+if (worldId != null && stitcher.addChild(worldId, foreignChildUuid)) {
+    logger.info("Link to MyWorld requested (accepted by Suite API)");
+}
 ```
+
+`worldId` is a local, not a field: the add is asynchronous, so a POST to a
+deleted and recreated singleton's old id may be accepted and dropped later,
+and an id cached across cycles would then never be refreshed while the log
+claimed success every cycle. Nothing removes an edge added
+this way (known limitation): a target dropped from the instance's scope stays
+a child until the pak deletes the edge itself. Contract, the POST-not-PUT
+rule and the removal path: `tier2_architecture.md`, "Relationships through
+the Suite API: POST adds, PUT replaces".
 
 Release in `onDiscard()`:
 ```java

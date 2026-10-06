@@ -11,9 +11,16 @@ import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.InetAddress;
 import java.net.URI;
+import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.regex.Pattern;
 
 /**
  * Framework-level Suite API REST transport for property/stats stitching.
@@ -128,6 +135,12 @@ import java.util.Map;
  * client.pushProperties(resourceUuid, props, System.currentTimeMillis());
  * client.pushStats(resourceUuid, stats, System.currentTimeMillis());
  * String body = client.get("/api/resources?adapterKind=VMWARE");
+ * // Shared singleton parent: look it up every cycle (one local GET), never
+ * // cache it across cycles. true from addChild means "accepted", not "linked".
+ * String worldId = client.findSingletonResourceId("MyAdapterKind", "MyWorld");
+ * if (worldId != null && client.addChild(worldId, foreignChildUuid)) {  // additive POST, never PUT
+ *     logger.info("Link to MyWorld requested (accepted by Suite API)");
+ * }
  *
  * // Release when the adapter is discarded:
  * client.discard();
@@ -510,6 +523,323 @@ public final class SuiteApiStitchClient {
     }
 
     /**
+     * Add one child to an existing resource through the Suite API, additively.
+     *
+     * <p>Convenience for {@link #addChildren(String, Collection)} with a single
+     * child; same contract.
+     *
+     * @param parentResourceId Suite API resource UUID of the parent
+     * @param childResourceId  Suite API resource UUID of the child
+     * @return {@code true} if the Suite API accepted the request (2xx), which
+     *         means "request accepted", not "linked" (the add is asynchronous;
+     *         log it that way)
+     */
+    public boolean addChild(String parentResourceId, String childResourceId) {
+        List<String> one = new ArrayList<>(1);
+        one.add(childResourceId);
+        return addChildren(parentResourceId, one);
+    }
+
+    /**
+     * Add children to an existing resource through the Suite API, additively:
+     * {@code POST /api/resources/{parentResourceId}/relationships/children}
+     * with body {@code {"uuids":["<childId>", ...]}} (operation
+     * {@code addRelationship}; identical path, verb and {@code uuid-values}
+     * body in the 9.0 and 9.1 operations-api specs).
+     *
+     * <p><strong>Why POST and never PUT.</strong> {@code PUT} on the same path
+     * ({@code setRelationship}) has replace semantics: it removes every
+     * existing child of the parent and substitutes the request body. When the
+     * parent is shared by several adapter instances (for example one
+     * pak-level singleton that every instance links its own vCenter to), each
+     * instance's PUT would wipe the children the other instances added, and
+     * the last instance to collect would win. {@code POST} only adds, so each
+     * instance asserts its own link without disturbing anyone else's. This
+     * class deliberately exposes no PUT/replace variant.
+     *
+     * <p><strong>Asynchronous.</strong> The spec states the add is not
+     * synchronous: a 2xx means the request was accepted, and the edge may
+     * appear a little later. Read the parent's relationships back
+     * ({@code GET /api/resources/{id}/relationships/children}) to confirm.
+     *
+     * <p><strong>Re-asserting is the intended usage.</strong> Call it every
+     * collect cycle; an edge is a (parent, child) pair, so a repeat add of an
+     * existing child has nothing to add. The spec does not state repeat-add
+     * behaviour in words, so the first live use should confirm one edge
+     * remains after several cycles. Per the spec, children that would form a
+     * cycle are skipped, and the call returns 404 only when every UUID in the
+     * body is invalid or missing (logged at WARN here like any non-2xx).
+     *
+     * <p><strong>Not the SDK route.</strong> For edges the adapter reports in
+     * its own collect result, use {@link RelationshipBuilder}, whose
+     * own-parent emission is {@code setRelationships} (full set per parent).
+     * Use this method when the parent is shared across adapter instances and
+     * a per-instance full set would be last-writer-wins.
+     *
+     * <p>Token lifecycle, transport and error posture match
+     * {@link #pushStats}: cached token, one re-acquire and retry on HTTP 401,
+     * every failure logged at WARN and swallowed so the collect cycle never
+     * sees an exception. An expected failure (an {@link IOException} such as
+     * a non-2xx status, timeout or refused connection, or an interrupt) is
+     * one WARN line without a stack trace, with the trace at DEBUG; anything
+     * else keeps its stack trace at WARN (see {@link #isExpectedFailure}).
+     * Blank or non-UUID ids are skipped with a WARN (the ids go into the
+     * request path and body, so they are validated rather than escaped; a
+     * rejected id is logged truncated and with control characters
+     * stripped). Ids are trimmed and lowercased, then duplicate
+     * child ids are collapsed (the body schema declares {@code uniqueItems}),
+     * and a child equal to the parent is skipped with a WARN (a self-edge
+     * would be a cycle, which the server skips anyway). The caller's
+     * collection is read inside the failure guard, so even a concurrent
+     * modification of it is logged and returned as {@code false}.
+     *
+     * <p><strong>Known limitation: nothing removes these edges.</strong> An
+     * edge added here persists until something deletes it with
+     * {@code DELETE /api/resources/{parentResourceId}/relationships/children/{childId}}
+     * (operation {@code deleteRelationship}, asynchronous, 204/404, same in
+     * the 9.0 and 9.1 specs). The framework does not wrap that call today.
+     * So a child that drops out of an adapter instance's scope (for example
+     * a vCenter removed from the instance's configuration) stays a child of
+     * the shared parent, and any roll-up over the parent's children keeps
+     * counting it. A pak whose scope can shrink owns that cleanup, or records
+     * the stale edge as a known limitation in its design.
+     *
+     * @param parentResourceId Suite API resource UUID of the parent
+     * @param childResourceIds Suite API resource UUIDs of the children; no-op
+     *                         if null, empty, or no valid id remains
+     * @return {@code true} if the Suite API accepted the request (2xx), which
+     *         means "request accepted", not "linked" (the add is asynchronous;
+     *         log it that way); {@code false} if nothing was sent or the
+     *         request failed
+     */
+    public boolean addChildren(String parentResourceId,
+            Collection<String> childResourceIds) {
+        if (!isUuid(parentResourceId)) {
+            logger.warn("SuiteApiStitchClient: addChildren skipped, parent resource id"
+                    + " is not a UUID: " + loggable(parentResourceId));
+            return false;
+        }
+        String parent = normalizeUuid(parentResourceId);
+        Set<String> children = new LinkedHashSet<>();
+        try {
+            // Read the caller's collection inside the guard: a concurrent
+            // modification must not throw into the collect cycle.
+            if (childResourceIds != null) {
+                for (String id : childResourceIds) {
+                    if (!isUuid(id)) {
+                        logger.warn("SuiteApiStitchClient: addChildren skipping child id"
+                                + " that is not a UUID: " + loggable(id) + " (parent="
+                                + parent + ")");
+                        continue;
+                    }
+                    String child = normalizeUuid(id);
+                    if (child.equals(parent)) {
+                        logger.warn("SuiteApiStitchClient: addChildren skipping child id"
+                                + " equal to its parent (self-edge): " + parent);
+                        continue;
+                    }
+                    children.add(child);
+                }
+            }
+            if (children.isEmpty()) return false;
+
+            String path = childrenRelationshipPath(parent);
+            String body = buildUuidValuesJson(children);
+            String tok = ensureToken();
+            try {
+                rawPost(path, body, tok);
+            } catch (Suite401Exception e) {
+                tok = reAcquireToken(tok);
+                rawPost(path, body, tok);
+            }
+            return true;
+        } catch (Exception e) {
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
+            logFailure("SuiteApiStitchClient: addChildren failed for parent="
+                    + parent + " children=" + children, e);
+            return false;
+        }
+    }
+
+    /**
+     * Look up the Suite API resource UUID of the one resource of a kind,
+     * typically the adapter's own singleton (for example a pak-level "World"
+     * object every adapter instance registers with the same identifiers).
+     *
+     * <p>Issues {@code GET /api/resources?adapterKind=<a>&resourceKind=<r>}
+     * (kinds trimmed) and keeps only entries whose
+     * {@code resourceKey.adapterKindKey} and {@code resourceKey.resourceKindKey}
+     * equal the trimmed arguments exactly and whose {@code identifier} is a
+     * UUID (returned lowercase).
+     *
+     * <ul>
+     *   <li>Exactly one match: returns its {@code identifier}.</li>
+     *   <li>No match: logs at WARN and returns {@code null}. Expected on the
+     *       very first cycle, before the platform has created a resource the
+     *       adapter only just discovered; the caller skips and retries next
+     *       cycle. A wrong kind key (the comparison is exact and
+     *       case-sensitive) looks the same, and the WARN names both causes.</li>
+     *   <li>More than one match: logs the candidate ids at WARN and returns
+     *       {@code null}. The helper never guesses which one is meant.</li>
+     *   <li>Incomplete page: if the response's {@code pageInfo.totalCount}
+     *       is larger than the number of entries on the page, other matches
+     *       may sit on a page not read, so it logs at WARN and returns
+     *       {@code null} rather than trusting one visible match. A response
+     *       with no usable {@code totalCount} ({@code pageInfo} absent,
+     *       {@code totalCount} absent, non-numeric or negative) is trusted as
+     *       complete and its single visible match is returned (the server
+     *       filters by kind and the default {@code pageSize} is 1000).</li>
+     *   <li>Query or parse failure: logs at WARN and returns {@code null};
+     *       never throws. An expected failure (HTTP status, timeout, refused
+     *       connection, interrupt) is one WARN line without a stack trace,
+     *       with the trace at DEBUG; anything else, a malformed response
+     *       included, keeps its stack trace at WARN.</li>
+     * </ul>
+     *
+     * <p><strong>Look up every cycle; do not cache across cycles.</strong> A
+     * singleton that is deleted and recreated (pak reinstall, admin delete)
+     * gets a new id. Clearing a cached id when {@link #addChild} returns
+     * {@code false} is not enough: the add is asynchronous, so a POST to a
+     * deleted parent's id may be accepted (2xx) and dropped later, leaving
+     * the stale id cached for the life of the collector while every cycle
+     * reports success. The lookup is one GET against the local Suite API, so
+     * repeating it each cycle costs nothing worth saving.
+     *
+     * @param adapterKind  adapter kind key, e.g. {@code "MyAdapterKind"}
+     * @param resourceKind resource kind key, e.g. {@code "MyWorld"}
+     * @return the single matching resource UUID, or {@code null}
+     */
+    public String findSingletonResourceId(String adapterKind, String resourceKind) {
+        String ak = adapterKind == null ? "" : adapterKind.trim();
+        String rk = resourceKind == null ? "" : resourceKind.trim();
+        if (ak.isEmpty() || rk.isEmpty()) {
+            logger.warn("SuiteApiStitchClient: findSingletonResourceId needs a non-blank"
+                    + " adapterKind and resourceKind (got " + loggable(adapterKind) + "/"
+                    + loggable(resourceKind) + ")");
+            return null;
+        }
+        String what = loggable(ak) + "/" + loggable(rk);
+        String path = "/api/resources?adapterKind=" + urlEncode(ak)
+                + "&resourceKind=" + urlEncode(rk);
+        List<String> ids;
+        long totalCount;
+        int onPage;
+        try {
+            SimpleJson root = SimpleJson.parse(get(path));
+            ids = parseResourceIds(root, ak, rk);
+            onPage = root.get("resourceList").size();
+            SimpleJson total = root.get("pageInfo").get("totalCount");
+            totalCount = total.isNull() ? -1L : total.asLong();
+        } catch (Exception e) {
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
+            logFailure("SuiteApiStitchClient: findSingletonResourceId query failed for "
+                    + what, e);
+            return null;
+        }
+        if (totalCount > onPage) {
+            logger.warn("SuiteApiStitchClient: findSingletonResourceId for " + what
+                    + " got a partial page (" + onPage + " of " + totalCount
+                    + " results); other matches may exist, returning none");
+            return null;
+        }
+        if (ids.isEmpty()) {
+            logger.warn("SuiteApiStitchClient: findSingletonResourceId found no exact "
+                    + what + " match (wrong kind key, which is case-sensitive,"
+                    + " or not created yet)");
+            return null;
+        }
+        if (ids.size() > 1) {
+            logger.warn("SuiteApiStitchClient: findSingletonResourceId found "
+                    + ids.size() + " " + what
+                    + " resources " + ids + "; expected one, returning none");
+            return null;
+        }
+        return ids.get(0);
+    }
+
+    /**
+     * Log a swallowed failure of {@link #addChildren} or
+     * {@link #findSingletonResourceId} without flooding the collector log.
+     *
+     * <p>These calls repeat every collect cycle, per adapter instance, so a
+     * persistent expected failure (the principal lacks relationship
+     * permission, the parent is gone, the Suite API is down) would otherwise
+     * write a full stack trace every cycle. Expected failures get one WARN
+     * line naming the exception class and message (the transport puts the
+     * HTTP status at the end of the message, which {@link #failureSummary}
+     * keeps when it caps a long one) and the stack trace only at DEBUG;
+     * unexpected ones keep the stack trace at WARN.
+     */
+    private void logFailure(String context, Exception e) {
+        String line = context + ": " + failureSummary(e);
+        if (isExpectedFailure(e)) {
+            logger.warn(line);
+            if (logger.isDebugEnabled()) {
+                logger.debug(line + " (stack trace)", e);
+            }
+        } else {
+            logger.warn(line, e);
+        }
+    }
+
+    /**
+     * True for the failures the transport raises when the Suite API is
+     * reachable but unhappy (non-2xx status, including a 401 that survived
+     * the one retry) or unreachable (timeout, refused connection, unknown
+     * host): the {@link IOException} family. An {@link InterruptedException}
+     * (collector shutdown) is expected too. Everything else, runtime
+     * exceptions included, is unexpected. Visible to unit tests.
+     */
+    static boolean isExpectedFailure(Throwable e) {
+        return e instanceof IOException || e instanceof InterruptedException;
+    }
+
+    /** Longest exception message {@link #failureSummary} echoes into a log line. */
+    static final int FAILURE_MESSAGE_MAX = 200;
+
+    /** Characters of the message tail {@link #failureSummary} keeps when capping. */
+    static final int FAILURE_TAIL_KEEP = 47;
+
+    /**
+     * {@code <SimpleClassName>: <message>} for a one-line log entry. The
+     * message can carry server text (a JSON parse error on a malformed 200
+     * body echoes the offending input), so unsafe characters are replaced
+     * as in {@link #loggable}. A message longer than
+     * {@link #FAILURE_MESSAGE_MAX} keeps its head and its last
+     * {@link #FAILURE_TAIL_KEEP} characters joined by {@code ...}, at most
+     * {@link #FAILURE_MESSAGE_MAX} characters in all, because the transport
+     * puts the HTTP status at the end ({@code "Suite API POST <url> HTTP 403"})
+     * and a long Suite API host must not push it out of the WARN line.
+     * Neither cut leaves a lone surrogate: a high surrogate ending the head
+     * and a low surrogate starting the tail are dropped. Visible to unit
+     * tests.
+     */
+    static String failureSummary(Throwable e) {
+        String msg = e.getMessage();
+        return e.getClass().getSimpleName() + ": "
+                + (msg == null ? "(no message)" : capHeadAndTail(msg));
+    }
+
+    /** Sanitize and, over {@link #FAILURE_MESSAGE_MAX}, keep head and tail. */
+    private static String capHeadAndTail(String msg) {
+        StringBuilder clean = new StringBuilder(msg.length());
+        for (int i = 0; i < msg.length(); i++) {
+            char c = msg.charAt(i);
+            clean.append(unsafeForLog(c) ? '?' : c);
+        }
+        if (clean.length() <= FAILURE_MESSAGE_MAX) return clean.toString();
+        int headEnd = FAILURE_MESSAGE_MAX - 3 - FAILURE_TAIL_KEEP;
+        if (Character.isHighSurrogate(clean.charAt(headEnd - 1))) headEnd--;
+        int tailStart = clean.length() - FAILURE_TAIL_KEEP;
+        if (Character.isLowSurrogate(clean.charAt(tailStart))) tailStart++;
+        return clean.substring(0, headEnd) + "..." + clean.substring(tailStart);
+    }
+
+    /**
      * Perform an authenticated GET against the Suite API.
      *
      * <p>The cached bearer token is used. If the Suite API returns HTTP 401,
@@ -767,6 +1097,123 @@ public final class SuiteApiStitchClient {
               .append(",\"data\":[").append(e.getValue()).append("]}");
         }
         return sb.append("]}").toString();
+    }
+
+    /** Canonical 8-4-4-4-12 hex UUID, the form Suite API resource ids take. */
+    private static final Pattern UUID_PATTERN = Pattern.compile(
+            "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}");
+
+    /** True if {@code s} (trimmed) is a canonical UUID. Visible to tests. */
+    static boolean isUuid(String s) {
+        return s != null && UUID_PATTERN.matcher(s.trim()).matches();
+    }
+
+    /**
+     * Suite API path for the additive add-children call. Visible to tests.
+     * The relationship type segment is the lowercase representation value
+     * ({@code children}) the spec enumerates.
+     */
+    static String childrenRelationshipPath(String parentResourceId) {
+        return "/api/resources/" + parentResourceId + "/relationships/children";
+    }
+
+    /** {@code uuid-values} body: {@code {"uuids":[...]}}. Visible to tests. */
+    static String buildUuidValuesJson(Collection<String> uuids) {
+        StringBuilder sb = new StringBuilder("{\"uuids\":[");
+        boolean first = true;
+        for (String id : uuids) {
+            if (!first) sb.append(",");
+            first = false;
+            sb.append(jsonStr(id));
+        }
+        return sb.append("]}").toString();
+    }
+
+    /**
+     * Extract the {@code identifier} of every {@code resourceList} entry whose
+     * {@code resourceKey} kinds equal the arguments exactly. Never null.
+     * Visible to tests.
+     */
+    static List<String> parseResourceIds(String json, String adapterKind,
+            String resourceKind) {
+        return parseResourceIds(SimpleJson.parse(json), adapterKind, resourceKind);
+    }
+
+    /**
+     * Same as {@link #parseResourceIds(String, String, String)} on an already
+     * parsed response. Entries whose {@code identifier} is not a UUID are
+     * dropped (the result is used as a request path segment); ids are
+     * returned lowercase and deduplicated.
+     */
+    static List<String> parseResourceIds(SimpleJson root, String adapterKind,
+            String resourceKind) {
+        List<String> ids = new ArrayList<>();
+        for (SimpleJson r : root.get("resourceList").asList()) {
+            SimpleJson key = r.get("resourceKey");
+            String id = r.get("identifier").asString(null);
+            if (adapterKind.equals(key.get("adapterKindKey").asString(null))
+                    && resourceKind.equals(key.get("resourceKindKey").asString(null))
+                    && isUuid(id)) {
+                String norm = normalizeUuid(id);
+                if (!ids.contains(norm)) ids.add(norm);
+            }
+        }
+        return ids;
+    }
+
+    /** Trimmed, lowercase form of a UUID already checked with {@link #isUuid}. */
+    static String normalizeUuid(String uuid) {
+        return uuid.trim().toLowerCase(java.util.Locale.ROOT);
+    }
+
+    /** Longest caller-supplied value echoed into a log line. */
+    static final int LOGGABLE_MAX = 80;
+
+    /**
+     * Log-safe form of a caller-supplied value: ISO control characters
+     * (CR, LF, tab, ...), the Unicode line and paragraph separators
+     * (U+2028, U+2029) and format characters (bidi overrides such as U+202E,
+     * zero-width characters) replaced with {@code ?} so a value cannot forge,
+     * split or visually reorder a log line, and truncated to
+     * {@link #LOGGABLE_MAX} characters with a {@code ...} marker. A
+     * truncation that would end on the high half of a surrogate pair drops
+     * that half rather than emit a lone surrogate. {@code null} renders as
+     * {@code "null"}. Visible to tests.
+     */
+    static String loggable(String s) {
+        return loggable(s, LOGGABLE_MAX);
+    }
+
+    /** {@link #loggable(String)} with a caller-chosen length cap. */
+    private static String loggable(String s, int max) {
+        if (s == null) return "null";
+        StringBuilder sb = new StringBuilder(Math.min(s.length(), max) + 3);
+        for (int i = 0; i < s.length() && sb.length() < max; i++) {
+            char c = s.charAt(i);
+            sb.append(unsafeForLog(c) ? '?' : c);
+        }
+        if (s.length() > max) {
+            int last = sb.length() - 1;
+            if (last >= 0 && Character.isHighSurrogate(sb.charAt(last))) {
+                sb.setLength(last);
+            }
+            sb.append("...");
+        }
+        return sb.toString();
+    }
+
+    /** True for characters {@link #loggable} replaces with {@code ?}. */
+    private static boolean unsafeForLog(char c) {
+        if (Character.isISOControl(c)) return true;
+        int type = Character.getType(c);
+        return type == Character.LINE_SEPARATOR
+                || type == Character.PARAGRAPH_SEPARATOR
+                || type == Character.FORMAT;
+    }
+
+    /** Query-parameter encoding (space as %20, not +). */
+    private static String urlEncode(String s) {
+        return URLEncoder.encode(s, StandardCharsets.UTF_8).replace("+", "%20");
     }
 
     /**

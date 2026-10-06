@@ -4744,3 +4744,391 @@ embargo. They live in `embargo/recon/2026-08-29-recon-log-appends.md`
 multi-subject column binding contract in
 `knowledge/context/wire-formats/view_column_wire_format.md` and the lesson
 `knowledge/lessons/dashboard-import-without-views-corrupts-refs.md`.
+
+
+## 2026-10-01: Can a pak policy fragment enable super metrics (metric attribute enablement) on import?
+
+**Intent:** Compliance pak ships four SMs on VMWARE / vSphere World that an admin must enable by hand. Determine whether a pak can ship a policy fragment (content/policies/) that enables super metrics or metrics, the way first-party paks ship alert enablement. Run 2026-10-01 about 3:00 to 3:20 PM America/Chicago (CDT). Devel only (prod not needed). All access read-only: SSH to devel for `unzip -p` / `python zipfile` reads to stdout and file reads under `/usr/lib/vmware-vcops`, plus Suite API GETs. Nothing modified on the appliance (policy exports were saved to the session scratchpad, not the appliance).
+
+**Verdict (INFERRED, not proven end to end):** Supported at the format level, unproven at the pak-import level. Zero installed pak ships any metric or super-metric enablement in a policy fragment: every shipped fragment (6 compliance packs' `content/policies/*.xml`, and the `<OOTBPolicies>` blocks inside the vSphere, vSAN and NSX-T `describe.xml`) contains only `<Alerts>/<Alert>` under `<PackageSettings>`. But the same `<PackageSettings>` schema, as exported by the live policy engine, carries `<Metrics>/<Metric>` and `<SuperMetrics>/<SuperMetric enabled="true" id="...">`, and the platform class that parses `<OOTBPolicies>` from adapter describe.xml (`PolicyPackageDescribe`) has `Metrics` and `SuperMetrics` tokens next to `Alerts`, `Symptoms`, `BadgeSymptoms`. So the schema supports it and our four SM UUIDs are stable (pak JSON ids equal the ids enabled in the live policy). What no evidence shows is a pak install actually applying SuperMetrics from a fragment. The only way to move this to PROVEN is a throwaway pak on devel (write operation, needs Scott's go).
+
+### Q1. content/policies/ across installed paks (devel, `/storage/db/casa/pak/dist_pak_files/VA_LINUX/`)
+
+34 paks on disk. Only six contain a literal `content/policies/` directory, all VMware Compliance Packs. Every other pak (vSphere, vSAN, NSX-T, VCF, Ping, Supervisor, VrAdapter, our four VCFContentFactory paks, iSDKVCFOperationsvCommunity, GitLab, Synology, etc.) has no `content/policies/` directory. Nested archives (adapters.zip, etc.) were searched too: no other policy-named content files (only `policy-*.jar` library jars and our vCommunity report `ESXi_Security_Policy_List`, which is a view).
+
+| pak | file | bytes |
+|---|---|---|
+| vRealizeOperationsCompliancePackforCIS-902025137908.pak | content/policies/cis.xml | 106956 |
+| ...DISA | content/policies/disa.xml | 92257 |
+| ...FISMA | content/policies/fisma.xml | 50620 |
+| ...HIPAA | content/policies/hipaa.xml | 56153 |
+| ...ISO | content/policies/iso.xml | 49295 |
+| ...PCI | content/policies/pci.xml | 48293 |
+
+Element inventory (distinct elements with counts), CIS as the largest example: PolicyContent 1, alertContent 1, AlertDefinitions 1, AlertDefinition 19, State 141, SymptomSets 4, SymptomSet 25, Symptom 381, SymptomDefinitions 1, SymptomDefinition 122, Condition 122, Impact 19, Recommendations 20, Recommendation 24, Description 5, **OOTBPolicies 1, Policy 1, PackageSettings 1, Alerts 5, Alert 19**. Other five have the identical element vocabulary with different counts (DISA: AlertDefinition 15, Alerts 5; FISMA: AlertDefinition 5; HIPAA: AlertDefinition 11, Alerts 6; ISO: 11; PCI: 11). In all six: count of the strings "uper", "metricKey", "attributeKey", "Attribute", "Metric" is 0.
+
+Verbatim (CIS, the whole policy-enablement part is this shape):
+```
+<OOTBPolicies vendorNameKey="14186">
+    <Policy key="fnbxuyqo-mw7i-yfvu-7e8w-fq1gg8jpw7xn" nameKey="14585">
+        <PackageSettings vendorNameKey="14186">
+            <Alerts adapterKind="VMWARE" resourceKind="VirtualMachine">
+                <Alert enabled="true" id="AlertDefinition-CIS-VM-VIRTUALMACHINE"/>
+```
+Note the compliance-pack file is a full `<PolicyContent>` doc (`<alertContent>` + `<OOTBPolicies>`), the same family as the vCommunity hardware reference.
+
+**Policy fragments also live in installed adapter `describe.xml`** (not under content/policies/, but this is where vSphere/vSAN/NSX-T put theirs), `/usr/lib/vmware-vcops/user/plugins/inbound/<adapter>/conf/describe.xml`:
+
+| adapter dir | describe.xml bytes | OOTBPolicies | PackageSettings children |
+|---|---|---|---|
+| vmwarevi_adapter3 (vSphere) | 1566842 | 1 block, 15 Policy, 48811 chars | Alerts 62, Alert 402 only |
+| VirtualAndPhysicalSANAdapter3 (vSAN) | 208476 | 1 Policy | Alerts 5, Alert 5 only |
+| NSXTAdapter3 | 192494 | 1 Policy | Alerts 1, Alert 1 only |
+
+Verbatim (vSAN, lines 3452-3472, abridged): `<OOTBPolicies vendorNameKey="60000"> <Policy key="9c4dd628-8cc9-4212-a172-2cfbf4fae0f1" namekey="60001"> <PackageSettings> <Alerts adapterKind="VirtualAndPhysicalSANAdapter" resourceKind="VirtualSANDCCluster"> <Alert enabled="true" id="AlertDefinition-VirtualAndPhysicalSANAdapter-VsanClusterViolatingHardeningGuide"/>`.
+Verbatim (NSX-T): `<Policy key="5f47208d-24e3-4662-be1c-97fea4132e8g" nameKey="275000"> <PackageSettings> <Alerts adapterKind="NSXTAdapter" resourceKind="NSXTAdapterInstance"> <Alert enabled="true" id="NSXInstanceViolatingSecurityConfigurationGuideLines"/>`.
+Verbatim (vSphere): `<OOTBPolicies vendorNameKey="10000"> ... <Policy key="62639a37-ab6f-4225-9aa7-9064f9badcb7" nameKey="10042" parentPolicy="40578135-be47-4b2a-9e6c-602b8e538f97"> <PackageSettings> <Alerts adapterKind="VMWARE" resourceKind="VirtualMachine"> <Alert id="AlertDefinition-VMWARE-VMWriteLatency" enabled="false"/>`. vSphere uses `parentPolicy=` on 15 policies, and uses `enabled="false"` as well as `"true"`.
+
+The same describe.xml files also carry a separate `<BasePolicyAnalysisSettings>/<PolicySettings>` section (capacity/workload/risk: `WorkloadSettings`, `CapacityTimeRemainingSettings`, `ApplicableResourceContainer enabled=... resourceContainerKey=...`, `RiskLevelSettings`). That enables capacity containers (cpu, mem, diskspace), not metrics or super metrics. grep for `supermetric`, `metricKey`, `attributeKey`, `MetricConfig`, `ApplicableMetric` in the three describe.xml files hits only vSphere TODO comments (lines 96, 172, 174, 350, 461...: "define super metric ... not supported by current super metric formulas"), no enablement elements.
+
+### Platform evidence that the schema has more than Alerts (strongest finding)
+
+1. **Live policy export (GET /api/policies/export?id=..., Accept: application/zip, read-only) of "vSphere Solution's Default Policy (Apr 17, 2026 3:50:38 PM)"**, id 9c1d42be-09b7-4149-92fc-2224e3d778bd, 325798 bytes. Root `<PolicyContent>` has three children: `<Policies>` (1 Policy), `<alertContent>`, `<superMetrics>` (50 SM definitions bundled with their formulas). `<PackageSettings>` children, in order: `Metrics` (HostSystem, VirtualMachine), `Alerts` (8 kinds), `SuperMetrics` (6 kinds). Verbatim:
+```
+<PackageSettings>
+    <Metrics adapterKind="VMWARE" resourceKind="HostSystem">
+        <Metric enabled="true" id="net|packetsrx_summation_sum"/>
+        <Metric enabled="true" id="net|packetsrx_summation"/>
+        <Metric enabled="true" id="net|packetstx_summation"/>
+        <Metric enabled="true" id="net|packetstx_summation_sum"/>
+    </Metrics>
+    <Metrics adapterKind="VMWARE" resourceKind="VirtualMachine">
+        <Metric enabled="true" id="diskspace|snapshot|creator"/>
+    ...
+    <SuperMetrics adapterKind="VMWARE" resourceKind="VMwareAdapter Instance">
+        <SuperMetric enabled="true" id="dd8a6df8-7454-4b8e-a6fe-65a662f9cbd4"/>
+```
+   Metric ids are lower-cased in this export (`net|packetsrx_summation_sum`). Element counts in this file: Metrics 2 blocks / 7 Metric, SuperMetrics 6 blocks / 66 SuperMetric. SuperMetric counts by kind: ClusterComputeResource 31, VMwareAdapter Instance 8, Datacenter 8, HostSystem 8, vSphere World 7, VirtualMachine 4. The other 18 exportable policies contain no `Metrics` or `SuperMetrics` element at all (`Base Settings` export returns HTTP 500; `Default Policy` exports as an empty 185-byte stub).
+   Side finding for DEF-010: the four `net|packets{rx,tx}_summation(_sum)` HostSystem keys the 2026-07-16 entry saw as absent are now explicitly `Metric enabled="true"` in devel's active default policy (someone enabled them since). The 07-16 policy-gated theory is confirmed at the policy level.
+2. **Platform classes on devel (`/usr/lib/vmware-vcops/common/lib`)**: `vrops-adapters-sdk.jar` `com/integrien/alive/common/adapter3/describe/PolicyPackageDescribe.class` (the describe.xml `<OOTBPolicies>` parser) contains the element tokens `Alert Alerts BadgeSymptom BadgeSymptoms Metric Metrics SuperMetric SuperMetrics Symptom Symptoms PackageSettings`, with `PolicyMetricDescribe`, `OotbPolicyDescribe`, `PolicyPackageEntryDescribe` (reads `enabled`). `vcops-analytics-1.0-SNAPSHOT.jar` has `policy/packagesettings/SuperMetricPackageSettingsResolver` and `MetricAttributePackageSettingsResolver` next to the Problem and Symptom resolvers. `vcops-collector-controller-1.0-SNAPSHOT.jar` `PolicyImportExportHandler` references `SuperMetricExportImportData`, `importSuperMetric`, `setImportedSuperMetricIds`, `addReferencedSuperMetricIds` (policy import carries and registers SM definitions). Class-string inspection only, no behaviour verified.
+
+### Q2. Compliance pak and SMs on devel
+
+- Pak installed: `VCFContentFactoryCompliance-00079.pak` on disk (manifest version 0.0.0.79, 739589 bytes); `GET /api/solutions` shows `VCF Content Factory Compliance` 0.0.0.79, adapter kind `vcfcf_compliance`. The pak has `content/{resources,supermetrics,reports,dashboards}/` and **no `content/policies/`**; its inner `adapters.zip` describe.xml (214906 bytes) has no `OOTBPolicies` and no `PolicySettings`.
+- All four SMs present (`GET /api/supermetrics`): Objects Scored `c72131ad-ee25-4e89-8190-1c93d78eeb5a`, Non-Compliant Objects `349307c4-2af7-4d83-90d2-1ad4f60138bf`, Objects Without Benchmark `8200eed9-6aa3-480d-bd7e-2b1fa81b8ee5`, Average Score `a3292c87-15b7-4fcd-beea-1b4510b3ca02`. The ids equal the UUID keys in the pak's `content/supermetrics/*.json`. Note: `GET /api/supermetrics` and `/api/supermetrics/{id}` report `resourceKinds: []` for these four, so the API view does not show the vSphere World assignment even though the policy XML does.
+- **Enabled: yes, in "vSphere Solution's Default Policy (Apr 17, 2026 3:50:38 PM)" (the `defaultPolicy: true` policy).** Verbatim from its export, all four under:
+```
+<SuperMetrics adapterKind="VMWARE" resourceKind="vSphere World">
+    <SuperMetric enabled="true" id="349307c4-2af7-4d83-90d2-1ad4f60138bf" />
+    <SuperMetric enabled="true" id="c72131ad-ee25-4e89-8190-1c93d78eeb5a" />
+    <SuperMetric enabled="true" id="a3292c87-15b7-4fcd-beea-1b4510b3ca02" />
+    <SuperMetric enabled="true" id="8200eed9-6aa3-480d-bd7e-2b1fa81b8ee5" />
+```
+  The other 18 exportable policies contain none of them. Which policy is "active on vSphere World" is INFERRED to be this default policy: no GET endpoint maps a resource to its effective policy (`/api/resources/{id}/policy` and `/policies` return 404 HTML; vSphere World id `ba1fe374-23fa-4584-9ca5-705cf1c637b0`), and the export does not show group assignment. Prod not checked.
+- Exactly what works for policy reads on devel (and the recon log says prod matches):
+  - `GET /api/policies` 200, 20 summaries (id, name, defaultPolicy); `parentPolicy` not populated in the list.
+  - `GET /api/policies/{id}` 500 `Internal Server error, cause unknown.` (reconfirmed on the default policy id).
+  - `GET /api/policies/{id}/settings` 400 `Query Parameter "type" is required.`; with `type=TIME_REMAINING` 400 `adapterKind and resourceKind are mandatory for ...`. Enum is capacity/workload type (per the 2026-07-16 and policy-enablement entries above), no metric/SM enablement type, so not useful here.
+  - **`GET /api/policies/export?id=<id>` with header `Accept: application/zip` works (200) for 19 of 20 policies**, returns a zip containing `exportedPolicies.xml`. This is the only read path that exposes per-attribute and SM enablement, and it is what `VCFOpsClient.export_default_policy_xml()` already uses. `Base Settings` returns 500, `Default Policy` returns a 185-byte empty `<Policy key=... name="Default Policy"/>`.
+
+### Q3. Do any installed policies reference super metrics?
+
+- Shipped by paks (content/policies/ and describe.xml OOTBPolicies): **none. No installed pak's policy fragment references a super metric or a metric. Alerts only.**
+- Live instance policies: yes, but only the `vSphere Solution's Default Policy` instance (66 SuperMetric elements across 6 resource kinds, 7 on vSphere World = our four plus three others), created by admin/CLI enablement, not by a pak. No other policy has SuperMetrics or Metrics.
+
+### Q4. Do first-party paks create a named policy of their own?
+
+Yes. First-party fragments declare `<OOTBPolicies><Policy key=... nameKey=...>` (a Policy with its own key and name), which creates named library policies rather than merging into the default. Evidence from `GET /api/policies` on devel (20 policies): "vSphere Security Configuration Guide", "vSAN Security Configuration Policy", "NSX Security Configuration Guide", "Config Wizard Based Policy" and the 12 "Health/Risk/Efficiency alerts on ..." policies are named policies matching the vSphere (15 OOTB Policy, nameKeys 10042..), vSAN (nameKey 60001) and NSX-T (nameKey 275000) OOTBPolicies blocks. The six compliance-pack fragments each have one Policy with its own key (CIS/DISA/FISMA/HIPAA/ISO/PCI names are not in devel's library list because those packs are not enabled into a policy there; prod lists a "PCI 3.2.1 / PCI 4.0" policy per the earlier 2026-07 entry). Name-to-nameKey mapping is inferred from matching names and counts, not read from the properties file. The default policy ("vSphere Solution's Default Policy") is not created by a fragment, it is created by the vSphere solution install and carries manual enablement. Our own paks (compliance, vCommunity vSphere) create no policy.
+
+### What this means for authoring (recommendation)
+
+- Not "author" and not "reuse": this is a design question with one cheap decisive test. Candidate mechanism: add `content/policies/<name>.xml` (compliance-pack shape: `<PolicyContent><Policies/>` or `<OOTBPolicies><Policy><PackageSettings><SuperMetrics adapterKind="VMWARE" resourceKind="vSphere World"><SuperMetric enabled="true" id="c72131ad-..."/>`) or an `<OOTBPolicies>` in the adapter describe.xml, using the stable pak SM UUIDs.
+- Open risks to test: (a) a fragment creates a NEW named policy, so SMs are enabled there, not in the default policy where vSphere World actually sits, unless the policy is made default or applied to the vSphere World group (an admin step); this matches how every first-party fragment behaves (named policies). Merging into the default policy is not shown anywhere. (b) whether `SuperMetrics` is honoured on import via content/policies/ vs describe.xml. (c) SM registration order on pak install (SM json imported before the fragment resolves the id).
+- The proving test needs a write: build a throwaway pak and install on devel (qa/devel), then re-run the policy export and look for the SuperMetric element. Needs Scott's go.
+- Fallback that already works and is proven: the existing `enable_supermetric_on_default_policy` (export, inject `<SuperMetric enabled="true" id=.../>`, re-import) via the installer.
+
+Files read (no changes): devel appliance paks above; scratch exports in `/tmp/claude-1004/-home-scott-claude-vcf-content-factory/296063d5-fa43-4883-a715-fbae8cc12386/scratchpad/devel/` (not persisted to repo).
+
+## 2026-10-01: How do vSphere World Summary metrics get their values (collected vs engine-computed)? Any rollup marker for an SDK describe.xml?
+
+Recon run 2026-10-01 about 15:00-15:20 CDT, devel instance (vcf-lab-operations-devel). Read-only: SSH reads of the appliance plugin tree and GET-only Suite API calls.
+
+**Verdict: ENGINE-COMPUTED, declared by a `<ComputedMetrics>` block (not by an attribute marker).** The vSphere World `summary` ResourceGroup is declared as bare `ResourceAttribute` name stubs. The values come from `<ComputedMetric key="summary|..." expression="sum(${adapterkind=VMWARE, resourcekind=VMwareAdapter Instance, metric=summary|...})"/>` entries in the same ResourceKind's `<ComputedMetrics>` child. The platform evaluates those over the child `VMwareAdapter Instance` resources (the 3 vCenter-level objects). Live check agrees: world total VMs 68 = 17 (wld01) + 37 (mgmt) + 14 (wld02); running 61 = 11+36+14; hosts 10 = 2+6+2; clusters 3 = 1+1+1. There is no per-attribute rollup/aggregation marker; the marker is the element `<ComputedMetrics>/<ComputedMetric key expression>` and it is already in the shipped public XSD (`describeSchema.xsd`, `ComputedMetricsType`, allowed as a child of `ResourceKind`), so an SDK describe.xml can declare it. Whether the platform honors `ComputedMetrics` in a third-party (non-VMWARE) adapter kind is NOT tested here; `pak_compare.py` already counts `ComputedMetric` elements, so some factory paks may already carry them (see "Open" below). Evidence for compute-by-engine vs. adapter: the shipped vmwarevi describe.xml comments say "the logic of the following metrics computation is complicated and not supported by current super metric functions. Look at WorldMetricCalculator.java" (those are the TODO items, still absent from the XML), implying World metrics are computed by platform-side code or describe-declared expressions, not collected by the adapter jar.
+
+### Where
+- Describe: `/usr/lib/vmware-vcops/user/plugins/inbound/vmwarevi_adapter3/conf/describe.xml` (13279 lines; `<AdapterKind key="VMWARE" nameKey="1" version="978">`). NOT the `vim/` folder: `vim/conf/describe.xml` is a 102-line stub for `VMWARE_INFRA_MANAGEMENT` (it does not contain vSphere World).
+- Schema: `/usr/lib/vmware-vcops/user/plugins/inbound/vim/conf/describeSchema.xsd` (4629 lines; identical md5 `77e0758553abbe2eb9218e8743ff6f8c` to `VMwareInfrastructureHealthAdapter/conf/`; `SupervisorAdapter` and `VrAdapter` copies differ). There is no XSD in `vmwarevi_adapter3/conf/` itself.
+
+### vSphere World ResourceKind (line 54), verbatim
+```xml
+<ResourceKind key="vSphere World" nameKey="2015" showTag="true" subType="6" type="8">
+...
+    <ResourceGroup key="summary" nameKey="1000">
+        <ResourceAttribute key="number_running_vms" keyAttribute="true" nameKey="1004"/>
+        <ResourceAttribute key="total_number_vms" keyAttribute="true" nameKey="1005"/>
+        ...
+        <ResourceAttribute key="total_number_clusters" nameKey="1027"/>
+        ...
+        <ResourceAttribute key="total_number_hosts" nameKey="1014"/>
+        ...
+    </ResourceGroup>
+...
+    <ComputedMetrics>   <!-- line 311 -->
+        <ComputedMetric key="summary|number_running_vms" expression="sum(${adapterkind=VMWARE, resourcekind=VMwareAdapter Instance, metric=summary|number_running_vms})"/>
+        <ComputedMetric key="summary|total_number_vms" expression="sum(${adapterkind=VMWARE, resourcekind=VMwareAdapter Instance, metric=summary|total_number_vms})"/>
+        <ComputedMetric key="summary|total_number_clusters" expression="sum(${adapterkind=VMWARE, resourcekind=VMwareAdapter Instance, metric=summary|total_number_clusters})"/>
+        <ComputedMetric key="summary|total_number_hosts" expression="sum(${adapterkind=VMWARE, resourcekind=VMwareAdapter Instance, metric=summary|total_number_hosts})"/>
+        <ComputedMetric key="summary|total_number_vcenters" expression="count(${adapterkind=VMWARE, resourcekind=VMwareAdapter Instance, metric=badge|health, depth=1})"/>
+        <ComputedMetric key="summary|vm_count_per_host" expression="(${this, metric=summary|total_number_vms})/(${this, metric=summary|total_number_hosts})"/>
+        <ComputedMetric key="summary|number_poweredOff_vms" expression="${this, metric=summary|total_number_vms} - ${this, metric=summary|number_running_vms}"/>
+        <ComputedMetric key="summary|drs_happy_vms" expression="sum(${adaptertype=VMWARE, objecttype=ClusterComputeResource, metric=summary|drs_happy_vms, depth=3})"/>
+        ...
+    </ComputedMetrics>
+```
+Note: the stub `ResourceAttribute` entries on World carry only `key`, `nameKey` (and `keyAttribute`); no `dataType`, `rollupType`, `dashboardOrder`, `isRate`, `defaultMonitored`. Other World metrics (cpu, mem, cost, vmop|provisioning, gpu) use the same pattern; the block ends with, for example:
+```xml
+<ComputedMetric key="gpu|mem.usage_average" expression="avg(${adaptertype=VMWARE, objecttype=HostSystem, attribute=gpu|mem.usage_average, depth=4})"/>
+```
+Expression grammar variants seen: `${adapterkind=..., resourcekind=..., metric=..., depth=N, where=(...)}`, `${adaptertype=..., objecttype=..., attribute=...}` (older spelling), `${this, metric=...}`, cross-kind `objectname=` refs, functions `sum`, `avg`, `count`, `min([a,b])`.
+
+### Datacenter (line 5090) and ClusterComputeResource (line 3926) for comparison: same keys are COLLECTED, declared fully
+```xml
+<!-- Datacenter -->
+<ResourceGroup key="summary" instanced="false" nameKey="1000" validation="">
+  <ResourceAttribute key="total_number_hosts" dashboardOrder="3" dataType="float" defaultMonitored="true" favoriteGroups="inventory" isDiscrete="false" isRate="false" maxVal="" minVal="" nameKey="1014" rollupType="latest"/>
+  <ResourceAttribute key="total_number_clusters" dashboardOrder="6" dataType="float" defaultMonitored="true" favoriteGroups="inventory" isDiscrete="false" isRate="false" keyAttribute="true" maxVal="" minVal="" nameKey="1027" rollupType="latest"/>
+  <ResourceAttribute key="number_running_vms" dashboardOrder="7" dataType="float" defaultMonitored="true" isDiscrete="false" isRate="false" keyAttribute="true" maxVal="" minVal="" nameKey="1004" rollupType="latest"/>
+  <ResourceAttribute key="total_number_vms" dashboardOrder="8" dataType="float" defaultMonitored="true" favoriteGroups="inventory" isDiscrete="false" isRate="false" keyAttribute="true" maxVal="" minVal="" nameKey="1005" rollupType="latest"/>
+<!-- ClusterComputeResource -->
+  <ResourceAttribute key="total_number_vms" dashboardOrder="8" dataType="float" defaultMonitored="true" favoriteGroups="inventory" isDiscrete="false" isRate="false" keyAttribute="true" maxVal="" minVal="" nameKey="1005" rollupType="latest"/>
+```
+On Datacenter and Cluster, `ComputedMetrics` holds only derived ratios (`summary|number_poweredOff_vms`, `summary|vm_count_per_host`, `summary|cluster_availability`), not the counts. So the counts at those levels are adapter-collected (vSphere adapter pushes them); at World the same-named counts are engine-computed sums.
+
+### Suite API evidence (devel, GET only)
+- `GET /api/resources?adapterKind=VMWARE&resourceKind=vSphere World` returns one resource, id `ba1fe374-23fa-4584-9ca5-705cf1c637b0`, description "built-in group ... provides the starting line for overall navigation". `resourceKey.resourceIdentifiers` is `[]`. `resourceStatusStates` has exactly ONE entry: `adapterInstanceId 5c9152d9-65ab-461f-a6e0-9220ef4627ed` (resolves to `Container` / `ContainerAdapterInstance`), DATA_RECEIVING/STARTED. None of the three VMwareAdapter instances (5827d79e wld01, 5aa31ee3 mgmt, 6ac9cd72 wld02) reports a status on World. The same three are its CHILD relationships (`relationships?relationshipType=CHILD`: three `VMwareAdapter Instance` resources).
+- `GET /api/resources/{world}/stats/latest?statKey=...` (sample at 15:10 CDT): total_number_hosts 10.0, total_number_vms 68.0, total_number_clusters 3.0, number_running_vms 61.0. Response shape per stat is only `timestamps`, `statKey.key`, `data`. No computed-versus-collected field.
+- `GET /api/resources/{world}/statkeys` returns only `{"key": ...}` per entry. `GET /api/adapterkinds/VMWARE/resourcekinds/vSphere World/statkeys` returns, for all four keys, `"rollupType": "AVG", "instanceType": "INSTANCED", "dataType2": "FLOAT", "defaultMonitored": true, "monitoring": false, "property": false`. `rollupType` is the time-rollup (historical-interval) aggregation, not a hierarchy rollup, and the World keys show the platform default AVG because the stubs declare none. No field distinguishes computed from collected.
+- World also carries the 4 `[VCF Content Factory] Compliance ...` super metrics as `Super Metric|sm_<uuid>` (sample at 14:41 CDT: Objects Without Benchmark 0.0, Average Score 84.63, Objects Scored 165.0, Non-Compliant Objects 133.0). Super metrics are also not distinguishable from collected in the stats payload except by the `Super Metric|sm_` key prefix.
+
+### Schema (describeSchema.xsd) vs `mpb_describe_xsd_canonical.md`
+- `ComputedMetrics` is a legal ResourceKind child in the shipped XSD (ResourceKind `xs:choice`: ResourceIdentifier | ResourceAttribute | ResourceGroup | ComputedMetrics | PowerState), `ComputedMetricsType` = zero or more `ComputedMetric` with required `key` and `expression`, no other attributes. The canonical summary (`knowledge/context/mpb/mpb_describe_xsd_canonical.md`) does NOT mention `ComputedMetrics` or `ComputedMetric` at all (0 hits). Gap in the canonical doc.
+- `ResourceAttribute` in the XSD also has `expression`, `derived`, `hidden` (each documented "For VMware internal use only"; canonical line 145 lists them). The VMWARE describe uses none of `derived` (0 occurrences); the `expression=` hits are ComputedMetric.
+- `rollupType` is used on Datacenter/Cluster/VM attributes in the VMWARE describe (for example `rollupType="latest"`) but there is NO `rollupType` attribute declared on `ResourceAttributeType` in the XSD (only the word appears in a ResourceKind doc string: "rollupContainer, usageOnlyWaste are For VMware internal use only", that is a capacity-model value, unrelated). Also absent from the canonical summary. So the XSD is not strictly enforced against the shipped describe, and `rollupType` is an undocumented-but-used attribute. Other describe attributes the canonical summary lacks entirely: `instanced` (the XSD has it), `isAutomaticallyManaged` (XSD has it), `ComputedMetric`, `rollupType`.
+- Nothing in the VMWARE describe or XSD resembles `rollup`/`aggregation` on an attribute. The only hierarchy-aggregation declaration is the `ComputedMetric.expression`.
+
+### Open / not tested (do not treat as fact)
+- Whether the platform evaluates `ComputedMetrics` on an SDK/third-party adapter kind installed from a pak: UNKNOWN. Cheap test: look for any non-VMWARE installed describe.xml with `<ComputedMetrics>` (grep done only on vmwarevi_adapter3 for this note) or install a throwaway ComputedMetric in a test SDK describe on devel.
+- Whether the engine, not the vmwarevi adapter jar, evaluates these: INFERRED as engine, from the XML being the only place the values are defined plus the World status being attributed to Container only (no VMware instance reports on World). Not confirmed against analytics code.
+- `WorldMetricCalculator.java` is referenced in comments; not located on the appliance (jar not decompiled in this task).
+
+Files read: `/usr/lib/vmware-vcops/user/plugins/inbound/vmwarevi_adapter3/conf/describe.xml`, `/usr/lib/vmware-vcops/user/plugins/inbound/vim/conf/describeSchema.xsd` (devel appliance); `/home/scott/claude/vcf-content-factory/knowledge/context/mpb/mpb_describe_xsd_canonical.md`; `/home/scott/claude/vcf-content-factory/content/sdk-adapters/compliance/describe.xml` (0 ComputedMetric hits).
+
+## 2026-10-02 11:05 CDT: compliance build 0.0.0.84 on devel, ComputedMetrics on ComplianceWorld (read-only)
+
+Intent: does the engine evaluate `<ComputedMetrics>` for the non-VMWARE kind `vcfcf_compliance`, and are the ComplianceWorld to VMwareAdapter Instance edges in place. Design: `knowledge/designs/sdk-adapters/compliance-environment-computed-metrics.md`.
+
+- Installed: `GET /api/solutions` shows "VCF Content Factory Compliance" 0.0.0.84; analytics log 10:05:53 CDT "adapter version: 0.0.0.0.0.84". Installed describe.xml has the four `<ComputedMetric>` entries (`sum(${adapterkind=VMWARE, resourcekind=VMwareAdapter Instance, metric=VCF-CF Compliance|Rollup|All|...})`).
+- Adapter instances (mgmt, wld01, wld02): DATA_RECEIVING/STARTED, GREEN, monitoringInterval 60, lastCollected 10:06:17 CDT. Only ONE cycle has run since install (next due about 11:06 CDT).
+- ComplianceWorld `bad96277-2d8c-4b38-b777-9070ef1f9bc8`: CHILD = wld01 `5827d79e...`, mgmt `5aa31ee3...`, wld02 `6ac9cd72...` (VMWARE / VMwareAdapter Instance), once each. PARENT = none. Logs: "Link of vCenter ... under ComplianceWorld ... requested and accepted by Suite API" for all three at 10:06:17 CDT.
+- Kind-level statkeys (`/api/adapterkinds/vcfcf_compliance/resourcekinds/ComplianceWorld/statkeys`) DECLARE all four `Rollup|Environment|{scored,non_compliant,no_benchmark,avg_score}`. Resource-level `/statkeys` on ComplianceWorld has none of them, `stats/latest` and a 2 h `stats` query return `values: []`. State: declared, no value produced (after about 59 min, one cycle, edges present since 10:06:17).
+- Per-vCenter Rollup|All (10:06:14-16 CDT): scored 68/65/31 = 164, non_compliant 48/58/26 = 132, no_benchmark 0, score_sum 13880.39, weighted avg 84.6365. vSphere World super metrics (10:06:16): scored 164, non_compliant 132, no_benchmark 0, avg 84.6365. These two agree.
+- Logs: no analytics/collector line mentions ComputedMetric, Rollup|Environment or ComplianceWorld since the install; only ERROR in analytics after install is an unrelated CertificateDataService "Null LI query config Ids". Adapter log has no addChildren/findSingletonResourceId strings (the adapter logs "Link of vCenter ... requested and accepted" instead). Log stamps are UTC (Z); subtract 5 h.
+- Gap: unproven that the engine ignores the block vs. needs another cycle or another edge-driven recalculation. INFERRED: not evaluated for this kind within one hour.
+
+## 2026-10-02 11:07-11:22 CDT: ComplianceWorld ComputedMetrics, second cycle after build 84 (read-only, devel)
+
+Intent: after the second collection cycle with the ComplianceWorld to VMwareAdapter Instance edges in place, does the engine evaluate `Rollup|Environment|*` for non-VMWARE kind vcfcf_compliance. Follow-up to the 11:05 CDT entry above. GET-only Suite API plus read-only SSH (log greps, `unzip -l`, describe reads). Log stamps are UTC; converted here.
+
+**Verdict: EVALUATED, with values, but late and only once so far.** The four keys exist and hold correct values (scored 164, non_compliant 132, no_benchmark 0, avg_score 84.6365, all equal to the sum of the three vCenters and to the vSphere World super metrics). They were NOT present at 11:06:54 and 11:07:05 CDT (stats and stats/latest empty, statkeys already listed them), and WERE present by 11:09:13 CDT. The only datapoint is stamped 10:06:16 CDT (the first-cycle child values), none stamped 11:06 after 15 more minutes (polled to 11:21:41). INFERRED explanation: the engine evaluated once, event-driven, when the relationship POST was re-asserted at 11:06:38-11:06:41 CDT (or when the keys registered), using the children's then-latest values, which were still the 10:06:16 points because the 11:06 vCenter datapoints land a few minutes after lastCollected. It did not follow the 11:06 child data on any schedule I could see. Not confirmed: whether a datapoint stamped 11:06 arrives later, whether the engine has a fixed cadence for non-VMWARE kinds (vSphere World computed keys tick every 5 minutes, ComplianceWorld none in 15 minutes), or whether the first (10:06) point came from the edge POST at 10:06:17 and was merely invisible until about 11:08. Poll again at about 12:07 CDT (third cycle) to separate these.
+
+### Cycle check
+Instances mgmt / wld01 / wld02 (vcfcf_compliance), lastCollected 11:06:41 / 11:06:40 / 11:06:38 CDT (earlier 10:06:17). All three past 11:05. monitoringInterval 60.
+
+### 1. ComplianceWorld bad96277-2d8c-4b38-b777-9070ef1f9bc8
+- Resource-level /statkeys now lists all four `Rollup|Environment|{scored,non_compliant,no_benchmark,avg_score}` (26 keys total). They were absent at 11:05. First observed present: 11:06:54 CDT.
+- stats/latest (11:09 CDT): scored 164.0, non_compliant 132.0, no_benchmark 0.0, avg_score 84.63654 all at 10:06:16 CDT. 3 h stats (LATEST and AVG, 1 and 5 minute buckets): one bucket each at 10:06:59 CDT with the same values. No 11:06 point through 11:21:41 CDT.
+- Every other stat/property key on it (latest, timestamps CDT): System Attributes|{all_metrics 0, total_alert_count 425, alert_count_info 9, alert_count_critical 185, alert_count_immediate 172, total_alarms 1146, health 99, self_alert_count 0, availability 1, child_all_metrics 27409} at 11:06:38; badge|{compliance -1, efficiency 100, health 100, risk 0} at 11:06:41; legacy Summary|{avg_vm_score 78.985, vms_below_threshold 41, total_vcenters 1, vcenters_below_threshold 1, total_vms 41, total_unreadable_controls 24, avg_vcenter_score 50} all frozen at 09-23 11:21:28. alert_count_warning is a statkey with no latest value. Properties: Summary|last_scan_timestamp 2026-10-02T09:45:49Z (that is the raw UTC value, 04:45:49 CDT), Summary|profile_name VMware_SCG_9.1, System Properties|resource_kind_type GENERAL, resource_kind_subtype GENERAL. child_all_metrics jumped to 27409 at 11:59:59 hourly bucket, meaning the engine counts the three children's metrics now (edges working).
+- Status states: three entries (mgmt 3dede008, wld01 71609ce2, wld02 6a6d6730), all DATA_RECEIVING/STARTED. vSphere World has one (Container 5c9152d9).
+
+### 2. Children
+Still exactly three CHILD VMwareAdapter Instance, once each: vcf-lab-wld01 5827d79e, vcf-lab-mgmt 5aa31ee3, vcf-lab-wld02 6ac9cd72. PARENT none. Re-POST logged 11:06:38 (wld02), 11:06:40 (wld01), 11:06:41 (mgmt) CDT, "requested and accepted"; analytics audit RESOURCE_UPDATE_RELATIONSHIP same seconds; no duplicates.
+
+### 3. vCenters, Rollup|All (latest at 11:09 CDT), and vSphere World SMs
+| vCenter | scored | non_compliant | no_benchmark | score_sum | avg_score | stamp CDT |
+|---|---|---|---|---|---|---|
+| wld01 | 68 | 48 | 0 | 5829.30 | 85.725 | 11:06:40 |
+| mgmt | 65 | 58 | 0 | 5397.34 | 83.036 | 11:06:41 |
+| wld02 | 31 | 26 | 0 | 2653.75 | 85.605 | 11:06:38 |
+| sum / weighted | 164 | 132 | 0 | 13880.39 | 84.6365 | |
+Note the vCenter latest stamps were still 10:06:14-16 at 11:07:17 and had moved to 11:06:xx by 11:09; same-values (data did not change between cycles).
+vSphere World ba1fe374 SM values: Objects Scored (sm_c72131ad) 164 and Non-Compliant (sm_349307c4) 132, Without Benchmark (sm_8200eed9) 0, Average Score (sm_a3292c87) 84.6365. Latest stamp was 10:06:16 at 11:09:35 and 11:10:35 CDT; the new point stamped 11:06:41 CDT was first visible at 11:11:35 CDT (so SM evaluation lags the cycle by roughly 4-5 minutes). Yes, the SMs got a second-cycle datapoint.
+
+### 4. Three-way comparison
+| Quantity | vCenter sum (Rollup|All) | vSphere World super metric | ComplianceWorld Rollup|Environment (engine ComputedMetric) |
+|---|---|---|---|
+| scored | 164 | 164 (11:06:41) | 164 (10:06:16) |
+| non_compliant | 132 | 132 (11:06:41) | 132 (10:06:16) |
+| no_benchmark | 0 | 0 (11:06:41) | 0 (10:06:16) |
+| avg_score | 84.6365 (13880.39/164) | 84.6365 | 84.6365, weighted as intended (no 0/0, no substituted 100 observed) |
+All three agree. The ComputedMetric is one cycle stale in timestamp only.
+
+### 5. Host-side (analytics, collector, since 10:05 CDT = 15:05Z)
+- No analytics or collector line mentions ComputedMetric, Rollup|Environment, ComplianceWorld (other than the adapter's own "enumerate: registering ComplianceWorld" and "Link of vCenter ... under ComplianceWorld ... requested and accepted"), bad96277 (apart from the same link lines and the audit RESOURCE_UPDATE_RELATIONSHIP rows), or any expression / super metric evaluation error. Only analytics ERROR since 10:05: unrelated CertificateDataService "Null LI query config Ids" at install. WARNs are unrelated (license "more than one license" for wld02, FullFallBackNames "nameKey is null" x34, badge|compliance point skipped for timestamp, outbound plugins). The describe install at 10:05:53 CDT logs no ComputedMetric-specific line (DescribeProcessor steps listed: credential kinds, resource kinds, actions, ..., generated metrics).
+- The only analytics logger ever naming computed metrics is `com.integrien.analytics.ComputedAndSystemMetricsRetrieverThread` (ERROR 2026-07-19 DistributedSystemDisconnectedException), so evaluation is silent at INFO.
+- `WorldMetricCalculator` does NOT exist as a class in any jar on the appliance (all jars under /usr/lib/vmware-vcops scanned; the VMWARE describe comment is only a name). Classes found, names only:
+  - vcops-analytics-1.0-SNAPSHOT.jar: `com.vmware.vcops.analytics.utils.ComputedMetricRegistrator`, `com.integrien.analytics.dataobject.{ComputedMetric, ComputedMetrics, ComputedMetricDef, CustomComputedMetric, ComputedMetricDirectedGraph, VMHappinessComputedMetric}`, `com.integrien.analytics.vm.PlacementComputedMetrics`, `com.vmware.vcops.analytics.metriccalculator.MetricCalculator`, `com.vmware.vcops.analytics.customgroup.GroupMetricCalculator`, plus `com.integrien.analytics.ComputedAndSystemMetricsRetrieverThread`.
+  - alive_platform.jar / vcops-platform: `com.integrien.alive.common.computedmetric.{CMParser, CMExecutor, CMCallback, CMValidator, CMEntry, CMWhereClause, ResourceSelector, CMCommon, CustomCMEntry, ...}` (generic expression engine).
+  - persistence-1.0-SNAPSHOT.jar: `com.vmware.statsplatform.persistence.metadata.{ComputedMetric, ComputedMetrics}`, `...metadata.describe.{ComputedMetricsDescriber, ComputedMetricExpressions}`.
+  - vrops-adapters-sdk jars: `com.integrien.alive.common.adapter3.describe.{ComputedMetricsDescribe, ComputedMetricDescribe}`.
+- Generic vs VMWARE-specific: GENERIC (INFERRED from class names plus describes, not decompiled). The machinery is keyed on the describe `<ComputedMetrics>` element via a describer/registrator and a kind-agnostic expression parser (`adapterkind=` / `adaptertype=`, `resourcekind=`, `metric=`, `depth=`, `${this,...}`). Twelve installed describes use `<ComputedMetric>`: vmwarevi_adapter3 (530), VcfAdapter (160), SupervisorAdapter (79), VirtualAndPhysicalSANAdapter3 (67), vcops_adapter3 (59), NSXTAdapter3 (52), container_adapter (21, cross-kind sums over VMWARE VirtualMachine with depth=10), mpb_synology_dsm_adapter3 (20), VMwareInfrastructureHealthAdapter (15), AppOSUCPAdapter3 (7), mpb_synology_nas_adapter3 (5), vcfcf_compliance (4). No VMWARE-specific World class exists. Not tested: that those non-VMWARE blocks actually emit values on devel (only ours, which does).
+- Cadence on vSphere World: summary|total_number_vms points every 5 minutes, bucket stamps :x1:59 CDT (08:10:59 through 11:01:59 and on; 35 points over 3 h, none missing). So the engine evaluates computed metrics on vSphere World on a 5 minute pass. ComplianceWorld showed one point in 3 h, none in 15 minutes after the second cycle: different behavior, not the same 5 minute cadence.
+
+### 6. Describe comparison, ComplianceWorld vs VMWARE vSphere World (both read verbatim from /usr/lib/vmware-vcops/user/plugins/inbound/{vcfcf_compliance,vmwarevi_adapter3}/conf/describe.xml)
+- ResourceKind: ComplianceWorld `<ResourceKind key="ComplianceWorld" nameKey="20" type="1">` plus a required `world_id` ResourceIdentifier. vSphere World `<ResourceKind key="vSphere World" nameKey="2015" showTag="true" subType="6" type="8">`, no identifiers. Resulting platform properties: ComplianceWorld resource_kind_type GENERAL / subtype GENERAL; vSphere World GROUP / GROUP_WORLD. So vSphere World is a group-typed world object, ComplianceWorld is a plain object. Possible relevance: group-type objects may be evaluated on the group pass; UNKNOWN.
+- Attribute declarations: vSphere World attributes are bare stubs (`<ResourceAttribute key="total_number_vms" keyAttribute="true" nameKey="1005"/>`), no dataType, defaultMonitored, rollupType, isProperty. ComplianceWorld declares full attributes (`dataType="float" isProperty="false" defaultMonitored="true"`, avg_score also `unit="%"`). Platform kind-level statkeys for World show rollupType AVG / INSTANCED defaults.
+- Groups: VMWARE lowercase single-level `summary` (no `instanced` attribute, resulting INSTANCED), ComplianceWorld capitalized `Rollup` > `Environment`, both `instanced="false"`, nested two deep (VMWARE also nests elsewhere, for example compute_reclaimable > idle). VMWARE metric key `summary|total_number_vms` is declared both as ResourceAttribute and as ComputedMetric key; ours the same pattern (`Rollup|Environment|scored`). Group casing is not a mismatch (key strings match their declarations exactly).
+- ComputedMetrics element: last child of the ResourceKind, after all ResourceGroups, in both. Same shape, `key` + `expression` only. VMWARE World mixes `adapterkind=`/`adaptertype=`; ours uses `adapterkind=VMWARE, resourcekind=VMwareAdapter Instance, metric=<group|key>` with no `depth` (VMWARE World uses the same form without depth for the sums, `depth=1` only on the count over badge|health). Ours also divides two sum() calls; VMWARE World has `(${this,...})/(${this,...})` and subtraction, so arithmetic between aggregates is supported.
+- Other difference: the source children's metric lives on a foreign kind (VMWARE VMwareAdapter Instance, group `VCF-CF Compliance|Rollup|All|*`), whereas vSphere World's sources are collected by the VMWARE adapter itself on its own kind. Cross-adapter source metrics evaluated fine.
+
+### Open
+- Whether a datapoint stamped 11:06 (or any later) appears; recheck after the 12:06 CDT cycle (about 12:07). Distinguish: one-shot at edge-assert time vs delayed per-cycle.
+- Whether the 10:06:16 point appeared as a late consequence of the 10:06:17 edge or the 11:06:38 re-assert (observation window gap 11:07:17 to 11:09:13).
+- ComplianceWorld is type=1 / GENERAL; vSphere World is type=8 subType=6 / GROUP_WORLD. Whether the type drives the 5 minute pass is not tested.
+
+Files read: devel `/usr/lib/vmware-vcops/user/plugins/inbound/{vcfcf_compliance,vmwarevi_adapter3,container_adapter}/conf/describe.xml`, `/storage/log/vcops/log/{analytics,collector,http_api,analytics.audit}*.log*`, jar listings under `/usr/lib/vmware-vcops/{common/lib,controller/plugins}`.
+
+## 2026-10-02 12:12-12:30 CDT: ComplianceWorld ComputedMetrics, third cycle after build 84 (read-only, devel)
+
+Intent: how often does the engine produce a datapoint for ComplianceWorld bad96277 `Rollup|Environment|{scored,non_compliant,no_benchmark,avg_score}`. GET-only Suite API. All times CDT.
+
+**Verdict: one-cycle-behind in visibility, NOT per-cycle in real time (INFERRED, one more data point needed).** After the third cycle there are exactly TWO points per key, stamped 10:06:16 and 11:06:41 (the child cycle stamps of cycles 1 and 2). No point stamped about 12:06 existed from 12:12 through the last poll at 12:29:12 (23 minutes after the cycle). The point stamped 11:06:41 was NOT visible at 11:21:41 (previous entry) and IS visible now, so it surfaced somewhere between 11:22 and 12:12; the 10:06:16 point likewise surfaced between 11:07 and 11:09. Both fit "a point stamped at cycle N becomes visible about one hour later, around cycle N+1 time". By that pattern the 12:06:5x point should appear about 13:07; I did not wait that long.
+
+### Cycle check
+vcfcf_compliance instances lastCollected: wld02 12:06:49, wld01 12:06:50, mgmt 12:06:52. All past 12:05 on first read (12:12). monitoringInterval 60.
+
+### 1. Raw stats, ComplianceWorld, 4 h (query at 12:12 and 12:22)
+`/stats` with statKey x4, begin = now-4h, and NO rollUpType/interval params returns raw points (rollUpType=NONE alone is rejected 400 "unit is null"). All four keys identical in shape:
+- scored: 10:06:16 = 164.0, 11:06:41 = 164.0
+- non_compliant: 10:06:16 = 132.0, 11:06:41 = 132.0
+- no_benchmark: 10:06:16 = 0.0, 11:06:41 = 0.0
+- avg_score: 10:06:16 = 84.63654, 11:06:41 = 84.63654
+Same query with LATEST rollup, 1 minute buckets, shows the same two points at bucket stamps 10:06:59 and 11:06:59. stats/latest: all four stamped 11:06:41. Nothing earlier than 10:06:16 (keys did not exist before build 84).
+
+### 2. First visibility of the newest point
+The 11:06:41 point: absent at 11:21:41 (prior recon), present at 12:12:47 (first poll this session, did not observe the moment). The 12:06 point: still absent at 12:29:12 (polled each 60 s from 12:12:47 to 12:20:47, again 12:22:12 to 12:29:12). First-seen time for the 12:06 point: not yet observed. Re-poll about 13:08 to confirm or refute the "stamp T appears about T+1 h" pattern.
+
+### 3. Contrast, same window
+- vCenters Rollup|All (wld01, mgmt, wld02), raw: points stamped 08:46:28-30, 09:46:47-54, 10:06:14-16, 11:06:38-41, 12:06:49-52 (5 each, every key including score_sum). The 12:06 point was visible by 12:21. wld01 12:06:50, mgmt 12:06:52, wld02 12:06:49.
+- vSphere World SMs ("[VCF Content Factory] Compliance Objects Scored / Non-Compliant Objects / Objects Without Benchmark / Average Score"): 5 points each, stamped 08:46:30, 09:46:54, 10:06:16, 11:06:41, 12:06:52 (exactly the mgmt vCenter stamp each cycle, one point per cycle, 12:06:52 visible by 12:21; earlier recon saw SM lag of about 4-5 minutes). Other SMs on World (snapshots, clusters not green) tick every 5 minutes.
+- vSphere World summary|total_number_vms: 47 points in the window, one every 5 minutes (stamps :x1-:x6 minute pattern, last 12:16:47), value 67 throughout (was 68 earlier today in the prior entry; value changed, count of VMs not investigated).
+
+### 4. ComplianceWorld own keys (latest stamps, 12:22)
+Fresh this cycle (12:06:49-52): System Attributes|{all_metrics 4 (was 0), total_alert_count 426, alert_count_info 9, alert_count_critical 185, alert_count_immediate 173, total_alarms 1147, health 99, self_alert_count 0, availability 1, child_all_metrics 27431} at 12:06:49; badge|{compliance -1, efficiency 100, health 100, risk 0} at 12:06:52. Frozen: legacy Summary|{avg_vm_score, total_vms, total_unreadable_controls, vcenters_below_threshold, vms_below_threshold, total_vcenters, avg_vcenter_score} all 2026-09-23 11:21:28. Properties Summary|last_scan_timestamp 2026-10-02T09:45:49Z (raw UTC), profile_name VMware_SCG_9.1, unchanged. No adapter-pushed metric or property on the world is fresh; the only adapter-originated state is the three resourceStatusStates entries (DATA_RECEIVING/STARTED) from adapter instances 3dede008 (mgmt), 71609ce2 (wld01), 6a6d6730 (wld02). All fresh keys are platform-generated (System Attributes, badges); the platform generates them because the adapter instances report status on the object each cycle. The adapter does not push values onto the world.
+
+### 5. Children
+Still exactly three CHILD, VMwareAdapter Instance: vcf-lab-wld01 5827d79e, vcf-lab-mgmt 5aa31ee3, vcf-lab-wld02 6ac9cd72, once each.
+
+### 6. Values
+Every ComplianceWorld point equals the sum of the vCenters at the matching cycle: 68+65+31 = 164 scored, 48+58+26 = 132 non_compliant, 0 no_benchmark, avg 13880.39/164 = 84.6365 (score_sum 5829.30+5397.34+2653.75). Values are identical across all cycles (data unchanged), so a lagging read cannot be told from a fresh one by value; only by stamp. Weighted avg correct, no 0/0.
+
+### Hypothesis and cheapest confirmation
+The datapoint stamps equal the children's cycle stamps, so the engine writes the aggregate at the children's timestamp but only after something later triggers it (the next cycle's relationship re-assert at about +1 h, or an hourly pass). vSphere World computed keys run on a 5 minute pass; ComplianceWorld (type=1 GENERAL, plain object) does not follow it. Edge re-assert times (11:06:38-41) line up with when the 10:06 point surfaced, which supports the edge/status-driven trigger over a fixed schedule. Cheapest confirm: poll ComplianceWorld stats at about 13:07 to 13:15 CDT, when cycle 4 re-asserts the edges; the 12:06:5x point should appear then if the trigger is the next re-assert. A sharper confirm without waiting an hour: record the first-seen time of the 12:06:5x point when it appears and compare to the 12:06:49 (wld02) analytics RESOURCE_UPDATE_RELATIONSHIP audit stamp of the next cycle.
+
+Files: scripts in the scratchpad only (not persisted). No instance writes.
+
+## 2026-10-02 13:13-13:19 CDT: ComplianceWorld ComputedMetrics, fourth cycle after build 84 (read-only, devel)
+
+Intent: test the prediction that the engine evaluates ComplianceWorld `Rollup|Environment|*` one collection cycle behind (after the cycle due about 13:06, the point stamped about 12:06:5x becomes visible, and no 13:06 point exists yet). GET-only Suite API plus read-only SSH greps. All times CDT.
+
+**Verdict: prediction CONFIRMED on the end state, NOT bracketed on timing.** At the first read (13:13:17) the 12:06:52 point was present for all four keys and no point stamped 13:06 existed. It stayed that way through the 30 s poll (13:13:24 to about 13:19) and a final raw query at 13:19:29, 12 minutes after the cycle. Each key now has exactly three raw points: 10:06:16, 11:06:41, 12:06:52 (the child cycle stamps). The 12:06:52 point was absent at 12:29:12 (prior entry) and present at 13:13:17, so it surfaced in that 44 minute window; the poll never saw a change because the surfacing happened before the first read, so the "appears at the next cycle" trigger is consistent but the moment was not caught (the cycle's relationship re-assert was 13:06:58-13:07:00, about 6 minutes before the first read).
+
+1. Cycle: vcfcf_compliance instances lastCollected wld02 13:06:58, wld01 13:06:59, mgmt 13:07:00. Collector log: "Link of vCenter ... requested and accepted" at 13:06:58.076 / 13:06:59.430 / 13:07:00.191 (logged as 18:06:58Z etc.). All three complete.
+2. Raw 5 h stats, keys scored / non_compliant / no_benchmark / avg_score: 10:06:16 = 164 / 132 / 0 / 84.63654; 11:06:41 = same; 12:06:52 = same. 12:06 point present: YES. 13:06 point present: NO (stats/latest stamped 12:06:52 on all four).
+3. Polled stats/latest every 30 s for 12 minutes starting 13:13:24: no change.
+4. Host side: no analytics or collector line naming ComputedMetric, CMExecutor, ComputedMetricRegistrator, ComputedMetricsDescriber or Rollup|Environment between 13:05 and 13:12 (only the adapter's own "enumerate: registering ComplianceWorld" and "Link of vCenter" lines). The only logger that ever names the evaluation path is `com.integrien.analytics.ComputedAndSystemMetricsRetrieverThread` (ComputedAndSystemMetricsRetriever thread, last seen ERROR 2026-07-19, "Error occurred while running ComputedMetricsDataRetriever"), silent at INFO. Config: `/usr/lib/vmware-vcops/user/conf/analytics/advanced.properties` lines 177-184, all commented out defaults: `systemMetricsRetrieveInterval = 1` (minutes, "interval to perform system/computed metrics retrieval"), `systemMetricsRetrieveTimeout = 10` (minutes), `systemMetricsRetrieveChunkSize = 1000`. `log4j2.properties` only sets `com.integrien.analytics.dataobject.ComputedMetric` to WARN. No key in analytics.properties or capacity.properties, and nothing in the compliance describe.xml beyond the four ComputedMetric entries, ties evaluation to the resource's own data arrival or sets a per-kind interval. The 1 minute retrieval default does not match the observed hourly lag, so that key is a retrieval pass, not the explanation (INFERRED).
+5. Children: still exactly three CHILD VMwareAdapter Instance, once each (wld01 5827d79e, mgmt 5aa31ee3, wld02 6ac9cd72). vCenter Rollup|All at 12:06:49-52 and 13:06:58-13:07:00, unchanged: wld01 68/48/0 score_sum 5829.30, mgmt 65/58/0 5397.34, wld02 31/26/0 2653.75. Sum 164 / 132 / 0 / 84.6365 equals the ComplianceWorld value at the matching stamp (12:06:52 = mgmt vCenter stamp).
+
+Still open: the exact surfacing time. To catch it, poll ComplianceWorld stats every 30 s from 12:29 style position of the NEXT cycle (14:06:5x) starting at 14:06 sharp, and compare against the 13:06:58 re-assert; expect the 13:07:00 point to appear about 14:07.
+
+Files read: devel `/usr/lib/vmware-vcops/user/conf/analytics/advanced.properties`, `log4j2.properties`, `/storage/log/vcops/log/collector.log`, analytics logs. No instance writes.
+
+## 2026-10-02 15:35-15:37 CDT: ComplianceWorld computed points (fifth cycle) and compliance alert volume (read-only, devel)
+
+Intent: confirm the one-cycle-behind pattern after the 15:07 cycle, and size the compliance pak's active alerts (ComplianceWorld total_alert_count about 425). GET-only. All times CDT; read at 15:35.
+
+1. ComplianceWorld bad96277 raw stats, 8 h, all four `Rollup|Environment|*` keys: points at 10:06:16, 11:06:41, 12:06:52, 13:07:00, 14:07:08 (5 each). Values constant: scored 164, non_compliant 132, no_benchmark 0, avg_score 84.63654. Instance lastCollected: wld02 15:07:12, wld01 15:07:14, mgmt 15:07:15.
+2. vCenter `Rollup|All|scored` stamps (wld01 / mgmt / wld02): 07:46:30/30/29, 08:46:29/30/28, 09:46:54/54/47, 10:06:15/16/14, 11:06:40/41/38, 12:06:50/52/49, 13:06:59/07:00/06:58, 14:07:07/08/06, 15:07:14/15/12. SM "[VCF Content Factory] Compliance Objects Scored" on vSphere World ba1fe374 (key `Super Metric|sm_c72131ad-...`): 07:46:30, 08:46:30, 09:46:54, 10:06:16, 11:06:41, 12:06:52, 13:07:00, 14:07:08, 15:07:15 (the mgmt stamp each cycle, no lag, no gaps).
+3. Computed points exist for cycles 10:06 to 14:07 (every cycle since build 84). The newest computed point (14:07:08) is exactly one cycle behind the newest vCenter rollup point (15:07:15); no 15:07 computed point at 15:35. Pattern holds for 5 of 5 cycles. Computed keys start at 10:06, so the 07:46 to 09:46 cycles predate build 84.
+4. Alerts (active, whole instance 4170; pak definitions identified by id prefix `AlertDefinition-vcfcf_compliance-`, since `/api/alertdefinitions?adapterKind=vcfcf_compliance` returns nothing, they sit under adapterKind VMWARE):
+   - Pak installed 143 alert definitions (143 distinct names): HostSystem 88, VirtualMachine 24, VMwareAdapter Instance 16, DVPG 8, DVS 5, ClusterComputeResource 2. 35 of 143 have at least one active alert.
+   - Active pak alerts: 415 on 109 distinct objects. (ComplianceWorld total_alert_count was 426; the 415 is the pak's own, so the remainder is alerts from other sources on ComplianceWorld's descendants, INFERRED not itemised.)
+   - By kind: VirtualMachine 230, HostSystem 151, DVPG 21, VMwareAdapter Instance 6, DVS 4, cluster 3.
+   - By criticality: IMMEDIATE 197, CRITICAL 170, WARNING 48 (none INFO). Kind x level: VM IMMEDIATE 159, VM CRITICAL 70, VM WARNING 1; Host CRITICAL 100, IMMEDIATE 28, WARNING 23; DVPG WARNING 21; VCenter instance WARNING 3, IMMEDIATE 3; DVS IMMEDIATE 4; cluster IMMEDIATE 3.
+   - Top 15 by active count (ties at 9 are cut arbitrarily; more 9s exist): 70 "vm.vmotion-encrypted: Virtual machines must require encryption for vMotion."; 70 "vm.ft-encrypted: Virtual machines must require encryption for Fault Tolerance."; 63 "vm.secure-boot: The guest OS must enable Secure Boot."; 19 "vm.virtual-hardware: Virtual machines must use a minimum supported virtual hardware version."; 11 "dvpg.network-reset-port: Reset distributed switch port configuration when a virtual machine disconnects."; 10 "Compliance data not collected (ESX host)"; 10 "Host Compliance Score Degraded"; 9 each: esx.password-complexity, esx.log-audit-local-capacity, esx.log-forwarding-tls-x509, esx.tls-ciphers, esx.log-audit-local, esx.disable-accounts-dcui, esx.hardware-virtual-nic, esx.lockdown-mode (full display names are "<id>: <sentence>" as in the control text).
+   - Counting method: all active alerts paged from /api/alerts?activeOnly=true, filtered by alertDefinitionId in the pak's id set, resource kind from /api/resources/{id}.
+
+## 2026-10-02 ~16:20 CDT: "Compliance data not collected (ESX host)" persistence (read-only, devel)
+
+Intent: why 9 of 10 "active" ESX host collection alerts persisted when only esx02 was unreadable.
+
+**Verdict: premise false, no stuck alert. Only 1 is ACTIVE (vcf-lab-wld01-esx02, genuine). The other 9 are status CANCELED, cancelled 2026-09-23 5:09 PM. The earlier "10 active" count (entry above, 15:35) came from /api/alerts?activeOnly=true, which on this instance also returns CANCELED alerts; it must be filtered on status == ACTIVE.**
+
+1. Definition (describe.xml, generated): alert vcfcf_compliance_collection_host, HostSystem, waitCycle 1, cancelCycle 1, symptom sets OR of (a) host_unreadable: metric VCF-CF Compliance|unreadable_count > 0, (b) host_failed: VCF-CF Compliance|collection_failed = 1, both waitCycle 1 / cancelCycle 1.
+2. Live: esx02 (alert dc90c189, start 9/23 11:51 AM, update 9/23 12:52 PM) has unreadable_count 48, collection_failed 1, score 0, total_count 0 at 4:04 PM; connectionState notResponding. The other 9 hosts: alert CANCELED 9/23 5:09 PM. Total ESX host alerts ever raised: 10.
+3. Adapter: complianceStats always pushes unreadable_count and collection_failed (0 or 1) every cycle, so a recovered host is pushed 0 and the symptoms cancel. Metrics, not properties, so no change-only storage issue. Not stuck by design.
+4. Host Compliance Score Degraded (score < 95 warning, score < 80 critical, both waitCycle 1/cancelCycle 1): 10 genuinely ACTIVE, all current scores below 80 (mgmt esx01-04 65.2, esx05/06 67.4, wld01-esx01 73.9, wld02-esx01 71.7, wld02-esx02 73.9, wld01-esx02 0 from the unreadable host). Genuinely active.
+5. Side effect: the 15:35 alert-volume figures (415 active pak alerts etc.) are likely inflated by canceled alerts and should be recounted with status filter.
+
+## 2026-10-02 4:13 PM: CORRECTION to the 3:35 PM alert-volume figures (read-only, devel)
+
+Intent: recount pak alerts with status == ACTIVE only. The 3:35 PM entry ("415 active pak alerts on 109 objects", kind/criticality split, top-15, 35 of 143 definitions) used /api/alerts?activeOnly=true unfiltered, which on this instance also returns CANCELED alerts. Those figures are superseded by this entry. Method: all pages of /api/alerts?activeOnly=true (4171 returned: 437 ACTIVE, 3734 CANCELED), pak alerts matched by alertDefinitionId prefix AlertDefinition-vcfcf_compliance-, resource kind from /api/resources/{id}.
+
+1. Pak ACTIVE alerts: 388 on 106 distinct objects (was 415 on 109).
+2. By kind and criticality (ACTIVE only):
+
+| Kind | IMMEDIATE | CRITICAL | WARNING | Total |
+|---|---|---|---|---|
+| VirtualMachine | 148 | 70 | 1 | 219 |
+| HostSystem | 19 | 100 | 23 | 142 |
+| DistributedVirtualPortgroup | 0 | 0 | 21 | 21 |
+| VmwareDistributedVirtualSwitch | 3 | 0 | 0 | 3 |
+| VMwareAdapter Instance | 0 | 0 | 3 | 3 |
+| ClusterComputeResource | 0 | 0 | 0 | 0 |
+| Total | 170 | 170 | 48 | 388 |
+
+   Versus 3:35 PM: VM 230 to 219, Host 151 to 142, DVS 4 to 3, VMwareAdapter Instance 6 to 3, cluster 3 to 0, DVPG unchanged. INFO none.
+3. Definitions with any ACTIVE alert: 32 of 143 (was 35). Top 15 by ACTIVE count (display names as the API returns them; ties at 9 are cut arbitrarily, 6 more definitions sit at 9 below the cut):
+   1. 70 vm.vmotion-encrypted: Virtual machines must require encryption for vMotion.
+   2. 70 vm.ft-encrypted: Virtual machines must require encryption for Fault Tolerance.
+   3. 63 vm.secure-boot: The guest OS must enable Secure Boot.
+   4. 11 dvpg.network-reset-port: Reset distributed switch port configuration when a virtual machine disconnects.
+   5. 10 Host Compliance Score Degraded
+   6. 9 esx.password-complexity: Enforce password complexity on ESX local accounts.
+   7. 9 esx.log-audit-local-capacity: The ESX host must store audit records for a time period consistent with your records retention policy.
+   8. 9 esx.log-forwarding-tls-x509: The ESX host must use strict x509 verification for TLS-enabled remote logging endpoints.
+   9. 9 esx.tls-ciphers: The ESX host's TLS profile must restrict negotiated ciphers and protocols to a modern, approved set.
+   10. 9 esx.log-audit-local: The ESX host must enable audit record logging.
+   11. 9 esx.disable-accounts-dcui: The ESX host must disable shell access for the dcui account.
+   12. 9 esx.hardware-virtual-nic: The ESX host must not enable virtual hardware management network interfaces.
+   13. 9 esx.lockdown-mode: The ESX host must enable Lockdown Mode.
+   14. 9 esx.shell-interactive-timeout: Configure the inactivity timeout to automatically terminate idle ESX host shells.
+   15. 9 esx.api-soap-timeout: The ESX host must configure a session timeout for the vSphere API.
+   Also at 9 (cut): esx.memeagerzero, esx.shell-timeout. Corrections to the 3:35 PM list: "Compliance data not collected (ESX host)" is 1 ACTIVE (was 10); vm.virtual-hardware is 8 (was 19), now below the top 15 (ranks 18); dvpg.network-vgt 8.
+4. Inflation: the API result contains 27 CANCELED pak alerts (388 + 27 = 415, matches). Cancel times 2026-09-23 1:52 PM to 2026-09-23 5:13 PM; earliest start 2026-09-23 11:48 AM. All 27 are nine days old. Across all sources the API also returns 3734 CANCELED alerts, so the unfiltered "4170 active" instance figure was mostly canceled.
+5. All ACTIVE alerts on devel (all sources): 437. Pak share: 388 / 437 = 88.8 percent (49 non-pak ACTIVE).
+
+Note: ComplianceWorld total_alert_count 426 (12:06 PM entry) is a platform rollup and was not re-read; not reconciled against 437. No instance writes; script in scratchpad only.
+
+## 2026-10-02 5:13 PM CDT: ComplianceWorld computed points after build 85 (read-only, devel)
+
+Intent: does the one-cycle-late pattern still hold after the 4:04 PM upgrade. GET-only Suite API plus read-only SSH log greps. All times CDT (collector logs are UTC, converted).
+
+**Verdict: pattern consistent, with a one-off gap from the upgrade. Not broken, but the surfacing moment is still not caught.** The 3:07 PM point never appeared and the 4:04 PM point is the only one after 2:07 PM. The 4:04 PM point was absent at 4:10 PM and is present now, so it surfaced between 4:10 and 5:13 PM (INFERRED: at the 5:04 cycle, which is when the old pattern predicts; no way to timestamp it, stats carry no insert time). The 5:04 PM point is absent at 5:13 PM, as the pattern predicts (it should appear after the 6:04 cycle).
+
+1. 5:04 cycle complete on all three vcfcf_compliance instances, lastCollected 5:04:44.505 (wld02, instance 5382), 5:04:45.833 (wld01, 5381), 5:04:46.574 PM (mgmt, 5379). Log lines: wld02 "cycle took 4537 ms", wld01 "cycle took 5865 ms", mgmt "cycle took 6601 ms". Each followed by "Link of vCenter ... requested and accepted".
+2. ComplianceWorld bad96277 raw 8 h (1 minute buckets, bucket end stamps), scored and avg_score identical stamps: 10:06:59, 11:06:59, 12:06:59, 1:07:59, 2:07:59, 4:04:59 PM (stats/latest stamp for scored 4:04:37.908 PM). Values constant: scored 164, avg_score 84.63654. 3:07 PM: NO. 4:04 PM: YES. 5:04 PM: NO.
+3. vCenter Rollup|All|scored (wld01 68 / mgmt 65 / wld02 31, constant) points at 9:46, 10:06, 11:06, 12:06, 1:07, 2:07, 3:07, 4:04, 5:04 PM (bucket stamps :59). No vCenter gap.
+4. Timing: computed 4:04 point stamped 4:04:37.9, the same cycle as the 4:04 vCenter points (mgmt 4:04:37.997), not the 3:07 cycle, so the 3:07 data was skipped, not late. Redescribe: analytics 4:04:17 PM, "adapter version 0.0.0.0.0.85", "Newer version describe received ... Performing describe update", processed resource kinds, policy, capacity (installed 4:04:13 upload). Kind statkeys on ComplianceWorld still list all four Rollup|Environment|{avg_score, non_compliant, no_benchmark, scored} (26 keys total), so the ComputedMetrics block survived. Analytics log 4:05 to 5:15 PM: zero lines naming ComplianceWorld, bad96277, ComputedMetric, redescribe or vcfcf_compliance (the only hits are the 4:04:17 install/describe lines). Collector WARN/ERROR 4:00 to 5:15 PM are vCommunity SOAP 500s and the Supervisor adapter notice, unrelated. Resource id unchanged (bad96277, creationTime 06-25 3:08:18 PM, so not recreated).
+5. Children: still exactly three CHILD VMwareAdapter Instance, once each (wld01 5827d79e, mgmt 5aa31ee3, wld02 6ac9cd72).
+
+Interpretation (INFERRED): the 3:07 point, which would have surfaced about 4:07, was lost because the redescribe at 4:04:17 reset the computed-metric state, and the first evaluation after it stamped the then-current 4:04 data. The one-late behavior resumes from there. Test: the 5:04 point should appear after the 6:04 PM cycle. Open: exact surfacing moment (poll from 6:04 sharp).

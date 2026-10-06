@@ -104,15 +104,52 @@ knowledge lives (a Java recipe registry keyed by logical prefix, or a
 read-recipe column in the source data) and keep the translation in one
 place — scattering it reintroduces silent mis-reads.
 
-## Pushing data — the Suite API property pusher
+## Pushing data: the SuiteApiStitcher facade
 
-The Java SDK's `SuiteAPIClient` / `ResourceCollection` path **drops
-foreign-resource data** (it only keeps metrics for resources the
-adapter itself discovered). To stitch onto existing VMWARE resources
-you bypass it: use the injected `suiteAPIClient.getClient()` via
-reflection to POST properties/stats directly to the Suite API
-(`SuiteApiPropertyPusher` in the compliance adapter). Push DTO-backed
-resources by their resolved resourceId.
+The SDK collect result drops data for resources the adapter did not
+discover, so stitching onto foreign resources goes through the Suite
+API. Hold a `SuiteApiStitcher` (`SuiteApiStitcher.create(this, logger)`
+in `configureAdapter`, `discard()` in `onDiscard`). Surface:
+`pushProperties`, `pushStats`, `addChild` / `addChildren`,
+`findSingletonResourceId`, `get`. The push, relationship and lookup
+calls log and swallow failures and never throw into the collect cycle.
+`get` is the exception: it throws `IOException` /
+`InterruptedException`, so catch them at the call site or an outage
+escapes `collect()`.
+
+**Relationships: POST adds, PUT replaces.** `addChild(parentId,
+childId)` is the additive `POST
+/api/resources/{parentId}/relationships/children`. Never use the PUT on
+that path: it replaces the parent's whole child list, so adapter
+instances sharing a parent (a pak singleton each instance links its own
+vCenter to) would wipe each other's links, last writer wins. The add is
+asynchronous, so a true return means "request accepted", not "linked":
+log it that way. Re-assert every cycle. Get the singleton's id with
+`findSingletonResourceId(adapterKind, resourceKind)`, which returns
+`null` on zero or ambiguous matches, and look it up every cycle rather
+than caching it: a POST to a deleted singleton's stale id can be
+accepted and dropped, and a cached id would then never recover. Edges
+added this way persist: nothing removes them when a target leaves
+scope, so removal is the pak's job. Edges in the
+adapter's own collect result still go through `RelationshipBuilder`. Do
+not mix the two routes on one parent until a live install proves it
+safe. Contract: `knowledge/context/tier2_architecture.md`.
+
+## Environment-wide totals: ComputedMetrics on the pak singleton
+
+A number that spans every adapter instance (fleet counts, a weighted
+average across vCenters) is declared, not pushed. Put it in a
+`<ComputedMetrics>` block on the pak's own singleton kind in describe.xml
+with a super-metric-style expression (`sum(${adapterkind=VMWARE,
+resourcekind=VMwareAdapter Instance, metric=VCF-CF Compliance|Rollup|All|scored})`),
+declare the matching attributes with `defaultMonitored="true"`, and have
+each instance `addChild` the singleton to its own target every cycle so
+the engine has children to walk. No policy enablement, no multi-writer
+race. Known costs: the totals trail by one collection interval, one point
+is skipped on every pak upgrade, and edges are never removed. Pin the
+expression's source keys in a describe test. Lesson:
+`knowledge/lessons/environment-totals-are-computed-metrics-not-super-metrics.md`;
+reference: compliance `ComplianceWorld`.
 
 ## ARIA_OPS stitching identity — the MOID trap
 

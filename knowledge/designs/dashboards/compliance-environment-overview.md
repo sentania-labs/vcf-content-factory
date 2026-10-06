@@ -77,11 +77,11 @@ dashboard):
 
 | # | Widget | Type | Grid (col, row, w, h) | Subject | Metrics / content |
 |---|---|---|---|---|---|
-| W1 | Environment Compliance | Scoreboard | 1, 1, 8, 4 | self-provider, pinned `VMWARE / vSphere World` | 4 SMs above. Avg score: red < 80, orange < 90, yellow < 95. Non-compliant: yellow >= 1. Without benchmark: orange >= 1 |
+| W1 | Environment Compliance | Scoreboard | 1, 1, 8, 4 | self-provider, pinned `vcfcf_compliance / ComplianceWorld` (2026-10-05 repoint; was `VMWARE / vSphere World` + 4 SMs) | `Rollup\|Environment\|{avg_score, non_compliant, no_benchmark, scored}`, engine-computed, one cycle behind. Avg score: red < 80, orange < 90, yellow < 95. Non-compliant: yellow >= 1. Without benchmark: orange >= 1 |
 | W2 | About this dashboard | TextDisplay | 9, 1, 4, 4 | none | What non-compliant and no-benchmark mean; names of the three drill-down dashboards |
 | W3 | Compliance by vCenter and Object Type | View | 1, 5, 12, 8 | self-provider, pinned `vSphere World`, children `VMwareAdapter Instance` | New view (below). Summary row = environment totals |
 | W4 | Objects by SCG Version | View | 1, 13, 6, 7 | same as W3 | New view (below). Summary row = totals |
-| W5 | Environment Score Trend | MetricChart | 7, 13, 6, 7 | pinned `vSphere World` | SM Average Score and SM Non-Compliant Objects, last 30 days |
+| W5 | Environment Score Trend | MetricChart | 7, 13, 6, 7 | pinned `ComplianceWorld` (2026-10-05 repoint; was `vSphere World`) | `Rollup\|Environment\|avg_score` and `Rollup\|Environment\|non_compliant`, last 30 days |
 | W6 | Open Compliance Alerts | AlertList | 1, 20, 12, 7 | driven by W3, default all | Explicit `alert_definitions` list of the generated per-control definitions (type 15, subType 21) (compliance), criticality warning and up, newest first |
 
 Interactions: W3 row selection drives W6 (alerts scoped to that
@@ -112,7 +112,7 @@ vCenter name, then `Rollup|Benchmark|<B>|objects` for SCG 6.7, 7.0,
   version, and the views show the benchmark applied, not the vDS
   version.
 - View summary rows cannot compute a weighted average; the environment
-  weighted average lives in W1 (super metric), and the view summary
+  weighted average lives in W1 (engine-computed `Rollup|Environment|avg_score` on ComplianceWorld since the 2026-10-05 repoint; was a super metric), and the view summary
   row is labelled "avg of vCenters".
 - Widget availability on Ops 9.0 (devel) vs 9.1 (prod) is not
   checkable by API; verified visually after the first install on each.
@@ -140,3 +140,16 @@ vCenter name, then `Rollup|Benchmark|<B>|objects` for SCG 6.7, 7.0,
 - **Unreadable counts as failing** (owner decision 2026-09-23,
   build 63): unreadable controls lower the score, and a per-object
   "Compliance data not collected" alert says why.
+
+## 2026-10-05 repoint (Scott: "A1> OK")
+
+W1 and W5 now read the engine-computed `Rollup|Environment|*` metrics on
+the pak's own `ComplianceWorld` singleton instead of the four super metrics
+on `vSphere World`; the super metrics are retired. Layout, widget types,
+grid and interactions are unchanged, so the approved HTML mock still
+describes the page. W3 and W4 stay pinned to `vSphere World`. Reason and
+proof: `knowledge/designs/sdk-adapters/compliance-environment-computed-metrics.md`.
+Note the totals trail the per-vCenter rollups by one collection interval
+and skip one point on every pak upgrade; the Scored tile stays beside the
+others so a zero non-compliant reading is never shown without its
+denominator.

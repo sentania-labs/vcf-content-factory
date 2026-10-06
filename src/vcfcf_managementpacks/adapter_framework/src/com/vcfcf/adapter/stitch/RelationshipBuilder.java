@@ -55,6 +55,19 @@ import java.util.Map;
  * Use {@link #buildDelta(boolean)} directly when you need explicit add/remove
  * deltas for own-adapter parents too.
  *
+ * <h3>Parent shared across adapter instances: use the Suite API add instead</h3>
+ * An own-adapter parent's children go out as one full set per parent per
+ * cycle. If that parent is shared by several adapter instances (a pak-level
+ * singleton every instance registers with the same identifiers) and each
+ * instance links its own child to it, a per-instance full set risks each
+ * instance replacing the others' children (last writer wins). For that case
+ * use {@link SuiteApiStitcher#addChild(String, String)}, the additive Suite
+ * API {@code POST .../relationships/children}, with the parent id from
+ * {@link SuiteApiStitcher#findSingletonResourceId(String, String)}. Whether
+ * a full set emitted through this builder for the same parent removes
+ * children added through the Suite API is unverified; avoid mixing the two
+ * routes on one parent until a live install shows it is safe.
+ *
  * <h3>Relationship cap</h3>
  * {@link #build()} enforces the supplied cap (default
  * {@link com.vcfcf.adapter.VcfCfAdapter#MAX_RELATIONSHIPS_PER_CYCLE}).
@@ -186,6 +199,11 @@ public final class RelationshipBuilder {
 
     /**
      * Add a cross-adapter child edge: {@code parent} gets a foreign child.
+     *
+     * <p>The edge is emitted in {@code parent}'s full set
+     * ({@code setRelationships}). If {@code parent} is shared across adapter
+     * instances, use {@link SuiteApiStitcher#addChild(String, String)}
+     * instead (see the class Javadoc).
      *
      * @param parent       the internal parent
      * @param foreignChild a {@link ResourceKey} from another adapter kind

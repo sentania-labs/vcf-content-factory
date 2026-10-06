@@ -195,6 +195,71 @@ public final class SuiteApiStitcher {
     }
 
     /**
+     * Add one child to an existing resource, additively, through the Suite
+     * API ({@code POST /api/resources/{parent}/relationships/children}).
+     *
+     * <p>Use this when the parent is shared by several adapter instances (for
+     * example a pak-level singleton each instance links its own foreign
+     * resource under). It is POST, never PUT: the PUT on the same path
+     * replaces the parent's whole child list, so each instance would wipe the
+     * links the others added (last writer wins). No replace variant is
+     * exposed. The add is asynchronous: {@code true} means "request
+     * accepted", not "linked", so log it that way. Re-asserting the same edge
+     * every cycle is the intended usage. Failures are logged at
+     * WARN and swallowed, like {@link #pushStats}. Nothing in the framework
+     * removes an edge added this way (known limitation): a child dropped
+     * from an instance's scope stays a child until the pak deletes the edge
+     * itself. Full contract: {@link SuiteApiStitchClient#addChildren}.
+     *
+     * <p>For edges reported in the adapter's own collect result, use
+     * {@link RelationshipBuilder} instead (its own-parent emission is a full
+     * set per parent).
+     *
+     * @param parentResourceId Suite API resource UUID of the parent
+     * @param childResourceId  Suite API resource UUID of the child
+     * @return {@code true} if the request was accepted (2xx); not proof the
+     *         edge exists
+     */
+    public boolean addChild(String parentResourceId, String childResourceId) {
+        return client.addChild(parentResourceId, childResourceId);
+    }
+
+    /**
+     * Add several children to an existing resource, additively. Same contract
+     * as {@link #addChild}; one request for the whole collection.
+     *
+     * @param parentResourceId Suite API resource UUID of the parent
+     * @param childResourceIds Suite API resource UUIDs of the children
+     * @return {@code true} if the request was accepted (2xx)
+     */
+    public boolean addChildren(String parentResourceId,
+            java.util.Collection<String> childResourceIds) {
+        return client.addChildren(parentResourceId, childResourceIds);
+    }
+
+    /**
+     * Look up the Suite API UUID of the single resource of a kind, typically
+     * the adapter's own singleton, so it can be used as a parent in
+     * {@link #addChild}. Returns {@code null} (after a WARN) on no match, on
+     * more than one match (never guesses), on a partial result page, or on
+     * any query failure; never throws. A response with no usable
+     * {@code totalCount} ({@code pageInfo} absent, {@code totalCount} absent,
+     * non-numeric or negative) is trusted as complete and its single visible
+     * match is returned. Look the singleton up every cycle (one local GET)
+     * and do not cache the id across cycles: the add is asynchronous, so a
+     * POST to a deleted singleton's id may be accepted and dropped later,
+     * and a cached stale id would then never be cleared. Full contract:
+     * {@link SuiteApiStitchClient#findSingletonResourceId}.
+     *
+     * @param adapterKind  adapter kind key
+     * @param resourceKind resource kind key
+     * @return the single matching resource UUID, or {@code null}
+     */
+    public String findSingletonResourceId(String adapterKind, String resourceKind) {
+        return client.findSingletonResourceId(adapterKind, resourceKind);
+    }
+
+    /**
      * Perform an authenticated GET against the Suite API.
      *
      * <p>Useful for resolving foreign resource UUIDs inline when

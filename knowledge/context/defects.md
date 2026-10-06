@@ -1201,3 +1201,34 @@ reused. Field lines are `- **Field:** value` (parsed by
 - **Close condition:** `sdk-adapter-author` changes the four attributes to
   `supermetric:"<name>"`; version bump and CI release; managementpacks
   validate passes for all Tier 2 paks.
+
+### DEF-022
+
+- **Title:** Compliance: an absent advanced setting whose control requires an
+  explicit value is skipped instead of failed, inflating compliance scores
+  (false pass)
+- **Severity:** blocking
+- **Status:** open
+- **Affects:** compliance
+- **First-seen:** adapter repo root commit `c6d9e73` (2026-06-08); in every
+  build since, confirmed in builds 85 and 86
+- **Source:** sentania-labs/vcf-content-factory-sdk-compliance issue #15
+  (High, Confirmed, filed 2026-09-24); `knowledge/context/reviews/compliance-build-86.md`
+  (WARNING 3, registry gap); registered 2026-10-05
+- **Summary:** Location: `src/com/vcfcf/adapters/compliance/ControlEvaluator.java`
+  lines ~150-161. When the setting is absent and the expected value does not
+  accept "Undefined" / "Not Present", the branch `continue`s without
+  recording pass, fail or unreadable, so an un-hardened object drops the
+  failing control from its denominator, scores higher, and that control's
+  alert can never fire (`vm.vmrc-lock`, EFI boot types,
+  `RemoteDisplay.maxConnections`, `mks.enable3d`, vpxd syslog / password /
+  log-level, 6.7 `isolation.tools.*`). Violates
+  `knowledge/lessons/unreadable-is-not-compliant.md`. Smallest fix: in the
+  else case emit a non-compliant `ControlResult` (actual `(undefined)`,
+  compliant false) and count it as a fail.
+- **Close condition:** `sdk-adapter-author` lands the fix with a
+  `ControlEvaluatorTest` case asserting an absent key with a value-required
+  expected is a fail, not a skip (and checks no `requiresAbsence` /
+  non-empty-mode expectation depends on the skip); `sdk-adapter-reviewer`
+  confirms it on the next build.
+- **Related:** `knowledge/lessons/unreadable-is-not-compliant.md`.

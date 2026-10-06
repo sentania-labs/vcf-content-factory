@@ -1,0 +1,21 @@
+    <OOTBPolicies vendorNameKey="14075">
+        <Policy key="baa5f9f3-19f6-458e-aa29-b1b83e1a4d12" nameKey="14074">
+            <PackageSettings vendorNameKey="VMWARE">
+                <Alerts adapterKind="VMWARE" resourceKind="VirtualMachine">
+                    <Alert enabled="true" id="AlertDefinition-VMViolate_PCI-DSS"/>
+                </Alerts>
+                <Alerts adapterKind="VMWARE" resourceKind="VMwareAdapter Instance">
+                    <Alert enabled="true" id="AlertDefinition-VCenterViolate_PCI-DSS"/>
+                </Alerts>
+                <Alerts adapterKind="VMWARE" resourceKind="DistributedVirtualPortgroup">
+                    <Alert enabled="true" id="AlertDefinition-DVPGViolate_PCI-DSS"/>
+                </Alerts>
+                <Alerts adapterKind="VMWARE" resourceKind="VmwareDistributedVirtualSwitch">
+                    <Alert enabled="true" id="AlertDefinition-DVSViolate_PCI-DSS"/>
+                </Alerts>
+                <Alerts adapterKind="VMWARE" resourceKind="HostSystem">
+                    <Alert enabled="true" id="AlertDefinition-HostViolate_PCI-DSS"/>
+                </Alerts>
+            </PackageSettings>
+        </Policy>
+    </OOTBPolicies>
