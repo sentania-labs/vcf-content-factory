@@ -871,7 +871,7 @@ def _load_bundled_content(
         return [], [], [], [], [], [], []
 
     try:
-        from vcfcf_dashboards.loader import load_view, load_dashboard, check_unique_summary_for
+        from vcfcf_dashboards.loader import load_view, load_dashboard, check_unique_summary_for, check_dashboard_navigations
     except ImportError as exc:
         raise SdkBuildError(
             f"bundled_content requires vcfcf_dashboards to be installed: {exc}"
@@ -944,6 +944,14 @@ def _load_bundled_content(
         check_unique_summary_for(dashboards)
     except Exception as exc:
         raise SdkBuildError(f"bundled_content.dashboards: {exc}") from exc
+    # Dashboard Navigation: a named target must be one of this pak's own
+    # dashboards (the pak is the import unit), resolved unambiguously.
+    nav_errors = check_dashboard_navigations(dashboards)
+    if nav_errors:
+        raise SdkBuildError(
+            "bundled_content.dashboards: Dashboard Navigation target(s) must be "
+            "dashboards bundled in this pak:\n" + "\n".join(f"  - {e}" for e in nav_errors)
+        )
 
     # --- Super Metrics ---
     supermetrics = []
@@ -2014,9 +2022,13 @@ def _write_outer_pak(
             # knowledge/context/api-surface/summary_dashboard_pak_binding.md.
             _summary_bindings: list[str] = []
             for d in dashboards:
+                # One file per dashboard, so Dashboard Navigation targets
+                # resolve against every dashboard this pak ships; a target
+                # outside the pak raises UnresolvedDashboardNavigationError.
                 dashboard_json = render_dashboards_bundle_json(
                     [d], views_by_name, _OWNER_UUID,
                     owning_adapter_kind=owning_adapter_kind,
+                    known_dashboards=dashboards,
                 )
                 # Derive a filesystem-safe slug from the dashboard name
                 slug = d.name.replace("/", "_").replace(" ", "_").replace("[", "").replace("]", "")

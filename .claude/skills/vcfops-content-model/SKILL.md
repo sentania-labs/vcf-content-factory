@@ -71,6 +71,12 @@ Key facts:
 - Install path: content-zip (dashboard.json per owner).
 - Widgets reference views by UUID (`config.viewDefinitionId`).
 - `widgetInteractions` wire provider→receiver by widget UUID.
+- `dashboardNavigations` is the Dashboard Navigation drill-down: source
+  widget UUID to a list of target dashboard UUIDs, each optionally naming
+  receiving widgets on the target (`interactionType: resourceId`, the
+  only value observed). YAML: per-widget `navigations` with `dashboard`
+  (by name) or `dashboard_id` (raw, external); see
+  `knowledge/context/wire-formats/dashboard_navigations.md`.
 - No REST CRUD — delete only via UI action layer.
 
 ### Symptom definitions
@@ -152,6 +158,7 @@ Quick reference:
 | SM formula → SM | `@supermetric:"<name>"` | `sm_<uuid>` | validate |
 | View column → SM | `supermetric:"<name>"` | `sm_<uuid>` | validate |
 | Dashboard → View | `view: "<name>"` | view UUID | validate |
+| Dashboard → Dashboard | `navigations: [{dashboard: "<name>", widgets: [<local id>]}]` | dashboard UUID + target widget UUIDs | render (validate checks) |
 | Alert → Symptom | `name: "<name>"` | symptom ID | sync |
 | Report → View | `view: "<name>"` | view UUID | validate |
 | Report → Dashboard | `dashboard: "<name>"` | dashboard UUID | validate |

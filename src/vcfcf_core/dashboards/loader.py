@@ -1523,7 +1523,7 @@ _VIEW_DETAILS_PREFIXES = ("http://", "https://", "/ui/", "/vcf-operations/ui/")
 _SECTION_FORBIDDEN_KEYS = (
     "metrics", "view", "resource_kinds", "pin", "self_provider",
     "property_list", "configs", "metric_key", "resource_relationship_advanced",
-    "column_preset", "relationship_mode", "view_details",
+    "column_preset", "relationship_mode", "view_details", "navigations",
 )
 
 
@@ -1532,6 +1532,40 @@ _SECTION_FORBIDDEN_KEYS = (
 # passthrough. Keys are the YAML-facing values; ``render.py`` maps
 # "name-only" to the verbatim captured wire-format constant.
 _SUPPORTED_COLUMN_PRESETS = frozenset({"name-only"})
+
+
+# Keys a ``navigations:`` entry may carry. Anything else is a typo (for
+# example ``dashbaord:``) and is rejected rather than silently ignored.
+_NAVIGATION_KEYS = ("dashboard", "dashboard_id", "widgets", "label")
+
+
+@dataclass
+class Navigation:
+    """One Dashboard Navigation target of a widget (dashboard-to-dashboard
+    drill-down: selecting an object in the source widget offers a jump to
+    the target dashboard, optionally pre-selecting that object in named
+    widgets there).
+
+    Exactly one of ``dashboard`` (the target's exact name, the convention)
+    and ``dashboard_id`` (raw UUID, for targets the factory does not own)
+    is set. ``widgets`` are the target dashboard's LOCAL widget ids; the
+    renderer resolves them to the target's ``Widget.widget_id``. A
+    ``dashboard_id`` entry never carries ``widgets`` (the factory cannot
+    know a foreign dashboard's widget ids). ``label`` is documentation
+    only and is never rendered.
+
+    Wire format (``dashboardNavigations``, keyed by source widget id):
+    knowledge/context/wire-formats/dashboard_navigations.md.
+
+    ``parse_dashboard_json`` (reverse.py) returns entries in the raw,
+    unresolved form: ``dashboard_id`` set and ``widgets`` holding the
+    target's reversed local ids. The extractor serializers turn those into
+    the authored form against the extraction set.
+    """
+    dashboard: str = ""
+    dashboard_id: str = ""
+    widgets: List[str] = field(default_factory=list)
+    label: str = ""
 
 
 @dataclass
@@ -1563,6 +1597,11 @@ class Widget:
     # A resourceId-bearing route is instance-specific and does not survive
     # a move between instances.
     view_details: Optional[str] = None
+    # Optional, any non-Section widget: Dashboard Navigation targets (see
+    # Navigation). Empty (default) renders nothing, so output for existing
+    # content is byte-identical: the dashboard's ``dashboardNavigations``
+    # block stays ``{}`` unless at least one widget declares a target.
+    navigations: List["Navigation"] = field(default_factory=list)
     # ResourceList only:
     resource_kinds: List[WidgetResourceKindRef] = field(default_factory=list)
     # ResourceList only: optional typed "Show Columns" grid-state preset.
@@ -1877,10 +1916,12 @@ class Dashboard:
                 )
             if (w.resource_kinds or w.view_name or w.pin is not None or w.self_provider
                     or w.scoreboard_config or w.metric_chart_config or w.heatmap_config
-                    or w.property_list_config or w.view_details is not None):
+                    or w.property_list_config or w.view_details is not None
+                    or w.navigations):
                 raise DashboardValidationError(
                     f"dashboard {self.name}: widget {w.local_id}: a Section must not "
-                    f"carry metrics, views, resource kinds, pins, self_provider, or view_details"
+                    f"carry metrics, views, resource kinds, pins, self_provider, "
+                    f"view_details, or navigations"
                 )
             for mid in w.section_config.member_ids:
                 if mid not in seen:
@@ -1903,6 +1944,16 @@ class Dashboard:
                     f"dashboard {self.name}: interaction {ix.from_local_id} -> "
                     f"{ix.to_local_id} references a Section; Sections carry no interactions"
                 )
+        # Self-targeting navigation is allowed (the product allows it), but
+        # a widget cannot name itself as a receiver on its own dashboard.
+        for w in self.widgets:
+            for nav in w.navigations:
+                if nav.dashboard == self.name and w.local_id in nav.widgets:
+                    raise DashboardValidationError(
+                        f"dashboard {self.name}: widget {w.local_id}: navigation to "
+                        f"its own dashboard names the widget itself as a receiver; "
+                        f"a widget cannot pass its selection to itself"
+                    )
 
 
 _UUID_RE = re.compile(
@@ -1986,6 +2037,211 @@ def check_unique_summary_for(dashboards: Iterable["Dashboard"]) -> None:
 
 IdMinter = Callable[[Path], str]
 ProvenanceFn = Callable[[Path], str]
+
+
+def check_dashboard_navigations(
+    dashboards: Iterable["Dashboard"],
+    corpus: Optional[Iterable["Dashboard"]] = None,
+    unloadable: Optional[Iterable[str]] = None,
+) -> List[str]:
+    """Resolve every ``navigations:`` target of ``dashboards`` against
+    ``corpus`` and return one error string per bad reference (empty list =
+    all clear).
+
+    ``corpus`` is the set of dashboards a target name may resolve to (the
+    factory passes every dashboard in the repo: ``content/dashboards/``
+    plus ``third_party/*/dashboards/``); the ``dashboards`` themselves are
+    always part of it, so self-targeting resolves. ``None`` means only
+    ``dashboards``.
+
+    Errors: a ``dashboard`` name that matches no dashboard, a name that
+    matches two dashboards with different ids (the reference is
+    ambiguous), a ``widgets`` entry that is not a non-Section widget on the
+    target, and a ``dashboard_id`` that is the id of a dashboard in the
+    corpus (the factory owns it, so it must be referenced by name, which is
+    what keeps it under the bundle carry-or-fail rule). Any other
+    ``dashboard_id`` is external by definition. The product itself
+    tolerates dangling targets silently, which is exactly why the factory
+    must not.
+
+    ``unloadable`` names dashboard YAMLs the caller could not load; a
+    "does not exist" error lists them, since the target may be one of them.
+    """
+    dashboards = list(dashboards)
+    by_name: dict[str, list["Dashboard"]] = {}
+    seen_ids: set[tuple[str, str]] = set()
+    for d in list(corpus or []) + dashboards:
+        key = (d.name, d.id)
+        if key in seen_ids:
+            continue
+        seen_ids.add(key)
+        by_name.setdefault(d.name, []).append(d)
+    by_id = {
+        (m.id or "").lower(): m
+        for ms in by_name.values() for m in ms if m.id
+    }
+    skipped = sorted(set(unloadable or []))
+    skipped_note = (
+        f"; {len(skipped)} dashboard YAML(s) failed to load and were not searched: "
+        f"{', '.join(skipped)}"
+        if skipped else ""
+    )
+    errors: List[str] = []
+    for d in dashboards:
+        for w in d.widgets:
+            for nav in w.navigations:
+                if nav.dashboard_id:
+                    owned = by_id.get(nav.dashboard_id.lower())
+                    if owned is not None:
+                        errors.append(
+                            f"dashboard {d.name!r}: widget {w.local_id!r}: navigation "
+                            f"dashboard_id {nav.dashboard_id} is the repo dashboard "
+                            f"{owned.name!r}; use dashboard: \"{owned.name}\" instead "
+                            f"(dashboard_id is only for dashboards the factory does not own)"
+                        )
+                    continue
+                matches = by_name.get(nav.dashboard) or []
+                if not matches:
+                    errors.append(
+                        f"dashboard {d.name!r}: widget {w.local_id!r}: navigation target "
+                        f"dashboard {nav.dashboard!r} does not exist (no dashboard has "
+                        f"that exact name; names are case- and prefix-sensitive)"
+                        f"{skipped_note}"
+                    )
+                    continue
+                if len({m.id for m in matches}) > 1:
+                    errors.append(
+                        f"dashboard {d.name!r}: widget {w.local_id!r}: navigation target "
+                        f"dashboard {nav.dashboard!r} is ambiguous: "
+                        f"{len(matches)} dashboards carry that name"
+                    )
+                    continue
+                target = matches[0]
+                receivers = {tw.local_id for tw in target.widgets if tw.type != "Section"}
+                for lid in nav.widgets:
+                    if lid not in receivers:
+                        errors.append(
+                            f"dashboard {d.name!r}: widget {w.local_id!r}: navigation to "
+                            f"dashboard {nav.dashboard!r} names receiving widget {lid!r}, "
+                            f"which is not a widget on that dashboard (its widget ids: "
+                            f"{', '.join(sorted(receivers)) or 'none'})"
+                        )
+    return errors
+
+
+def split_navigation_targets(dashboards: Iterable["Dashboard"]) -> "tuple[List[str], List[str]]":
+    """Navigation targets that a set of dashboards does not carry itself.
+
+    Returns ``(outside, external)``, each a list of human-readable lines:
+    ``outside`` for every ``dashboard:`` target whose name is not one of
+    ``dashboards`` (the import would ship a link to a dashboard it never
+    creates), ``external`` for every ``dashboard_id`` target (external by
+    definition: it must already exist on the target instance). Used by the
+    bundle carry-or-fail rule and the dashboards CLI package / sync.
+    """
+    dashboards = list(dashboards)
+    carried = {d.name for d in dashboards}
+    outside: List[str] = []
+    external: List[str] = []
+    for d in dashboards:
+        for w in d.widgets:
+            for nav in w.navigations:
+                if nav.dashboard_id:
+                    label = f" ({nav.label})" if nav.label else ""
+                    external.append(
+                        f"dashboard {d.name!r} widget {w.local_id!r} navigates to external "
+                        f"dashboard {nav.dashboard_id}{label}; it must already exist on "
+                        f"the target instance"
+                    )
+                elif nav.dashboard not in carried:
+                    outside.append(
+                        f"dashboard {d.name!r} widget {w.local_id!r} navigates to "
+                        f"{nav.dashboard!r}, which is not in this import"
+                    )
+    return outside, external
+
+
+def _parse_navigations(w: dict) -> List["Navigation"]:
+    """Parse one widget's optional ``navigations:`` list (shape only; name
+    and receiving-widget resolution is ``check_dashboard_navigations``)."""
+    wid = w.get("id", "?")
+    raw = w.get("navigations")
+    if raw is None:
+        return []
+    if not isinstance(raw, list):
+        raise DashboardValidationError(
+            f"widget {wid!r}: navigations must be a list of targets; "
+            f"got {type(raw).__name__} {raw!r}"
+        )
+    out: List[Navigation] = []
+    for i, entry in enumerate(raw):
+        where = f"widget {wid!r}: navigations[{i}]"
+        if not isinstance(entry, dict):
+            raise DashboardValidationError(
+                f"{where} must be a mapping with 'dashboard' or 'dashboard_id'; got {entry!r}"
+            )
+        unknown = [k for k in entry if k not in _NAVIGATION_KEYS]
+        if unknown:
+            raise DashboardValidationError(
+                f"{where}: unknown key(s) {', '.join(map(str, unknown))} "
+                f"(allowed: {', '.join(_NAVIGATION_KEYS)})"
+            )
+        has_name = "dashboard" in entry
+        has_id = "dashboard_id" in entry
+        if has_name == has_id:
+            raise DashboardValidationError(
+                f"{where}: set exactly one of 'dashboard' (target name, the convention) "
+                f"or 'dashboard_id' (raw UUID, for dashboards the factory does not own)"
+            )
+        name = ""
+        dash_id = ""
+        if has_name:
+            name_raw = entry["dashboard"]
+            if not isinstance(name_raw, str) or not name_raw.strip():
+                raise DashboardValidationError(
+                    f"{where}: dashboard must be a non-empty string (the target's exact name)"
+                )
+            name = name_raw.strip()
+        else:
+            id_raw = entry["dashboard_id"]
+            dash_id = str(id_raw).strip().lower() if isinstance(id_raw, str) else ""
+            if not _UUID_RE.match(dash_id):
+                raise DashboardValidationError(
+                    f"{where}: dashboard_id must be a dashboard UUID; got {id_raw!r}"
+                )
+            if "widgets" in entry:
+                raise DashboardValidationError(
+                    f"{where}: widgets is not allowed on a dashboard_id entry: the factory "
+                    f"cannot know a foreign dashboard's widget ids. Drop widgets, or target "
+                    f"a factory dashboard by name with 'dashboard:'"
+                )
+        widgets_raw = entry.get("widgets")
+        targets: List[str] = []
+        if widgets_raw is not None:
+            if not isinstance(widgets_raw, list) or not all(
+                isinstance(x, str) and x.strip() for x in widgets_raw
+            ):
+                raise DashboardValidationError(
+                    f"{where}: widgets must be a list of the target dashboard's widget "
+                    f"ids; got {widgets_raw!r}"
+                )
+            for x in widgets_raw:
+                x = x.strip()
+                if x in targets:
+                    raise DashboardValidationError(f"{where}: widgets lists {x!r} more than once")
+                targets.append(x)
+        label_raw = entry.get("label")
+        if label_raw is not None and not isinstance(label_raw, str):
+            raise DashboardValidationError(
+                f"{where}: label must be a string (documentation only); got {label_raw!r}"
+            )
+        out.append(Navigation(
+            dashboard=name,
+            dashboard_id=dash_id,
+            widgets=targets,
+            label=(label_raw or "").strip(),
+        ))
+    return out
 
 
 def _resolve_id(path: Path, data: dict, on_missing_id: Optional[IdMinter]) -> str:
@@ -2547,6 +2803,10 @@ def load_dashboard(
                     f"No placeholder expansion exists, links are static."
                 )
 
+        # --- Parse navigations (any non-Section widget; Section rejects
+        # the key through _SECTION_FORBIDDEN_KEYS below) ---
+        navigations = _parse_navigations(w) if widget_type != "Section" else []
+
         # --- Parse AlertVolume config ---
         alert_volume_config = None
         if widget_type == "AlertVolume":
@@ -3018,6 +3278,7 @@ def load_dashboard(
                 ),
                 section_config=section_config,
                 view_details=view_details_raw,
+                navigations=navigations,
                 resource_kinds=rks,
                 view_name=str(w.get("view", "") or "").strip(),
                 self_provider=bool(w.get("self_provider", False)),

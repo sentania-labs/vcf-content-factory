@@ -280,7 +280,23 @@ def _check_deps(
             project_scope=None,
         )
 
-        return graph.errors
+        # Dashboard Navigation targets: a bundle must carry every named
+        # target (carry-or-fail at build). Worded so _auto_add_deps can
+        # pick the quoted name up as a dashboard.
+        picked_names = {d.name for d in dashboards}
+        nav_warnings = []
+        for d in dashboards:
+            for w in d.widgets:
+                for nav in w.navigations:
+                    if nav.dashboard and nav.dashboard not in picked_names:
+                        msg = (
+                            f"dashboard '{d.name}' navigates to dashboard "
+                            f"'{nav.dashboard}', which is not in the selection"
+                        )
+                        if msg not in nav_warnings:
+                            nav_warnings.append(msg)
+
+        return graph.errors + nav_warnings
 
     except ImportError:
         return []
@@ -458,8 +474,35 @@ def compose_bundle(
         except EOFError:
             ans = "n"
         if ans in ("y", "yes"):
-            picks = _auto_add_deps(picks, dep_warnings, repo_root)
-            _out("  Missing deps auto-added (where resolvable).")
+            # Iterate to convergence: an added navigation target brings its
+            # own views and targets, at any chain length. Picks only grow and
+            # every pass must add a component not seen before, so a cycle
+            # (A -> B -> A) ends the loop rather than spinning it.
+            seen = {(ct, e.rel_path) for ct in CONTENT_TYPES for e in picks.get(ct, [])}
+            while dep_warnings:
+                picks = _auto_add_deps(picks, dep_warnings, repo_root)
+                dep_warnings = _check_deps(
+                    picked_dashboards=picks.get("dashboards", []),
+                    picked_views=picks.get("views", []),
+                    picked_sms=picks.get("supermetrics", []),
+                    picked_cgs=picks.get("customgroups", []),
+                    repo_root=repo_root,
+                )
+                now = {(ct, e.rel_path) for ct in CONTENT_TYPES for e in picks.get(ct, [])}
+                if now <= seen:
+                    break
+                seen |= now
+            if dep_warnings:
+                # Writing this manifest would only defer the failure to the
+                # build (carry-or-fail), so refuse here with the names.
+                print(
+                    "ERROR: dependencies still unresolved after auto-add; no bundle written:",
+                    file=sys.stderr,
+                )
+                for w in dep_warnings:
+                    print(f"  - {w}", file=sys.stderr)
+                return 1
+            _out("  Missing deps auto-added.")
         else:
             _out("  Leaving picks as-is. Bundle install may fail if deps are absent on the instance.")
 

@@ -19,7 +19,7 @@ import json
 import re
 import time
 import uuid
-from typing import Mapping, Optional
+from typing import Iterable, Mapping, Optional
 from xml.sax.saxutils import escape
 
 from .loader import (
@@ -33,6 +33,16 @@ from .loader import (
     PropertyListConfig, ResourceRelationshipAdvancedConfig,
     _UUID_RE as _VIEW_UUID_RE,
 )
+
+
+class UnresolvedDashboardNavigationError(ValueError):
+    """A widget's ``navigations:`` entry names a dashboard (or a receiving
+    widget on it) that is not among the dashboards the renderer was given.
+
+    The product imports a dangling target without complaint and the jump
+    then goes nowhere, so the renderer refuses instead. Pass every
+    dashboard a target may resolve to through ``known_dashboards``.
+    """
 
 
 class UnresolvedViewReferenceError(ValueError):
@@ -2282,12 +2292,76 @@ def _resource_relationship_advanced_widget(
     }
 
 
+def _render_dashboard_navigations(
+    dashboard: Dashboard,
+    targets_by_name: Mapping[str, "list[Dashboard]"],
+) -> dict:
+    """``dashboardNavigations`` for one dashboard: source widget id to a
+    list of ``{"id": <target dashboard id>, "widgets": [{"interactionType":
+    "resourceId", "id": <receiving widget id>}]}`` in authored order.
+    Empty dict when no widget declares navigations (the historical output).
+
+    Names resolve through ``targets_by_name`` (name to the distinct
+    dashboards carrying it; more than one id is ambiguous and raises,
+    never a silent pick); receiving widgets resolve to
+    the target's ``Widget.widget_id`` (stable, derived from the target
+    dashboard's name and the local id). ``dashboard_id`` targets pass
+    through verbatim with ``widgets: []``. Wire format:
+    knowledge/context/wire-formats/dashboard_navigations.md.
+    """
+    out: dict = {}
+    for w in dashboard.widgets:
+        if not w.navigations or w.type == "Section":
+            continue
+        entries = []
+        for nav in w.navigations:
+            if nav.dashboard_id:
+                entries.append({"id": nav.dashboard_id, "widgets": []})
+                continue
+            candidates = targets_by_name.get(nav.dashboard) or []
+            if not candidates:
+                raise UnresolvedDashboardNavigationError(
+                    f"dashboard {dashboard.name!r} widget {w.local_id!r}: navigation "
+                    f"target dashboard {nav.dashboard!r} is not a loaded dashboard; "
+                    f"render it alongside its targets (same bundle) or pass them "
+                    f"as known_dashboards"
+                )
+            if len(candidates) > 1:
+                raise UnresolvedDashboardNavigationError(
+                    f"dashboard {dashboard.name!r} widget {w.local_id!r}: navigation "
+                    f"target dashboard {nav.dashboard!r} is ambiguous: "
+                    f"{len(candidates)} dashboards with different ids carry that name "
+                    f"({', '.join(c.id for c in candidates)})"
+                )
+            target = candidates[0]
+            receivers = {tw.local_id: tw for tw in target.widgets if tw.type != "Section"}
+            widgets = []
+            for lid in nav.widgets:
+                tw = receivers.get(lid)
+                if tw is None:
+                    raise UnresolvedDashboardNavigationError(
+                        f"dashboard {dashboard.name!r} widget {w.local_id!r}: navigation "
+                        f"to dashboard {nav.dashboard!r} names receiving widget {lid!r}, "
+                        f"which is not a widget on that dashboard"
+                    )
+                if target.name == dashboard.name and lid == w.local_id:
+                    raise UnresolvedDashboardNavigationError(
+                        f"dashboard {dashboard.name!r} widget {w.local_id!r}: a widget "
+                        f"cannot name itself as a receiver on its own dashboard"
+                    )
+                widgets.append({"interactionType": "resourceId", "id": tw.widget_id})
+            entries.append({"id": target.id, "widgets": widgets})
+        out[w.widget_id] = entries
+    return out
+
+
 def _build_dashboard_obj(
     dashboard: Dashboard,
     views_by_name: dict[str, ViewDef],
     kind_index: dict[tuple[str, str], int],
     resource_index: dict[tuple[str, str], int],
     owner_user_id: str,
+    targets_by_name: Optional[Mapping[str, "list[Dashboard]"]] = None,
 ) -> dict:
     widgets_json = []
     widget_id_by_local = {w.local_id: w.widget_id for w in dashboard.widgets}
@@ -2413,7 +2487,9 @@ def _build_dashboard_obj(
         "disabled": False,
         "id": dashboard.id,
         "locked": False,
-        "dashboardNavigations": {},
+        "dashboardNavigations": _render_dashboard_navigations(
+            dashboard, targets_by_name if targets_by_name is not None else {}
+        ),
         "widgetInteractions": interactions_json,
         "lastUpdateTime": now_ms,
         "widgets": widgets_json,
@@ -2425,6 +2501,7 @@ def render_dashboards_bundle_json(
     views_by_name: dict[str, ViewDef],
     owner_user_id: str,
     owning_adapter_kind: Optional[str] = None,
+    known_dashboards: Optional[Iterable[Dashboard]] = None,
 ) -> str:
     """Render all of an owner's dashboards into the single
     dashboard/dashboard.json the VCF Ops content importer expects
@@ -2442,7 +2519,20 @@ def render_dashboards_bundle_json(
             associate the dashboard with the owning adapter; without it the
             importer silently drops the dashboard.
             Spec ref: knowledge/context/cleanroom-spec/spec/18-pak-content-bundle.md §A1.
+        known_dashboards: Extra dashboards a ``navigations: - dashboard:``
+            name may resolve to (for example every dashboard in the repo when
+            rendering one). The rendered ``dashboards`` are always part of
+            the set. A referenced name that resolves to nothing, or to two
+            dashboards with different ids, raises
+            ``UnresolvedDashboardNavigationError``.
     """
+    # Name to the distinct dashboards (by id) carrying it; the rendered
+    # object is kept when the same dashboard also arrives via known.
+    targets_by_name: dict[str, list[Dashboard]] = {}
+    for d in list(dashboards) + list(known_dashboards or []):
+        bucket = targets_by_name.setdefault(d.name, [])
+        if all((b.id or "").lower() != (d.id or "").lower() for b in bucket):
+            bucket.append(d)
     kind_index: dict[tuple[str, str], int] = {}
     for d in dashboards:
         for w in d.widgets:
@@ -2597,7 +2687,10 @@ def render_dashboards_bundle_json(
     _envelope_uuid = str(uuid.UUID(bytes=hashlib.sha256(_id_seed).digest()[:16], version=4))
 
     def _build_dashboard_with_adapter(d: Dashboard) -> dict:
-        obj = _build_dashboard_obj(d, views_by_name, kind_index, resource_index, owner_user_id)
+        obj = _build_dashboard_obj(
+            d, views_by_name, kind_index, resource_index, owner_user_id,
+            targets_by_name=targets_by_name,
+        )
         # A1: set adapterName on each dashboard object so the importer can file it.
         if owning_adapter_kind:
             obj["adapterName"] = owning_adapter_kind

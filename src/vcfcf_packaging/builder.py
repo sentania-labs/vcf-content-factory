@@ -59,6 +59,7 @@ from vcfcf_core.packaging.assembly import (  # noqa: F401  (re-exported for old-
 )
 from vcfcf_supermetrics.loader import sm_id_map
 from .loader import Bundle, BundleValidationError, load_bundle, render_bme_items  # noqa: F401
+from .navigation import print_navigation_prerequisites
 from .template_version import CURRENT_TEMPLATE_VERSION
 
 # ---------------------------------------------------------------------------
@@ -469,6 +470,7 @@ def build_bundle(
         sm_map=sm_id_map(bundle.sm_paths, bundle_ctx),
         bundle_context=bundle_ctx,
     )
+    print_navigation_prerequisites(bundle, bundle_ctx)
 
     # --- bundle.json ---
     bundle_json = _build_bundle_json(bundle, display_name)

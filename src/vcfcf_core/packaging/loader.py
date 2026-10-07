@@ -80,8 +80,12 @@ from typing import Callable, List, Optional
 
 import yaml
 
+from ..common.provenance import provenance_from_path as _provenance_from_path
 from ..supermetrics.loader import SuperMetricDef, load_file as load_sm
-from ..dashboards.loader import ViewDef, Dashboard, load_view, load_dashboard
+from ..dashboards.loader import (
+    ViewDef, Dashboard, load_view, load_dashboard, check_dashboard_navigations,
+    split_navigation_targets,
+)
 from ..customgroups.loader import CustomGroupDef, load_file as load_cg
 from ..reports.loader import ReportDef, load_file as load_report
 from ..symptoms.loader import SymptomDef, load_file as load_symptom
@@ -96,6 +100,37 @@ ProvenanceFn = Callable[[Path], str]
 
 class BundleValidationError(ValueError):
     pass
+
+
+def check_bundle_dashboard_navigations(dashboards: List[Dashboard], context: str) -> List[str]:
+    """Enforce the bundle-must-carry-targets rule for Dashboard Navigation.
+
+    Every ``navigations: - dashboard: <name>`` target of a dashboard in
+    ``dashboards`` must itself be one of ``dashboards`` (the jump would
+    otherwise point at a dashboard the import never creates, and the
+    product tolerates that silently), and every receiving widget it names
+    must be on that target. Raises ``BundleValidationError`` naming each
+    missing dashboard (``context`` labels the bundle).
+
+    Returns the ``dashboard_id`` targets as human-readable prerequisite
+    lines (external by definition: they must already exist on the target
+    instance). The caller decides how to report them; this function never
+    prints.
+    """
+    outside, prereqs = split_navigation_targets(dashboards)
+    if outside:
+        raise BundleValidationError(
+            f"{context}: Dashboard Navigation target(s) missing from the bundle "
+            f"(add each named dashboard to the bundle, or remove the navigation):\n"
+            + "\n".join(f"  - {m}" for m in outside)
+        )
+    errors = check_dashboard_navigations(dashboards)
+    if errors:
+        raise BundleValidationError(
+            f"{context}: Dashboard Navigation error(s):\n"
+            + "\n".join(f"  - {e}" for e in errors)
+        )
+    return prereqs
 
 
 @dataclass
@@ -382,14 +417,28 @@ def load_bundle(
     except Exception as e:
         raise BundleValidationError(f"{path}: view error: {e}") from e
 
-    # For third-party bundles (factory_native=False), don't force dashboards
-    # into the "VCF Content Factory" folder.  Use an empty default_name_path
-    # so only an explicit name_path: field in the YAML places them in a folder.
-    dash_default_name_path = "VCF Content Factory" if factory_native else ""
+    # Folder default and prefix rule are decided PER FILE, from the file's
+    # own provenance, not per manifest: a factory dashboard carried by a
+    # third-party bundle (an extracted bundle carrying a repo-owned
+    # Dashboard Navigation target) keeps the "VCF Content Factory" folder
+    # it has from its own home, so installing that bundle never moves the
+    # existing dashboard (same id) out of the folder; a third-party
+    # dashboard gets the empty default (only an explicit name_path: places
+    # it in a folder). A file of unknown provenance follows the manifest.
+    def _dash_is_factory(p: Path) -> bool:
+        if provenance_of is not None:
+            prov = provenance_of(p)
+        elif root is not None:
+            prov = _provenance_from_path(p, root)
+        else:
+            prov = ""
+        return factory_native if not prov else prov == "factory"
+
+    dash_factory = {str(p): _dash_is_factory(p) for p in dash_paths}
     try:
         dashboards = [
-            load_dashboard(p, enforce_framework_prefix=factory_native,
-                           default_name_path=dash_default_name_path,
+            load_dashboard(p, enforce_framework_prefix=dash_factory[str(p)],
+                           default_name_path="VCF Content Factory" if dash_factory[str(p)] else "",
                            on_missing_id=on_missing_id, provenance_of=provenance_of)
             for p in dash_paths
         ]
@@ -398,13 +447,15 @@ def load_bundle(
 
     # Cross-validate dashboards against loaded views
     views_by_name = {v.name: v for v in views}
-    for d in dashboards:
+    for p, d in zip(dash_paths, dashboards):
         try:
-            d.validate(views_by_name, enforce_framework_prefix=factory_native)
+            d.validate(views_by_name, enforce_framework_prefix=dash_factory[str(p)])
         except Exception as e:
             raise BundleValidationError(
                 f"{path}: dashboard '{d.name}' cross-validation error: {e}"
             ) from e
+    # Dashboard Navigation: every named target must ship in this bundle.
+    check_bundle_dashboard_navigations(dashboards, str(path))
 
     try:
         customgroups = [

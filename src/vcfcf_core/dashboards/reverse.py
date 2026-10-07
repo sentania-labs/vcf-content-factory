@@ -46,6 +46,7 @@ from .loader import (
     Interaction,
     MetricChartConfig,
     MetricSpec,
+    Navigation,
     ParetoAnalysisConfig,
     ProblemAlertsListConfig,
     PropertyListConfig,
@@ -1203,6 +1204,15 @@ _SUPPORTED_WIDGET_TYPES = frozenset({
 })
 
 
+def reverse_local_id(raw_id: str) -> str:
+    """The local widget id ``parse_dashboard_json`` gives a wire widget id
+    (sanitised, at most 40 characters; ``""`` when nothing survives, in
+    which case the parser falls back to ``widget_<seq>``). Shared with the
+    extractor serializers so a Dashboard Navigation receiving widget maps
+    back to the same local id its target dashboard's YAML carries."""
+    return re.sub(r"[^a-zA-Z0-9_\-]", "_", str(raw_id))[:40]
+
+
 def parse_dashboard_json(dash_json: dict, views_by_id: dict[str, ViewDef]) -> Dashboard:
     """Parse a dashboard.json widget graph into a Dashboard dataclass.
 
@@ -1265,7 +1275,7 @@ def parse_dashboard_json(dash_json: dict, views_by_id: dict[str, ViewDef]) -> Da
 
         raw_id = str(w.get("id") or seq)
         # Use a sanitised short local_id
-        local_id = re.sub(r"[^a-zA-Z0-9_\-]", "_", raw_id)[:40] or f"widget_{seq}"
+        local_id = reverse_local_id(raw_id) or f"widget_{seq}"
 
         grid = w.get("gridsterCoords") or {}
         coords = {
@@ -1488,6 +1498,44 @@ def parse_dashboard_json(dash_json: dict, views_by_id: dict[str, ViewDef]) -> Da
                 to_local_id=to_local,
                 type=ix_type,
             ))
+
+    # Dashboard Navigations: kept in the raw, unresolved form (target
+    # dashboard UUID plus the target's reversed local widget ids); the
+    # extractor serializers resolve them against the extraction set
+    # (vcfcf_core.extractor.extractor._navigations_to_yaml). A source widget
+    # that was skipped (unsupported type) loses its navigations, with a WARN.
+    widgets_by_local = {wd.local_id: wd for wd in widgets}
+    raw_navs = dash_json.get("dashboardNavigations") or {}
+    if isinstance(raw_navs, dict):
+        for src_id, targets in raw_navs.items():
+            src_local = widget_id_to_local.get(str(src_id))
+            if src_local is None or not isinstance(targets, list):
+                _warn(
+                    f"dashboard '{display_name}': dashboardNavigations source widget "
+                    f"{src_id!r} is not a parsed widget; its navigations are dropped"
+                )
+                continue
+            src_widget = widgets_by_local[src_local]
+            if src_widget.type == "Section":
+                _warn(
+                    f"dashboard '{display_name}': Section widget '{src_local}' carries "
+                    f"dashboardNavigations; Sections take none, dropped"
+                )
+                continue
+            for t in targets:
+                if not isinstance(t, dict) or not t.get("id"):
+                    continue
+                receivers = [
+                    reverse_local_id(r.get("id"))
+                    for r in (t.get("widgets") or [])
+                    if isinstance(r, dict) and r.get("id")
+                ]
+                # De-duplicated, order kept: the loader rejects a receiver
+                # listed twice, so a duplicate in the export must not reach YAML.
+                src_widget.navigations.append(Navigation(
+                    dashboard_id=str(t["id"]).strip().lower(),
+                    widgets=list(dict.fromkeys(r for r in receivers if r)),
+                ))
 
     return Dashboard(
         id=dash_id,

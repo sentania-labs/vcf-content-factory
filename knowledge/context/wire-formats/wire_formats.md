@@ -112,6 +112,12 @@ etc.), `pagination-control`, and `metadata`.
   (`{x,y,w,h}` on a 12-column grid), and a type-specific `config`.
 - `widgetInteractions` is a list of
   `{widgetIdProvider, type: "resourceId", widgetIdReceiver}`.
+- `dashboardNavigations` is the dashboard-to-dashboard drill-down: source
+  widget id to a list of `{id: <target dashboard uuid>, widgets:
+  [{interactionType: "resourceId", id: <widget uuid on target>}]}`
+  (`widgets: []` = jump only). `{}` when unused, which is what every
+  dashboard without YAML `navigations:` renders. Full contract, YAML
+  surface and validation: `dashboard_navigations.md`.
 
 A `View` widget references its view by `config.viewDefinitionId`,
 which must match the view's UUID. In this repo, the dashboard YAML's

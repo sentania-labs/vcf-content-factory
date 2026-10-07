@@ -237,6 +237,137 @@ class _SMNameCache:
 # Existing-id scan (non-overwrite invariant)
 # ---------------------------------------------------------------------------
 
+def _owned_dashboards(repo_root: Path) -> dict:
+    """Lower-case UUID to loaded Dashboard for every dashboard the repo owns
+    (``content/dashboards/`` plus ``third_party/*/dashboards/``, the set
+    validate checks the owned-id rule against). A Dashboard Navigation
+    target found here is extracted as ``dashboard: "<name>"``, not
+    ``dashboard_id:``. Read-only: no id minting; a YAML that fails to load
+    is skipped (its own validate reports it)."""
+    import warnings as _warnings
+    from vcfcf_core.dashboards.loader import load_dashboard as _load_one
+
+    dirs = [repo_root / "content" / "dashboards"]
+    tp = repo_root / "third_party"
+    if tp.is_dir():
+        dirs.extend(sorted(p / "dashboards" for p in tp.iterdir() if (p / "dashboards").is_dir()))
+    out: dict = {}
+    with _warnings.catch_warnings():
+        _warnings.simplefilter("ignore")
+        for d in dirs:
+            for p in (sorted(d.rglob("*.y*ml")) if d.is_dir() else []):
+                try:
+                    dash = _load_one(p, enforce_framework_prefix=False, default_name_path="")
+                except Exception:
+                    continue
+                if dash.id:
+                    out[dash.id.lower()] = dash
+    return out
+
+
+# Content types a PROJECT.yaml auto-discovers (vcfcf_core.packaging.loader).
+_PROJECT_CONTENT_TYPES = (
+    "supermetrics", "views", "dashboards", "customgroups",
+    "reports", "symptoms", "alerts", "recommendations",
+)
+
+
+def _owned_navigation_content(dash_path: Path, slug_dir: Path, repo_root: Path) -> Optional[dict]:
+    """Explicit PROJECT.yaml content lists for an extraction whose dashboard
+    navigates to dashboards the repo already owns, or None when it does not.
+
+    The extracted YAML names such a target by ``dashboard:`` (validate's
+    owned-id rule), and a bundle must carry every named target, so the
+    generated manifest has to carry the owned dashboard too, plus its views,
+    super metrics, custom groups and its own named targets (the same closure
+    the /bundle composer computes, ``navigation_closure``). Explicit lists
+    switch PROJECT.yaml auto-discovery off, so the project's own files are
+    listed as well. References are repo-relative when the project sits
+    inside ``repo_root`` (what ``load_bundle`` resolves first), else
+    absolute. A target that cannot be closed over is WARNed: the build
+    names it.
+    """
+    import warnings as _warnings
+    from vcfcf_core.customgroups.loader import load_file as _load_cg
+    from vcfcf_core.dashboards.loader import load_dashboard as _load_dash, load_view as _load_view
+    from vcfcf_core.supermetrics.loader import load_file as _load_sm
+    from vcfcf_packaging.navigation import navigation_closure
+
+    try:
+        written = _load_dash(dash_path, enforce_framework_prefix=False, default_name_path="")
+    except Exception:
+        return None
+    names = {
+        nav.dashboard for w in written.widgets for nav in w.navigations
+        if nav.dashboard and nav.dashboard != written.name
+    }
+    if not names:
+        return None
+    slug_res = slug_dir.resolve()
+    root_res = repo_root.resolve()
+
+    def _inside(p: Path, d: Path) -> bool:
+        try:
+            Path(p).resolve().relative_to(d)
+            return True
+        except ValueError:
+            return False
+
+    owned = [
+        d for d in _owned_dashboards(repo_root).values()
+        if d.source_path is not None and not _inside(d.source_path, slug_res)
+        and (d.id or "").lower() != (written.id or "").lower()
+    ]
+    start = [d for d in owned if d.name in names]
+    if not start:
+        return None
+
+    def _corpus(type_name: str, load) -> list:
+        dirs = [repo_root / "content" / type_name]
+        tp = repo_root / "third_party"
+        if tp.is_dir():
+            dirs.extend(sorted(p / type_name for p in tp.iterdir() if (p / type_name).is_dir()))
+        out = []
+        with _warnings.catch_warnings():
+            _warnings.simplefilter("ignore")
+            for d in dirs:
+                for p in (sorted(d.rglob("*.y*ml")) if d.is_dir() else []):
+                    if _inside(p, slug_res):
+                        continue
+                    try:
+                        out.append(load(p))
+                    except Exception:
+                        pass
+        return out
+
+    views = _corpus("views", lambda p: _load_view(p, enforce_framework_prefix=False))
+    sms = _corpus("supermetrics", lambda p: _load_sm(p, enforce_framework_prefix=False))
+    cgs = _corpus("customgroups", lambda p: _load_cg(p, enforce_framework_prefix=False))
+    dashes, dviews, dsms, dcgs, unresolved = navigation_closure(start, owned, views, sms, cgs)
+    for msg in unresolved:
+        _warn(f"navigation closure for the manifest: {msg}; the bundle build will name it")
+
+    rel_ok = _inside(slug_res, root_res)
+
+    def _ref(p) -> str:
+        p = Path(p).resolve()
+        return str(p.relative_to(root_res)) if rel_ok and _inside(p, root_res) else str(p)
+
+    lists: dict = {}
+    for t in _PROJECT_CONTENT_TYPES:
+        local = sorted((slug_dir / t).rglob("*.y*ml")) if (slug_dir / t).is_dir() else []
+        lists[t] = [_ref(p) for p in local]
+    for t, objs in (("dashboards", dashes), ("views", dviews),
+                    ("supermetrics", dsms), ("customgroups", dcgs)):
+        for o in objs:
+            sp = getattr(o, "source_path", None)
+            if sp is not None and _ref(sp) not in lists[t]:
+                lists[t].append(_ref(sp))
+    for d in dashes:
+        _info(f"manifest carries navigation target {d.name!r} ({_ref(d.source_path)})")
+    return {t: refs for t, refs in lists.items() if refs}
+
+
 def _scan_existing_ids(kind: str, repo_root: Path) -> dict[str, Path]:
     """Return a mapping of uuid -> file path for existing repo YAML files.
 
@@ -359,7 +490,9 @@ def _export_supermetrics_full(sm_client) -> dict[str, dict]:
         raise VCFOpsError(str(e)) from e
 
 
-def _export_dashboard_json(sm_client, dashboard_uuid: str) -> Optional[dict]:
+def _export_dashboard_json(
+    sm_client, dashboard_uuid: str, names_out: Optional[dict] = None,
+) -> Optional[dict]:
     """Export all dashboards via content-zip and return the dict for dashboard_uuid.
 
     The walk over ``dashboards/<owner>`` inner zips and the ``entries`` merge
@@ -369,7 +502,10 @@ def _export_dashboard_json(sm_client, dashboard_uuid: str) -> Optional[dict]:
     format (tabConfigs[], no widget config) and should not be used for parsing.
 
     Returns the matching dashboard dict (with top-level ``entries`` merged in),
-    or None if the UUID is not found in the export.
+    or None if the UUID is not found in the export. When ``names_out`` is a
+    dict it is filled with lower-case UUID to display name (folder prefix
+    stripped) for every exported dashboard, which labels Dashboard
+    Navigation targets outside the extraction.
     """
     from vcfcf_common.client import VCFOpsError
 
@@ -378,6 +514,12 @@ def _export_dashboard_json(sm_client, dashboard_uuid: str) -> Optional[dict]:
         dashboards = _dashboards_from_export_zip(outer_zip)
     except ValueError as e:
         raise VCFOpsError(str(e)) from e
+    if names_out is not None:
+        for dash in dashboards:
+            did = (dash.get("id") or "").lower()
+            dname = (dash.get("name") or "").strip()
+            if did and dname:
+                names_out[did] = dname.split("/", 1)[-1].strip()
     for dash in dashboards:
         if (dash.get("id") or "").lower() == dashboard_uuid.lower():
             return dash
@@ -626,8 +768,9 @@ def extract_dashboard(
     # (dashboard/dashboard.json).  We use _export_dashboard_json() to export and
     # locate our target dashboard.
     print(f"\nExporting dashboard {dashboard_id} via content-zip ...")
+    dashboard_names_by_id: dict = {}
     try:
-        dash_data = _export_dashboard_json(sm_client, dashboard_id)
+        dash_data = _export_dashboard_json(sm_client, dashboard_id, dashboard_names_by_id)
     except Exception as e:
         print(f"ERROR: dashboard export failed: {e}", file=sys.stderr)
         return 1
@@ -1019,6 +1162,7 @@ def extract_dashboard(
     # -----------------------------------------------------------------------
     # Write YAML files
     # -----------------------------------------------------------------------
+    nav_content_lists: Optional[dict] = None
     sm_file_paths: list[str] = []
     view_file_paths: list[str] = []
     dash_file_paths: list[str] = []
@@ -1126,9 +1270,16 @@ def extract_dashboard(
         dash_filename = f"{dash_name_safe}.yaml"
         dash_path = dash_subdir / dash_filename
         dash_data["id"] = dashboard_id
-        _write_dashboard_yaml(dash_path, dash_data, dashboard_id, view_results, factory_native=False)
+        _write_dashboard_yaml(
+            dash_path, dash_data, dashboard_id, view_results, factory_native=False,
+            dashboard_names_by_id=dashboard_names_by_id,
+            owned_dashboards=(
+                _owned_dashboards(_REPO_ROOT) if dash_data.get("dashboardNavigations") else None
+            ),
+        )
         dash_file_paths.append(f"dashboards/{dash_filename}")
         _info(f"wrote {dash_path}")
+        nav_content_lists = _owned_navigation_content(dash_path, slug_dir, _REPO_ROOT)
 
     # -----------------------------------------------------------------------
     # Enablement walk: collect all metric refs and check defaultMonitored
@@ -1279,6 +1430,7 @@ def extract_dashboard(
         source_version=source_version,
         description_file=description_file,
         builtin_metric_enables=bme_list if bme_list else None,
+        content_lists=nav_content_lists,
     )
     _info(f"wrote manifest: {manifest_path}")
 
