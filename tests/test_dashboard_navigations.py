@@ -871,3 +871,159 @@ def test_live_extract_names_repo_owned_target_and_passes_validate(tmp_path, caps
     assert "not-on-target" in err
     extracted = _load(path)
     assert check_dashboard_navigations([extracted], corpus=[dst]) == []
+
+
+# ---------------------------------------------------------------------------
+# Codex round on PR #197
+# ---------------------------------------------------------------------------
+
+EXT_ID = "5f3f1c2a-7b1e-4c1d-9a2b-3c4d5e6f7a8b"
+U_NAME = "[VCF Content Factory] Nav Further"
+U_ID = "44444444-4444-4444-8444-444444444444"
+
+
+class _StubSuiteClient:
+    def authenticate(self):
+        return None
+
+    def export_default_policy_xml(self):
+        raise RuntimeError("no policy in this test")
+
+    def get_supermetric(self, uuid):
+        raise RuntimeError("no SM in this test")
+
+    def list_supermetrics(self, page_size=2000):
+        return []
+
+
+@pytest.fixture
+def owned_extract(monkeypatch, tmp_path):
+    """A repo owning DST (which navigates on to U), and a live dashboard
+    whose navigation targets DST by id, with a receiver on it."""
+    import vcfcf_extractor.extractor as ex
+
+    root = tmp_path / "repo"
+    for sub in ("dashboards", "views", "supermetrics"):
+        (root / "content" / sub).mkdir(parents=True)
+    dst_doc = _target_doc()
+    dst_doc["widgets"][0]["navigations"] = [{"dashboard": U_NAME}]
+    _write(root / "content" / "dashboards" / "t.yaml", dst_doc)
+    _write(root / "content" / "dashboards" / "u.yaml", _dash(U_NAME, U_ID, [_rl("u_list")]))
+    _write(root / "content" / "dashboards" / "unrelated.yaml",
+           _dash("[VCF Content Factory] Unrelated", OTHER_ID, [_rl("x")]))
+    dst = _load(root / "content" / "dashboards" / "t.yaml")
+    picker = next(w.widget_id for w in dst.widgets if w.local_id == "cluster_picker")
+    live = {
+        "id": EXT_ID, "name": "Ext Dash", "shared": True, "entries": {},
+        "widgets": [_wire_widget(W_SRC_LIST, "TextDisplay", 1)],
+        "widgetInteractions": [],
+        "dashboardNavigations": {W_SRC_LIST: [
+            {"id": DST_ID, "widgets": [{"interactionType": "resourceId", "id": picker}]}]},
+    }
+    monkeypatch.setattr(ex, "_REPO_ROOT", root)
+    monkeypatch.setattr(ex, "_build_sm_client", lambda *a, **k: _StubSuiteClient())
+    monkeypatch.setattr(ex, "_export_dashboard_json",
+                        lambda client, uuid, names_out=None: live if uuid == EXT_ID else None)
+    monkeypatch.setattr(ex, "_export_supermetrics_full", lambda client: {})
+    desc = tmp_path / "DESCRIPTION.md"
+    desc.write_text("desc\n", encoding="utf-8")
+
+    def run(output_dir: Path) -> int:
+        return ex.extract_dashboard(
+            host="h", user="u", password="p", verify_ssl=False,
+            dashboard_id=EXT_ID, dashboard_name=None, bundle_slug="ext",
+            author="a", license_="MIT", description_file=desc, source_url="", source_version="",
+            output_dir=str(output_dir), skip_supermetrics=set(), include_customgroups=[],
+            prefix="", dry_run=False, yes=True,
+        )
+
+    return root, run
+
+
+class TestExtractManifestCarriesOwnedTargets:
+    def _assert_builds(self, bundle):
+        from vcfcf_core.packaging.loader import check_bundle_dashboard_navigations
+        assert sorted(d.name for d in bundle.dashboards) == sorted(["Ext Dash", DST, U_NAME])
+        assert check_bundle_dashboard_navigations(bundle.dashboards, "ext") == []
+
+    def test_project_inside_repo_lists_repo_relative_refs(self, owned_extract, capsys):
+        from vcfcf_core.packaging.loader import load_bundle
+        root, run = owned_extract
+        assert run(root / "third_party") == 0
+        capsys.readouterr()
+        manifest = root / "third_party" / "ext" / "PROJECT.yaml"
+        doc = yaml.safe_load(manifest.read_text())
+        assert doc["dashboards"] == [
+            "third_party/ext/dashboards/Ext Dash.yaml",
+            "content/dashboards/t.yaml",
+            "content/dashboards/u.yaml",  # transitive: DST navigates on to U
+        ]
+        ext_doc = yaml.safe_load((root / "third_party" / "ext" / "dashboards" / "Ext Dash.yaml").read_text())
+        assert ext_doc["widgets"][0]["navigations"] == [{"dashboard": DST, "widgets": ["cluster_picker"]}]
+        self._assert_builds(load_bundle(manifest, repo_root=root))
+
+    def test_project_outside_repo_lists_absolute_refs(self, owned_extract, tmp_path, capsys):
+        from vcfcf_packaging.loader import load_bundle
+        root, run = owned_extract
+        assert run(tmp_path / "elsewhere") == 0
+        capsys.readouterr()
+        manifest = tmp_path / "elsewhere" / "ext" / "PROJECT.yaml"
+        assert all(Path(r).is_absolute() for r in yaml.safe_load(manifest.read_text())["dashboards"])
+        self._assert_builds(load_bundle(manifest))
+
+    def test_no_owned_target_keeps_auto_discovery(self, owned_extract, monkeypatch, tmp_path, capsys):
+        import vcfcf_extractor.extractor as ex
+        root, run = owned_extract
+        live = ex._export_dashboard_json(None, EXT_ID)
+        live["dashboardNavigations"] = {W_SRC_LIST: [{"id": FOREIGN_ID, "widgets": []}]}
+        assert run(tmp_path / "plain") == 0
+        capsys.readouterr()
+        doc = yaml.safe_load((tmp_path / "plain" / "ext" / "PROJECT.yaml").read_text())
+        assert "dashboards" not in doc
+
+
+def _chain_repo(tmp_path: Path, n: int, cycle: bool = False) -> Path:
+    names = [f"[VCF Content Factory] Chain {i:02d}" for i in range(n)]
+    for i, name in enumerate(names):
+        nxt = names[(i + 1) % n] if (i + 1 < n or cycle) else None
+        navs = [{"dashboard": nxt}] if nxt else []
+        _write(tmp_path / "content" / "dashboards" / f"d{i:02d}.yaml",
+               _dash(name, f"{i:08x}-0000-4000-8000-000000000000",
+                     [_rl("l", navigations=navs) if navs else _rl("l")]))
+    return tmp_path
+
+
+def _compose(repo: Path, answers: list) -> int:
+    from vcfcf_packaging.composer import compose_bundle
+    seq = iter(answers)
+
+    def _in(_prompt=""):
+        try:
+            return next(seq)
+        except StopIteration:
+            raise EOFError
+
+    return compose_bundle("nav-chain", repo_root=repo, input_fn=_in, output_fn=lambda *a, **k: None)
+
+
+class TestComposerConvergence:
+    def test_chain_of_twelve_is_fully_added(self, tmp_path):
+        repo = _chain_repo(tmp_path, 12)
+        assert _compose(repo, ["", "desc", "END", "d00", "y"]) == 0
+        doc = yaml.safe_load((repo / "bundles" / "nav-chain.yaml").read_text())
+        assert sorted(doc["dashboards"]) == [f"content/dashboards/d{i:02d}.yaml" for i in range(12)]
+
+    def test_two_dashboard_cycle_terminates(self, tmp_path):
+        repo = _chain_repo(tmp_path, 2, cycle=True)
+        assert _compose(repo, ["", "desc", "END", "d00", "y"]) == 0
+        doc = yaml.safe_load((repo / "bundles" / "nav-chain.yaml").read_text())
+        assert sorted(doc["dashboards"]) == ["content/dashboards/d00.yaml", "content/dashboards/d01.yaml"]
+
+    def test_unresolved_target_fails_without_writing(self, tmp_path, capsys):
+        repo = _chain_repo(tmp_path, 3)
+        _write(repo / "content" / "dashboards" / "d02.yaml",
+               _dash("[VCF Content Factory] Chain 02", "00000002-0000-4000-8000-000000000000",
+                     [_rl("l", navigations=[{"dashboard": "[VCF Content Factory] Gone"}])]))
+        assert _compose(repo, ["", "desc", "END", "d00", "y"]) == 1
+        assert "[VCF Content Factory] Gone" in capsys.readouterr().err
+        assert not (repo / "bundles" / "nav-chain.yaml").exists()

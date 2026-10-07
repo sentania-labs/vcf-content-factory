@@ -474,10 +474,12 @@ def compose_bundle(
         except EOFError:
             ans = "n"
         if ans in ("y", "yes"):
-            # Repeat until nothing new resolves: an added navigation target
-            # brings its own views and targets.
-            for _ in range(10):
-                before = {ct: [e.slug for e in picks.get(ct, [])] for ct in CONTENT_TYPES}
+            # Iterate to convergence: an added navigation target brings its
+            # own views and targets, at any chain length. Picks only grow and
+            # every pass must add a component not seen before, so a cycle
+            # (A -> B -> A) ends the loop rather than spinning it.
+            seen = {(ct, e.rel_path) for ct in CONTENT_TYPES for e in picks.get(ct, [])}
+            while dep_warnings:
                 picks = _auto_add_deps(picks, dep_warnings, repo_root)
                 dep_warnings = _check_deps(
                     picked_dashboards=picks.get("dashboards", []),
@@ -486,12 +488,21 @@ def compose_bundle(
                     picked_cgs=picks.get("customgroups", []),
                     repo_root=repo_root,
                 )
-                after = {ct: [e.slug for e in picks.get(ct, [])] for ct in CONTENT_TYPES}
-                if not dep_warnings or after == before:
+                now = {(ct, e.rel_path) for ct in CONTENT_TYPES for e in picks.get(ct, [])}
+                if now <= seen:
                     break
-            _out("  Missing deps auto-added (where resolvable).")
-            for w in dep_warnings:
-                _out(f"  WARN (unresolved): {w}")
+                seen |= now
+            if dep_warnings:
+                # Writing this manifest would only defer the failure to the
+                # build (carry-or-fail), so refuse here with the names.
+                print(
+                    "ERROR: dependencies still unresolved after auto-add; no bundle written:",
+                    file=sys.stderr,
+                )
+                for w in dep_warnings:
+                    print(f"  - {w}", file=sys.stderr)
+                return 1
+            _out("  Missing deps auto-added.")
         else:
             _out("  Leaving picks as-is. Bundle install may fail if deps are absent on the instance.")
 

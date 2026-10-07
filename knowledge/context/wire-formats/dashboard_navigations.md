@@ -134,8 +134,11 @@ as `PREREQUISITE:` lines (the target must already exist on the instance).
 
 A discrete dashboard release with a named target therefore cannot build
 on its own; ship the pair as a bundle. The `/bundle` composer reports a
-missing navigation target as a dependency and auto-adds it (and, on
-repeat passes, the added dashboard's own views and targets).
+missing navigation target as a dependency and auto-adds it, iterating
+to convergence at any chain length (each pass must add a component not
+seen before, so a cycle ends the loop) so the added dashboard's own
+views and targets come too. Anything still unresolved after convergence
+fails composition with the names, and no manifest is written.
 
 ## Extract
 
@@ -152,6 +155,14 @@ Both `/extract` paths carry the block:
   owned dashboard). Every other target becomes `dashboard_id:` with the
   UUID preserved and `label:` set to the target's name from the same
   content export, when the export carries it.
+- When the live extractor names an owned target, the generated
+  `PROJECT.yaml` carries it so the advertised `build` passes
+  carry-or-fail: explicit content lists with the project's own files plus
+  the owned dashboard and its closure (its views, super metrics, custom
+  groups and its own named targets, transitively; `navigation_closure` in
+  `src/vcfcf_packaging/navigation.py`). References are repo-relative when
+  the project sits inside the repo, absolute otherwise. Without an owned
+  target the manifest keeps auto-discovery (no lists).
 - Receivers on a target that is neither in the extraction nor owned by
   the repo are dropped with a WARN
   (a `dashboard_id` entry cannot name widgets); the jump itself is kept.

@@ -1426,13 +1426,19 @@ def _write_manifest(
     source_version: str,
     description_file: Path,
     builtin_metric_enables: list[dict] = None,
+    content_lists: Optional[dict] = None,
 ) -> None:
     """Write the bundle PROJECT.yaml at third_party/<slug>/PROJECT.yaml.
 
     Uses the v3 layout: PROJECT.yaml lives inside the slug directory alongside
-    supermetrics/, views/, dashboards/ subdirs.  No explicit content lists are
-    written: vcfcf_packaging/loader.py auto-discovers content from subdirs
-    when the manifest is named PROJECT.yaml and carries no explicit lists.
+    supermetrics/, views/, dashboards/ subdirs.  By default no explicit
+    content lists are written: vcfcf_packaging/loader.py auto-discovers
+    content from subdirs when the manifest is named PROJECT.yaml and carries
+    no explicit lists. ``content_lists`` (type to list of file references,
+    supplied by the caller) is written verbatim instead, for an extraction
+    that must also carry content outside the project directory (Dashboard
+    Navigation targets the repo already owns); explicit lists switch
+    auto-discovery off, so the caller includes the project's own files too.
     """
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
@@ -1459,8 +1465,12 @@ def _write_manifest(
     if source:
         doc["source"] = source
 
-    # No explicit supermetrics/views/dashboards lists: the loader auto-discovers
-    # content from subdirs when the file is named PROJECT.yaml.
+    # No explicit supermetrics/views/dashboards lists unless the caller
+    # supplies them: the loader auto-discovers content from subdirs when
+    # the file is named PROJECT.yaml.
+    for k, refs in (content_lists or {}).items():
+        if refs:
+            doc[k] = list(refs)
 
     if builtin_metric_enables:
         doc["builtin_metric_enables"] = builtin_metric_enables
