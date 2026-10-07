@@ -149,7 +149,7 @@ scripts/
   bootstrap_references.sh    SessionStart: clones allowlisted external reference repos
   bootstrap_managed_paks.sh  SessionStart: clones managed pak repos (managed_paks.md)
   curation_staleness_check.sh  SessionStart nudge when curation is due
-  check_framework_review.sh  CI: RULE-013 gate, a src/vcfcf_*/ diff needs a review record
+  check_framework_review.sh  CI reminder, non-blocking: warns when a src/vcfcf_*/ diff has no review record (the gate itself is RULE-013, pre-PR)
   immutability_guard.sh      CI: RULE-016 gate, nothing under reference/ is modified
   path_reference_audit.sh    CI: RULE-015 gate, every cited path must resolve
   version_line_guard.sh      pre-push hook (.githooks/pre-push): version line consistency
