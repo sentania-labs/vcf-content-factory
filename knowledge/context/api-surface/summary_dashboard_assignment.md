@@ -52,8 +52,14 @@ CRUD at all (`content_api_surface.md`).
 `CiscoNetworkingDeviceSummary.json` and `Oracle-Database-Summary.json` all
 ship in vendor paks and none is bound to anything. `isDefault` is `false`
 on all 36 pak dashboards parsed. Oracle 9.1's "Drill Down" dashboards ship
-`hidden: true` with populated `dashboardNavigations`, but that is keyed by
-widget UUID: widget-to-widget drill-down, not a summary binding.
+`hidden: true` with populated `dashboardNavigations`, but that is the
+Dashboard Navigation drill-down, not a summary binding: keyed by source
+widget UUID, each value a list of target dashboard UUIDs, each optionally
+naming receiving widgets on the target. `interactionType: resourceId` is
+the only value seen, both in the five navigating dashboards under
+`reference/references/` (31 receiving widgets) and in the 33 navigating
+vendor dashboards on the devel instance (a different population from the
+36 pak dashboards above; recon log entry 2026-10-07).
 
 ## The mechanism that does work
 

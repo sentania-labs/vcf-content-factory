@@ -111,8 +111,8 @@ commit SHAs, line refs) · proposed fix**. No finding without evidence.
    "writes to" against the CLAUDE.md roster row.
 7. Write `knowledge/context/curation/<date>-report.md`. Be honest about coverage:
    if you time-boxed or sampled a large class, say what you did not reach.
-   **Your report is a generated doc and RULE-007 applies to it: no
-   em-dashes anywhere in it.** Use commas, colons, parentheses, or a
+   **Your report is a generated doc and must contain no em-dashes
+   anywhere.** Use commas, colons, parentheses, or a
    period. This is not optional and it is not a style preference the
    report gets to opt out of.
 

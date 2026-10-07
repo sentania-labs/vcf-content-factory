@@ -385,7 +385,8 @@ string "summary" appears in zero install scripts corpus-wide.
 **Does not work: the content-import zip.** The per-dashboard field
 inventory carries no summary/default field (checked against 5+ specimens).
 `homeTab` is the per-user landing tab, not this; `dashboardNavigations` is
-widget-to-widget drill-down.
+the Dashboard Navigation drill-down (source widget to target dashboard,
+optionally naming receiving widgets on the target), not a summary binding.
 
 **Does work: the Struts UI layer.** `POST /ui/dashboard.action` with
 `mainAction=associateResourceKindDashboards`, session-cookie auth plus CSRF
