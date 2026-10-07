@@ -81,7 +81,9 @@ from typing import Callable, List, Optional
 import yaml
 
 from ..supermetrics.loader import SuperMetricDef, load_file as load_sm
-from ..dashboards.loader import ViewDef, Dashboard, load_view, load_dashboard
+from ..dashboards.loader import (
+    ViewDef, Dashboard, load_view, load_dashboard, check_dashboard_navigations,
+)
 from ..customgroups.loader import CustomGroupDef, load_file as load_cg
 from ..reports.loader import ReportDef, load_file as load_report
 from ..symptoms.loader import SymptomDef, load_file as load_symptom
@@ -96,6 +98,54 @@ ProvenanceFn = Callable[[Path], str]
 
 class BundleValidationError(ValueError):
     pass
+
+
+def check_bundle_dashboard_navigations(dashboards: List[Dashboard], context: str) -> List[str]:
+    """Enforce the bundle-must-carry-targets rule for Dashboard Navigation.
+
+    Every ``navigations: - dashboard: <name>`` target of a dashboard in
+    ``dashboards`` must itself be one of ``dashboards`` (the jump would
+    otherwise point at a dashboard the import never creates, and the
+    product tolerates that silently), and every receiving widget it names
+    must be on that target. Raises ``BundleValidationError`` naming each
+    missing dashboard (``context`` labels the bundle).
+
+    Returns the ``dashboard_id`` targets as human-readable prerequisite
+    lines (external by definition: they must already exist on the target
+    instance). The caller decides how to report them; this function never
+    prints.
+    """
+    carried = {d.name for d in dashboards}
+    missing: List[str] = []
+    prereqs: List[str] = []
+    for d in dashboards:
+        for w in d.widgets:
+            for nav in w.navigations:
+                if nav.dashboard_id:
+                    label = f" ({nav.label})" if nav.label else ""
+                    prereqs.append(
+                        f"dashboard {d.name!r} widget {w.local_id!r} navigates to external "
+                        f"dashboard {nav.dashboard_id}{label}; it must already exist on "
+                        f"the target instance"
+                    )
+                elif nav.dashboard not in carried:
+                    missing.append(
+                        f"dashboard {d.name!r} widget {w.local_id!r} navigates to "
+                        f"{nav.dashboard!r}, which is not in this bundle"
+                    )
+    if missing:
+        raise BundleValidationError(
+            f"{context}: Dashboard Navigation target(s) missing from the bundle "
+            f"(add each named dashboard to the bundle, or remove the navigation):\n"
+            + "\n".join(f"  - {m}" for m in missing)
+        )
+    errors = check_dashboard_navigations(dashboards)
+    if errors:
+        raise BundleValidationError(
+            f"{context}: Dashboard Navigation error(s):\n"
+            + "\n".join(f"  - {e}" for e in errors)
+        )
+    return prereqs
 
 
 @dataclass
@@ -405,6 +455,8 @@ def load_bundle(
             raise BundleValidationError(
                 f"{path}: dashboard '{d.name}' cross-validation error: {e}"
             ) from e
+    # Dashboard Navigation: every named target must ship in this bundle.
+    check_bundle_dashboard_navigations(dashboards, str(path))
 
     try:
         customgroups = [

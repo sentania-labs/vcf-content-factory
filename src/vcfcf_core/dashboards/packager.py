@@ -82,12 +82,15 @@ def build_import_zip(
     owner_username: str = "admin",
     marker_filename: str | None = None,
     sm_map: Optional[Mapping[str, str]] = None,
+    known_dashboards: Optional[Iterable[Dashboard]] = None,
 ) -> bytes:
     """Assemble the nested import zip for ``views`` and ``dashboards``.
 
     ``sm_map`` (super metric name to uuid) resolves ``supermetric:"<name>"``
     view columns; the caller supplies it (the factory scans its
     ``content/supermetrics`` tree), this module never looks on disk.
+    ``known_dashboards`` is passed to the renderer as the extra set a
+    ``navigations: - dashboard:`` name may resolve to.
     """
     views = list(views)
     dashboards = list(dashboards)
@@ -111,7 +114,8 @@ def build_import_zip(
             outer.writestr(zipfile.ZipInfo("dashboards/"), b"")
             outer.writestr(zipfile.ZipInfo("dashboardsharings/"), b"")
             dj = render_dashboards_bundle_json(
-                dashboards, views_by_name, owner_user_id
+                dashboards, views_by_name, owner_user_id,
+                known_dashboards=known_dashboards,
             )
             outer.writestr(
                 f"dashboards/{owner_user_id}",

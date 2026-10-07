@@ -359,7 +359,9 @@ def _export_supermetrics_full(sm_client) -> dict[str, dict]:
         raise VCFOpsError(str(e)) from e
 
 
-def _export_dashboard_json(sm_client, dashboard_uuid: str) -> Optional[dict]:
+def _export_dashboard_json(
+    sm_client, dashboard_uuid: str, names_out: Optional[dict] = None,
+) -> Optional[dict]:
     """Export all dashboards via content-zip and return the dict for dashboard_uuid.
 
     The walk over ``dashboards/<owner>`` inner zips and the ``entries`` merge
@@ -369,7 +371,10 @@ def _export_dashboard_json(sm_client, dashboard_uuid: str) -> Optional[dict]:
     format (tabConfigs[], no widget config) and should not be used for parsing.
 
     Returns the matching dashboard dict (with top-level ``entries`` merged in),
-    or None if the UUID is not found in the export.
+    or None if the UUID is not found in the export. When ``names_out`` is a
+    dict it is filled with lower-case UUID to display name (folder prefix
+    stripped) for every exported dashboard, which labels Dashboard
+    Navigation targets outside the extraction.
     """
     from vcfcf_common.client import VCFOpsError
 
@@ -378,6 +383,12 @@ def _export_dashboard_json(sm_client, dashboard_uuid: str) -> Optional[dict]:
         dashboards = _dashboards_from_export_zip(outer_zip)
     except ValueError as e:
         raise VCFOpsError(str(e)) from e
+    if names_out is not None:
+        for dash in dashboards:
+            did = (dash.get("id") or "").lower()
+            dname = (dash.get("name") or "").strip()
+            if did and dname:
+                names_out[did] = dname.split("/", 1)[-1].strip()
     for dash in dashboards:
         if (dash.get("id") or "").lower() == dashboard_uuid.lower():
             return dash
@@ -626,8 +637,9 @@ def extract_dashboard(
     # (dashboard/dashboard.json).  We use _export_dashboard_json() to export and
     # locate our target dashboard.
     print(f"\nExporting dashboard {dashboard_id} via content-zip ...")
+    dashboard_names_by_id: dict = {}
     try:
-        dash_data = _export_dashboard_json(sm_client, dashboard_id)
+        dash_data = _export_dashboard_json(sm_client, dashboard_id, dashboard_names_by_id)
     except Exception as e:
         print(f"ERROR: dashboard export failed: {e}", file=sys.stderr)
         return 1
@@ -1126,7 +1138,10 @@ def extract_dashboard(
         dash_filename = f"{dash_name_safe}.yaml"
         dash_path = dash_subdir / dash_filename
         dash_data["id"] = dashboard_id
-        _write_dashboard_yaml(dash_path, dash_data, dashboard_id, view_results, factory_native=False)
+        _write_dashboard_yaml(
+            dash_path, dash_data, dashboard_id, view_results, factory_native=False,
+            dashboard_names_by_id=dashboard_names_by_id,
+        )
         dash_file_paths.append(f"dashboards/{dash_filename}")
         _info(f"wrote {dash_path}")
 

@@ -62,6 +62,7 @@ These files cost almost nothing to scan and prevent re-deriving known knowledge.
 | `alertdef_symptomset_import.md` | Alert content-import multi-tier SymptomSet encoding |
 | `symptomdef_severity_import.md` | SymptomDefinition severity: content-import XML vs REST JSON divergence |
 | `dashboard_section_gauge_viewdetails.md` | Factory mapping for Section (row header, membership by row), gauge scoreboard (`visualTheme: 9`), `viewDetails` link contract, AlertVolume (`IntSummaryAlertVolume`); 9.1.1 / 9.2 captures plus export samples |
+| `dashboard_navigations.md` | Dashboard Navigation drill-down: `dashboardNavigations` wire shape, per-widget `navigations:` YAML (`dashboard` by name or raw `dashboard_id`, target `widgets`), validate/render resolution, bundle-must-carry-targets, extract mapping (2026-10-07) |
 | `dashboard_view_pin_resolution.md` | Self-provider View pin binds by resource display name, not kind key (live-verified 2026-08-26); `_WORLD_DISPLAY_NAME` table and `pin.name` override |
 | `../investigations/policy_fragment_wire_format.md` | Super metric enablement in a policy: `<SuperMetrics adapterKind resourceKind><SuperMetric enabled id="<bare uuid>"/>` under `PackageSettings`; policy export is the only read path (`GET /api/policies/{id}` is undefined, hence 500); a pak's policies directory (`<pak>/content/policies/`) fragments parse it but create their own named policy, not a Default Policy edit (2026-10-01) |
 

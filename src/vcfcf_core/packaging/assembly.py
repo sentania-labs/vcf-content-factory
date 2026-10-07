@@ -55,7 +55,9 @@ from ..alerts.render import render_alert_content_xml
 from ..dashboards.render import render_dashboards_bundle_json, render_views_xml
 from ..reports.render import render_report_xml
 from ..supermetrics.crossref import resolve_sm_formula, sm_name_to_uuid_map
-from .loader import Bundle, BundleValidationError, render_bme_items
+from .loader import (
+    Bundle, BundleValidationError, check_bundle_dashboard_navigations, render_bme_items,
+)
 
 # The builder stamps PLACEHOLDER_USER_ID into the rendered dashboard JSON.
 # The install script replaces this at install time with the real user UUID.
@@ -368,6 +370,10 @@ def render_bundle_payloads(
 
     dashboard_json = None
     if bundle.dashboards:
+        # Bundle-must-carry-targets (Dashboard Navigation). load_bundle
+        # already ran it for manifests; discrete builds assemble a synthetic
+        # Bundle that never passes through load_bundle, so run it here too.
+        check_bundle_dashboard_navigations(bundle.dashboards, bundle_context)
         views_by_name = {v.name: v for v in bundle.views}
         dashboard_json = render_dashboards_bundle_json(
             bundle.dashboards, views_by_name, PLACEHOLDER_USER_ID

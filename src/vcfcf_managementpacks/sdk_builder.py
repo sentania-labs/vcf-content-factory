@@ -2014,9 +2014,13 @@ def _write_outer_pak(
             # knowledge/context/api-surface/summary_dashboard_pak_binding.md.
             _summary_bindings: list[str] = []
             for d in dashboards:
+                # One file per dashboard, so Dashboard Navigation targets
+                # resolve against every dashboard this pak ships; a target
+                # outside the pak raises UnresolvedDashboardNavigationError.
                 dashboard_json = render_dashboards_bundle_json(
                     [d], views_by_name, _OWNER_UUID,
                     owning_adapter_kind=owning_adapter_kind,
+                    known_dashboards=dashboards,
                 )
                 # Derive a filesystem-safe slug from the dashboard name
                 slug = d.name.replace("/", "_").replace(" ", "_").replace("[", "").replace("]", "")

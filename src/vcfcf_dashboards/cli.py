@@ -19,7 +19,7 @@ from .client import (
     import_content_zip,
 )
 from .id_guard import check_dashboard_id_stability
-from .loader import DashboardValidationError, load_all
+from .loader import DashboardValidationError, check_dashboard_navigations, load_all
 from .packager import build_import_zip
 from .summary_bind import bind_summary
 from .ui_client import UIClientError, VCFOpsUIClient
@@ -30,6 +30,50 @@ DEFAULT_DASHBOARDS = Path("content/dashboards")
 
 def _load(args) -> tuple[list, list]:
     return load_all(Path(args.views_dir), Path(args.dashboards_dir))
+
+
+def _has_navigations(dashboards: list) -> bool:
+    return any(w.navigations for d in dashboards for w in d.widgets)
+
+
+def _navigation_corpus(dashboards: list, mint: bool = False) -> list:
+    """Every dashboard a ``navigations: - dashboard:`` name may resolve to:
+    the loaded ``dashboards`` plus every ``third_party/*/dashboards/`` YAML
+    (relative to the working directory, like the rest of this CLI).
+
+    ``mint`` uses the minting loader (validate, which already mints ids into
+    third-party YAML in its membership pass); package and sync use the core
+    loader with no minting so they never write a file. A third-party YAML
+    that fails to load is skipped here: its own validation reports it.
+    """
+    corpus = list(dashboards)
+    third_party = Path("third_party")
+    if not third_party.is_dir():
+        return corpus
+    if mint:
+        from .loader import load_dashboard as _load_one
+    else:
+        from vcfcf_core.dashboards.loader import load_dashboard as _load_one
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        for proj_dir in sorted(third_party.iterdir()):
+            dash_dir = proj_dir / "dashboards"
+            if not dash_dir.is_dir():
+                continue
+            for dp in sorted(dash_dir.rglob("*.y*ml")):
+                try:
+                    corpus.append(_load_one(dp, enforce_framework_prefix=False, default_name_path=""))
+                except Exception:
+                    pass
+    return corpus
+
+
+def _report_navigation_errors(sources: list, corpus: list) -> int:
+    """Print one INVALID line per unresolved navigation reference; 1 if any."""
+    errors = check_dashboard_navigations(sources, corpus)
+    for msg in errors:
+        print(f"INVALID: {msg}", file=sys.stderr)
+    return 1 if errors else 0
 
 
 _TIME_WINDOW_WARNING_PREFIX = "view "
@@ -100,6 +144,17 @@ def cmd_validate(args) -> int:
         print(f"  dashboard  {d.id}  {d.name}")
 
     rc = 0
+
+    # Dashboard Navigation targets resolve by exact name against every
+    # dashboard in the repo (content/dashboards/ plus third_party/*/
+    # dashboards/) on a full-corpus validate; third-party dashboards are
+    # checked as sources too. An explicit-path validate checks against the
+    # loaded set only.
+    if using_defaults:
+        nav_corpus = _navigation_corpus(dashboards, mint=True)
+        rc |= _report_navigation_errors(nav_corpus, nav_corpus)
+    else:
+        rc |= _report_navigation_errors(dashboards, dashboards)
 
     # Issue #113 identity guard: dashboard import identity is the NAME, so a
     # changed id: under an unchanged name: silently orphans the previously
@@ -317,9 +372,12 @@ def cmd_package(args) -> int:
     except DashboardValidationError as e:
         print(f"INVALID: {e}", file=sys.stderr)
         return 1
+    known = _navigation_corpus(dashboards) if _has_navigations(dashboards) else None
+    if known is not None and _report_navigation_errors(dashboards, known):
+        return 1
     # sm_id_map() with no scope scans content/supermetrics from the cwd,
     # the map the renderer used to find on its own before M2 row 2.
-    blob = build_import_zip(views, dashboards, sm_map=sm_id_map())
+    blob = build_import_zip(views, dashboards, sm_map=sm_id_map(), known_dashboards=known)
     out = Path(args.output)
     out.write_bytes(blob)
     print(f"wrote {out} ({len(blob)} bytes)")
@@ -335,6 +393,9 @@ def cmd_sync(args) -> int:
     if not views and not dashboards:
         print("nothing to sync", file=sys.stderr)
         return 1
+    known = _navigation_corpus(dashboards) if _has_navigations(dashboards) else None
+    if known is not None and _report_navigation_errors(dashboards, known):
+        return 1
     profile, default = resolve_profile_from_args(args)
     client = VCFOpsClient.from_env(profile=profile, default_profile=default)
     try:
@@ -342,7 +403,7 @@ def cmd_sync(args) -> int:
         marker = discover_marker_filename(client)
         blob = build_import_zip(
             views, dashboards, owner_user_id=user["id"], marker_filename=marker,
-            sm_map=sm_id_map(),
+            sm_map=sm_id_map(), known_dashboards=known,
         )
         result = import_content_zip(client, blob)
     except VCFOpsError as e:

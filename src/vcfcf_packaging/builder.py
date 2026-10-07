@@ -39,9 +39,11 @@ design note behind the bundle README, and the output path.
 from __future__ import annotations
 
 import datetime as _dt
+import sys
 from pathlib import Path
 from typing import List, Optional
 
+from vcfcf_core.packaging.loader import check_bundle_dashboard_navigations
 from vcfcf_core.packaging.assembly import (  # noqa: F401  (re-exported for old-path callers)
     DASHBOARD_DROPIN_USER_ID,
     PLACEHOLDER_USER_ID,
@@ -389,6 +391,15 @@ def _generate_bundle_readme(bundle: Bundle, display_name: str) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _print_navigation_prerequisites(bundle: Bundle, bundle_ctx: str) -> None:
+    """List every ``dashboard_id`` Dashboard Navigation target in the build
+    output: external by definition, so a prerequisite, not an error. (Named
+    targets missing from the bundle already failed render_bundle_payloads.)
+    Shared with discrete_builder."""
+    for line in check_bundle_dashboard_navigations(bundle.dashboards, bundle_ctx):
+        print(f"  PREREQUISITE: {line}", file=sys.stderr)
+
+
 def build_bundle(
     bundle_path: str | Path,
     output_dir: str | Path = "dist",
@@ -469,6 +480,7 @@ def build_bundle(
         sm_map=sm_id_map(bundle.sm_paths, bundle_ctx),
         bundle_context=bundle_ctx,
     )
+    _print_navigation_prerequisites(bundle, bundle_ctx)
 
     # --- bundle.json ---
     bundle_json = _build_bundle_json(bundle, display_name)

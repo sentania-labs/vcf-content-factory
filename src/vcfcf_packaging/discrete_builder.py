@@ -736,6 +736,8 @@ def _assemble_zip(
         sm_map=sm_id_map(bundle.sm_paths, bundle_ctx),
         bundle_context=bundle_ctx,
     )
+    from .builder import _print_navigation_prerequisites
+    _print_navigation_prerequisites(bundle, bundle_ctx)
 
     # bundle.json
     bundle_json_str = json.dumps({

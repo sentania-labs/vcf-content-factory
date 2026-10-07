@@ -142,6 +142,7 @@ validate or sync time.
 | SM formula → other SM | `@supermetric:"<exact name>"` | `Super Metric|sm_<uuid>` | **emit/push** (`crossref`), not `validate` |
 | View column → SM | `supermetric:"<exact name>"` in `attribute:` | `sm_<uuid>` in `attributeKey` | `validate` (dashboard loader) |
 | Dashboard widget → View | `view: "<exact view name>"` | view UUID in widget config | `validate` (dashboard loader) |
+| Dashboard widget → Dashboard (drill-down) | `navigations: [{dashboard: "<exact dashboard name>", widgets: [<target local ids>]}]` | `dashboardNavigations`: target dashboard UUID plus target widget UUIDs | `validate` (dashboards CLI, against `content/dashboards/` + `third_party/*/dashboards/`) and render; a bundle must carry every target. Raw `dashboard_id: <uuid>` only for dashboards the factory does not own. See `../wire-formats/dashboard_navigations.md` |
 | Alert → Symptom | `name: "<exact symptom name>"` in symptom set | symptom definition ID | `sync` (alert installer, via `GET /api/symptomdefinitions`) |
 
 **Rules:**

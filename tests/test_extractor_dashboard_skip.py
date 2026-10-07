@@ -54,7 +54,7 @@ def stubbed(monkeypatch, tmp_path):
     (root / "content" / "supermetrics").mkdir()
     monkeypatch.setattr(ex, "_REPO_ROOT", root)
     monkeypatch.setattr(ex, "_build_sm_client", lambda *a, **k: _StubClient())
-    monkeypatch.setattr(ex, "_export_dashboard_json", lambda client, uuid: _dash_json() if uuid == DASH_ID else None)
+    monkeypatch.setattr(ex, "_export_dashboard_json", lambda client, uuid, names_out=None: _dash_json() if uuid == DASH_ID else None)
     monkeypatch.setattr(ex, "_export_supermetrics_full", lambda client: {})
     monkeypatch.setattr(ex, "_export_views_zip", lambda client, uuids: (_ for _ in ()).throw(AssertionError("no views expected")))
     desc = tmp_path / "DESCRIPTION.md"

@@ -47,8 +47,9 @@ Factory render:
 ```
 
 Validation: a Section must not carry metrics, views, resource kinds,
-pins, `self_provider`, `view_details`, or interaction endpoints; Sections
-do not nest.
+pins, `self_provider`, `view_details`, `navigations`
+(`dashboard_navigations.md`), or interaction endpoints; Sections do not
+nest.
 
 ## Gauge scoreboard (`visualTheme: 9`)
 

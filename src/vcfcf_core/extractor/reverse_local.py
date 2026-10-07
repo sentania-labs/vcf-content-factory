@@ -574,8 +574,14 @@ def _write_dashboard_yaml(
     dash_json: dict,
     view_uuid_map: dict[str, dict],
     name_path_override: Optional[str] = None,
+    extraction: Optional[dict] = None,
 ) -> list[str]:
     """Parse a dashboard JSON dict and write factory-shape YAML.
+
+    ``extraction`` maps lower-case dashboard UUID to the parsed Dashboard of
+    every dashboard in this reverse port (``_parse_extraction``); Dashboard
+    Navigation targets found there are written by name, others by
+    ``dashboard_id``. ``None`` means this dashboard alone.
 
     Returns list of WARN messages emitted for unsupported widget types.
     """
@@ -643,13 +649,21 @@ def _write_dashboard_yaml(
     doc["shared"] = bool(dash_json.get("shared", True))
 
     # Import widget serializer from extractor (reuse existing code)
-    from .extractor import _widget_to_yaml_dict
+    from .extractor import _navigations_to_yaml, _widget_to_yaml_dict
+
+    navs_by_local: dict = {}
+    if dashboard:
+        ext = dict(extraction or {})
+        ext.setdefault((dashboard.id or "").lower(), dashboard)
+        navs_by_local = _navigations_to_yaml(dashboard, ext)
 
     if dashboard and dashboard.widgets:
         widgets_yaml = []
         for w in dashboard.widgets:
             try:
                 wd = _widget_to_yaml_dict(w, {})
+                if w.local_id in navs_by_local:
+                    wd["navigations"] = navs_by_local[w.local_id]
                 widgets_yaml.append(wd)
             except Exception as e:
                 _warn(
@@ -728,13 +742,39 @@ def _structural_key(widget_json: dict) -> tuple:
     return (wtype, coord_key, view_id, _metric_signature(cfg))
 
 
+def _parse_extraction(source_dashboards: list[dict], top_entries: dict) -> dict:
+    """Lower-case UUID to parsed Dashboard for every source dashboard: the
+    set Dashboard Navigation targets resolve against. Only names and widget
+    local ids are read from it, so views are not resolved and the parser's
+    WARNs are left to the per-dashboard write that follows."""
+    import warnings as _warnings
+
+    from ..dashboards.reverse import parse_dashboard_json
+
+    out: dict = {}
+    for dash in source_dashboards:
+        with _warnings.catch_warnings():
+            _warnings.simplefilter("ignore")
+            try:
+                parsed = parse_dashboard_json(_merge_entries(dash, top_entries), {})
+            except Exception:
+                continue
+        if parsed.id:
+            out[parsed.id.lower()] = parsed
+    return out
+
+
 def _compare_dashboard_round_trip(
     source_json: dict,
     yaml_path: Path,
     view_yaml_dir: Path,
     sm_yaml_dir: Path,
+    sibling_yaml_paths: Optional[list] = None,
 ) -> dict:
     """Render the YAML forward and compare structure to the source JSON.
+
+    ``sibling_yaml_paths`` are the other dashboard YAMLs written by the same
+    reverse port; they are loaded as Dashboard Navigation targets.
 
     Returns a result dict:
       {
@@ -785,11 +825,21 @@ def _compare_dashboard_round_trip(
         except Exception:
             pass
 
+    known_dashboards = []
+    for sp in sibling_yaml_paths or []:
+        if Path(sp) == Path(yaml_path):
+            continue
+        try:
+            known_dashboards.append(load_dashboard(Path(sp), enforce_framework_prefix=False))
+        except Exception:
+            pass
+
     try:
         rendered_json_str = render_dashboards_bundle_json(
             dashboards=[dashboard],
             views_by_name=views_by_name,
             owner_user_id="00000000-0000-0000-0000-000000000001",
+            known_dashboards=known_dashboards,
         )
         rendered = json.loads(rendered_json_str)
     except (KeyError, UnresolvedViewReferenceError) as e:
@@ -1030,6 +1080,7 @@ def reverse_local_port(
     written_dashboards: list[Path] = []
     all_unsupported_seen: dict[str, list[str]] = {}  # dash_name -> [types]
 
+    extraction = _parse_extraction(source_dashboards, top_entries)
     for dash in source_dashboards:
         # Merge top-level entries into per-dashboard dict
         dash_with_entries = _merge_entries(dash, top_entries)
@@ -1048,6 +1099,7 @@ def reverse_local_port(
             dash_with_entries,
             view_uuid_map=found_views,
             name_path_override=name_path_override,
+            extraction=extraction,
         )
         _info(f"wrote dashboard: {out_path}")
         written_dashboards.append(out_path)
@@ -1073,6 +1125,7 @@ def reverse_local_port(
                 yaml_path=out_path,
                 view_yaml_dir=output_views_dir,
                 sm_yaml_dir=sm_yaml_dir,
+                sibling_yaml_paths=written_dashboards,
             )
             diff_results.append(diff)
             status = diff["status"]

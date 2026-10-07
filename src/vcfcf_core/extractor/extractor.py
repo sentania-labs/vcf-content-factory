@@ -1120,13 +1120,91 @@ def _widget_to_yaml_dict(widget, view_name_map: dict) -> dict:
     return d
 
 
-def _write_dashboard_yaml(path: Path, dash_data: dict, dashboard_uuid: str, view_results: dict, factory_native: bool = False) -> None:
+def _same_dashboard(a, b) -> bool:
+    return a is b or (bool(a.id) and (a.id or "").lower() == (b.id or "").lower())
+
+
+def _navigations_to_yaml(
+    dashboard,
+    extraction: dict,
+    names_by_id: Optional[dict] = None,
+) -> dict:
+    """Turn the raw navigations ``parse_dashboard_json`` left on
+    ``dashboard``'s widgets into YAML entries, keyed by source local id.
+
+    ``extraction`` maps lower-case dashboard UUID to the parsed Dashboard of
+    every dashboard in the same extraction (``dashboard`` itself included,
+    so self-targets resolve). A target found there becomes ``dashboard:``
+    by name, with ``widgets`` mapped back to that dashboard's local ids (a
+    receiver it does not carry, for example an unsupported widget type, is
+    dropped with a WARN). Any other target becomes ``dashboard_id:`` with the
+    UUID preserved and a ``label`` from ``names_by_id`` (lower-case UUID to
+    display name) when the extractor could read it; its receiving widgets
+    are dropped with a WARN, since the factory cannot address widgets on a
+    dashboard it does not own.
+    """
+    names_by_id = names_by_id or {}
+    out: dict = {}
+    for w in dashboard.widgets:
+        entries = []
+        for nav in getattr(w, "navigations", None) or []:
+            tid = (nav.dashboard_id or "").lower()
+            target = extraction.get(tid)
+            if target is not None:
+                receivers = {tw.local_id for tw in target.widgets if tw.type != "Section"}
+                kept = []
+                for lid in nav.widgets:
+                    if lid not in receivers:
+                        _warn(
+                            f"dashboard '{dashboard.name}' widget '{w.local_id}': navigation "
+                            f"receiver '{lid}' is not a parsed widget on '{target.name}'; dropped"
+                        )
+                    elif _same_dashboard(target, dashboard) and lid == w.local_id:
+                        _warn(
+                            f"dashboard '{dashboard.name}' widget '{w.local_id}': navigation "
+                            f"names the widget itself as a receiver on its own dashboard "
+                            f"(the factory rejects that); dropped"
+                        )
+                    else:
+                        kept.append(lid)
+                entry: dict = {"dashboard": target.name}
+                if kept:
+                    entry["widgets"] = kept
+            else:
+                entry = {"dashboard_id": tid}
+                label = names_by_id.get(tid)
+                if label:
+                    entry["label"] = label
+                if nav.widgets:
+                    _warn(
+                        f"dashboard '{dashboard.name}' widget '{w.local_id}': navigation to "
+                        f"{label or tid} (outside this extraction) passed the selection to "
+                        f"{len(nav.widgets)} widget(s) there; dashboard_id targets cannot "
+                        f"name receiving widgets, so the jump is kept without them"
+                    )
+            entries.append(entry)
+        if entries:
+            out[w.local_id] = entries
+    return out
+
+
+def _write_dashboard_yaml(
+    path: Path,
+    dash_data: dict,
+    dashboard_uuid: str,
+    view_results: dict,
+    factory_native: bool = False,
+    dashboard_names_by_id: Optional[dict] = None,
+) -> None:
     """Write a dashboard YAML file in factory shape with real widget + interaction graph.
 
     ``dash_data`` is the raw dict from getDashboardConfig.
     ``dashboard_uuid`` is the resolved dashboard UUID.
     ``view_results`` is a mapping of uuid_lower -> view dict (used to build
     views_by_id for parse_dashboard_json view resolution).
+    ``dashboard_names_by_id`` (lower-case UUID to display name, optional)
+    labels Dashboard Navigation targets outside this extraction; the
+    extraction is this one dashboard, so only a self-target resolves by name.
 
     Uses vcfcf_core.dashboards.reverse.parse_dashboard_json() to parse the full
     widget graph, then serializes each Widget dataclass to YAML.
@@ -1190,12 +1268,22 @@ def _write_dashboard_yaml(path: Path, dash_data: dict, dashboard_uuid: str, view
 
     doc["shared"] = bool(dash_data.get("shared", True))
 
+    # Dashboard Navigations: this extraction is the one dashboard.
+    navs_by_local = (
+        _navigations_to_yaml(
+            dashboard, {dashboard_uuid.lower(): dashboard}, dashboard_names_by_id
+        )
+        if dashboard else {}
+    )
+
     # Serialize widget graph
     if dashboard and dashboard.widgets:
         widgets_yaml = []
         for w in dashboard.widgets:
             try:
                 wd = _widget_to_yaml_dict(w, {})
+                if w.local_id in navs_by_local:
+                    wd["navigations"] = navs_by_local[w.local_id]
                 widgets_yaml.append(wd)
             except Exception as e:
                 _warn(
