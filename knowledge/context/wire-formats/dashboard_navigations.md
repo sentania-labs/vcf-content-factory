@@ -162,7 +162,11 @@ Both `/extract` paths carry the block:
   groups and its own named targets, transitively; `navigation_closure` in
   `src/vcfcf_packaging/navigation.py`). References are repo-relative when
   the project sits inside the repo, absolute otherwise. Without an owned
-  target the manifest keeps auto-discovery (no lists).
+  target the manifest keeps auto-discovery (no lists). `load_bundle`
+  decides a dashboard's folder default and prefix rule per file from its
+  own provenance, not per manifest, so a carried factory dashboard keeps
+  the "VCF Content Factory" folder inside the third-party bundle;
+  installing that bundle never moves it (same id).
 - Receivers on a target that is neither in the extraction nor owned by
   the repo are dropped with a WARN
   (a `dashboard_id` entry cannot name widgets); the jump itself is kept.

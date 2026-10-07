@@ -971,6 +971,42 @@ class TestExtractManifestCarriesOwnedTargets:
         assert all(Path(r).is_absolute() for r in yaml.safe_load(manifest.read_text())["dashboards"])
         self._assert_builds(load_bundle(manifest))
 
+    @pytest.mark.parametrize("inside_repo", [True, False])
+    def test_carried_factory_dashboard_keeps_its_own_folder(
+        self, owned_extract, tmp_path, capsys, inside_repo,
+    ):
+        """Installing the extracted (third-party) bundle must not move the
+        carried factory dashboard (same id) out of the factory folder: its
+        rendered name / namePath equal a standalone render from
+        content/dashboards/, and its provenance stays factory."""
+        from vcfcf_core.dashboards.loader import load_dashboard
+        from vcfcf_core.dashboards.render import render_dashboards_bundle_json
+        from vcfcf_core.packaging.assembly import render_bundle_payloads
+        root, run = owned_extract
+        out_dir = root / "third_party" if inside_repo else tmp_path / "elsewhere"
+        assert run(out_dir) == 0
+        capsys.readouterr()
+        manifest = out_dir / "ext" / "PROJECT.yaml"
+        if inside_repo:
+            from vcfcf_core.packaging.loader import load_bundle
+            bundle = load_bundle(manifest, repo_root=root)
+        else:
+            from vcfcf_packaging.loader import load_bundle
+            bundle = load_bundle(manifest)
+        assert bundle.factory_native is False
+        payload = json.loads(render_bundle_payloads(bundle, sm_map={}, bundle_context="ext").dashboard_json)
+        carried = next(d for d in payload["dashboards"] if d["id"] == DST_ID)
+        home = load_dashboard(root / "content" / "dashboards" / "t.yaml")
+        alone = json.loads(render_dashboards_bundle_json([home], {}, OWNER, known_dashboards=[
+            load_dashboard(root / "content" / "dashboards" / "u.yaml")]))["dashboards"][0]
+        assert (carried["name"], carried["namePath"]) == (alone["name"], alone["namePath"])
+        assert carried["namePath"] == "VCF Content Factory"
+        if not inside_repo:
+            assert next(d for d in bundle.dashboards if d.id == DST_ID).provenance == "factory"
+        # the extracted dashboard itself still follows the third-party rule
+        ext = next(d for d in payload["dashboards"] if d["id"] == EXT_ID)
+        assert ext["namePath"] == ""
+
     def test_no_owned_target_keeps_auto_discovery(self, owned_extract, monkeypatch, tmp_path, capsys):
         import vcfcf_extractor.extractor as ex
         root, run = owned_extract
