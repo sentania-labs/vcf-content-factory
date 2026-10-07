@@ -871,7 +871,7 @@ def _load_bundled_content(
         return [], [], [], [], [], [], []
 
     try:
-        from vcfcf_dashboards.loader import load_view, load_dashboard, check_unique_summary_for
+        from vcfcf_dashboards.loader import load_view, load_dashboard, check_unique_summary_for, check_dashboard_navigations
     except ImportError as exc:
         raise SdkBuildError(
             f"bundled_content requires vcfcf_dashboards to be installed: {exc}"
@@ -944,6 +944,14 @@ def _load_bundled_content(
         check_unique_summary_for(dashboards)
     except Exception as exc:
         raise SdkBuildError(f"bundled_content.dashboards: {exc}") from exc
+    # Dashboard Navigation: a named target must be one of this pak's own
+    # dashboards (the pak is the import unit), resolved unambiguously.
+    nav_errors = check_dashboard_navigations(dashboards)
+    if nav_errors:
+        raise SdkBuildError(
+            "bundled_content.dashboards: Dashboard Navigation target(s) must be "
+            "dashboards bundled in this pak:\n" + "\n".join(f"  - {e}" for e in nav_errors)
+        )
 
     # --- Super Metrics ---
     supermetrics = []

@@ -83,6 +83,7 @@ import yaml
 from ..supermetrics.loader import SuperMetricDef, load_file as load_sm
 from ..dashboards.loader import (
     ViewDef, Dashboard, load_view, load_dashboard, check_dashboard_navigations,
+    split_navigation_targets,
 )
 from ..customgroups.loader import CustomGroupDef, load_file as load_cg
 from ..reports.loader import ReportDef, load_file as load_report
@@ -115,29 +116,12 @@ def check_bundle_dashboard_navigations(dashboards: List[Dashboard], context: str
     instance). The caller decides how to report them; this function never
     prints.
     """
-    carried = {d.name for d in dashboards}
-    missing: List[str] = []
-    prereqs: List[str] = []
-    for d in dashboards:
-        for w in d.widgets:
-            for nav in w.navigations:
-                if nav.dashboard_id:
-                    label = f" ({nav.label})" if nav.label else ""
-                    prereqs.append(
-                        f"dashboard {d.name!r} widget {w.local_id!r} navigates to external "
-                        f"dashboard {nav.dashboard_id}{label}; it must already exist on "
-                        f"the target instance"
-                    )
-                elif nav.dashboard not in carried:
-                    missing.append(
-                        f"dashboard {d.name!r} widget {w.local_id!r} navigates to "
-                        f"{nav.dashboard!r}, which is not in this bundle"
-                    )
-    if missing:
+    outside, prereqs = split_navigation_targets(dashboards)
+    if outside:
         raise BundleValidationError(
             f"{context}: Dashboard Navigation target(s) missing from the bundle "
             f"(add each named dashboard to the bundle, or remove the navigation):\n"
-            + "\n".join(f"  - {m}" for m in missing)
+            + "\n".join(f"  - {m}" for m in outside)
         )
     errors = check_dashboard_navigations(dashboards)
     if errors:

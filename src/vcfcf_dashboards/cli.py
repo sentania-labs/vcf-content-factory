@@ -19,7 +19,12 @@ from .client import (
     import_content_zip,
 )
 from .id_guard import check_dashboard_id_stability
-from .loader import DashboardValidationError, check_dashboard_navigations, load_all
+from .loader import (
+    DashboardValidationError,
+    check_dashboard_navigations,
+    load_all,
+    split_navigation_targets,
+)
 from .packager import build_import_zip
 from .summary_bind import bind_summary
 from .ui_client import UIClientError, VCFOpsUIClient
@@ -36,44 +41,100 @@ def _has_navigations(dashboards: list) -> bool:
     return any(w.navigations for d in dashboards for w in d.widgets)
 
 
-def _navigation_corpus(dashboards: list, mint: bool = False) -> list:
-    """Every dashboard a ``navigations: - dashboard:`` name may resolve to:
-    the loaded ``dashboards`` plus every ``third_party/*/dashboards/`` YAML
-    (relative to the working directory, like the rest of this CLI).
+def _navigation_corpus(
+    dashboards: list, dashboards_dir: Path, mint: bool = False,
+) -> "tuple[list, list[str]]":
+    """Every dashboard a ``navigations: - dashboard:`` name may resolve to,
+    plus the paths of dashboard YAMLs that failed to load.
+
+    The set is the loaded ``dashboards``, plus ``content/dashboards/`` (always,
+    even when ``--dashboards-dir`` points somewhere else, so a subset does
+    not lose its siblings), plus every ``third_party/*/dashboards/`` YAML.
+    Paths are relative to the working directory, like the rest of this CLI.
+    Duplicates are harmless: resolution de-duplicates by name and id.
 
     ``mint`` uses the minting loader (validate, which already mints ids into
     third-party YAML in its membership pass); package and sync use the core
-    loader with no minting so they never write a file. A third-party YAML
-    that fails to load is skipped here: its own validation reports it.
+    loader with no minting so they never write a file. A YAML that fails to
+    load is returned in the second list: its own validation reports the
+    failure, and an unresolved-target error names it, since the target may
+    be one of them.
     """
     corpus = list(dashboards)
+    unloadable: list[str] = []
+    dirs: list[Path] = []
+    try:
+        loaded_dir = dashboards_dir.resolve()
+    except OSError:
+        loaded_dir = dashboards_dir
+    if DEFAULT_DASHBOARDS.is_dir() and DEFAULT_DASHBOARDS.resolve() != loaded_dir:
+        dirs.append(DEFAULT_DASHBOARDS)
     third_party = Path("third_party")
-    if not third_party.is_dir():
-        return corpus
+    if third_party.is_dir():
+        dirs.extend(
+            proj / "dashboards" for proj in sorted(third_party.iterdir())
+            if (proj / "dashboards").is_dir()
+        )
+    if not dirs:
+        return corpus, unloadable
     if mint:
         from .loader import load_dashboard as _load_one
     else:
         from vcfcf_core.dashboards.loader import load_dashboard as _load_one
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        for proj_dir in sorted(third_party.iterdir()):
-            dash_dir = proj_dir / "dashboards"
-            if not dash_dir.is_dir():
-                continue
+        for dash_dir in dirs:
             for dp in sorted(dash_dir.rglob("*.y*ml")):
                 try:
                     corpus.append(_load_one(dp, enforce_framework_prefix=False, default_name_path=""))
                 except Exception:
-                    pass
-    return corpus
+                    unloadable.append(str(dp))
+    return corpus, unloadable
 
 
-def _report_navigation_errors(sources: list, corpus: list) -> int:
+def _report_navigation_errors(sources: list, corpus: list, unloadable: "list[str] | None" = None) -> int:
     """Print one INVALID line per unresolved navigation reference; 1 if any."""
-    errors = check_dashboard_navigations(sources, corpus)
+    errors = check_dashboard_navigations(sources, corpus, unloadable=unloadable)
     for msg in errors:
         print(f"INVALID: {msg}", file=sys.stderr)
     return 1 if errors else 0
+
+
+def _check_import_targets(dashboards: list, allow_outside: bool) -> int:
+    """Package / sync: the import zip creates exactly ``dashboards``.
+
+    Every ``dashboard:`` target not among them and every ``dashboard_id``
+    target is printed as a ``PREREQUISITE:`` line (it must already exist on
+    the instance, or the jump goes nowhere and the product says nothing).
+    A named target outside the import fails the command unless the operator
+    passed ``--allow-external-navigation-targets``; ``dashboard_id`` targets
+    are external by definition and never fail. Returns 1 on failure.
+    """
+    outside, external = split_navigation_targets(dashboards)
+    for line in outside + external:
+        print(f"PREREQUISITE: {line}", file=sys.stderr)
+    if outside and not allow_outside:
+        print(
+            f"INVALID: {len(outside)} navigation target(s) are repo dashboards this "
+            f"import does not carry. Include them (widen --dashboards-dir), or pass "
+            f"--allow-external-navigation-targets once they are installed on the "
+            f"target instance.",
+            file=sys.stderr,
+        )
+        return 1
+    return 0
+
+
+def _resolve_import_navigations(args, dashboards: list) -> "tuple[int, list | None]":
+    """Package / sync preamble: ``(rc, known_dashboards)``. Reads nothing and
+    returns ``(0, None)`` when no dashboard declares navigations."""
+    if not _has_navigations(dashboards):
+        return 0, None
+    known, unloadable = _navigation_corpus(dashboards, Path(args.dashboards_dir))
+    if _report_navigation_errors(dashboards, known, unloadable):
+        return 1, None
+    allow = getattr(args, "allow_external_navigation_targets", False)
+    return _check_import_targets(dashboards, allow), known
 
 
 _TIME_WINDOW_WARNING_PREFIX = "view "
@@ -146,15 +207,15 @@ def cmd_validate(args) -> int:
     rc = 0
 
     # Dashboard Navigation targets resolve by exact name against every
-    # dashboard in the repo (content/dashboards/ plus third_party/*/
-    # dashboards/) on a full-corpus validate; third-party dashboards are
-    # checked as sources too. An explicit-path validate checks against the
-    # loaded set only.
-    if using_defaults:
-        nav_corpus = _navigation_corpus(dashboards, mint=True)
-        rc |= _report_navigation_errors(nav_corpus, nav_corpus)
-    else:
-        rc |= _report_navigation_errors(dashboards, dashboards)
+    # dashboard in the repo (the loaded set, content/dashboards/ and
+    # third_party/*/dashboards/). A full-corpus validate checks third-party
+    # dashboards as sources too; an explicit-path validate checks the
+    # loaded dashboards.
+    nav_corpus, nav_unloadable = _navigation_corpus(
+        dashboards, Path(args.dashboards_dir), mint=using_defaults,
+    )
+    nav_sources = nav_corpus if using_defaults else dashboards
+    rc |= _report_navigation_errors(nav_sources, nav_corpus, nav_unloadable)
 
     # Issue #113 identity guard: dashboard import identity is the NAME, so a
     # changed id: under an unchanged name: silently orphans the previously
@@ -372,8 +433,8 @@ def cmd_package(args) -> int:
     except DashboardValidationError as e:
         print(f"INVALID: {e}", file=sys.stderr)
         return 1
-    known = _navigation_corpus(dashboards) if _has_navigations(dashboards) else None
-    if known is not None and _report_navigation_errors(dashboards, known):
+    nav_rc, known = _resolve_import_navigations(args, dashboards)
+    if nav_rc:
         return 1
     # sm_id_map() with no scope scans content/supermetrics from the cwd,
     # the map the renderer used to find on its own before M2 row 2.
@@ -393,8 +454,8 @@ def cmd_sync(args) -> int:
     if not views and not dashboards:
         print("nothing to sync", file=sys.stderr)
         return 1
-    known = _navigation_corpus(dashboards) if _has_navigations(dashboards) else None
-    if known is not None and _report_navigation_errors(dashboards, known):
+    nav_rc, known = _resolve_import_navigations(args, dashboards)
+    if nav_rc:
         return 1
     profile, default = resolve_profile_from_args(args)
     client = VCFOpsClient.from_env(profile=profile, default_profile=default)
@@ -807,6 +868,16 @@ def build_parser() -> argparse.ArgumentParser:
 
     pp = sub.add_parser("package", help="build the import ZIP locally")
     pp.add_argument("-o", "--output", default="dashboards-content.zip")
+    pp.add_argument(
+        "--allow-external-navigation-targets",
+        action="store_true",
+        default=False,
+        help=(
+            "Allow a Dashboard Navigation to a repo dashboard this import does "
+            "not carry (it is listed as a PREREQUISITE and must already be "
+            "installed). Default: fail."
+        ),
+    )
     pp.set_defaults(func=cmd_package)
 
     ps = sub.add_parser("sync", help="build and import to VCF Ops")
@@ -835,6 +906,16 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Skip the OOTB metric defaultMonitored check entirely. "
             "Use when you know the target policy already covers these metrics."
+        ),
+    )
+    ps.add_argument(
+        "--allow-external-navigation-targets",
+        action="store_true",
+        default=False,
+        help=(
+            "Allow a Dashboard Navigation to a repo dashboard this import does "
+            "not carry (it is listed as a PREREQUISITE and must already be "
+            "installed). Default: fail."
         ),
     )
     add_profile_arg(ps, default="devel")

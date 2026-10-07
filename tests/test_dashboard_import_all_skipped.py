@@ -445,7 +445,10 @@ def test_sync_bundle_prints_a_warning_trailer(monkeypatch, capsys):
             r.items.append(ItemResult(name="d2", status="ok"))
             return r
 
-    bundle = types.SimpleNamespace(name="b", description="", dashboards=["/x/d.yaml"])
+    # dashboards holds loaded Dashboard objects on a real Bundle (sync_bundle
+    # reads their navigations); the paths come from the patched
+    # _get_yaml_paths_for_type below, so the list itself can stay empty.
+    bundle = types.SimpleNamespace(name="b", description="", dashboards=[])
     monkeypatch.setattr(syncer, "load_bundle", lambda p: bundle)
     monkeypatch.setattr(
         syncer, "_get_yaml_paths_for_type",

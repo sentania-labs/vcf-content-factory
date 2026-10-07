@@ -62,6 +62,7 @@ from vcfcf_core.packaging.assembly import (
     render_vcfops_manifest,
 )
 from .loader import Bundle, BuiltinMetricEnable, render_bme_items  # noqa: F401  (parity contract with builder.py, see tests)
+from .navigation import print_navigation_prerequisites
 from .template_version import CURRENT_TEMPLATE_VERSION
 
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
@@ -736,8 +737,7 @@ def _assemble_zip(
         sm_map=sm_id_map(bundle.sm_paths, bundle_ctx),
         bundle_context=bundle_ctx,
     )
-    from .builder import _print_navigation_prerequisites
-    _print_navigation_prerequisites(bundle, bundle_ctx)
+    print_navigation_prerequisites(bundle, bundle_ctx)
 
     # bundle.json
     bundle_json_str = json.dumps({

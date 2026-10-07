@@ -1530,9 +1530,11 @@ def parse_dashboard_json(dash_json: dict, views_by_id: dict[str, ViewDef]) -> Da
                     for r in (t.get("widgets") or [])
                     if isinstance(r, dict) and r.get("id")
                 ]
+                # De-duplicated, order kept: the loader rejects a receiver
+                # listed twice, so a duplicate in the export must not reach YAML.
                 src_widget.navigations.append(Navigation(
                     dashboard_id=str(t["id"]).strip().lower(),
-                    widgets=[r for r in receivers if r],
+                    widgets=list(dict.fromkeys(r for r in receivers if r)),
                 ))
 
     return Dashboard(

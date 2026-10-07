@@ -22,6 +22,7 @@ from typing import Dict, List, Optional
 
 from .handler import ContentHandler, DeleteResult, ItemResult, SyncResult, discover_handlers
 from .loader import Bundle, BundleValidationError, load_bundle, load_all_bundles
+from .navigation import print_navigation_prerequisites
 
 
 # ---------------------------------------------------------------------------
@@ -132,6 +133,9 @@ def sync_bundle(
     """
     try:
         bundle = load_bundle(bundle_path)
+        # load_bundle already enforced carry-or-fail for named targets;
+        # external (dashboard_id) targets are prerequisites, said aloud.
+        print_navigation_prerequisites(bundle, str(bundle_path))
     except BundleValidationError as exc:
         print(f"FATAL: {exc}", file=sys.stderr)
         return 1

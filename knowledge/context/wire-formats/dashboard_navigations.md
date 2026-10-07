@@ -23,6 +23,11 @@ dashboards on devel read through the UI dashboard config call on
 2026-10-07 (ops-recon; `tabNavigations` cross-checked against the
 content-export form with zero mismatches on 13 dashboards).
 
+The TVS pak is a local-only artifact (a manual Broadcom download, not in
+any fetch registry); not reproducible from a fresh clone. Findings are
+summarized here in full (RULE-015), so nothing below depends on having
+it.
+
 ```json
 "dashboardNavigations": {
   "<source widget uuid>": [
@@ -49,11 +54,11 @@ content-export form with zero mismatches on 13 dashboards).
   dashboards carry outer keys for four source widget ids that are not
   widgets on the dashboard (checked offline 2026-10-07). The importer
   accepts them; the factory's reverse parser drops them with a WARN.
-- An empty block is `{}`. Every factory dashboard without navigations
-  still renders exactly that, byte-identical to the pre-feature output
-  (before/after render diff over all 45 dashboard YAMLs in the repo and
-  the managed SDK paks, plus every bundle's dashboard payload,
-  2026-10-07: identical).
+- An empty block is `{}`. Contract: a dashboard whose widgets declare no
+  `navigations:` renders exactly that, byte-identical to the output before
+  the feature existed, on every render path (standalone zip, bundle, SDK
+  pak). `tests/test_dashboard_navigations.py` guards it over the repo's
+  dashboards.
 
 ## Factory YAML
 
@@ -91,33 +96,46 @@ renders with). `dashboard_id` passes through with `widgets: []`.
 ## Resolution and validation
 
 - Names resolve against every dashboard in the repo:
-  `content/dashboards/` plus `third_party/*/dashboards/`.
+  `content/dashboards/` plus `third_party/*/dashboards/`, plus the
+  `--dashboards-dir` set when the CLI is pointed elsewhere.
   `python3 -m vcfcf_dashboards validate` (full corpus) checks factory and
-  third-party dashboards alike; an explicit `--dashboards-dir` validate
-  checks against the loaded set only.
+  third-party dashboards alike as sources; an explicit `--dashboards-dir`
+  validate checks the loaded dashboards as sources against the same
+  lookup set.
 - Failures, each naming the source dashboard, the widget and the bad
-  reference: a name that matches no dashboard; a name that matches two
-  dashboards with different ids (ambiguous); a `widgets` entry that is not
-  a non-Section widget on the target.
+  reference: a name that matches no dashboard (the error also lists any
+  dashboard YAML that failed to load, since the target may be one of
+  them); a name that matches two dashboards with different ids
+  (ambiguous); a `widgets` entry that is not a non-Section widget on the
+  target; a `dashboard_id` that is the id of a dashboard the repo owns
+  (use `dashboard: "<name>"`, which keeps it under carry-or-fail).
 - Self-targeting is allowed (the product allows it), but a widget cannot
   name itself as a receiver on its own dashboard.
-- The renderer refuses the same cases
-  (`UnresolvedDashboardNavigationError`) so no render path can emit a
-  dangling target. `render_dashboards_bundle_json(...,
-  known_dashboards=...)` supplies targets that are not being rendered;
-  the dashboards CLI `package` / `sync` pass the repo corpus, the SDK pak
-  builder passes the pak's own dashboards.
+- The renderer refuses an unknown name, an ambiguous name (two ids) and
+  an unknown receiver (`UnresolvedDashboardNavigationError`), as the
+  backstop for callers that skipped validate.
+  `render_dashboards_bundle_json(..., known_dashboards=...)` supplies
+  targets that are not being rendered. Resolving is not the same as
+  shipping: a target supplied that way is not in the zip, so each
+  import path decides what to do about it (next section).
 
 ## Packaging
 
-A bundle or release that carries a source dashboard must carry every
-`dashboard:` target, or the build fails naming each missing one
-(`load_bundle`, and `render_bundle_payloads` for discrete builds, which
-never pass through `load_bundle`). `dashboard_id` targets are external by
-definition and are printed as `PREREQUISITE:` lines in the build output
-(the target must already exist on the instance). A discrete dashboard
-release with a named target therefore cannot build on its own; ship the
-pair as a bundle.
+Every import path either ships each named target or says so out loud.
+`dashboard_id` targets are external by definition and are always printed
+as `PREREQUISITE:` lines (the target must already exist on the instance).
+
+| Path | Named target not in the import |
+|---|---|
+| Bundle / release build, discrete build | fails, naming each missing dashboard (`load_bundle`; `render_bundle_payloads` for discrete builds, which never pass through `load_bundle`) |
+| `vcfcf_packaging sync` (bundle install) | fails in `load_bundle`; external targets printed as prerequisites |
+| `vcfcf_dashboards package` / `sync` (standalone zip of `--dashboards-dir`) | printed as `PREREQUISITE:`, and fails unless `--allow-external-navigation-targets` is passed (for a target already installed) |
+| SDK pak build | fails: targets must be dashboards bundled in the pak |
+
+A discrete dashboard release with a named target therefore cannot build
+on its own; ship the pair as a bundle. The `/bundle` composer reports a
+missing navigation target as a dependency and auto-adds it (and, on
+repeat passes, the added dashboard's own views and targets).
 
 ## Extract
 

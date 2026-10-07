@@ -2042,6 +2042,7 @@ ProvenanceFn = Callable[[Path], str]
 def check_dashboard_navigations(
     dashboards: Iterable["Dashboard"],
     corpus: Optional[Iterable["Dashboard"]] = None,
+    unloadable: Optional[Iterable[str]] = None,
 ) -> List[str]:
     """Resolve every ``navigations:`` target of ``dashboards`` against
     ``corpus`` and return one error string per bad reference (empty list =
@@ -2055,10 +2056,16 @@ def check_dashboard_navigations(
 
     Errors: a ``dashboard`` name that matches no dashboard, a name that
     matches two dashboards with different ids (the reference is
-    ambiguous), and a ``widgets`` entry that is not a non-Section widget
-    on the target. ``dashboard_id`` entries are external by definition and
-    are not checked here. The product itself tolerates dangling targets
-    silently, which is exactly why the factory must not.
+    ambiguous), a ``widgets`` entry that is not a non-Section widget on the
+    target, and a ``dashboard_id`` that is the id of a dashboard in the
+    corpus (the factory owns it, so it must be referenced by name, which is
+    what keeps it under the bundle carry-or-fail rule). Any other
+    ``dashboard_id`` is external by definition. The product itself
+    tolerates dangling targets silently, which is exactly why the factory
+    must not.
+
+    ``unloadable`` names dashboard YAMLs the caller could not load; a
+    "does not exist" error lists them, since the target may be one of them.
     """
     dashboards = list(dashboards)
     by_name: dict[str, list["Dashboard"]] = {}
@@ -2069,11 +2076,29 @@ def check_dashboard_navigations(
             continue
         seen_ids.add(key)
         by_name.setdefault(d.name, []).append(d)
+    by_id = {
+        (m.id or "").lower(): m
+        for ms in by_name.values() for m in ms if m.id
+    }
+    skipped = sorted(set(unloadable or []))
+    skipped_note = (
+        f"; {len(skipped)} dashboard YAML(s) failed to load and were not searched: "
+        f"{', '.join(skipped)}"
+        if skipped else ""
+    )
     errors: List[str] = []
     for d in dashboards:
         for w in d.widgets:
             for nav in w.navigations:
-                if not nav.dashboard:
+                if nav.dashboard_id:
+                    owned = by_id.get(nav.dashboard_id.lower())
+                    if owned is not None:
+                        errors.append(
+                            f"dashboard {d.name!r}: widget {w.local_id!r}: navigation "
+                            f"dashboard_id {nav.dashboard_id} is the repo dashboard "
+                            f"{owned.name!r}; use dashboard: \"{owned.name}\" instead "
+                            f"(dashboard_id is only for dashboards the factory does not own)"
+                        )
                     continue
                 matches = by_name.get(nav.dashboard) or []
                 if not matches:
@@ -2081,6 +2106,7 @@ def check_dashboard_navigations(
                         f"dashboard {d.name!r}: widget {w.local_id!r}: navigation target "
                         f"dashboard {nav.dashboard!r} does not exist (no dashboard has "
                         f"that exact name; names are case- and prefix-sensitive)"
+                        f"{skipped_note}"
                     )
                     continue
                 if len({m.id for m in matches}) > 1:
@@ -2101,6 +2127,38 @@ def check_dashboard_navigations(
                             f"{', '.join(sorted(receivers)) or 'none'})"
                         )
     return errors
+
+
+def split_navigation_targets(dashboards: Iterable["Dashboard"]) -> "tuple[List[str], List[str]]":
+    """Navigation targets that a set of dashboards does not carry itself.
+
+    Returns ``(outside, external)``, each a list of human-readable lines:
+    ``outside`` for every ``dashboard:`` target whose name is not one of
+    ``dashboards`` (the import would ship a link to a dashboard it never
+    creates), ``external`` for every ``dashboard_id`` target (external by
+    definition: it must already exist on the target instance). Used by the
+    bundle carry-or-fail rule and the dashboards CLI package / sync.
+    """
+    dashboards = list(dashboards)
+    carried = {d.name for d in dashboards}
+    outside: List[str] = []
+    external: List[str] = []
+    for d in dashboards:
+        for w in d.widgets:
+            for nav in w.navigations:
+                if nav.dashboard_id:
+                    label = f" ({nav.label})" if nav.label else ""
+                    external.append(
+                        f"dashboard {d.name!r} widget {w.local_id!r} navigates to external "
+                        f"dashboard {nav.dashboard_id}{label}; it must already exist on "
+                        f"the target instance"
+                    )
+                elif nav.dashboard not in carried:
+                    outside.append(
+                        f"dashboard {d.name!r} widget {w.local_id!r} navigates to "
+                        f"{nav.dashboard!r}, which is not in this import"
+                    )
+    return outside, external
 
 
 def _parse_navigations(w: dict) -> List["Navigation"]:

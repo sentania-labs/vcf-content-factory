@@ -21,8 +21,8 @@ and the YAML schema cannot express it.
 
 ## Wire format (verified)
 
-Source: Oracle Database 9.1 vendor pak (`reference/references/tvs/`),
-and 33 vendor dashboards on devel read through the UI dashboard config
+Source: Oracle Database 9.1 vendor pak (`reference/references/tvs/`, a
+local-only Broadcom download, not registry-fetchable, RULE-015), and 33 vendor dashboards on devel read through the UI dashboard config
 call on 2026-10-07 (ops-recon; the UI exposes the same map as
 `tabNavigations`, cross-checked against the content-export form with
 zero mismatches on 13 dashboards).
@@ -115,6 +115,10 @@ extractor can read it, otherwise omitted.
 - Authoring navigations into vendor dashboards (the factory does not own
   them).
 - The static `view_details` route link, which already works.
+- Receiving widgets on an external (`dashboard_id`) target. Extract keeps
+  the jump but drops the pre-selection, since the factory cannot name a
+  foreign dashboard's widgets. The Oracle pak's drill into stock Cluster
+  Performance loses its pre-selection on extract.
 
 ## Related
 

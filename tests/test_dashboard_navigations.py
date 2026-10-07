@@ -437,7 +437,7 @@ class TestPackaging:
         manifest = _bundle_repo(tmp_path, include_target=False)
         with pytest.raises(BundleValidationError) as ei:
             load_bundle(manifest, repo_root=tmp_path)
-        assert DST in str(ei.value) and "not in this bundle" in str(ei.value)
+        assert DST in str(ei.value) and "missing from the bundle" in str(ei.value)
 
     def test_bundle_carrying_target_renders_and_lists_prerequisites(self, tmp_path):
         from vcfcf_core.packaging.assembly import render_bundle_payloads
@@ -461,14 +461,14 @@ class TestPackaging:
         src = _load_doc(tmp_path, _dash(SRC, SRC_ID, [_rl("s", navigations=[{"dashboard": DST}])]))
         bundle = Bundle(name="x", description="", sync_enabled=True, supermetrics=[],
                         views=[], dashboards=[src], customgroups=[])
-        with pytest.raises(BundleValidationError, match="not in this bundle"):
+        with pytest.raises(BundleValidationError, match="missing from the bundle"):
             render_bundle_payloads(bundle, sm_map={}, bundle_context="discrete:dashboard:x")
 
     def test_builder_prints_prerequisites(self, tmp_path, capsys):
         from vcfcf_core.packaging.loader import load_bundle
-        from vcfcf_packaging.builder import _print_navigation_prerequisites
+        from vcfcf_packaging.navigation import print_navigation_prerequisites
         manifest = _bundle_repo(tmp_path, include_target=True, extra_navs=[{"dashboard_id": STOCK_ID}])
-        _print_navigation_prerequisites(load_bundle(manifest, repo_root=tmp_path), "nav")
+        print_navigation_prerequisites(load_bundle(manifest, repo_root=tmp_path), "nav")
         err = capsys.readouterr().err
         assert "PREREQUISITE" in err and STOCK_ID in err
 
@@ -596,3 +596,238 @@ class TestExtract:
             ("", FOREIGN_ID, ["x"]),
             ("", SRC_ID, [W_SRC_TXT]),
         ]
+
+
+# ---------------------------------------------------------------------------
+# Review round 1 (knowledge/context/reviews/framework/dashboards-navigations-2026-10-07.md)
+# ---------------------------------------------------------------------------
+
+OTHER_ID = "33333333-3333-4333-8333-333333333333"
+
+
+class TestRendererAmbiguity:
+    def test_same_name_two_ids_raises(self, tmp_path):
+        from vcfcf_core.dashboards.render import UnresolvedDashboardNavigationError
+        src = _load_doc(tmp_path, _dash(SRC, SRC_ID, [_rl("s", navigations=[{"dashboard": DST}])]), "s.yaml")
+        dst = _load_doc(tmp_path, _target_doc(), "t.yaml")
+        twin_doc = _target_doc()
+        twin_doc["id"] = OTHER_ID
+        twin = _load_doc(tmp_path, twin_doc, "twin.yaml")
+        with pytest.raises(UnresolvedDashboardNavigationError, match="ambiguous"):
+            _render([src, dst], known=[twin])
+
+    def test_same_dashboard_rendered_and_known_is_not_ambiguous(self, tmp_path):
+        src = _load_doc(tmp_path, _dash(SRC, SRC_ID, [_rl("s", navigations=[{"dashboard": DST}])]), "s.yaml")
+        dst = _load_doc(tmp_path, _target_doc(), "t.yaml")
+        out = _render([src, dst], known=[_load_doc(tmp_path, _target_doc(), "t2.yaml")])
+        src_out = next(d for d in out["dashboards"] if d["id"] == SRC_ID)
+        assert next(iter(src_out["dashboardNavigations"].values()))[0]["id"] == DST_ID
+
+    def test_unrelated_same_name_ambiguity_is_not_an_error(self, tmp_path):
+        """Only a REFERENCED ambiguous name fails."""
+        src = _load_doc(tmp_path, _dash(SRC, SRC_ID, [_rl("s", navigations=[{"dashboard_id": STOCK_ID}])]), "s.yaml")
+        dst = _load_doc(tmp_path, _target_doc(), "t.yaml")
+        twin_doc = _target_doc()
+        twin_doc["id"] = OTHER_ID
+        _render([src, dst], known=[_load_doc(tmp_path, twin_doc, "twin.yaml")])
+
+
+class TestCheckRound1:
+    def test_dashboard_id_of_a_repo_dashboard_must_use_name(self, tmp_path):
+        from vcfcf_core.dashboards.loader import check_dashboard_navigations
+        src = _load_doc(tmp_path, _dash(SRC, SRC_ID, [_rl("s", navigations=[{"dashboard_id": DST_ID}])]), "s.yaml")
+        dst = _load_doc(tmp_path, _target_doc(), "t.yaml")
+        errs = check_dashboard_navigations([src], corpus=[dst])
+        assert len(errs) == 1
+        assert DST_ID in errs[0] and f'use dashboard: "{DST}"' in errs[0] and "'s'" in errs[0]
+
+    def test_unresolved_error_names_unloadable_yamls(self, tmp_path):
+        from vcfcf_core.dashboards.loader import check_dashboard_navigations
+        src = _load_doc(tmp_path, _dash(SRC, SRC_ID, [_rl("s", navigations=[{"dashboard": DST}])]))
+        errs = check_dashboard_navigations([src], unloadable=["third_party/p/dashboards/broken.yaml"])
+        assert len(errs) == 1 and "failed to load" in errs[0] and "broken.yaml" in errs[0]
+
+
+def test_reverse_parser_dedupes_receivers_and_yaml_loads(tmp_path):
+    from vcfcf_core.dashboards.reverse import parse_dashboard_json
+    from vcfcf_core.extractor.extractor import _write_dashboard_yaml
+    src = _export_json()["dashboards"][0]
+    src["dashboardNavigations"] = {W_SRC_LIST: [{"id": SRC_ID, "widgets": [
+        {"interactionType": "resourceId", "id": W_SRC_TXT},
+        {"interactionType": "resourceId", "id": W_SRC_TXT}]}]}
+    assert parse_dashboard_json(src, {}).widgets[0].navigations[0].widgets == [W_SRC_TXT]
+    path = tmp_path / "d.yaml"
+    _write_dashboard_yaml(path, src, SRC_ID, {})
+    _load(path).validate({}, enforce_framework_prefix=False)
+
+
+# --- dashboards CLI package / sync (standalone content-import zip) --------
+
+
+def _cli_repo(tmp_path: Path, src_navs: list) -> Path:
+    """content/dashboards/ holds the target; subset/ holds only the source."""
+    _write(tmp_path / "content" / "dashboards" / "t.yaml", _target_doc())
+    _write(tmp_path / "subset" / "s.yaml", _dash(SRC, SRC_ID, [_rl("src_list", navigations=src_navs)]))
+    return tmp_path
+
+
+def _zip_navigations(blob: bytes) -> dict:
+    import io
+    import zipfile
+    outer = zipfile.ZipFile(io.BytesIO(blob))
+    inner_name = next(n for n in outer.namelist() if n.startswith("dashboards/") and not n.endswith("/"))
+    inner = zipfile.ZipFile(io.BytesIO(outer.read(inner_name)))
+    doc = json.loads(inner.read("dashboard/dashboard.json"))
+    return {d["id"]: d["dashboardNavigations"] for d in doc["dashboards"]}
+
+
+class TestDashboardsCliImport:
+    def _package(self, tmp_path, *extra):
+        from vcfcf_dashboards.cli import main
+        out = tmp_path / "out.zip"
+        rc = main(["--views-dir", str(tmp_path / "noviews"), "--dashboards-dir", "subset",
+                   "package", "-o", str(out), *extra])
+        return rc, out
+
+    def test_package_fails_on_target_outside_the_import(self, tmp_path, monkeypatch, capsys):
+        monkeypatch.chdir(_cli_repo(tmp_path, [{"dashboard": DST, "widgets": ["cluster_picker"]}]))
+        rc, out = self._package(tmp_path)
+        err = capsys.readouterr().err
+        assert rc == 1 and not out.exists()
+        assert "PREREQUISITE" in err and DST in err and "not in this import" in err
+        assert "--allow-external-navigation-targets" in err
+        # W2: the subset still resolves its sibling in content/dashboards/
+        assert "does not exist" not in err
+
+    def test_package_with_allow_flag_ships_link_and_says_so(self, tmp_path, monkeypatch, capsys):
+        monkeypatch.chdir(_cli_repo(tmp_path, [
+            {"dashboard": DST, "widgets": ["cluster_picker"]},
+            {"dashboard_id": STOCK_ID, "label": "Cluster Performance"}]))
+        rc, out = self._package(tmp_path, "--allow-external-navigation-targets")
+        err = capsys.readouterr().err
+        assert rc == 0, err
+        assert err.count("PREREQUISITE") == 2 and STOCK_ID in err and "Cluster Performance" in err
+        navs = _zip_navigations(out.read_bytes())
+        assert list(navs) == [SRC_ID]  # only the source is in the zip
+        assert [e["id"] for e in next(iter(navs[SRC_ID].values()))] == [DST_ID, STOCK_ID]
+
+    def test_package_external_id_only_is_a_prerequisite_not_a_failure(self, tmp_path, monkeypatch, capsys):
+        monkeypatch.chdir(_cli_repo(tmp_path, [{"dashboard_id": STOCK_ID}]))
+        rc, out = self._package(tmp_path)
+        err = capsys.readouterr().err
+        assert rc == 0 and out.exists()
+        assert "PREREQUISITE" in err and STOCK_ID in err
+
+    def test_package_target_in_the_import_is_silent(self, tmp_path, monkeypatch, capsys):
+        _cli_repo(tmp_path, [{"dashboard": DST}])
+        _write(tmp_path / "subset" / "t.yaml", _target_doc())
+        monkeypatch.chdir(tmp_path)
+        rc, _ = self._package(tmp_path)
+        assert rc == 0 and "PREREQUISITE" not in capsys.readouterr().err
+
+    def _sync(self, tmp_path, monkeypatch, *extra):
+        import vcfcf_dashboards.cli as cli
+        sent = {}
+
+        class _Client:
+            pass
+
+        monkeypatch.setattr(cli.VCFOpsClient, "from_env", classmethod(lambda c, **k: _Client()))
+        monkeypatch.setattr(cli, "get_current_user", lambda c: {"id": OWNER})
+        monkeypatch.setattr(cli, "discover_marker_filename", lambda c: "1L.v1")
+
+        def _import(c, blob):
+            sent["blob"] = blob
+            return {"state": "FINISHED", "operationSummaries": []}
+
+        monkeypatch.setattr(cli, "import_content_zip", _import)
+        monkeypatch.setattr(cli, "_run_dep_walker", lambda *a, **k: 0)
+        rc = cli.main(["--views-dir", str(tmp_path / "noviews"), "--dashboards-dir", "subset",
+                       "sync", *extra])
+        return rc, sent
+
+    def test_sync_fails_before_any_network_call(self, tmp_path, monkeypatch, capsys):
+        monkeypatch.chdir(_cli_repo(tmp_path, [{"dashboard": DST}]))
+        rc, sent = self._sync(tmp_path, monkeypatch)
+        err = capsys.readouterr().err
+        assert rc == 1 and "blob" not in sent
+        assert "PREREQUISITE" in err and DST in err
+
+    def test_sync_with_allow_flag_imports_resolved_link(self, tmp_path, monkeypatch, capsys):
+        monkeypatch.chdir(_cli_repo(tmp_path, [{"dashboard": DST, "widgets": ["cluster_picker"]}]))
+        rc, sent = self._sync(tmp_path, monkeypatch, "--allow-external-navigation-targets")
+        capsys.readouterr()
+        assert rc == 0
+        navs = _zip_navigations(sent["blob"])
+        assert next(iter(navs[SRC_ID].values()))[0]["id"] == DST_ID
+
+
+# --- bundle sync, composer, SDK pak --------------------------------------
+
+
+def test_bundle_sync_prints_external_prerequisites(tmp_path, monkeypatch, capsys):
+    import vcfcf_packaging.syncer as syncer
+    from vcfcf_packaging.syncer import sync_bundle
+    manifest = _bundle_repo(tmp_path, include_target=True, extra_navs=[{"dashboard_id": STOCK_ID}])
+    monkeypatch.chdir(tmp_path)
+    # Pre-existing, unrelated: _get_yaml_paths_for_type reads
+    # bundle.symptom_paths, which Bundle does not define. Not under test.
+    monkeypatch.setattr(syncer, "_get_yaml_paths_for_type", lambda b, ct: [])
+    sync_bundle(manifest.relative_to(tmp_path), handlers=[], session=object())
+    err = capsys.readouterr().err
+    assert "PREREQUISITE" in err and STOCK_ID in err
+
+
+def test_composer_reports_and_auto_adds_navigation_targets(tmp_path):
+    from vcfcf_packaging.composer import _auto_add_deps, _check_deps, discover_components
+    _write(tmp_path / "content" / "dashboards" / "s.yaml",
+           _dash(SRC, SRC_ID, [_rl("src_list", navigations=[{"dashboard": DST}])]))
+    _write(tmp_path / "content" / "dashboards" / "t.yaml", _target_doc())
+    entries = {e.slug: e for e in discover_components(tmp_path, "dashboards")}
+    picks = {"dashboards": [entries["s"]]}
+    warns = _check_deps(picks["dashboards"], [], [], [], tmp_path)
+    assert any(DST in w and "not in the selection" in w for w in warns)
+    picks = _auto_add_deps(picks, warns, tmp_path)
+    assert {e.slug for e in picks["dashboards"]} == {"s", "t"}
+    assert _check_deps(picks["dashboards"], [], [], [], tmp_path) == []
+
+
+class TestSdkPak:
+    def _project(self, tmp_path):
+        from vcfcf_managementpacks.sdk_project import SdkProjectDef, _derive_entry_class
+        return SdkProjectDef(
+            name="Test Adapter", version="1.0.0", build_number=1,
+            adapter_kind="test_adapter", description="Test", tier=2,
+            dependencies=[], entry_class=_derive_entry_class("test_adapter"),
+            source_path=tmp_path / "adapter.yaml",
+        )
+
+    def test_pak_renders_navigation_to_a_sibling_dashboard(self, tmp_path):
+        import io
+        import zipfile
+        from vcfcf_managementpacks.sdk_builder import _write_outer_pak
+        src = _load_doc(tmp_path, _dash(SRC, SRC_ID, [_rl("s", navigations=[
+            {"dashboard": DST, "widgets": ["cluster_picker"]}])]), "s.yaml")
+        dst = _load_doc(tmp_path, _target_doc(), "t.yaml")
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w"):
+            pass
+        out = tmp_path / "dist"
+        out.mkdir()
+        pak = _write_outer_pak(project=self._project(tmp_path), output_dir=out,
+                               adapters_zip_bytes=buf.getvalue(), dashboards=[src, dst],
+                               owning_adapter_kind="test_adapter")
+        with zipfile.ZipFile(pak) as zf:
+            name = next(n for n in zf.namelist() if n.endswith("Nav_Source/dashboard.json"))
+            doc = json.loads(zf.read(name))
+        navs = doc["dashboards"][0]["dashboardNavigations"]
+        tw = {w.local_id: w.widget_id for w in dst.widgets}
+        assert navs == {src.widgets[0].widget_id: [
+            {"id": DST_ID, "widgets": [{"interactionType": "resourceId", "id": tw["cluster_picker"]}]}]}
+
+    def test_pak_rejects_target_outside_the_pak(self, tmp_path):
+        from vcfcf_managementpacks.sdk_builder import SdkBuildError, _load_bundled_content
+        _write(tmp_path / "s.yaml", _dash(SRC, SRC_ID, [_rl("s", navigations=[{"dashboard": DST}])]))
+        raw = {"bundled_content": {"dashboards": ["s.yaml"]}}
+        with pytest.raises(SdkBuildError, match="bundled in this pak"):
+            _load_bundled_content(raw, tmp_path, tmp_path)
