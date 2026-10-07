@@ -175,6 +175,14 @@ Point-in-time review records: per-build SDK adapter reviews written by
 `framework-reviewer` (the pre-PR gate on `src/vcfcf_*/` changes).
 Timestamped records, not living docs.
 
+### `approvals/`: owner decision and approval records
+Point-in-time records of the repo owner's verbatim decisions and go-aheads:
+install and interval approvals per pak build, and dated decision lists
+answering pending questions. Destructive and outward-facing actions need
+the owner's explicit words preserved as an artifact before execution, and
+this is where they live. One file per decision set, dated. Timestamped
+records, not living docs.
+
 ### `cleanroom-requests/` — Cleanroom investigation requests
 Dated request/finding notes feeding the cleanroom reverse-engineering work
 (see `cleanroom-spec/`).

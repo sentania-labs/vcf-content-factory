@@ -5132,3 +5132,18 @@ Intent: does the one-cycle-late pattern still hold after the 4:04 PM upgrade. GE
 5. Children: still exactly three CHILD VMwareAdapter Instance, once each (wld01 5827d79e, mgmt 5aa31ee3, wld02 6ac9cd72).
 
 Interpretation (INFERRED): the 3:07 point, which would have surfaced about 4:07, was lost because the redescribe at 4:04:17 reset the computed-metric state, and the first evaluation after it stamped the then-current 4:04 data. The one-late behavior resumes from there. Test: the 5:04 point should appear after the 6:04 PM cycle. Open: exact surfacing moment (poll from 6:04 sharp).
+
+## 2026-10-07: dashboards with populated dashboardNavigations on devel (read-only, ops-recon)
+
+Intent: which dashboards on devel, vendor ones included, carry a real Dashboard Navigation target list. Context: sentania-labs/vcf-cf-migrator issue #3 and the factory's Dashboard Navigation authoring feature (branch feat/dashboard-navigations).
+
+Method: the content-export zip returned only 13 of the 14 factory dashboards and no vendor ones, so all 180 were listed with `getDashboardList` and read one by one with `getDashboardConfig` on `/ui/dashboard.action` (Struts tier). That call exposes the map as `tabNavigations`; shape and values matched `dashboardNavigations` on the 13 exported dashboards, zero mismatches. No instance writes.
+
+Findings:
+1. 33 of 180 dashboards have at least one non-empty target list. All 33 are vendor-shipped and hidden. None of the 14 factory dashboards has one.
+2. Families: vSphere core (Capacity Summary, Cluster Capacity, Cluster Performance with nine source widgets, the four Inventory dashboards, vSphere Daily Check), vSAN OSA and ESA Capacity and Performance, Cost (Showback, Chargeback, VM Cost vs. Price), NSX System Health to the three node-health dashboards, GPU Providers to GPU Consumers, the Telegraf OS dashboards.
+3. Every nested widget uses `interactionType: resourceId`. No other value seen.
+4. Targets with an empty `widgets` list are common (SD-WAN, Replications, RPO dashboards): the jump exists, no object is passed.
+5. Several vendor blocks point at dashboard ids absent from devel (solutions not installed there). They install and render without error, so a dangling target is tolerated silently by the product.
+6. Cluster Performance is `533e14ed-2796-4ead-a644-468beb6396f8` on devel and is the same id the Oracle Database 9.1 pak targets: vendor paks link to stock dashboards by fixed id.
+7. Vendor quirk: Troubleshoot SD-WAN (`3800758d-03d2-407b-9b7b-030431ab47da`) has two nested widget ids that are JSON strings stuffed into the `id` field rather than UUIDs.

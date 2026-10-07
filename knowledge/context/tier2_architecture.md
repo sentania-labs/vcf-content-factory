@@ -227,12 +227,17 @@ importable, a malformed entry still fails closed for the pak being gated
 when its first token names that pak, and the lookup failure is reported on
 stderr.
 
-## Agent roster additions for Tier 2
+## Agent roster for Tier 2
 
 | Agent | Posture | Spawn when |
 |---|---|---|
-| `sdk-author` | Author (Java) | After `mp-designer` produces an approved Tier 2 design. Writes Java + describe.xml under `content/sdk-adapters/<name>/`. Validates by compiling. |
-| `sdk-builder` | Build | After `sdk-author`. Detects JDK, runs `javac`/`jar`, assembles pak, runs pak-compare. |
+| `sdk-adapter-author` | Author (Java) | After `mp-designer` produces an approved Tier 2 design. Writes Java + describe.xml under `content/sdk-adapters/<name>/`. Validates with `validate-sdk` and builds with `build-sdk`. |
+| `sdk-adapter-reviewer` | Read-only review | After `sdk-adapter-author` reports a build, before the install gate. |
+
+There is no separate build agent. `sdk-adapter-author` runs `build-sdk`
+(the `vcfcf_managementpacks` CLI) for the local dev preview; the official
+pak is built by the adapter repo's own CI on a `v*` tag, with no agent in
+the loop.
 
 `mp-designer` is updated (not duplicated) — interview now includes
 tier evaluation per `tier_decision_framework.md`.

@@ -64,8 +64,9 @@ If any of these are sufficient: stay Tier 1.
        which triggers and which API observations justify them.
 5. Present tier + reasoning to user. User confirms.
 6. Orchestrator routes:
-    - Tier 1 -> mp-author -> mp-builder
-    - Tier 2 -> sdk-author -> sdk-builder
+    - Tier 1 -> mp-author -> MPB build via the vcfcf_managementpacks CLI
+    - Tier 2 -> sdk-adapter-author (validate-sdk, build-sdk) -> sdk-adapter-reviewer
+                -> pak-compare (zero BLOCKING) -> confirm -> install
 ```
 
 ## Promotion: Tier 1 → Tier 2
@@ -78,7 +79,7 @@ is:
    new trigger.
 2. The new design artifact references the prior Tier 1 design as
    "promoted from."
-3. `sdk-author` generates the Tier 2 project; the BuilderFile is used
+3. `sdk-adapter-author` generates the Tier 2 project; the BuilderFile is used
    as input scaffolding (object kinds, metrics, properties → Java
    POJOs + describe.xml).
 4. Old Tier 1 pak is uninstalled; new Tier 2 pak takes its

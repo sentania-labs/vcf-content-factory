@@ -11,10 +11,18 @@ detail.
 ```
 ADMIN.md                     Human-facing concept walkthrough
 CLAUDE.md                    Orchestrator rules (always loaded)
+Getting_Started.md           Clone to configured, step by step
+Memory.md                    Advisory persona/state; per-user detail in memory/ (gitignored)
 README.md                    Project intro
-ROADMAP.md                   What's done / in progress / next
 STRUCTURE.md                 Authoritative directory map
-reference/                   Immutable external material (RULE-016) — see Knowledge below
+bundles/                     Bundle and release manifests (see Distribution)
+content/                     Authored YAML source of truth (see Content)
+knowledge/                   Rules, lessons, context, designs, ROADMAP (see Knowledge)
+reference/                   Immutable external material, RULE-016 (see Knowledge)
+scripts/                     Hooks and operational scripts (see Scripts)
+src/                         Framework Python packages (see Python packages)
+tests/                       Framework test suite
+third_party/                 Redistributed third-party content items (attribution required)
 ```
 
 ## Python packages
@@ -84,23 +92,33 @@ content/
   reports/                   Report definition YAML
   managementpacks/           Management pack YAML (MPB builder input)
   sdk-adapters/              Tier 2 SDK adapter repos (gitignored; bootstrap-cloned)
+  migrator/                  sentania-labs/vcf-cf-migrator clone (gitignored; cloned by
+                             hand, not in managed_paks.md). Its export corpus lives
+                             under its own gitignored corpus/.
 ```
 
 ## Distribution
 
 ```
 bundles/                     Bundle manifests (input to vcfcf_packaging build)
+bundles/releases/            Release manifests, one per released item
 dist/                        Built distribution zips (gitignored)
-designs/                     Approved MP / content design artifacts (mp-designer output)
 ```
 
 ## Knowledge
 
 ```
-context/                     Topical background — read on demand
-  README.md                  Index of context files
-  rules_*.md                 Hard-won operational rules by category
-  *.md                       Topical references (wire formats, API surface, etc.)
+knowledge/
+  rules/                     Absolute law (precedence 1); INDEX.md lists them
+  lessons/                   Hard-won lessons (precedence 2); INDEX.md lists them
+  context/                   Topical background, read on demand (precedence 3)
+    README.md                Index of context files
+    *.md, */                 Wire formats, API surface, investigations, reviews, ...
+  designs/                   Prompt-of-record + design artifacts per item / feature
+  diagrams/                  Architecture diagrams
+  HOW_IT_WORKS.md            Architecture walkthrough
+  ROADMAP.md                 What's done / in progress / next
+  vcf_ops_concepts.md        Concept primer
 reference/                   Immutable external material (RULE-016; never edit)
   docs/                      Vendor source-of-truth references
     vcf9/                    Extracted VCF 9 documentation markdown
@@ -118,12 +136,22 @@ reference/                   Immutable external material (RULE-016; never edit)
   agents/                    Subagent prompts (one file per agent)
   skills/                    Domain skills loaded on demand
   commands/                  Slash commands (/bundle, /release, /publish, /extract)
-  settings.json              autoMemoryEnabled: false; bootstrap_references hook
+  settings.json              autoMemoryEnabled: false; SessionStart hooks
 ```
 
 ## Scripts
 
+The ones hooks and CI call. Recon and normalization helpers also live
+here; `ls scripts/` is the full list.
+
 ```
 scripts/
-  bootstrap_references.sh    Clones allowlisted external reference repos
+  bootstrap_references.sh    SessionStart: clones allowlisted external reference repos
+  bootstrap_managed_paks.sh  SessionStart: clones managed pak repos (managed_paks.md)
+  curation_staleness_check.sh  SessionStart nudge when curation is due
+  check_framework_review.sh  CI reminder, non-blocking: warns when a src/vcfcf_*/ diff has no review record (the gate itself is RULE-013, pre-PR)
+  immutability_guard.sh      CI: RULE-016 gate, nothing under reference/ is modified
+  path_reference_audit.sh    CI: RULE-015 gate, every cited path must resolve
+  version_line_guard.sh      pre-push hook (.githooks/pre-push): version line consistency
+  validate-content.py        Content validation entry point
 ```
