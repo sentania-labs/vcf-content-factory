@@ -237,6 +237,34 @@ class _SMNameCache:
 # Existing-id scan (non-overwrite invariant)
 # ---------------------------------------------------------------------------
 
+def _owned_dashboards(repo_root: Path) -> dict:
+    """Lower-case UUID to loaded Dashboard for every dashboard the repo owns
+    (``content/dashboards/`` plus ``third_party/*/dashboards/``, the set
+    validate checks the owned-id rule against). A Dashboard Navigation
+    target found here is extracted as ``dashboard: "<name>"``, not
+    ``dashboard_id:``. Read-only: no id minting; a YAML that fails to load
+    is skipped (its own validate reports it)."""
+    import warnings as _warnings
+    from vcfcf_core.dashboards.loader import load_dashboard as _load_one
+
+    dirs = [repo_root / "content" / "dashboards"]
+    tp = repo_root / "third_party"
+    if tp.is_dir():
+        dirs.extend(sorted(p / "dashboards" for p in tp.iterdir() if (p / "dashboards").is_dir()))
+    out: dict = {}
+    with _warnings.catch_warnings():
+        _warnings.simplefilter("ignore")
+        for d in dirs:
+            for p in (sorted(d.rglob("*.y*ml")) if d.is_dir() else []):
+                try:
+                    dash = _load_one(p, enforce_framework_prefix=False, default_name_path="")
+                except Exception:
+                    continue
+                if dash.id:
+                    out[dash.id.lower()] = dash
+    return out
+
+
 def _scan_existing_ids(kind: str, repo_root: Path) -> dict[str, Path]:
     """Return a mapping of uuid -> file path for existing repo YAML files.
 
@@ -1141,6 +1169,9 @@ def extract_dashboard(
         _write_dashboard_yaml(
             dash_path, dash_data, dashboard_id, view_results, factory_native=False,
             dashboard_names_by_id=dashboard_names_by_id,
+            owned_dashboards=(
+                _owned_dashboards(_REPO_ROOT) if dash_data.get("dashboardNavigations") else None
+            ),
         )
         dash_file_paths.append(f"dashboards/{dash_filename}")
         _info(f"wrote {dash_path}")

@@ -145,10 +145,15 @@ Both `/extract` paths carry the block:
   dashboard in the same source file becomes `dashboard:` by name, with
   `widgets` mapped back to that dashboard's reversed local ids.
 - Live extractor (one dashboard per run): only a self-target is in the
-  extraction; every other target becomes `dashboard_id:` with the UUID
-  preserved and `label:` set to the target's name from the same content
-  export, when the export carries it.
-- Receivers on a target outside the extraction are dropped with a WARN
+  extraction. A target whose id is a dashboard the repo already owns
+  (`content/dashboards/` or `third_party/*/dashboards/`) becomes
+  `dashboard:` by that dashboard's name, with receivers mapped back
+  through its widget ids (validate rejects a `dashboard_id` naming an
+  owned dashboard). Every other target becomes `dashboard_id:` with the
+  UUID preserved and `label:` set to the target's name from the same
+  content export, when the export carries it.
+- Receivers on a target that is neither in the extraction nor owned by
+  the repo are dropped with a WARN
   (a `dashboard_id` entry cannot name widgets); the jump itself is kept.
   A receiver the reverse parser skipped (unsupported widget type) is also
   dropped with a WARN.

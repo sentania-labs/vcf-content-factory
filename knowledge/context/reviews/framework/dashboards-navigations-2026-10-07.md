@@ -219,3 +219,137 @@ An operator who syncs or packages a factory dashboard that drills into a
 third-party (or not-yet-installed) dashboard gets a drill-down link to a
 dashboard that does not exist on the instance. The command reports success,
 and nothing tells them.
+
+---
+
+# Round 2 (709b1ce on 5494cdb, rebased onto origin/main b701471)
+
+**Verdict: APPROVE.** 0 BLOCKING, 0 WARNING, 2 NIT. All 14 round-1
+findings are resolved. I verified each one independently, by code read and
+a re-run, not from the result block.
+
+## Checks re-run
+
+| Check | Result |
+|---|---|
+| Seven-package validate chain | all rc=0, tree clean afterwards |
+| `tests/test_dashboard_navigations.py` | 57 passed |
+| Full pytest | 2038 passed, 6 failed, 15 skipped. Same 6 as round 1, all `content/sdk-adapters/synology/adapter.yaml` not found (SDK repos absent from the worktree). |
+| Render regression vs origin/main (b701471; its `src/` matches round 1's base apart from bytecode) | **identical**, 77 of 77 outputs (same harness and coverage as round 1). |
+| Round-1 adversarial probes, re-run | see below |
+
+## Finding-by-finding
+
+- **B1, resolved.** `cli.py` `_resolve_import_navigations` /
+  `_check_import_targets`. In probe 2 (factory dashboard to a third_party
+  target, plus a `dashboard_id`), `package` now:
+  - prints both `PREREQUISITE:` lines;
+  - prints an INVALID naming `--allow-external-navigation-targets`;
+  - exits rc=1.
+
+  With the flag it exits rc=0, still prints both prerequisite lines, and
+  the zip carries the resolved link. The gate also covers `sync` (shared
+  preamble, before any client is built), and both parsers register the flag
+  with default False. The wire doc's false "no render path can emit a
+  dangling target" sentence is gone. In its place is a table of what each
+  path does, and it matches the code. Tests cover package and sync with and
+  without the flag, plus the `dashboard_id`-only case.
+- **W1, resolved.** The renderer keeps name to distinct-by-id candidates
+  and raises `UnresolvedDashboardNavigationError` ("ambiguous") when there
+  is more than one.
+  - Probes 1 and 1b now raise, where they used to make a silent pick.
+  - The same dashboard arriving through both the rendered set and `known`
+    is not treated as ambiguous (probe 1c, plus a test).
+  - An ambiguous name that nothing references does not fail (test).
+  - The SDK pak path also runs `check_dashboard_navigations(dashboards)` in
+    `_load_bundled_content` and raises `SdkBuildError` (test). The
+    buildkit's existing regex rewrites the widened import line to
+    `.dashboard_loader` (verified by applying `_IMPORT_REWRITES`), and no
+    `vcfcf_dashboards` import is left over.
+- **W2, resolved.** The corpus now always includes `content/dashboards/`.
+  Probe 3's subset package no longer reports "does not exist"; it fails on
+  the carry gate with the actionable message.
+- **W3, resolved.** A `dashboard_id` equal to a corpus dashboard's id is an
+  error that names the dashboard and says to use `dashboard: "<name>"`
+  (probe 5, plus a test). Inside a bundle, the corpus is the bundle, so
+  this covers bundle and SDK builds too.
+- **W4, resolved.** `sync_bundle` prints external prerequisites right after
+  `load_bundle`, inside the existing `BundleValidationError` handler.
+- **W5, resolved.** The composer reports navigation targets "not in the
+  selection", and auto-add iterates until nothing new resolves (test:
+  target auto-added, re-check clean).
+- **W6, resolved.** RULE-015 local-only disclaimer added in both the wire
+  doc and the design.
+- **W7, resolved.** Tests now cover SDK pak (sibling renders, outside-pak
+  rejected), CLI package/sync, renderer ambiguity, owned id, composer,
+  bundle-sync prerequisites, and receiver dedupe.
+- **N1, resolved.** Receivers are de-duplicated in order (probe 6b: the
+  YAML now loads, plus a test).
+- **N2, resolved.** The volatile count is replaced by a statement of the
+  contract.
+- **N3, resolved conditionally.** It can only be checked once the PR body
+  exists. The PR body must state two things: the rebuild trigger fired
+  (`render.py`, `assembly.py`, `builder.py`, `discrete_builder.py`), and
+  output is byte-identical (77 of 77), so the rebuild is a no-op and no
+  `CURRENT_TEMPLATE_VERSION` bump is warranted.
+- **N4, resolved.** The design's Out of scope now names the dropped
+  pre-selection on external targets.
+- **N5, resolved.** Unloadable YAMLs are collected and named in the
+  "does not exist" error (test).
+- **N6, resolved.** The shared helper now lives in
+  `src/vcfcf_packaging/navigation.py`; builder, discrete_builder and syncer
+  all import it, and no cross-module private import remains.
+
+## The pre-existing syncer crash (not counted against the branch)
+
+**Confirmed pre-existing.** On origin/main,
+`syncer._get_yaml_paths_for_type(load_bundle(...), ...)` raises
+`AttributeError: 'Bundle' object has no attribute 'symptom_paths'`. The
+branch does not touch that function: its only syncer change is the
+4-line prerequisite print.
+
+**The branch's handling does not mask a regression:**
+
+- `test_bundle_sync_prints_external_prerequisites` patches out only
+  `_get_yaml_paths_for_type`. That function is not under test. The
+  assertion targets the new print, which runs before the patched call.
+- The fixture edit in `test_dashboard_import_all_skipped.py`
+  (`dashboards=["/x/d.yaml"]` to `[]`) is forced by the new print: it
+  iterates `Dashboard` objects, and real `Bundle.dashboards` holds those,
+  not path strings. That test still feeds its handler paths through the
+  same patched function, so its trailer assertion is unchanged in
+  substance.
+- Neither patch hides branch behavior.
+
+The crash means `vcfcf_packaging sync` cannot currently reach any handler
+for a real bundle, on main or on this branch. That belongs to the
+separately filed issue.
+
+## NIT (new in round 2)
+
+**R2-N1.** `src/vcfcf_core/extractor/extractor.py` `_navigations_to_yaml`
+(live path), interacting with the W3 fix. Here is the sequence:
+
+1. A lab dashboard drills into a factory dashboard installed on the lab.
+   That dashboard carries the repo's own stable UUID.
+2. The extractor writes it as `dashboard_id: <repo uuid>`.
+3. Full validate now rejects that ("use dashboard: ...").
+
+It fails loudly and the message tells the user what to do, so this is
+not a silent failure.
+
+**Fix:** have the live extractor map a target id that matches a repo
+dashboard (`content/dashboards/`, `third_party/*/dashboards/`, reachable
+via `_REPO_ROOT`) to `dashboard: "<name>"`. Add a test.
+
+**R2-N2.** Commit 5494cdb's body still says "56 rendered outputs diffed
+clean". The doc and this review use the contract, and 77 respectively.
+
+**Fix:** reword when the commits are squashed or amended for the PR, or
+cite 77 in the PR body alongside N3.
+
+## Verdict
+
+APPROVE (zero BLOCKING). Per CLAUDE.md delegation rule 9, R2-N1 and R2-N2
+are fixed before the PR opens. R2-N2 and N3 are PR-text items. R2-N1 is a
+small code change, and the re-review for it can be scoped to that hunk.

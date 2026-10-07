@@ -1128,6 +1128,7 @@ def _navigations_to_yaml(
     dashboard,
     extraction: dict,
     names_by_id: Optional[dict] = None,
+    owned: Optional[dict] = None,
 ) -> dict:
     """Turn the raw navigations ``parse_dashboard_json`` left on
     ``dashboard``'s widgets into YAML entries, keyed by source local id.
@@ -1137,13 +1138,20 @@ def _navigations_to_yaml(
     so self-targets resolve). A target found there becomes ``dashboard:``
     by name, with ``widgets`` mapped back to that dashboard's local ids (a
     receiver it does not carry, for example an unsupported widget type, is
-    dropped with a WARN). Any other target becomes ``dashboard_id:`` with the
+    dropped with a WARN). A target outside the extraction that the repo
+    already owns (``owned``: lower-case UUID to the loaded Dashboard the
+    caller found in its tree) also becomes ``dashboard:`` by name, because
+    validate rejects a ``dashboard_id`` naming an owned dashboard; its
+    receivers are wire widget ids, mapped back through the owned
+    dashboard's ``Widget.widget_id`` (unmatched ones dropped with a WARN).
+    Any other target becomes ``dashboard_id:`` with the
     UUID preserved and a ``label`` from ``names_by_id`` (lower-case UUID to
     display name) when the extractor could read it; its receiving widgets
     are dropped with a WARN, since the factory cannot address widgets on a
     dashboard it does not own.
     """
     names_by_id = names_by_id or {}
+    owned = owned or {}
     out: dict = {}
     for w in dashboard.widgets:
         entries = []
@@ -1168,6 +1176,26 @@ def _navigations_to_yaml(
                     else:
                         kept.append(lid)
                 entry: dict = {"dashboard": target.name}
+                if kept:
+                    entry["widgets"] = kept
+            elif tid in owned:
+                repo_target = owned[tid]
+                by_wire = {
+                    (tw.widget_id or "").lower(): tw.local_id
+                    for tw in repo_target.widgets if tw.type != "Section"
+                }
+                kept = []
+                for rid in nav.widgets:
+                    lid = by_wire.get(rid.lower())
+                    if lid is None:
+                        _warn(
+                            f"dashboard '{dashboard.name}' widget '{w.local_id}': navigation "
+                            f"receiver '{rid}' is not a widget of the repo dashboard "
+                            f"'{repo_target.name}'; dropped"
+                        )
+                    elif lid not in kept:
+                        kept.append(lid)
+                entry = {"dashboard": repo_target.name}
                 if kept:
                     entry["widgets"] = kept
             else:
@@ -1195,6 +1223,7 @@ def _write_dashboard_yaml(
     view_results: dict,
     factory_native: bool = False,
     dashboard_names_by_id: Optional[dict] = None,
+    owned_dashboards: Optional[dict] = None,
 ) -> None:
     """Write a dashboard YAML file in factory shape with real widget + interaction graph.
 
@@ -1204,7 +1233,10 @@ def _write_dashboard_yaml(
     views_by_id for parse_dashboard_json view resolution).
     ``dashboard_names_by_id`` (lower-case UUID to display name, optional)
     labels Dashboard Navigation targets outside this extraction; the
-    extraction is this one dashboard, so only a self-target resolves by name.
+    extraction is this one dashboard, so only a self-target resolves by name,
+    plus any target in ``owned_dashboards`` (lower-case UUID to a loaded
+    Dashboard the repo already owns; the factory supplies it, this module
+    never scans a tree).
 
     Uses vcfcf_core.dashboards.reverse.parse_dashboard_json() to parse the full
     widget graph, then serializes each Widget dataclass to YAML.
@@ -1271,7 +1303,8 @@ def _write_dashboard_yaml(
     # Dashboard Navigations: this extraction is the one dashboard.
     navs_by_local = (
         _navigations_to_yaml(
-            dashboard, {dashboard_uuid.lower(): dashboard}, dashboard_names_by_id
+            dashboard, {dashboard_uuid.lower(): dashboard}, dashboard_names_by_id,
+            owned=owned_dashboards,
         )
         if dashboard else {}
     )

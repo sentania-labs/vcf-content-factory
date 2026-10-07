@@ -831,3 +831,43 @@ class TestSdkPak:
         raw = {"bundled_content": {"dashboards": ["s.yaml"]}}
         with pytest.raises(SdkBuildError, match="bundled in this pak"):
             _load_bundled_content(raw, tmp_path, tmp_path)
+
+
+# --- review round 2: live extract of a target the repo already owns -------
+
+
+def test_live_extract_names_repo_owned_target_and_passes_validate(tmp_path, capsys):
+    """A navigation to a dashboard the repo owns must be extracted as
+    ``dashboard: "<name>"`` (receivers mapped back through the owned
+    dashboard's widget ids), or validate rejects it under the owned-id rule."""
+    from vcfcf_core.dashboards.loader import check_dashboard_navigations
+    from vcfcf_core.extractor.extractor import _write_dashboard_yaml
+    from vcfcf_extractor.extractor import _owned_dashboards
+
+    repo = tmp_path / "repo"
+    _write(repo / "content" / "dashboards" / "t.yaml", _target_doc())
+    owned = _owned_dashboards(repo)
+    assert list(owned) == [DST_ID]
+    dst = owned[DST_ID]
+    picker_wire_id = next(w.widget_id for w in dst.widgets if w.local_id == "cluster_picker")
+
+    src = _export_json()["dashboards"][0]
+    src["dashboardNavigations"] = {W_SRC_LIST: [
+        {"id": DST_ID.upper(), "widgets": [
+            {"interactionType": "resourceId", "id": picker_wire_id},
+            {"interactionType": "resourceId", "id": "not-on-target"}]},
+        {"id": FOREIGN_ID, "widgets": []},
+    ]}
+    path = tmp_path / "out" / "src.yaml"
+    _write_dashboard_yaml(path, src, SRC_ID, {}, dashboard_names_by_id={DST_ID: "ignored label"},
+                          owned_dashboards=owned)
+    err = capsys.readouterr().err
+    doc = yaml.safe_load(path.read_text())
+    navs = {w["id"]: w.get("navigations") for w in doc["widgets"]}
+    assert navs[W_SRC_LIST] == [
+        {"dashboard": DST, "widgets": ["cluster_picker"]},
+        {"dashboard_id": FOREIGN_ID},
+    ]
+    assert "not-on-target" in err
+    extracted = _load(path)
+    assert check_dashboard_navigations([extracted], corpus=[dst]) == []
