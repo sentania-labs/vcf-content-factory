@@ -47,7 +47,7 @@ under the 50-character UI cap, factory issue #198).
 | 3 | 1-12 | Compliance by vCenter and Object Type | View embed | view `[VCF Content Factory] Compliance by vCenter and Object Type`, descendants of page object | `select_first_row: true` so row 5 is never blank on load. |
 | 4 | 1-6 | Environment Score Trend | MetricChart | `Rollup|Environment|avg_score`, `Rollup|Environment|non_compliant` (color_method 2) | |
 | 4 | 7-12 | Objects by SCG Version | View embed | view `[VCF Content Factory] Compliance Objects by SCG Version`, descendants of page object | |
-| 5 | 1-12 | Open Compliance Alerts | AlertList | `alert_types: ["15_21"]`, criticality [2,3,4], mode all, `depth: 5` | Driven by row 3 selection; depth 5 covers ComplianceWorld > vCenter > Datacenter > Cluster > Host > VM. |
+| 5 | 1-12 | Open Compliance Alerts | AlertList | `alert_types: ["15_21"]`, criticality [2,3,4], mode all, `depth: 4` | Driven by row 3 selection. The input is always the selected vCenter row (`select_first_row`), never ComplianceWorld, so depth 4 covers vCenter > Datacenter > Cluster > Host > VM, same as the Environment Overview (build 88 review NIT 5; was 5). |
 
 ## Interaction wiring
 
