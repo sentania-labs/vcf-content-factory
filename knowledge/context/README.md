@@ -169,6 +169,7 @@ Session-specific research logs, diff analyses, and exploration notes. Read when
 debugging a specific issue; not required reading.
 
 - `policy_fragment_wire_format.md`: policy super metric enablement wire format and pak policies-directory (`<pak>/content/policies/`) fragment support (also listed under `wire-formats/`).
+- `2026-10-12-compliance-pak-summary-binding.md`: compliance build 88 World Summary did not bind on devel 9.0.2 because the pak importer crashes on an unknown widget type (`Section`, missing from that build), and the crash aborts the whole dashboard before `dashboards.properties` is read.
 
 ### `reviews/` — Build and framework review reports
 Point-in-time review records: per-build SDK adapter reviews written by

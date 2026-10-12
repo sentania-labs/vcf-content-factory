@@ -125,6 +125,19 @@ same pak with `forceUpdateContent` re-imports (force) and re-binds,
 creating another template copy each time (`getUniqueTabName` appends a
 suffix). Expect template clutter after repeated installs.
 
+## Unknown widget type aborts the import, so the binding never runs
+
+Seen live on devel (9.0.2.0 Build 25137845) on 2026-10-12. When
+`WidgetType.fromKey` returns null, `ImportExportManager.importDashboard`
+tries to log a skip message using `getString("Title")` and
+`getString("Type")`, with capital letters, which a dashboard JSON does not
+have. The resulting `JSONException` aborts the whole dashboard. There is no
+share and no `dashboards.properties` binding, and the installer quietly
+moves on to the next directory. The `Section` widget type does not exist on
+that build. Any pak dashboard whose bound dashboard uses a widget type
+unknown to the target build therefore fails silently. Evidence:
+`../investigations/2026-10-12-compliance-pak-summary-binding.md`.
+
 ## Uninstall behavior
 
 `removeContent` deletes the tracked dashboard ids (`deleteDashboardTabs`
