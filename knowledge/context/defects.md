@@ -1232,3 +1232,26 @@ reused. Field lines are `- **Field:** value` (parsed by
   non-empty-mode expectation depends on the skip); `sdk-adapter-reviewer`
   confirms it on the next build.
 - **Related:** `knowledge/lessons/unreadable-is-not-compliant.md`.
+
+### DEF-023
+
+- **Title:** Compliance: a VCF Ops resource list longer than one page, or a
+  2xx body without `resourceList`, was taken as complete, so the objects
+  past the page silently never received compliance data
+- **Severity:** tracked
+- **Status:** open
+- **Affects:** compliance
+- **First-seen:** every build through 87 (single `pageSize=10000` fetch in
+  `ComplianceStitcher`); found 2026-10-12
+- **Source:** `knowledge/context/reviews/compliance-build-88.md` (WARNING 2)
+- **Summary:** `ComplianceStitcher.fetchResources` read one page of the
+  Suite API resource list and treated it as the whole inventory, and a 2xx
+  body with no `resourceList` read as zero resources. Before build 88 the
+  missed objects were scored and counted but never pushed; from build 88
+  (rollup counts only pushable objects) they would leave the totals with
+  no visible signal. Fix (build 88, adapter commit `0c38e91`): page until
+  `pageInfo.totalCount` rows are in, mark the kind load-failed on a missing
+  list, an empty page short of the total, or the 20-page cap, holding the
+  kind back with `Rollup|incomplete` = 1. Closes on devel proof of build
+  88 with the vCenter collection alert path exercised or the paging seen
+  in the log.
