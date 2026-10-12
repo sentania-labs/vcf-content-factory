@@ -5,7 +5,7 @@
 - **Adapter repo:** `content/sdk-adapters/compliance/` (sentania-labs/vcf-content-factory-sdk-compliance)
 - **Date:** 2026-10-12
 - **Tracking:** adapter issue #38
-- **Status:** go from Scott 2026-10-12 ("Option 1."); authoring
+- **Status:** go from Scott 2026-10-12 ("Option 1."); build 88 authored, reviewed APPROVE (knowledge/context/reviews/compliance-build-88.md), findings being closed; devel install waits on Scott
 
 ## Initial prompt (Scott, verbatim, 2026-10-12)
 
@@ -42,9 +42,14 @@ Two changes, both in build 88:
    with no matching Ops resource is excluded from `Rollup|<Kind>|scored`,
    `non_compliant`, `no_benchmark`, `score_sum` and the `All` and
    `Benchmark` totals. The gap is visible, not hidden: a new per-kind
-   key `Rollup|<Kind>|unmatched` (count, pushed every cycle like
-   `Rollup|incomplete`, 0 when none) and one INFO line per cycle per
-   kind naming the unmatched objects (name and MOID, capped sensibly).
+   key `Rollup|<Kind>|unmatched` (count, 0 when none; pushed on every
+   complete cycle and held back with the kind's other keys when that
+   kind's listing failed, since a count that was not taken is not a 0;
+   `Rollup|incomplete` alone goes out every cycle) and one INFO line
+   per cycle per kind naming the unmatched objects (name and MOID,
+   capped sensibly). Amended 2026-10-12 after the build 88 review (N2):
+   the code holds the key back with its kind, and that is the right
+   reading.
    Whether to skip scoring an unmatched object entirely (saves the
    vCenter reads) is the author's call; the count and names must still
    be reported.
