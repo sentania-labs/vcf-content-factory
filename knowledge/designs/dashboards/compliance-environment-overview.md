@@ -153,3 +153,31 @@ Note the totals trail the per-vCenter rollups by one collection interval
 and skip one point on every pak upgrade; the Scored tile stays beside the
 others so a zero non-compliant reading is never shown without its
 denominator.
+
+## Correction 2026-10-12: alert widget filter and input depth
+
+### Initial prompt (Scott, verbatim)
+
+> Dashboards for this pak:
+> The alert widgets show blank.  The alert widget should be updated to filter on Alert Type: "Application ALerts Compliance" since that is how we have defined all of our compliance pak alerts.
+>
+> Additionally, the input transformation depth needs to be updated to an appropriate depth based on the input object - to cover all the children of that object
+
+### Vision
+
+Every AlertList widget in the five compliance dashboards (compliance-overview,
+compliance-environment-overview, compliance-esxi-hosts, compliance-vms,
+compliance-vcenter-networking) filters by alert type rather than by a pinned
+list of alert definition ids. Every alert the pak ships is declared in
+describe.xml as `type="15" subType="21"` (Application / Compliance), so the
+widget filter is the alert type code `15_21` (loader field `alert_types`).
+The `alert_definitions` pin is removed; it is the suspected cause of the blank
+widgets and is redundant once the type filter is in place.
+
+The widget's input depth (loader field `depth`, the Input Transformation
+depth in the UI) is sized per widget from the object that feeds it, so that
+the widget reaches every descendant that can carry a compliance alert
+(VMwareAdapter Instance, Cluster, HostSystem, VirtualMachine, vDS, Distributed
+Port Group), following the VMWARE relationship tree. Each chosen depth is
+justified in a YAML comment on the widget. Layout, coords and interactions
+are unchanged, so the RULE-011 wireframe gate does not re-open.
