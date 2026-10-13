@@ -31,3 +31,28 @@
 ## Not covered
 
 - prod or qa, pushes, PRs, tags, other instance changes.
+
+## Outcome 2026-10-13
+
+Installed 4:19 PM, version 0.0.0.93 on /api/solutions, pak results all
+successful, jars match. Identity PASS: same three account ids, the two
+removed settings no longer stored, wld01 saved twice without error. Dialog
+PASS: Host, Credential, Collector; Advanced Settings holds Overrides file and
+Read vCenter appliance settings only. Validate PASS on all three FQDNs with
+no prompt: devel's vCenter certificates chain to the lab CAs already in the
+platform trust store, so the accept path could not be exercised on the
+FQDN. The accept dialog did appear when validating wld01 by IP
+(172.27.8.32), and after acceptance Validate failed with the name-mismatch
+message as designed (name check PASS). Not-collected marker NOT PROVEN: the
+test changed the host to a non-resolving name, so the adapter could not
+resolve the vCenter object (no VCURL equal to the entered host) and, as
+documented, pushed nothing; a test that keeps the real host and breaks the
+credential is needed. All three accounts restored to FQDNs and collecting at
+4:51 PM; overrides in force (1 skipped, 1 overridden, VM pin SCG 8.0).
+Transient: overrides_status read "fetch failed: no answer
+(SocketTimeoutException), last good from 4:29 PM" at 4:52 PM while mgmt and
+wld02 also logged Suite API read timeouts at 4:50 PM; cached copy applied.
+No stored-value INFO/WARN lines fired (the platform does not hand the
+adapter removed identifiers). Screenshots in the session scratchpad shots/:
+build93-wld01-dialog.png, build93-wld01-cert-dialog.png,
+build93-wld01-ip-validate.png.

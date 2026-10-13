@@ -5,7 +5,7 @@
 - **Adapter repo:** `content/sdk-adapters/compliance/`
 - **Date:** 2026-10-13
 - **Builds on:** build 92 (`compliance-build-92-drop-custom-skip-cancel.md`)
-- **Status:** go from Scott 2026-10-13 ("okay - go ahead."); build 92 identity result PASS (remove, do not hide); build 93 authored on feat/build-93-auto-only-cert-accept (296db83..8021a1c), review in progress; devel install awaits a separate go
+- **Status:** go from Scott 2026-10-13 ("okay - go ahead."); build 92 identity result PASS (remove, do not hide); build 93 installed on devel 2026-10-13 4:19 PM (54ca857, pak 6c436c55): identity, dialog, name check PASS; accept dialog seen on an IP host; not-collected marker unproven (adapter issue #43)
   authoring starts when the build 92 identity result and the Advanced
   Settings placement investigation are in
 
