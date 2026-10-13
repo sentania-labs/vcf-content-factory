@@ -96,3 +96,86 @@ Open defects with `Affects: compliance`: DEF-022, DEF-023. No `defects.local.md`
 - **DEF-023 (tracked, open): fix in place, closure still owed.** `ComplianceStitcher.java` is untouched in this build (not in the diff stat), and `ComplianceDecisions.resourcePageOutcome` is unchanged (the decisions diff touches only the build 90 additions). Closure still needs devel proof of the paging, which the build 90 devel install can supply.
 
 **Registration candidates:** W2, if it is not fixed before release (an alert-layer gap that is silent and unbounded). W1 folds into DEF-022 as above.
+
+## Re-review (fix commits ed4236d and a285ce9, HEAD a285ce9)
+
+- **Reviewer:** sdk-adapter-reviewer
+- **Date:** 2026-10-13, 10:58 AM (local, America/Chicago)
+- **Scope:** `git diff 0f833bd..a285ce9`, 14 files. `ControlEvaluator.java` (DEF-022), `OverridesStore.java` (W2), `ComplianceOverrides.java` and `ComplianceAdapter.java` (N1), `ControlEvaluatorTest.java` and `OverridesTest.java`, the generator recommendation text, template, docs, CHANGELOG, CANONICAL_SCHEMA. `ComplianceStitcher.java` untouched. `build_number` stays 90 (the pak was never installed). Working tree clean before and after.
+- **Artifacts:** author's `dist/vcfcf_sdk_compliance.0.0.0.90.pak`, sha256 `b59a3181...707f` (matches the brief, built 10:48 AM, commit a285ce9 stamped 10:49 AM). Reviewer build from HEAD into the scratchpad, sha256 `d0c99b75...8540`.
+- **Verdict:** CHANGES REQUESTED (1 BLOCKING / 1 WARNING / 3 NIT)
+- **Fit for a devel install: YES.** The one BLOCKING is a README sentence; the code delta is correct. It blocks the ship step, not the devel proof.
+
+### Bottom line
+
+All seven prior findings are closed, and DEF-022 is fixed as its close condition asks. An unset advanced setting now fails with Actual `(undefined)` unless the guide allows absence. The dvfilter exception cannot mask an unreadable read and cannot reach any other bundled control. Two things stop an APPROVE. **B1:** the landing README still says absent settings are skipped and points to a Known issues entry this build removed. **W3** (new, pre-existing since the repo's root commit, not touched here): `vm.dvfilter` always passes, because its parameter is a wildcard that is looked up literally.
+
+### Independent verification
+
+| Check | Result |
+|---|---|
+| `validate-sdk` | OK (only the existing `-source 11` warning) |
+| `build-sdk` from HEAD | builds `0.0.0.90`, template logged at `content/files/solutionconfig/` |
+| Author pak vs HEAD build (recursive, nested zips and jar unpacked) | 242 / 242 entries, **zero content differences**: the author's pak is HEAD |
+| Pak 89 vs pak 90 (recursive) | the same 16 new entries and the same changed set as the first pass |
+| `pak-compare` 90 vs 89 | gate PASS, 0 BLOCKING / 2 WARNING (identifier count 6 vs 5; ComplianceWorld group attributes 6 vs 1) / 1 INFO (template). Same as the first pass. |
+| `ci/run_java_tests.sh` | 13 Java suites pass (ControlEvaluatorTest, OverridesTest included); generator 17 OK, `--check` up to date; AlertList 6, widget types 2, template 5 OK |
+| `pytest tests/` | 30 passed, 11 subtests |
+| Em-dashes in added lines | 0 |
+
+### Prior findings
+
+| Finding | Status | Evidence |
+|---|---|---|
+| W1 (stricter Override drops unset objects, DEF-022) | **Closed** | `ControlEvaluator.java:176-191`: an absent or empty value is a result with Actual `(undefined)`, fail unless `allowsUndefined`. `OverridesTest.overrideDropsOrUndefined` (line 323): Override `TRUE` on `vm.deactivate-console-copy`, key absent, asserts "unset FAILS under the site TRUE", total 1, Actual `(undefined)`. A failing result is pushed, so the cleanup no longer retires it with "(not in applied benchmark)". Template and overrides.md now say a plain value fails an unset object. |
+| W2 (fetch failure with no copy, silent and unbounded) | **Closed** | `OverridesStore.java:100-110`: `notLoaded()` is true for FETCH_FAILED with `parsed == null`, or `fetchFailures >= 3`. The counter resets on a good fetch, an absent result, a path refusal, an empty name and a new name. A parse failure resets it as well, since the fetch worked. `fetchReason` (line 173) maps 401/403 to `refused (HTTP 4xx)`, other statuses to `HTTP nnn`, otherwise `no answer (<Exception>)`. `OverridesTest.fetchFailureAlert` (line 678) covers 403 and 401 with no copy, no channel, timeout, 1 and 2 failures with a copy (no alert), the 3rd (alert, "fetch failed 3 cycles"), the 4th, recovery, a parse failure ending the run, and a new name. The generated recommendation (nameKey 2042) and overrides.md say "refused" and no longer say "did not answer". The claim that the collector log names the identity is true: `SuiteApiStitchClient` logs `principal=` at INFO when it starts (framework lines 333, 359, 388). See N7 for the no-channel corner. |
+| N1 (counts not in force) | **Closed** | `Resolved.skippedIn` / `overriddenIn` (`ComplianceOverrides.java:550`) count an id only when the profile that governs its kind scores it: the pin for a pinned kind, otherwise the instance's own profiles. `buildSelector` computes them from the unadjusted profiles and resets them to 0 on an empty file. `pushOverridesStatus` uses them. `OverridesTest.inForceCounts` (line 360) covers fixed 9.0, an 8.0 host pin and Auto. |
+| N2 (undocumented forms) | **Closed** | `vmx-N or higher` and `X or Not Present` rows are in overrides.md and the template |
+| N3 (`overrides_not_loaded` row) | **Closed** | in the overrides.md Step 4 table |
+| N4 (case sensitivity) | **Closed** | overrides.md and the template; overrides.md also covers a copy name that differs only in case |
+| N5 (no wiring pin) | **Closed, and the pin bites** | `OverridesTest.adapterWiringSourcePins` (line 779). Comments are stripped before matching. I mutated three scratch copies of HEAD: (1) `cleanupPlan(..., Collections.emptySet())`, (2) the real call commented out next to an empty-set call, (3) `orphanProps(..., emptySet(), ...)`. **All three fail** OverridesTest with "cleanBatch: expected, in order: ...". The unmutated copy passes. |
+
+### Focus checks
+
+**(a) DEF-022 fix.** With a successful read, a missing or empty value goes to one branch (`ControlEvaluator.java:176-191`): a pass only for `X or Undefined`, `X or Not Present` or bare `Not Present`, otherwise a fail. Both outcomes carry Actual `(undefined)` and sit in pass, fail and total. `(non-empty)` and `not:X` reach the mode checks only with a present value, so an absent one fails. `ControlEvaluatorTest.absentAdvancedSetting` (line 112) asserts this for six forms: "plain TRUE, unset: fail", "X or Undefined, unset: pass", "Not Present, unset: pass", "X or Not Present, unset: pass", "(non-empty), unset: fail", "not:X, unset: fail (absence is never 'not equal')", plus "failing controls stay in the denominator" (total 6, score 50) and "absent is not unreadable". The map reaching `evaluateControls` comes only from a successful `QueryOptions` / `extraConfig` read. Every fault throws `ReadFault` or `AdvancedSettingsUnreadableException` and goes to `evaluateControlsUnreadable` (`VimOptions.java:52-111`, `ComplianceAdapter.java` around 1317, 1469 and 1588). An unreadable read therefore never reaches the new fail branch, and never the pass branch either. Scale: across the five bundled profiles, 21, 35, 40, 44 and 46 advanced-setting controls (6.7 to 9.1) have no absence-allowing form. Those now fail when unset, which is the change DEF-022 asks for. The CHANGELOG says scores may drop.
+
+**(b) The explicit-empty exception.** `expectsExplicitEmpty` (line 324) matches `NULL` (case-insensitive) or a value of two or more characters that is empty or blank once one pair of surrounding quotes is removed. It fires only when the key is **present** with an empty value (line 164). An absent key still fails ("absent against \"\": fail (undefined)"). I read every advanced_setting row by header in all five canonical CSVs. The only match is `esx.network-dvfilter` (HostSystem): `NULL` in 6.7, `""` in 7.0 to 9.1. Values such as `esx.password-complexity` (`"random=0 ..."`, quoted) do not match. In the bundled profiles it cannot widen to another control. Through the overrides file it can (N6). On the cardinal rule: an empty Actual can only come from a successful `QueryOptions` that returned a `<value>` element with no text (`VimOptions.fromQueryOptions:58-63`; an OptionValue with no `<value>` element is dropped, so it reads as absent and fails). A probe on all five profiles' dvfilter control through `evaluateControlsUnreadable` gives pass 0, unreadable 1. The exception cannot mask an unreadable read.
+
+**Devel evidence that settles dvfilter.** After a build 90 collect on devel, read `VCF-CF Compliance|esx.network-dvfilter|Actual` and `|Compliant` on each ESX host. **Actual `""` with Compliant 1** confirms ESX returns the key with an empty string through `QueryOptions(null)`, and the exception works. **Actual `(undefined)` with Compliant 0** means ESX omits the value, the exception never fires, and every hardened host fails this control. That would need an owner decision (a false fail, not a false pass). Build 89 data cannot tell the two apart, because both cases were skipped then. `esxcli system settings advanced list -o /Net/DVFilterBindIpAddress` or the vSphere Client Advanced System Settings view can corroborate, but neither is the adapter's read path. The pushed Actual is the decisive evidence.
+
+**(c) W2.** See the table. Alert after 3 straight failures with a copy in force. Alert at once with no copy. 401/403 reads "refused (HTTP 4xx)".
+
+**(d) N1.** See the table.
+
+**(e) N5.** Mutation-proven, see the table.
+
+**DEF-022 close wording vs the tests.** The fix commit and the CHANGELOG claim "ControlEvaluatorTest covers the absent-key path for every expected-value form (plain, or Undefined, Not Present, or Not Present, (non-empty), not:X), present-empty values, and the explicit-empty exception". This matches `ControlEvaluatorTest.absentAdvancedSetting` assertion for assertion, including "empty value against TRUE: fail", "present and empty against \"\" / NULL: pass", "a bound address against \"\": fail" and "absent against \"\": fail (undefined)". The override half of the proposed amendment matches `OverridesTest.overrideDropsOrUndefined`. One overstatement: `vmx-N or higher` is a valid Override form on a text advanced setting and is not in the six. It takes the same fail branch (`allowsUndefined` is false), so nothing is wrong, but "every form" means every form listed. "A failed read is unchanged" is covered by the existing suites (`Build77FaultTest`, the `evaluateControlsUnreadable` cases), not by the new tests. That is fine. I compared against the commit message and the CHANGELOG because the author's result block was not in my brief.
+
+### New findings
+
+#### BLOCKING
+
+**B1. The landing README contradicts build 90's scoring (owner: `sdk-adapter-author`).** Authority: review dimension 11 (docs that contradict actual behavior are BLOCKING). `README.md:59-60` still says "(One known gap: a setting that is simply absent is currently skipped rather than failed; see Known issues.)". This build fails such settings, and the same commit removed the #15 entry from Known issues, so the pointer leads nowhere. An operator who sees new `(undefined)` failures and reads the landing page gets the opposite explanation. **Fix:** replace the parenthetical with the current rule (an unset setting fails unless the guide allows it to be unset, Actual `(undefined)`), or delete it.
+
+#### WARNING
+
+**W3. `vm.dvfilter` always passes: its wildcard parameter is looked up as a literal key (owner: `sdk-adapter-author`; registration candidate).** Authority: skill § *Unreadable is NOT compliant*; `knowledge/lessons/unreadable-is-not-compliant.md`; skill § *Gaps, name them, never hide them*; `knowledge/rules/no-fabricated-metrics.md`. In SCG 7.0, 8.0, 9.0 and 9.1, `vm.dvfilter` has parameter `ethernet*.filter*.name` and expected `Not Present`. `ControlEvaluator.java:136` does `advancedSettings.get(param)`, and no VMX key is literally `ethernet*.filter*.name`. So the value is always absent, `allowsUndefined("Not Present")` is true, and the control passes. Probe: a VM with `ethernet0.filter0.name = dvfilter-generic-vmware` scores pass 1 / fail 0 under all four profiles. The control cannot detect the condition it exists to detect, yet it reports a pass. It has been there since the root commit `c6d9e73`. Build 90 neither introduced it nor changed it (the DEF-022 fix leaves `Not Present` passing on absence). I graded it WARNING for that reason, following the DEF-022 precedent (build 86 W3), and propose registering it at blocking severity so the release gate holds it. **Fix:** match wildcard parameters as patterns: any key matching `ethernet\d+\.filter\d+\.name` present is a fail, with that key and value as Actual. Or, until a matcher exists, put `vm.dvfilter` in `profiles/manual_review.csv` as an honest gap. Add a test where a VM with a filter attachment fails.
+
+#### NIT
+
+**N6. An Override of `""`, `" "`, `NULL` or `null` turns on the explicit-empty pass for any text advanced setting.** `checkValue` passes these through `checkPlain` (`ComplianceOverrides.java:464`). Probe on `esx.log-level`: all four are accepted, a present empty value then passes, and an absent one fails. This is operator-explicit and marked "(site override)", so it is not a hidden widening and not an unreadable mask. But `null` in particular reads like a literal value. **Fix:** document in overrides.md that `""` / `NULL` mean "present and empty", or reject `NULL` / `null` in `checkValue`.
+
+**N7. "no Suite API channel ... the alert fires" cannot happen.** With no channel, `stitcher` is null, so `pushOverridesStatus` pushes the status only to Compliance World. The vCenter metric the alert reads is never written (the same applies to an unmatched vCenter). The overrides.md status and reason tables together imply the alert fires. The snapshot flag is right; the delivery is impossible. The no-channel case is already flagged by "Ambient Suite API stitcher unavailable". **Fix:** one line in overrides.md: with no channel, the status appears on Compliance World only and the alert cannot fire.
+
+**N8. Actual `(undefined)` on a failing control is not in data-reference's list of Actual values** (`docs/data-reference.md:82-94`). Before this build it appeared only on passes. Add a line.
+
+### Registry check (`knowledge/context/defects.md`)
+
+- **DEF-022: RESOLVED, propose close.** Fix: adapter commit `ed4236d`, `ControlEvaluator.java:150-191`, build 90 (pak sha256 `b59a3181...707f`). The close condition is met: a `ControlEvaluatorTest` case (`absentAdvancedSetting`) asserts an absent key with a value-required expected value is a fail, not a skip ("plain TRUE, unset: fail", "value-required controls fail when unset", "failing controls stay in the denominator"). It also asserts that `requiresAbsence` / non-empty / not-equal expectations do not depend on the skip ("Not Present, unset: pass", "(non-empty), unset: fail", "not:X, unset: fail"). The override path from the first pass is covered by `OverridesTest.overrideDropsOrUndefined`. Confirmed statically on this build. The close condition needs no live proof. A devel collect showing `vm.vmrc-lock` Compliant 0 with Actual `(undefined)` on a VM without the key would corroborate it. B1 is a stale README line about this defect. The orchestrator may close now or on the B1 re-review.
+- **DEF-023: open, unchanged.** `ComplianceStitcher.java` and `ComplianceDecisions.resourcePageOutcome` are not touched by `ed4236d` or `a285ce9`. Closure still owes the devel paging proof, which this build's devel install can supply.
+
+**Registration candidate:** W3 (`vm.dvfilter` wildcard false pass), proposed at blocking severity, `Affects: compliance`, first seen `c6d9e73`.
+
+### If shipped as-is
+
+Scores are now honest for unset advanced settings. But the landing README tells operators the opposite. `vm.dvfilter` keeps passing VMs that carry a dvfilter attachment, as it has in every build.

@@ -1228,9 +1228,18 @@ reused. Field lines are `- **Field:** value` (parsed by
   compliant false) and count it as a fail.
 - **Close condition:** `sdk-adapter-author` lands the fix with a
   `ControlEvaluatorTest` case asserting an absent key with a value-required
-  expected is a fail, not a skip (and checks no `requiresAbsence` /
-  non-empty-mode expectation depends on the skip); `sdk-adapter-reviewer`
-  confirms it on the next build.
+  expected is a fail with Actual `(undefined)`, not a skip, and that
+  `X or Undefined`, `X or Not Present` and bare `Not Present` still pass
+  when absent while `(non-empty)` and `not:X` fail; an `OverridesTest` case
+  where an Override removes "or Undefined" and the key is absent asserts a
+  fail rather than a dropped control; `sdk-adapter-reviewer` confirms it.
+- **Progress 2026-10-13:** fix landed in build 90, adapter commit `ed4236d`
+  (`ControlEvaluatorTest.absentAdvancedSetting`) and `a285ce9`
+  (`OverridesTest.overrideDropsOrUndefined`); the build 90 re-review
+  (`knowledge/context/reviews/compliance-build-90.md`) confirms both and
+  proposes close. Also reachable from the build 90 overrides file: an
+  Override that drops "or Undefined" hit the same skip. Status flips to
+  closed when build 90 passes its final review pass.
 - **Related:** `knowledge/lessons/unreadable-is-not-compliant.md`.
 
 ### DEF-023
@@ -1255,3 +1264,31 @@ reused. Field lines are `- **Field:** value` (parsed by
   kind back with `Rollup|incomplete` = 1. Closes on devel proof of build
   88 with the vCenter collection alert path exercised or the paging seen
   in the log.
+
+### DEF-024
+
+- **Title:** Compliance: `vm.dvfilter` looks up the wildcard parameter
+  `ethernet*.filter*.name` as a literal key, so a VM with a dvfilter
+  attachment passes (false pass)
+- **Severity:** blocking
+- **Status:** open
+- **Affects:** compliance
+- **First-seen:** adapter repo root commit `c6d9e73` (2026-06-08); every
+  build since, under SCG 7.0, 8.0, 9.0 and 9.1
+- **Source:** `knowledge/context/reviews/compliance-build-90.md` (re-review
+  WARNING 1); registered 2026-10-13
+- **Summary:** `ControlEvaluator` (around line 136) reads the control's
+  `parameter` as one advanced-setting key. The dvfilter parameter is a
+  pattern (`ethernet*.filter*.name`), so the lookup never finds
+  `ethernet0.filter0.name` and the "Not Present" expectation passes on
+  every VM, including one with a filter attached. Violates
+  `knowledge/lessons/unreadable-is-not-compliant.md`. Fix: glob the
+  pattern over the VM's advanced-setting keys; any match is a fail with the
+  matched keys in Actual; an unreadable settings read stays unreadable.
+- **Close condition:** `sdk-adapter-author` lands the matcher with
+  `ControlEvaluatorTest` cases (no filter keys pass, one filter key fails
+  naming it, read failure unreadable) and confirms no other canonical CSV
+  parameter carries `*` unmatched; `sdk-adapter-reviewer` confirms.
+- **Progress 2026-10-13:** fix in flight on build 90
+  (`feat/build-90-overrides-file`).
+- **Related:** DEF-022 (same evaluator, same lesson).
