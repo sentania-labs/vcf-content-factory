@@ -5,8 +5,8 @@
 - **Adapter repo:** `content/sdk-adapters/compliance/`
 - **Date:** 2026-10-13
 - **Tracking:** adapter issue #41 (Skip alert does not clear; doc path corrections)
-- **Builds on:** `compliance-overrides-file.md` (build 90/91, proven on devel 2026-10-13)
-- **Status:** go from Scott 2026-10-13 ("GO."); authoring
+- **Builds on:** `compliance-overrides-file.md` (build 90/91, evaluated on devel 2026-10-13; Skip alert clear excepted, issue #41)
+- **Status:** go from Scott 2026-10-13 ("GO."); build 92 installed on devel 2:44 PM (identity PASS, Skip pushes -1 every cycle, call rate unchanged; alert cancel NOT proven, alerts were already cancelled); PR #45
 
 ## Initial prompt (Scott, verbatim, 2026-10-13)
 

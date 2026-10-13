@@ -256,7 +256,10 @@ Java one:
   its own subdirectory and **fails the build on a loose `.properties` file
   there** (`cli:mp_build.py:92-134, 537-539`), so check how a
   `dashboards.properties` survives before relying on it (not tested).
-- Multi-tier alerts need one `<SymptomSets>` wrapper inside `<State>`; bare
+- A `<SymptomSets>` wrapper must hold two or more children or Ops rejects
+  the whole describe at install (compliance build 90, lesson
+  `pak-content-bundling.md`); a single symptom set goes bare under `<State>`.
+  Multi-tier alerts need one `<SymptomSets>` wrapper inside `<State>`; bare
   sibling `<SymptomSet>`s collapse to the last one
   (`wire-formats/alertdef_symptomset_import.md`).
 - Files under `content/files/solutionconfig/` survive a non-force upgrade and
@@ -711,7 +714,7 @@ and `investigations/2026-10-13-cluster-perf-risk-tuneup-assessment.md` (C).
 | No timeouts; hung call leaks the token | C §5 | `timeout=(connect, read)` everywhere |
 | Token and bodies logged at DEBUG (SDK) | C §7 | `logging.Filter` on `aria.ops.suite_api_client`; upstream SDK issue |
 | 0.0 emitted for "unknown" | C §3 | Omit the metric when the band is unknown |
-| Placeholder `DISPLAY_NAME` / `DESCRIPTION` / `VENDOR` in manifest | C §9 | Fill `manifest.txt` |
+| `DISPLAY_NAME` / `DESCRIPTION` / `VENDOR` in manifest | C §9 (corrected) | Not a defect: localization keys resolved via `resources/resources.properties`; check that file carries the real values |
 
 SDK-side defects found while writing this document (candidates for upstream
 issues, none reported yet): `isKpi` not emitted (§2.4); enum per-value
@@ -787,7 +790,7 @@ metadata). Whether the base image supplies `requests` transitively (through
       name.
 
 **Packaging and distribution**
-- [ ] `manifest.txt` has real `display_name`, `description`, `vendor`,
+- [ ] `manifest.txt` keeps the localization keys and `resources/resources.properties` carries the real display name, description and vendor,
       `version`; `adapter_kinds` equals the describe key.
 - [ ] The release states the registry path and image digest, and the
       registry allows anonymous pull from Cloud Proxies.

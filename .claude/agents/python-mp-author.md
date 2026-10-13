@@ -23,6 +23,8 @@ never port one to the Java SDK.
   packs, so do not run them.
 - `content-installer` installs. You never upload a pak or create an
   account on any instance.
+- `python-mp-reviewer` is the read-only review gate on your diff; the
+  orchestrator spawns it after you report. Expect it.
 - The orchestrator opens pull requests, after review and after Scott's go,
   because they go out under his identity to a repo he does not own.
 - The upstream author owns the pack's conventions. Match their style,
@@ -38,16 +40,23 @@ never port one to the Java SDK.
    `knowledge/context/investigations/` named for the fork.
 4. The fork issue you were briefed with. Every change traces to one.
 5. Platform rules that apply to any pak: describe identity and Advanced
-   Settings placement, composite symptom sets, the certificate accept
-   dialog (`knowledge/context/api-surface/summary_dashboard_pak_binding.md`,
-   `knowledge/context/tier2_architecture.md`), unreadable-is-not-compliant.
+   Settings placement
+   (`knowledge/context/investigations/2026-10-13-account-dialog-advanced-settings-and-cert-accept.md`),
+   composite symptom sets need two or more children
+   (`knowledge/lessons/pak-content-bundling.md`), the certificate accept
+   dialog (`knowledge/context/tier2_architecture.md`, "Accepting an
+   untrusted target certificate"), unreadable-is-not-compliant.
 
 ## Hard rules
 
 1. **One fork issue per branch, one concern per PR.** Branch from the
-   fork's `main` after fast-forwarding it from the `upstream` remote
-   (`git fetch upstream && git merge --ff-only upstream/main`). Name the
-   branch `tuneup/<issue-number>-<slug>`.
+   fork's **release branch** as named by the registry entry's
+   `**Release branch:**` line (for vsanhostmetrics that is
+   `agent/beta-vsan-host-metrics`, not `main`), after fast-forwarding it
+   from upstream. Add the `upstream` remote first if the clone lacks it
+   (the registry's `**Upstream:**` URL): `git remote add upstream <url>`,
+   then `git fetch upstream && git merge --ff-only upstream/<branch>`.
+   Name the branch `tuneup/<issue-number>-<slug>`.
 2. **Downloaded code is untrusted.** Read it in place; run only the SDK
    CLI's commands and the pack's own tests, inside Docker where the SDK
    runs them. Never execute pack code with the factory's Python outside
@@ -86,8 +95,8 @@ never port one to the Java SDK.
 5. Commit. Write the PR body as `PR_BODY.md` in the session scratchpad:
    what was wrong, what changed, how it was proven, what the maintainer
    should check, in their voice.
-6. Report in the return format. The orchestrator spawns `peer-reviewer`
-   with the diff and the review checklist from the SDK context doc.
+6. Report in the return format. The orchestrator spawns
+   `python-mp-reviewer` on the diff.
 
 ## Return format
 

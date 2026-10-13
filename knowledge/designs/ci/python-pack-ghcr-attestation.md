@@ -14,7 +14,8 @@ works for the maintainer with no secrets.
 
 1. **The pak does not contain the image.** It carries a pointer
    (`REGISTRY`, `REPOSITORY`, `DIGEST`) in `adapter.zip!<AdapterKind>.conf`, and
-   the Cloud Proxy pulls that digest **anonymously** at run time. So the image
+   the Cloud Proxy pulls that digest **anonymously** at run time (per the SDK
+   docs; not yet observed in the lab, which has no Cloud Proxy). So the image
    must be in a public registry, and the attestation has to be on the exact
    digest the pak names.
 2. **The image can be built with plain `docker build`, the pak cannot.**
@@ -497,7 +498,7 @@ jobs:
         run: |
           set -euo pipefail
           cat > notes.md <<EOF
-          Adapter image (the Cloud Proxy pulls this on first collection; needs outbound 443 to ghcr.io):
+          Adapter image (per the SDK docs the Cloud Proxy pulls this on first collection; needs outbound 443 to ghcr.io):
 
               ${IMAGE}:${IMAGE_TAG}
               ${IMAGE}@${DIGEST}

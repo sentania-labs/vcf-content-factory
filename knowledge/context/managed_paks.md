@@ -171,6 +171,8 @@ an `upstream` remote and fast-forward from it); do work on branches.
 - **Remote:** https://github.com/sentania-labs/vsanhostmetrics
 - **Target:** `content/sdk-adapters/vsanhostmetrics/`
 - **Upstream:** `https://github.com/nickfirefoot/vsanhostmetrics.git`
+- **Release branch:** `agent/beta-vsan-host-metrics` (upstream releases 1.3.1
+  to 1.4.6 were cut here; `main` is stale at 1.2.3)
 - **Type:** Python Integration SDK container adapter (upstream's)
 - **Status:** forked 2026-10-13; assessed
   (`investigations/2026-10-13-vsanhostmetrics-tuneup-assessment.md`); fork
@@ -186,6 +188,7 @@ an `upstream` remote and fast-forward from it); do work on branches.
 - **Remote:** https://github.com/sentania-labs/cluster-perf-risk
 - **Target:** `content/sdk-adapters/cluster-perf-risk/`
 - **Upstream:** `https://github.com/gillaspy/cluster-perf-risk.git`
+- **Release branch:** `main`
 - **Type:** Python Integration SDK container adapter (upstream's); credential
   posture already mapped in
   `investigations/2026-10-13-cluster-perf-risk-credential-reuse.md`

@@ -153,8 +153,10 @@ resolves it into `config` on a 10-minute tick. The installer's
 clone copies widgets that still have `config = null`. Nothing ever resolves
 the templates key (user `null`). This also means the "widget state copied"
 statement above holds only for a source that has already resolved. No
-YAML or renderer change can fix it. Re-bind (`bind-summary`) once the source's widgets
-all show `isLoading: false`. To check a clone, read
+YAML or renderer change can fix it. A re-bind (`bind-summary`) once the
+source's widgets all show `isLoading: false` is the candidate workaround,
+not yet run on 9.0.2 and parked (stake:
+`../investigations/2026-10-13-summary-dashboard-parked.md`). To check a clone, read
 `getDashboardConfig?isTemplate=true`: `isLoading: true` with no
 `widgetConfig` means it is unresolved. Do not rely on `getWidgetConfigs`,
 which is scoped to the user and returns `{}` for every template. Evidence:

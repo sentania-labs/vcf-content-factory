@@ -5,7 +5,7 @@
 - **Adapter repo:** `content/sdk-adapters/compliance/` (sentania-labs/vcf-content-factory-sdk-compliance)
 - **Date:** 2026-10-12
 - **Tracking:** adapter issue #38
-- **Status:** go from Scott 2026-10-12 ("Option 1."); build 88 authored, reviewed APPROVE (knowledge/context/reviews/compliance-build-88.md), findings being closed; devel install waits on Scott
+- **Status:** go from Scott 2026-10-12 ("Option 1."); build 88 reviewed APPROVE and installed on devel 2026-10-12 5:11 PM (Environment 175 scored / 140 non-compliant, wld01 18 pods skipped, unmatched 0); PR #44 on the adapter repo
 
 ## Initial prompt (Scott, verbatim, 2026-10-12)
 

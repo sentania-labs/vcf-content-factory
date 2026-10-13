@@ -180,6 +180,8 @@ debugging a specific issue; not required reading.
 
 - `policy_fragment_wire_format.md`: policy super metric enablement wire format and pak policies-directory (`<pak>/content/policies/`) fragment support (also listed under `wire-formats/`).
 - `2026-10-12-compliance-pak-summary-binding.md`: compliance build 88 World Summary did not bind on devel 9.0.2 because the pak importer crashes on an unknown widget type (`Section`, missing from that build), and the crash aborts the whole dashboard before `dashboards.properties` is read.
+- `2026-10-13-cluster-perf-risk-credential-reuse.md`: cluster-perf-risk has no credential and talks only to the Suite API with the platform login; no transferable credential reuse for an adapter that opens its own vCenter session.
+- `2026-10-13-cluster-perf-risk-tuneup-assessment.md`: ranked tune-up PRs for the forked cluster-perf-risk pack (silent login failure, unverified Suite API TLS, publish-to-native edges); fork issues #1 to #9.
 - `2026-10-13-vsanhostmetrics-tuneup-assessment.md`: ranked tune-up PRs for the forked vsanhostmetrics Python SDK adapter: accepted certificate ignored (use `get_certificates()` with pyVmomi `serverPemCert`), collect errors silently discarded, one non-vSAN cluster aborts collection, username outside the credential type.
 
 ### `reviews/` — Build and framework review reports

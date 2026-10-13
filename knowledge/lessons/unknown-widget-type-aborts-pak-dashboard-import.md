@@ -30,8 +30,12 @@ Build 89 removed the Section row and the dashboard imported and bound.
   pak needs proof on that oldest version, not on the newest.
 - After every pak install, count the pak's dashboards on the instance
   (same discipline as `new-metric-alerts-need-two-samples.md`) and, for a
-  bound Summary dashboard, read `getSummaryTabId` for the kind. A FINISHED
-  install proves nothing about dashboards.
+  bound Summary dashboard, read `getSummaryTabId` for the kind and then
+  `getDashboardConfig?isTemplate=true` for that tab id: the binding existing
+  proves nothing about the clone, which on 9.0.2 is blank (`isLoading: true`
+  on every widget) because the installer clones before materialization
+  (`dashboard-import-deferred-materialization.md`, 2026-10-13 addendum). A
+  FINISHED install proves nothing about dashboards.
 - Re-read the target's build number at the start of a session that
   installs content. Context notes about an instance's version go stale
   when the lab is rebuilt.

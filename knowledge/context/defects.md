@@ -1275,9 +1275,13 @@ reused. Field lines are `- **Field:** value` (parsed by
   no visible signal. Fix (build 88, adapter commit `0c38e91`): page until
   `pageInfo.totalCount` rows are in, mark the kind load-failed on a missing
   list, an empty page short of the total, or the 20-page cap, holding the
-  kind back with `Rollup|incomplete` = 1. Closes on devel proof of build
-  88 with the vCenter collection alert path exercised or the paging seen
-  in the log.
+  kind back with `Rollup|incomplete` = 1.
+- **Close condition:** devel proof with the vCenter collection alert path
+  exercised (a cycle whose resource list fails marks the kind incomplete and
+  the alert fires) or paging seen in the adapter log past one page; the
+  2026-10-13 log read found no page-count line and lists under one page, so a
+  log line or a test fixture over 10,000 objects is still owed (build 94
+  candidate).
 
 ### DEF-024
 

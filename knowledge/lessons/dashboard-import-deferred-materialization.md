@@ -54,7 +54,11 @@ deferred state. On devel 9.0.2 (compliance build 89) the clone was taken at
 9:10:17 AM and the source's settings were filled in at 9:12:31 AM. The
 background thread only walks user-owned dashboards, so the ownerless clone
 never materializes: the Summary tab renders stock badges, empty views and
-an unfiltered alert list, with an hourglass on every title. The fix is to
-bind after the source is materialized (`bind-summary`), and the install
+an unfiltered alert list, with an hourglass on every title. The candidate
+fix is to bind after the source is materialized (`bind-summary`); it has not
+been run on 9.0.2, Scott rejected a factory post-install rebind as the answer
+("if we install a pack it shoudl bind the summary dashboards", stake:
+`knowledge/context/investigations/2026-10-13-summary-dashboard-parked.md`),
+and the #200 branch is parked at CHANGES REQUESTED. If pursued, the install
 flow must wait for `isLoading == false` on every widget before binding.
 Details: `knowledge/context/investigations/2026-10-13-compliance-summary-clone-config-loss.md`.

@@ -209,7 +209,9 @@ cannot reorder them.
    the cost is an orphan template per install, the same as today. Either
    way, `bind-summary` should refuse to bind while the source has any
    `isLoading: true` widget.
-3. **Not recommended, untested:** shipping a `GenericTemplates*` directory
+3. **Not recommended, untested, and since ruled out:** the 9.0.2 installer
+   has no `GenericTemplates*` branch at all
+   (`2026-10-13-dashboard-import-deferral-trigger.md`). Shipping a `GenericTemplates*` directory
    would start a templates-key importer, which *might* resolve the clone if
    the clone kept the source's `entryKeys` and `importComplete=false`.
    It depends on directory order and the 10-minute sleep, and it was not

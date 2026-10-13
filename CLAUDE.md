@@ -93,9 +93,9 @@ mandate lines, not reflexively.)
 
 Agent prompts under `.claude/agents/` are authoritative for each
 agent's behavior; if this table ever conflicts with a prompt, the
-prompt wins. Model tiers: the seven agents with no `model:` line
-(both reviewers, `tooling`, `sdk-adapter-author`, `python-mp-author`, `mp-designer`, both
-API explorers) deliberately inherit the session model; the rest are
+prompt wins. Model tiers: the ten agents with no `model:` line
+(the four reviewers, `tooling`, `sdk-adapter-author`, `python-mp-author`,
+`mp-designer`, both API explorers) deliberately inherit the session model; the rest are
 pinned `sonnet`. Do not re-add pins without a decision.
 
 | Agent | Posture | Writes to | Spawn when |
@@ -118,7 +118,8 @@ pinned `sonnet`. Do not re-add pins without a decision.
 | `mp-author` | Author | `content/managementpacks/` | After `mp-designer` produces approved design. **Tier 1** MPB YAML spec. |
 | `sdk-adapter-author` | Author/Engineering | `content/sdk-adapters/` (independent gitignored repos) | After approved Tier 2 design. Java sibling to `mp-author`; **only** agent that edits adapter Java. |
 | `sdk-adapter-reviewer` | Read-only review | `knowledge/context/reviews/` | After `sdk-adapter-author` reports a build, before the install gate. |
-| `python-mp-author` | Author (secondary vehicle) | forked third-party Python packs under `content/sdk-adapters/<fork>/` (registered as such in `managed_paks.md`) | A fork issue needs a tune-up PR for its upstream author. Proves with the SDK CLI loop; never pushes, installs, or opens the PR. Review via `peer-reviewer` with the checklist in `knowledge/context/python_integration_sdk.md`. |
+| `python-mp-author` | Author (secondary vehicle) | forked third-party Python packs under `content/sdk-adapters/<fork>/` (registered as such in `managed_paks.md`) | A fork issue needs a tune-up PR for its upstream author. Proves with the SDK CLI loop; never pushes, installs, or opens the PR. |
+| `python-mp-reviewer` | Read-only review | `knowledge/context/reviews/python-packs/README.md` and sibling reports | After `python-mp-author` reports, before any fork push or upstream PR. Checklist: `knowledge/context/python_integration_sdk.md`. |
 | `framework-reviewer` | Read-only review | `knowledge/context/reviews/framework/` | After `tooling` touches `src/vcfcf_*/`, before the PR. **Blanket**, every diff (RULE-013). |
 | `curator` | Read-only audit | `knowledge/context/curation/<date>-report.md` | When the staleness hook says curation is due. Spawn **in the background**. |
 
