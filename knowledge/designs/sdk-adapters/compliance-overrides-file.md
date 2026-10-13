@@ -5,7 +5,7 @@
 - **Adapter repo:** `content/sdk-adapters/compliance/` (sentania-labs/vcf-content-factory-sdk-compliance)
 - **Date:** 2026-10-13
 - **Tracking:** adapter issue #40 (docs trigger); this design supersedes the "custom profile how-to" as written
-- **Status:** design drafted from Scott's requirements; awaiting his go to build
+- **Status:** go from Scott 2026-10-13 ("let's move forward on that"); build 90 authored on feat/build-90-overrides-file (a27fea6..0f833bd), review in progress; devel install awaits a separate go
 
 ## Initial prompt (Scott, verbatim, 2026-10-13)
 
