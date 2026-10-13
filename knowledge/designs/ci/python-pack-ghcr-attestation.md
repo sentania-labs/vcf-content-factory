@@ -817,8 +817,8 @@ after merge. Nothing publishes until the maintainer pushes a tag.
 |---|---|---|
 | Secrets | none | none |
 | Package | `ghcr.io/nickfirefoot/vsanhostmetrics` exists and is public, but was pushed by hand with a personal token. Package settings > Manage Actions access: make sure `nickfirefoot/vsanhostmetrics` has **Write**, or the first tag fails at mp-build's push with `permission_denied` | first tag creates `ghcr.io/gillaspy/cluster-perf-risk`; the run stops at the anonymous-pull check; set the package public once and re-run failed jobs |
-| Habit change | stop running mp-build and uploading paks by hand; bump `manifest.txt`, merge, tag | same; also update README and `config.json` references from docker.io if he adopts GHCR |
-| Optional | repo variable `COSIGN_SIGN=true` for cosign signatures | same |
+| Habit change | stop running mp-build and uploading paks by hand; merge, tag (CI stamps the manifest version from the tag; the committed manifest matters only for hand builds) | same; also update README and `config.json` references from docker.io if he adopts GHCR |
+| Signing | nothing to set: cosign keyless signing of the image and the pak is unconditional in the as-built workflow | same |
 | Repo setting check | Actions > General: allow non-GitHub actions (docker, sigstore). Default allows them | same |
 
 ## Open questions
