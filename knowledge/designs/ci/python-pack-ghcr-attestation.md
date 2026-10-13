@@ -768,3 +768,33 @@ sense on the lab's self-hosted pool for our own fork runs; the upstream
 workflow stays on plain hosted runners installing the pinned SDK from PyPI
 so the maintainer's CI depends on nobody but VMware. Revisit if the number
 of Python packs grows or lab-registry verification is wanted.
+
+## As built for cluster-perf-risk (branch tuneup/ci-ghcr-attestation, ec4f61b, 2026-10-13)
+
+Changes from the design text above, found while building and proving locally:
+
+- cosign v3 writes one bundle per artifact (`<pak>.sigstore.json`, signature
+  and certificate together); that bundle goes on the Release.
+- The anonymous-pull check calls the token endpoint without `curl -f` so a
+  private package yields guidance instead of a dead step.
+- "Tag already exists" treats only `manifest unknown` as absent and
+  re-checks before tagging; any other registry error stops the run.
+- `--push-registry` added to mp-build; the stored docker login is reused with
+  nothing on argv (design open question 1 answered: yes).
+- Tests run inside the adapter image (the SDK lib needs `requests` from the
+  base image).
+- SARIF upload only on branch pushes (tag refs unverified for code scanning).
+- Mirror flow: `mp-build -r <mirror>` would produce a new, unsigned digest;
+  the README instead copies with `crane copy` (digest preserved), verifies
+  the mirror's digest, and points the pak conf at the mirror keeping the
+  verified DIGEST; `oras copy -r` carries signatures.
+- Trivy exceptions: `.trivyignore.yaml` lists eight SDK-inherited HIGH
+  findings (cryptography 44.0.0 pinned exactly by the SDK lib 1.1.0; pip's
+  vendored msgpack, urllib3, setuptools in the base image) by exact version
+  with reasons, expiring 2027-01-11. Scott, 2026-10-13: "if we can't do
+  anythign abou them, that's acceptable". New findings still fail.
+- Manifest keys DISPLAY_NAME / DESCRIPTION / VENDOR are the SDK's
+  localization keys resolved through resources.properties, not placeholders
+  (assessment finding 9 corrected).
+
+Proof tag `v1.3.0-rc.1` pushed to the fork 2026-10-13 ~3:45 PM; run 38471417171.

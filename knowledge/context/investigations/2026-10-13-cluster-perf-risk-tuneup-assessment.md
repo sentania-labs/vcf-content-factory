@@ -371,3 +371,11 @@ first collection does (and finding 1 makes that first collection honest).
   for this adapter.
 - Live probe for finding 3 third bullet: what the collector does with an
   external `VMWARE` key whose resource no longer exists.
+
+## Correction 2026-10-13 (finding 9, manifest)
+
+`DISPLAY_NAME`, `DESCRIPTION` and `VENDOR` in manifest.txt are the SDK's
+documented localization keys, resolved through `resources/resources.properties`
+(which carries "Cluster Performance Risk", a description and "gillaspy").
+They are not placeholders and the pak is installable as shipped. The README
+and `.gitignore` parts of finding 9 stand.

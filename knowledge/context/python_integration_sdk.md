@@ -814,3 +814,14 @@ metadata). Whether the base image supplies `requests` transitively (through
 - The first pyVmomi release with `serverPemCert` (§3.2).
 - The urllib3 version inside the base image; the fingerprint-pin pattern was
   read in urllib3 2.0.7 (§3.3).
+
+## Correction 2026-10-13: manifest localization keys
+
+`DISPLAY_NAME`, `DESCRIPTION` and `VENDOR` in `manifest.txt` are
+localization keys resolved through `resources/resources.properties`
+(mp-init docs: set to "DISPLAY_NAME" for localization). Every official
+sample and the vcommunity paks ship them that way. Do not "fill" them with
+literal strings; check that `resources.properties` carries the real values.
+Any earlier line in this document or in the MPB notes
+(`mpb_handoff.md`, `mpb_designer_wire_format.md`) calling them unfilled
+placeholders is wrong.
