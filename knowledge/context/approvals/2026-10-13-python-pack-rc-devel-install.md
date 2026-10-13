@@ -47,3 +47,13 @@ devel. Side note for both packs: the bridge logged "Traversal specs root tag
 should be 'AdapterKind'" at import because the SDK-generated
 content/traversalspecs/ holds only the schema file; harmless, SDK
 scaffolding behaviour.
+
+## Close 2026-10-13
+
+Scott, verbatim: "the python paks install on dv: red herring - there is not
+cloud proxy so it won't work". The devel install proves only that the paks
+import (solution, dashboards, views); account creation, the registry pull
+and collection cannot be exercised without a Cloud Proxy and are not
+pursued on devel. Both rc paks remain installed on devel with no accounts;
+remove them whenever devel is tidied. The fork CI work is complete at the
+publish level.

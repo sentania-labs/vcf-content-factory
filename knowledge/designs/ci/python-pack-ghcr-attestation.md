@@ -847,3 +847,12 @@ which is what the pak's adapter conf pins. Both forks' CI are therefore
 proven through publish. Platform-side proof (Cloud Proxy pull and
 collection) is blocked on devel having no Cloud Proxy (see the approval
 record 2026-10-13-python-pack-rc-devel-install.md).
+
+### Status 2026-10-13: complete at publish; platform proof deferred
+
+Scott: "the python paks install on dv: red herring - there is not cloud
+proxy so it won't work". Both forks' CI is done and proven through
+publish (image and pak attested, signed, scanned; pak pins the digest).
+The install-and-collect proof needs an Ops instance with a Cloud Proxy
+and is deferred until one exists; it is not a gap in the workflows.
+Upstream PRs are on hold ("no upstream PRs yet").
