@@ -744,3 +744,18 @@ all three, none optional:
 The README section for consumers lists the three checks: `cosign verify`,
 `gh attestation verify` (image and pak), `trivy image` on the published
 digest.
+
+### What the platform does with all this: nothing
+
+Scott, verbatim: "the pproblem is the pak install doesn't do those things
+because unless they are in an offline mode - they are pulling directly from
+the ghcr, but it doesn't mean we shouldn't do those things and provide
+guideance." The Cloud Proxy pulls the digest the pak names and verifies no
+signature, attestation or scan. The value is for the consumer who checks
+before install, and the pak's pinned digest is what makes the check exact.
+The README therefore carries: verify the digest the pak pins (read it from
+the adapter conf inside the pak) with cosign, gh attestation and trivy; for
+a private registry or air-gapped site, pull, verify, copy preserving the
+digest (crane or cosign copy), rebuild the pak with `mp-build -r` against
+the mirror, verify again. The README states plainly that Ops never
+enforces any of it.
