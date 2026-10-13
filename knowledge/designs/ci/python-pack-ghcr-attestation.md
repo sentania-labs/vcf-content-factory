@@ -113,7 +113,7 @@ workstation and attach the pak to a release manually (nickfirefoot v1.4.6,
 the container and calling `adapterDefinition` (`build_pak_file`:
 `adapter_container.start()`, `Describe.get(...)`). That means the publish job
 needs a working Docker daemon and port 8080 free, both true on
-`ubuntu-24.04` hosted runners.
+`ubuntu-latest` hosted runners.
 
 ## Evidence for (2): what mp-build needs in CI, and whether plain docker can replace it
 
@@ -234,7 +234,7 @@ jobs:
     # Plain docker, no registry, read-only token. Proves the image builds from
     # the SDK base and the adapter answers adapterDefinition, which is what
     # mp-build needs at release time.
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
@@ -295,7 +295,7 @@ jobs:
   publish:
     needs: verify
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write          # push to ghcr.io/<owner>/<repo>
@@ -477,7 +477,7 @@ jobs:
   release:
     # The only job that can write to the repo, and it runs no build code.
     needs: publish
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
@@ -559,7 +559,7 @@ Design notes on the YAML:
   install path. Add it only if a maintainer wants it (github-ci skill: it must
   follow the highest version, not the newest push).
 - **amd64 only.** Cloud Proxies are x86_64; mp-build builds for the runner
-  arch, `ubuntu-24.04` is amd64. Multi-arch is not needed.
+  arch, `ubuntu-latest` is amd64. Multi-arch is not needed.
 
 ## Blocker: vsanhostmetrics is not an mp-build project on main
 
@@ -856,3 +856,11 @@ publish (image and pak attested, signed, scanned; pak pins the digest).
 The install-and-collect proof needs an Ops instance with a Cloud Proxy
 and is deferred until one exists; it is not a gap in the workflows.
 Upstream PRs are on hold ("no upstream PRs yet").
+
+### Runner image 2026-10-13
+
+Scott: "we should update the CIs so they don't run on ubuntu 24. either
+latest or push them to 26 already." Both fork workflows now use
+`ubuntu-latest` (amd64), so the maintainer never tracks a runner version;
+the lab's other pak workflows already do the same. Design text above
+updated to match.
