@@ -45,3 +45,16 @@ server-side config was correct and complete the whole time.
    not freshly-imported ones.
 4. Installer/qa procedure: sync → confirm materialization → then
    Playwright.
+
+## Addendum 2026-10-13: the pak installer's Summary binding loses the same race
+
+A pak `dashboards.properties` binding clones the imported dashboard into a
+SUMMARY template seconds after import, while every widget is still in the
+deferred state. On devel 9.0.2 (compliance build 89) the clone was taken at
+9:10:17 AM and the source's settings were filled in at 9:12:31 AM. The
+background thread only walks user-owned dashboards, so the ownerless clone
+never materializes: the Summary tab renders stock badges, empty views and
+an unfiltered alert list, with an hourglass on every title. The fix is to
+bind after the source is materialized (`bind-summary`), and the install
+flow must wait for `isLoading == false` on every widget before binding.
+Details: `knowledge/context/investigations/2026-10-13-compliance-summary-clone-config-loss.md`.
