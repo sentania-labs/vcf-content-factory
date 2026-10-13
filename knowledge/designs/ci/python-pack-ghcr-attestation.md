@@ -759,3 +759,12 @@ a private registry or air-gapped site, pull, verify, copy preserving the
 digest (crane or cosign copy), rebuild the pak with `mp-build -r` against
 the mirror, verify again. The README states plainly that Ops never
 enforces any of it.
+
+### Sidelined: a custom worker image
+
+Scott, 2026-10-13: "sideline that thought and get the CI working". A
+prebuilt worker image (SDK CLI, base image, Trivy, cosign) would only make
+sense on the lab's self-hosted pool for our own fork runs; the upstream
+workflow stays on plain hosted runners installing the pinned SDK from PyPI
+so the maintainer's CI depends on nobody but VMware. Revisit if the number
+of Python packs grows or lab-registry verification is wanted.
