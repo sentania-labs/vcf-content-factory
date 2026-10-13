@@ -93,7 +93,10 @@ For every subdirectory of `content/dashboards/`:
    `force = this.forceUpdateContent`. Exception: a directory whose name
    starts with `GenericTemplates` is imported with `userId = null`, which
    the importer treats as "this is a template", and it is neither shared
-   nor bound.
+   nor bound. **Not on 9.0.2 GA (Build 25137845):** there the installer
+   always imports as the super admin, and `GenericTemplates` appears in
+   no installer or bridge class
+   (`../investigations/2026-10-13-dashboard-import-deferral-trigger.md`).
 2. It is shared with the **Everyone** group.
 3. If `dashboards.properties` has an entry for the directory name, then
    for each `AdapterKind:ResourceKind`:
