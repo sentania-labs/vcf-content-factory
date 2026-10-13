@@ -29,6 +29,12 @@
 > to have overriden values. for example password trieds to 5 instead of 3,
 > etc.
 
+> so it will ship in system defined, and the user will edit that one? how
+> do we keep it upgrade safe?
+
+> i feel like we ship a template and the user copies it and then names the
+> copy per adapter instnace
+
 ## Findings that shaped the design (verified 2026-10-13)
 
 - The current custom profile is a canonical CSV read from a local path on
@@ -58,8 +64,13 @@ working underneath; the file adjusts them.
 
 ### The file
 
-Shipped default `content/files/solutionconfig/compliance_overrides.xml`,
-imported into the store at install, all entries commented out. Format:
+The pak ships one **template**,
+`content/files/solutionconfig/compliance_overrides_template.xml`, imported
+into the store at install, every entry commented out with its
+documentation beside it. The user never edits the template. They copy it
+in the Configuration Files page, name the copy for the vCenter or group
+of vCenters it serves, edit the copy, and point each adapter instance at
+its copy by name. Format:
 
 ```xml
 <ComplianceOverrides>
@@ -96,9 +107,21 @@ imported into the store at install, all entries commented out. Format:
 ### Settings
 
 - New instance setting **Overrides file** (`overrides_file`, default
-  `compliance_overrides`), the file name in the store without path or
-  extension, same convention as vcommunity. Different instances can point
-  at different files (upload a renamed copy).
+  empty), the name of the user's copy in the store without path or
+  extension, same convention as vcommunity. Empty means no overrides and
+  no fetch. Different instances point at different copies; several
+  instances may share one.
+- **Upgrade safety by construction.** The pak writes only
+  `compliance_overrides_template`. A user's copy has a name the pak never
+  ships, so no install, upgrade or force-update can overwrite it, whatever
+  SolutionManager does to the files it owns. The template may be refreshed
+  by an upgrade, which is the intent (new controls documented in it). An
+  instance that names a file the store does not have reports it
+  (status property and alert below) and runs with no overrides, never
+  with a stale guess. Pending: what SolutionManager does to store files on
+  upgrade and uninstall is being read from the installer bytecode and
+  recorded in `summary_dashboard_pak_binding.md`; the design does not
+  depend on the answer.
 - **Retired:** `custom_profile_path` and the `Custom` profile choice. One
   release of deprecation: an instance still set to Custom logs a WARN
   naming the overrides file as the replacement and keeps working.
@@ -106,13 +129,13 @@ imported into the store at install, all entries commented out. Format:
 ### Visibility
 
 - ComplianceWorld and each vCenter: `Summary|overrides_file`,
-  `Summary|overrides_status` (OK / absent / parse failed, last good from
-  <time> / N unknown ids), `Summary|overrides_skipped`,
+  `Summary|overrides_status` (none / OK / absent / parse failed, last good
+  from <time> / N unknown ids), `Summary|overrides_skipped`,
   `Summary|overrides_overridden` counts.
 - One INFO line per cycle listing applied skips and overrides; one WARN per
   cycle for each rejected entry.
 - A new pak alert "Compliance overrides file not loaded" on the vCenter
-  object (parse failure or absent file while the setting is non-default).
+  object (parse failure, or the named file is absent from the store).
 
 ### Out of scope for build 90
 
@@ -127,7 +150,8 @@ imported into the store at install, all entries commented out. Format:
 ### Docs
 
 `docs/custom-profiles.md` becomes `docs/overrides.md`: open the page,
-edit or upload the file, the three entry types with the password-attempts
+copy the template and name the copy, set the instance to it, the three
+entry types with the password-attempts
 example, how to confirm it loaded, and what you see when an entry is
 rejected. README link "Tuning controls and thresholds". CANONICAL_SCHEMA.md
 stays as the contributor reference, linked from docs/building.md only.
