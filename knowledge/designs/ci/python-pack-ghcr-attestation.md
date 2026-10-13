@@ -702,21 +702,23 @@ after merge. Nothing publishes until the maintainer pushes a tag.
    compliance pak's `build-pak-on-tag.yml` (tag-equals-version gate, Release
    upload).
 
-## Decision 2026-10-13: vsanhostmetrics CI manufactures the project
+## Decision 2026-10-13: vsanhostmetrics project files are manufactured once in the fork and committed
 
-Scott, verbatim: "or our build for vsanmetris must manufactor the project and
-manifest". The vsanhostmetrics workflow does not require the upstream author
-to commit the mp-build project files. Instead:
+Scott, verbatim: "I mean we manufacutre the porject and manifest in our fork
+and then make it part of the PR, right?" (correcting an earlier reading).
+The mp-build project files for vsanhostmetrics (`manifest.txt`,
+`Dockerfile`, `commands.cfg`, `conf/`, `config.json`, whatever the scaffold
+script assembles) are generated once in the sentania-labs fork, committed
+on the CI branch, and included in the upstream PR with the workflow. CI
+does not run the scaffold; it builds from the committed project. The PR
+body explains the files to the author and that the scaffold script can be
+retired or kept as documentation. `manifest.txt` version is stamped by CI
+from the tag at build time (sed into the work copy, not committed).
 
-1. A small, layout-neutral upstream PR makes `scaffold_project.py` honor its
-   directory argument (today it ignores it and writes under a hard-coded home
-   path) and accept the version to stamp into `manifest.txt`.
-2. The `publish` job scaffolds into a work directory, stamps the version from
-   the tag, runs `mp-build --no-ttl -r ghcr.io/<owner>/<repo>` there, and
-   continues with the digest check, attestation, immutable tag and release
-   steps exactly as for cluster-perf-risk. Nothing generated is committed.
-3. If the author later commits the project files, the scaffold step is
-   dropped and the rest of the workflow is unchanged.
-
-The `verify` job runs the same scaffold step so a PR proves the project
-still assembles.
+Task, Scott verbatim: "Build the CIs that build installable versions of
+both of those MPs in our forks". Order: cluster-perf-risk first (already an
+mp-build project), then vsanhostmetrics (project files first, then the
+workflow). Each proven by a tag run in the fork publishing to
+`ghcr.io/sentania-labs/<repo>` with attestation and a Release carrying the
+pak; the pak then installed on devel through `content-installer` under its
+own go, which is the end-to-end proof that the Cloud Proxy pulls from GHCR.

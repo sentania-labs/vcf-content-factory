@@ -564,3 +564,8 @@ The first pass's list stands, sharpened by the fixes:
    then 0 and the alert cancelled on the next good cycle.
 4. Before the upgrade, no two accounts differ only in
    `benchmark_profile` or `allowInsecure` for the same vCenter.
+
+## Nit confirmation (HEAD `54ca857`)
+
+APPROVE, 0 BLOCKING / 0 WARNING / 0 NIT: the diff from `da0c25f` is only `VCenterCertificates.isIpLiteral` (four octets 0 to 255; IPv6 by colon, bracket stripped by normalizeHost), its CertificateTest cases and one CHANGELOG line; 300.1.1.1 and 10.0.0.256 are not literals, 10.0.0.1, 255.255.255.255 and [::1] are, [fd00::5] still matches its IP SAN, and a wrong-name literal still refuses (IP SAN mismatch, IP never matches CN, 127.0.0.1 handshake fails); `ci/run_java_tests.sh` and pytest (37 passed) pass, validate-sdk OK, and `build-sdk` from HEAD matches the author's pak in all 180 nested entries; DEF-023 and DEF-025 untouched by this commit, unchanged.
+Final pak: `dist/vcfcf_sdk_compliance.0.0.0.93.pak`, sha256 `6c436c55136d4b2640dc297b5e7710f7bf85cb91ddd58406fff88395115d941c`.
