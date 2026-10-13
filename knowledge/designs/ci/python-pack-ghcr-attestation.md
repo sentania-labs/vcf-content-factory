@@ -834,3 +834,16 @@ files in the pak versus the shipped one: the content/*.md and help HTML,
 untested on install. Proof tag `v1.4.6-rc.1`, run 38477153855. A main-based
 branch (`tuneup/ci-ghcr-attestation`, 461951d) is kept locally for
 reference, not pushed.
+
+### Proof run, vsanhostmetrics fork, 2026-10-13 ~5:30 PM
+
+Run 38477153855 on tag `v1.4.6-rc.1`: verify, publish and release
+succeeded first run; package created public; Release carries
+`VsanHostMetrics_1.4.6.pak`, its sigstore bundle and SHA256SUMS. Verified
+from the workstation: `gh attestation verify` passes for the pak and for
+the image digest
+`sha256:62577d09ba15dde8f8bdec3b30d099375ec28f8a88ff7a751cefc026f048ba25`,
+which is what the pak's adapter conf pins. Both forks' CI are therefore
+proven through publish. Platform-side proof (Cloud Proxy pull and
+collection) is blocked on devel having no Cloud Proxy (see the approval
+record 2026-10-13-python-pack-rc-devel-install.md).
