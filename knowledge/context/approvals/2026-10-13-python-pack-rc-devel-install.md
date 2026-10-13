@@ -22,3 +22,15 @@
 ## Not covered
 
 - Upstream pull requests, prod or qa, any change to existing accounts.
+
+## Outcome 2026-10-13, cluster-perf-risk
+
+Installed 5:10 to 5:13 PM: /api/solutions lists Cluster Performance Risk
+1.3.0; pak results all exit 0; the adapter conf carries ghcr.io,
+/sentania-labs/cluster-perf-risk and the expected digest; the pack dashboard
+imported. Account NOT created: the pack is a Python container adapter and
+the Add Account page requires a Cloud Proxy; devel has none (only collector
+is the primary, no container runtime). No image pull occurred at install (the
+pull happens on a proxy at first container start). Blocked until a Cloud
+Proxy is paired to devel (lab-admin pipeline, Scott's go) or the proof moves
+to an instance that has one. vsanhostmetrics will stop at the same point.
