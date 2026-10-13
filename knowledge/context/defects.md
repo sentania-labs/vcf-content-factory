@@ -1317,3 +1317,28 @@ reused. Field lines are `- **Field:** value` (parsed by
   devel build 91 (2026-10-13): 25 wld01 VMs read `vm.dvfilter` Actual
   `(undefined)` Compliant 1 through the pattern path.
 - **Related:** DEF-022 (same evaluator, same lesson).
+
+### DEF-025
+
+- **Title:** Compliance: a control retired from an object (guide version
+  change, control no longer applicable) has its leftover failing key set to
+  -1 once, so its open alert never sees cancel cycles and stays active
+- **Severity:** tracked
+- **Status:** open
+- **Affects:** compliance
+- **First-seen:** every build with the stale-key cleanup (build 8x), found
+  2026-10-13 while fixing the same shape for Skip (adapter issue #41, fixed
+  in build 92)
+- **Source:** `knowledge/context/reviews/compliance-build-92.md` (WARNING 4);
+  adapter issue #42
+- **Summary:** `cleanBatch` / `staleControls` push -1 for a retired key one
+  time; the control symptoms need three cancel cycles of non-triggering
+  samples, so an alert open on that key stays open after a guide version
+  change or when a control stops applying. Not a false pass (the key reads
+  -1, not evaluated); a stale alert. Fix: push -1 for retired keys on every
+  cycle while the object remains on the new version, or cancel through the
+  same per-cycle path build 92 uses for Skip.
+- **Close condition:** fix landed with a test asserting the -1 push repeats
+  on later cycles for a retired key; devel evidence that an open alert on a
+  retired control cancels within three cycles of a version change.
+- **Related:** adapter issue #41, DEF-022.
