@@ -722,3 +722,25 @@ workflow). Each proven by a tag run in the fork publishing to
 `ghcr.io/sentania-labs/<repo>` with attestation and a Release carrying the
 pak; the pak then installed on devel through `content-installer` under its
 own go, which is the end-to-end proof that the Cloud Proxy pulls from GHCR.
+
+## Requirement 2026-10-13: attested, signed, scanned
+
+Scott, verbatim: "we should insure the image is attested, signed, and
+security scanning by something like trivy". The workflow therefore carries
+all three, none optional:
+
+- **Attested:** `actions/attest-build-provenance` on the pushed image digest
+  and on the pak file (SLSA provenance, stored with the package and the
+  repo's attestations).
+- **Signed:** cosign keyless (sigstore, the job's OIDC identity) on the image
+  digest; the pak blob signed the same way with the signature bundle attached
+  to the Release. Consumers verify with the workflow identity regex and the
+  GitHub OIDC issuer; no long-lived key anywhere.
+- **Scanned:** Trivy on the built image in `verify` (every PR and push) and
+  again in `publish` before anything is pushed, failing on HIGH and CRITICAL
+  findings that have a fix; SARIF uploaded to code scanning on push and tag
+  runs (a fork PR token cannot). A scan failure blocks the publish.
+
+The README section for consumers lists the three checks: `cosign verify`,
+`gh attestation verify` (image and pak), `trivy image` on the published
+digest.
