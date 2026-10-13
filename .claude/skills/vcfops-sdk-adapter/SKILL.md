@@ -212,6 +212,21 @@ the adapter Down with a descriptive message) if a required column is
 missing. Normalize vendor formats into one canonical schema *before*
 the adapter loads them; the adapter parses only the canonical schema.
 
+## describe.xml alert shapes Ops rejects at install
+
+- A `<SymptomSets>` container must hold **two or more** children. One
+  symptom set goes bare under `<State>`; wrapping it in a container makes
+  Ops reject the whole describe ("A composite symptom set should contain
+  at least two Symptom Sets/Composite Symptom Sets"), the pak manager
+  reports "Failed to install solution", and the controller rolls back to
+  the previous build. validate-sdk, pak-compare and a clean generator
+  `--check` do not catch it (factory issue #203); the adapter's own
+  describe test must. Compliance build 90, 2026-10-13; lesson
+  `knowledge/lessons/pak-content-bundling.md`.
+- Verify an install by the installed solution version
+  (`GET /suite-api/api/solutions`), never by the factory CLI's OK line
+  (factory issue #202).
+
 ## Events
 
 Pak-runtime event format is a known TOOLSET GAP — events are stripped
