@@ -257,3 +257,226 @@ collection, and the log shows the per-cycle "skipped control key(s) set to
 -1" INFO line. Confirm the lockout override and the VM pin are still in
 force. Confirm the account's Compliance Profile dropdown no longer offers
 Custom.
+
+## Re-review: HEAD `ddaf06e` (fix commit on top of `bdb49e6`)
+
+- **Reviewed:** 2026-10-13, about 2:30 PM local, branch `feat/build-90-overrides-file`
+- **Pak:** `dist/vcfcf_sdk_compliance.0.0.0.92.pak`, sha256 `d212c9706f5abc3336220fb63df592e5b38c499a537c19ab2dad93c02a58bb34` (confirmed), reference 0.0.0.91
+- **Verdict:** APPROVE, 0 BLOCKING / 1 new WARNING (R-W1) / 0 NIT. W2, W3, N1, N2 and N3 are closed. W1 (identity on upgrade, devel check owed) and W4 (now DEF-025) carry over unchanged. N4 (closure candidates for adapter issues #36, #40, part of #26) still stands for the orchestrator.
+
+The W3 merge is correct in the shipped code. Each object now sends one
+properties call and one stats call per cycle. The Skip's -1 and Actual
+text travel inside those calls, and nothing scored is dropped or
+overwritten. The one new finding is about the tests, not the code. The
+commit message says the source pins force every object push through
+`pushObject`. They do not catch a separate skip push added back in
+`afterPush` or in a new helper, and they do not catch the skip being
+dropped on the profile-name-only path (non-vSAN cluster). I proved
+each case with a mutant in a scratch copy: the code changed and
+OverridesTest still passed.
+
+### Independent verification
+
+| Check | Result |
+|---|---|
+| Pak sha256 | matches the brief |
+| `validate-sdk` | OK |
+| `build-sdk` from HEAD (scratch output) | builds 0.0.0.92. All 173 entries in adapters.zip (nested jars included) and the 5 overview entries hash-identical to the author's pak. Only the archive wrappers differ (timestamps). describe.xml in the pak is byte-identical to HEAD. The jar contains `ComplianceDecisions$PushSink` and `$SkipPush`. Working tree clean afterwards. |
+| `pak-compare` 92 vs 91 | gate PASS, 0 BLOCKING / 1 WARNING (identifier count 5 vs 6, the W1 removal) / 0 INFO. Unchanged from the first pass. |
+| Dimension 13, my own parse of the built pak's describe.xml | 144 alerts, 152 symptom definitions, 7 `<SymptomSets>` containers with 2, 2, 2, 3, 2, 2, 2 children; all 152 `SymptomSet ref` values resolve to a defined symptom; `waitCycle` is 1, `cancelCycle` is 1 or 3, all integers. describe.xml is unchanged since `bdb49e6`. |
+| Symptom keys | the fix commit changes no stat key: `compliantKey`, `K`, the Summary, `collection_failed` and `Rollup|incomplete` keys are untouched, and generator `--check` is up to date |
+| `ci/run_java_tests.sh` | exit 0; all 13 Java suites pass (OverridesTest includes `skipRidesInObjectPush`; ComplianceRollupTest includes `build92RetiredCustom`); generator `--check` up to date; the 5 Python checks OK |
+| `pytest` (adapter tests) | 33 passed, 11 subtests |
+| Em-dashes in added lines | none |
+
+### Prior findings
+
+- **W2 closed.** `resources/resources.properties:31` (key 105) no longer
+  has the custom-profile sentence; the shipped `resources.properties` in
+  the pak matches. No stray custom-profile wording is left in
+  `resources/`, `docs/`, README or REFERENCE except the intended
+  build 92 removal notes.
+- **W3 closed** (details below).
+- **N1 closed.** `docs/overrides.md` "What happens to a skipped control"
+  now says a Skip creates a -1 metric where the guide checks the control
+  but it does not apply (a vSAN control on a non-vSAN cluster), that -1
+  is not a pass, and that no alert fires on it. It matches the code:
+  `collectVimObject` takes `emptyResult` for a non-vSAN cluster and
+  `skipInForce` still returns the skip ids.
+- **N2 closed** (details below).
+- **N3 closed.** `ControlEvaluator.java:620` and `:653` comments now
+  describe Override literals, not custom profiles. Comment-only.
+
+### The W3 merge
+
+Read in full: `ComplianceDecisions.pushObject` and `PushSink`
+(`ComplianceDecisions.java:702-738`), `SkipPush` and `skipPush`
+(`:666-700`), `complianceProps`, `complianceStats`,
+`nothingEvaluatedStats`, `profileNameProps`, and in
+`ComplianceAdapter.java` `skipInForce` (`:1054`), `afterPush` (`:1021`),
+`pushOrProfileName` (`:1892`), `pushProfileNamePropertyOnly` (`:2110`),
+`pushComplianceViaClient` (`:2144`), and the five call sites (host
+`:1432`, VM `:1548`, vCenter `:1674`, dvs/dvpg/cluster `:1843`,
+no-benchmark `:1008`).
+
+- **One call of each per object.** `pushObject` makes exactly one
+  `pushProperties` and one `pushStats` call. With a non-empty skip it
+  copies both scored maps into new `LinkedHashMap`s and `putAll`s the
+  skip maps. With null or an empty skip it passes the original maps
+  through untouched. The properties map is never empty (it always has
+  `profile_name`), so `ComplianceStitcher.pushProperties`'s empty-map
+  guard never removes a call.
+- **No key collision.** The skip keys are `K + id + "|Compliant"` and
+  `K + id + "|Actual"`. A scored key for the same id would need the id
+  in `cr.controlResults`. `cr` is evaluated against the adjusted profile,
+  and `ComplianceOverrides.Resolved.adjust` (`ComplianceOverrides.java:631-635`)
+  removes every control whose `controlId` is in `skipped` from every
+  profile, with no version or kind scope. `ControlResult.scgId` is
+  `Control.controlId` (`BenchmarkProfile.java:267`). The summary keys
+  (`score`, `pass_count`, ...) are not control ids. So the two key sets
+  are disjoint by construction. If they ever did collide, the skip's -1
+  would win, which fails toward "not evaluated", never toward a pass.
+- **No dropped scored stat.** Nothing is removed from either map.
+  `skipRidesInObjectPush` asserts every scored stat survives and that the
+  merged sizes equal the sums (mutant m5, which builds the stats map
+  without the scored keys, fails it at line 702).
+- **Profile-name-only shape.** `pushProfileNamePropertyOnly` sends
+  `profileNameProps` plus `nothingEvaluatedStats` through `pushObject`.
+  With no skip, that is the same two payloads build 91 sent. With a skip,
+  the -1 and Actual ride in the same two calls. No score is pushed
+  (no sentinel), as before.
+- **Call count unchanged from build 91 for objects with no Skip.**
+  Build 91 (`4fa180a`) had 13 direct `stitcher.push*` calls in
+  `ComplianceAdapter.java`. HEAD has 9, plus the two `pushObject`
+  calls that replace the 4 direct calls in `pushComplianceViaClient` and
+  `pushProfileNamePropertyOnly`. Every per-object path still makes 2
+  calls. The version-unreadable and no-benchmark paths are unchanged
+  and have no benchmark, so there is no skip to carry (`skipInForce`
+  returns null when `d.profile == null`, which matches the build 92
+  first cut).
+- **Cleanup and logging.** `afterPush` still adds the skip ids to the
+  live set, so the end-of-cycle cleanup leaves them alone, and still
+  increments the counters behind the per-cycle INFO line (`:505-510`).
+- **Ordering and failure.** The skip now shares the scored push's
+  timestamp. A push exception behaves as it did for the scored payload
+  in build 91; the merge adds no new throw.
+
+### Do the source pins catch a separate skip push coming back?
+
+I copied the adapter to a scratch directory, applied each mutation, and
+ran OverridesTest. Baseline: passes.
+
+| Mutant | What it does | OverridesTest |
+|---|---|---|
+| m2 | `pushObject` sends the scored maps, then the skip maps as a second pair of calls | **fails** (line 690, call count) |
+| m5 | `pushObject` drops the scored stats | **fails** (line 702) |
+| m1 | `afterPush` makes its own `stitcher.pushProperties(resourceId, skip.props, ...)` and `pushStats(..., skip.stats, ...)` after `live.addAll(skip.ids)` | **passes** |
+| m3 | a new helper `sendSkip(resourceId, skip)` with its own two `stitcher.push*` calls, called from `afterPush` | **passes** |
+| m7 | `pushOrProfileName` passes `null` instead of `skip` to `pushProfileNamePropertyOnly` | **passes** |
+
+The pins catch the original shape (the name `pushSkippedInForce`, a
+`stitcher.` call inside `skipInForce`, or a direct push inside the two
+push helpers) and any split inside `pushObject`. They do not catch
+m1 or m3. Both bring back exactly the W3 cost: two extra Suite API
+POSTs per object with a Skip, every cycle. They also do not catch m7.
+m7 is worse than a performance regression. On a non-vSAN cluster, or
+any object whose slice has nothing evaluable, the skip ids still join
+the live set in `afterPush`, so the cleanup skips them and no -1 is
+ever pushed. A key left at 0 from before (vSAN turned off, then the
+control skipped) keeps its open alert forever. That is issue #41 back
+on that shape. The current code is correct. The gap is that the tests
+would let either regression ship green.
+
+### N2: zeroing the retired Custom bucket
+
+Read in full: `ComplianceConfig.isCustomName` and `storedAsCustom`
+(`ComplianceConfig.java:69, 94`), `onConfigure` (`ComplianceAdapter.java:144`),
+`pushRollup` (`:787-817`), `ComplianceRollup.toStats` (`:254-292`) and
+`zeroRetiredCustom` (`:74-95`).
+
+- **The key is right.** Build 91 named the Custom profile `Custom`
+  (`BenchmarkLoader.java:168` at `4fa180a`) and `bucketOf("Custom")`
+  returned `Custom`, so the build 91 key was
+  `VCF-CF Compliance|Rollup|Benchmark|Custom|objects`, which equals
+  `RETIRED_CUSTOM_KEY` (the test also pins it).
+- **Held back on incomplete cycles.** `toStats` emits the
+  `Benchmark|<bucket>|objects` keys only when no kind is incomplete, and
+  `unknown` is a fixed bucket, so `Benchmark|unknown|objects` is present
+  exactly on complete cycles. `zeroRetiredCustom` adds the 0 only when
+  that key is present and returns false otherwise, so the flag stays set
+  and the 0 goes out on the next complete cycle. Tested both ways in
+  `build92RetiredCustom`.
+- **Once.** The flag clears only after `stitcher.pushStats` returns. If
+  the push throws, the 0 is retried next cycle. `onConfigure` sets the
+  flag again on every configure (collector restart, account edit), so
+  one more 0 goes out after each. That is harmless and matches the
+  README wording ("once, on the first complete collection after it is
+  configured").
+- **Can it push 0 for an account never on Custom?** Not for an account
+  whose stored profile is anything other than `Custom`: the flag comes
+  only from `storedAsCustom`, which requires the raw stored value to be
+  `Custom` (trimmed, any case), and build 92 no longer offers Custom for
+  a new account. One edge: a build 91 account stored as Custom with an
+  empty CSV path never loaded a Custom profile (`BenchmarkLoader.java:165`
+  at `4fa180a` falls through to the bundled path), so its vCenter never
+  had the key. Build 92 creates it at 0. Zero objects in a retired
+  bucket is true, so this is not a finding.
+
+### New finding
+
+**R-WARNING 1** [`tests/com/vcfcf/adapters/compliance/OverridesTest.java`
+`adapterWiringSourcePins`, about lines 1050-1105; dimension 9
+(behavior-preservation proven, not asserted), skill § bulk-read dynamic
+pattern] The commit message says "the source pins require every object
+push to go through pushObject". Mutants m1, m3 and m7 show they do not.
+A separate skip push added back in `afterPush` or a new helper (the W3
+cost) passes, and so does dropping the skip on the profile-name-only
+path (no -1 ever pushed, so a stale 0 keeps its alert open on a non-vSAN
+cluster). Smallest fix, test-only, no build number change needed:
+(a) `T.check(!body(ca, "private void afterPush(").contains("stitcher."))`;
+(b) `T.check(!ca.contains("skip.props") && !ca.contains("skip.stats"))`,
+and pin the count of `stitcher.pushProperties(` and `stitcher.pushStats(`
+in `ComplianceAdapter.java` at today's 4 and 5 (the rollup, overrides
+status, version-unreadable, cleanup and no-benchmark sites), so a new
+helper shows up as a changed count; (c) `inOrder` on
+`body(ca, "private void pushOrProfileName(")`: both branches pass
+`profileName, skip);`. Re-run m1, m3 and m7 to confirm all three fail.
+Not a registration candidate: no shipped behavior is wrong.
+
+### Review dimensions, fix commit only
+
+1, 3: the skip payload only ever carries -1 and the skip text; no path
+turns a failed read into a pass. 2: no vim25 change. 4: no loader change.
+5: no stitching or foreign-key change; `ComplianceStitcher` gained only
+`implements PushSink` and two `@Override`s. 6: one new INFO line per
+configure-and-zero; no secrets. 7: two short-lived map copies per object
+with a Skip, discarded after the push. 8: W3 closed, per-object calls
+back to 2. 9: build number stays 92 (never installed), CHANGELOG line
+matches the diff, diff is minimal; R-W1 is the one gap in the proof.
+10: no gap change. 11: README and overrides.md match the behavior.
+13: describe unchanged, check repeated on the built pak, passes.
+
+### Registry check (knowledge/context/defects.md)
+
+- **DEF-023** (single-page resource list): still open, unchanged.
+  `ComplianceStitcher.fetchResources` (`ComplianceStitcher.java:277`) is
+  untouched by `bdb49e6..ddaf06e` (only the `implements` line and two
+  `@Override`s changed). Still owed: devel proof of the paging, or of
+  the vCenter collection alert path.
+- **DEF-025** (retired control alert never cancels): still present,
+  unchanged. `cleanBatch` (`ComplianceAdapter.java:1138`) still pushes -1
+  once over a 0 (`zeroOnly`) or a 0 or 1 (`zeroOrOne`) and reads -1 back
+  afterwards. The fix commit does not touch the cleanup. Not closable.
+- DEF-022 and DEF-024 are closed; no other open defect names compliance.
+- Registration candidates: none new. W1 becomes one only if the devel
+  upgrade shows an identity problem.
+
+### Devel verification still owed
+
+Unchanged from the first pass: the section (a) identity checks first,
+then the shell-timeout alerts cancelling within three cycles, the
+per-cycle "skipped control key(s) set to -1" INFO line, the lockout
+override and VM pin still in force, and no Custom in the profile
+dropdown. Add one check for W3: the Suite API call rate from the
+collector does not rise after the upgrade with a Skip in force. For an
+account still stored as Custom, look for the "set to 0 once" INFO line.
