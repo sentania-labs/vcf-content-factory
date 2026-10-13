@@ -1021,3 +1021,19 @@ latest or push them to 26 already." Both fork workflows now use
 `ubuntu-latest` (amd64), so the maintainer never tracks a runner version;
 the lab's other pak workflows already do the same. Design text above
 updated to match.
+
+### Manifest stamped from the tag (2026-10-13, both forks)
+
+Scott: "can we auto update the manifest.txt so it's not a manual process?"
+Both workflows now write the tag's X.Y.Z into manifest.txt in the runner's
+working copy before mp-build (JSON load and dump, never committed), the
+"tag must match manifest" gate is replaced by "valid version tag, final
+tags on a release branch", and the digest check also refuses a pak whose
+manifest version is not the tag's. The committed manifest matters only for
+hand builds. Proof: cluster-perf-risk v1.3.0-rc.3 (run 38485249743) and
+vsanhostmetrics v1.4.6-rc.3 (run 38485253262), both green on
+ubuntu-latest; release assets ClusterPerfRisk_1.3.0.pak and
+VsanHostMetrics_1.4.6.pak with sigstore bundles and checksums. Commits
+50f7ffd and 598b3e8 on the fork branches. Maintainer instructions
+(package write access, workflow permissions, then tag) were handed to
+Scott for the vsanhostmetrics author.
