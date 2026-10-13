@@ -34,3 +34,16 @@ is the primary, no container runtime). No image pull occurred at install (the
 pull happens on a proxy at first container start). Blocked until a Cloud
 Proxy is paired to devel (lab-admin pipeline, Scott's go) or the proof moves
 to an instance that has one. vsanhostmetrics will stop at the same point.
+
+## Outcome 2026-10-13, vsanhostmetrics
+
+Installed 5:25 to 5:28 PM: /api/solutions lists vSAN Host Metrics 1.4.6;
+pak results all exit 0; adapter conf carries ghcr.io,
+/sentania-labs/vsanhostmetrics and digest sha256:62577d09...ba25; all 7
+dashboards and 30 views imported; the extra content/*.md and help HTML
+files produced no installer warning. Both Add Account tiles report the
+Cloud Proxy requirement; no account created. Both rc paks left installed on
+devel. Side note for both packs: the bridge logged "Traversal specs root tag
+should be 'AdapterKind'" at import because the SDK-generated
+content/traversalspecs/ holds only the schema file; harmless, SDK
+scaffolding behaviour.
