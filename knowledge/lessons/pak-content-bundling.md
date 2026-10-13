@@ -165,3 +165,15 @@ resource that will always exist when the owning adapter is installed
 - AppOSUCP (devel): `vault/workspaces/vcf-mp-cleanroom/inputs/from-devel/paks/AppOSUCPAdapter-*.pak`
 - VrAdapter (devel): `vault/workspaces/vcf-mp-cleanroom/inputs/from-devel/paks/VrAdapter-*.pak`
 - idps-planner: `dist/ThirdPartyContent/dashboards/idps-planner.zip`
+
+## Addendum 2026-10-13: the two-child rule bit again (compliance build 90)
+
+A generated alert wrapped one `SymptomSet` in `<SymptomSets operator="or">`.
+validate-sdk, the unit tests, three review passes and pak-compare all passed
+it; VCF Operations 9.0.2 rejected the whole describe at install and the
+controller rolled back to the previous build. Worse, the factory install
+command reported "Install completed and verified" because it only checks that
+the adapter kind exists (factory issue #202). Enforcement in validate-sdk is
+factory issue #203. Until it lands: a single symptom set goes bare, never in a
+composite container, and an install is verified by the installed solution
+version, not by the CLI's OK line.
