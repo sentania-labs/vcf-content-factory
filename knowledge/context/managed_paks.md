@@ -154,3 +154,33 @@ it is not a published pak.
 - **adapter_kind:** synology_diskstation
 - **Owner:** sentania-labs. Public repo.
 - **Notes:** Synology DiskStation.
+
+## Third-party Python Integration SDK paks (forks, contribute upstream)
+
+Registered 2026-10-13 on Scott's instruction ("I would like to fork these so we
+can better manage updates to them as opposed to straight cloning"). These are
+not factory SDK adapters: they are Python Integration SDK packs by other
+authors, forked into `sentania-labs` so tune-up pull requests can be prepared
+on a branch and sent upstream. They stay Python. The clone target reuses
+`content/sdk-adapters/` only so the bootstrap script manages them; build-sdk,
+validate-sdk and pak-compare do not apply. Keep `main` tracking upstream (add
+an `upstream` remote and fast-forward from it); do work on branches.
+
+### vsanhostmetrics (fork of nickfirefoot/vsanhostmetrics)
+
+- **Remote:** `https://github.com/sentania-labs/vsanhostmetrics.git`
+- **Target:** `content/sdk-adapters/vsanhostmetrics/`
+- **Upstream:** `https://github.com/nickfirefoot/vsanhostmetrics.git`
+- **Type:** Python Integration SDK container adapter (upstream's)
+- **Status:** forked 2026-10-13; first tune-up pass pending (certificate
+  validation options, credential storage)
+
+### cluster-perf-risk (fork of gillaspy/cluster-perf-risk)
+
+- **Remote:** `https://github.com/sentania-labs/cluster-perf-risk.git`
+- **Target:** `content/sdk-adapters/cluster-perf-risk/`
+- **Upstream:** `https://github.com/gillaspy/cluster-perf-risk.git`
+- **Type:** Python Integration SDK container adapter (upstream's); credential
+  posture already mapped in
+  `investigations/2026-10-13-cluster-perf-risk-credential-reuse.md`
+- **Status:** forked 2026-10-13; first tune-up pass pending
