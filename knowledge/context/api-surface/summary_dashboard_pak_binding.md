@@ -287,6 +287,237 @@ hits. The installed solutions that ship `content/dashboards/`
 The mechanism exists in the product, but no shipped 9.2 pak on these
 builds exercises it.
 
+## Pak upgrade and the configuration-file store
+
+Read 2026-10-13 (about 10:10 AM CDT) on devel, VCF Operations 9.0.2.0
+Build 25137845. Three jars were copied off the appliance read-only with
+`scp` and disassembled locally with `javap -c -p` (nothing on the
+appliance was modified; copies kept in the session scratchpad, not
+committed):
+
+| jar (under `/usr/lib/vmware-vcops/`) | classes read |
+|---|---|
+| `controller/plugins/vcops-view-server-1.0-SNAPSHOT.jar` (sha256 `e489148d...7a7175`) | `SolutionManagerDistributedTask`, `SolutionManager`, `SolutionManagementConstants` |
+| `controller/plugins/vcops-bridge-server-1.0-SNAPSHOT.jar` | `DataRetrieverServer`, `VCOPSCLIManager`, `ConfigFilesManager` |
+| `common/lib/vcops-platform-1.0-SNAPSHOT.jar` | `ConfigFile`, `ConfigFile$ConfigFileTypes`, `SolutionContent` |
+
+The Java below is reconstructed from bytecode by hand (no decompiler
+on the workstation). Names and branches are exact; layout is
+approximate.
+
+### Short answers
+
+| question | answer |
+|---|---|
+| Upgrade **without** force content update, file already in the store | **Not touched.** The import is refused with the error `The following file of the same name already exist: <title>`, logged as `Import title: ... failed`, and the install carries on. A user's UI edit survives. The new version's file content is **not** applied either. |
+| Upgrade **with** force content update | **Overwritten, unconditionally.** No content compare, no check for who edited it last. Content, title, encoding, original name and **folder** are replaced from the pak (the pak sets no folder, so a file the user moved into a folder goes back to the root). `user_id` becomes the installing user and `last_modified_time` becomes now. A user's UI edit is lost. |
+| Force upgrade, file dropped from the new pak version | **Deleted** from the store (`removeObsoleteContent`), as long as an earlier install recorded it. |
+| Pak uninstall | **Deleted**: every recorded file title, user-edited or not, but only when the uninstall runs with its `removeContent` flag set. Files the pak never recorded (for example a same-name file the user created before the first non-force install) are left alone. |
+| Skip files that already exist? | Yes, but only without force, and it is an ERROR-level import failure, not a silent skip. With force there is no skip. |
+
+### Path and identity
+
+- Pak path: `content/files/solutionconfig/` (`installSolutionConfigContent`
+  builds `<pak>/content/files/solutionconfig` and passes type
+  `"solutionconfig"`). The "solutionconfigs" in the walk-order list in
+  §Where it lives is this directory.
+- Store entry: `ConfigFile(SOLUTION_CONFIG, title, originalName = file name, content)`
+  in the global KV namespace `configurationfiles_files`, key
+  `("SolutionConfig" + "." + title).toLowerCase()`.
+- **The title is the file name including its extension** for a file
+  placed directly in `content/files/solutionconfig/` (for example
+  `compliance_overrides_template.xml`, which the UI shows as
+  `SolutionConfig/compliance_overrides_template.xml`). The key is
+  lowercased, so a pak file and a UI-created file whose names differ only
+  in case are the **same** entry.
+- The id recorded in `SolutionContent.solutionConfigIds` (KV
+  `SolutionContentNamespace`, keyed by pak id) is that same title string,
+  and uninstall deletes by `constructUniqueKey("SolutionConfig", title)`.
+
+```java
+// SolutionManagerDistributedTask
+private void installSolutionConfigContent(String path, Set<String> ids) {
+    String dir = path + File.separator + "content" + File.separator + "files"
+               + File.separator + "solutionconfig";
+    installContentFromFile(ids, dir, "solutionconfig");
+}
+
+private void installContentFromFile(Set<String> ids, String dirPath, String type) {
+    File dir = new File(dirPath);
+    if (dir != null && dir.exists() && dir.isDirectory()) {
+        File[] files = dir.listFiles();
+        for (int i = 0; i < files.length; i++) {
+            File f = files[i];
+            if (!f.exists()) continue;
+            if (f.isDirectory()) {
+                File[] sub = f.listFiles();
+                for (int j = 0; j < sub.length; j++) {
+                    File s = sub[i];              // sic: outer index i, not j
+                    if (s.exists()) importContentFromFile(ids, f, s, type);
+                }
+            } else {
+                importContentFromFile(ids, f, f, type);   // title = file name
+            }
+        }
+    }
+}
+
+private void importContentFromFile(Set<String> ids, File titleFile, File file, String type) {
+    String title = titleFile.getName();
+    try {
+        ResultBase r = importContentFromFile(title, file, this.forceUpdateContent, type);
+        if (r.getErrorMessage() == null) ids.add(title);
+        else {
+            logger.error(String.format("Import title: %s, name: %s failed. Error: %s",
+                         title, file.getName(), r.getErrorMessage()));
+            this.txtWidgetIdsInstalled = false;   // sic: txtwidget flag for every type
+        }
+    } catch (Exception e) { ... same flag reset ... }
+}
+
+// "solutionconfig" case of importContentFromFile(String, File, boolean, String)
+return getDataRetriever().importSolutionConfigFromFile(
+    title, null, file.getName(),
+    new String(IOUtils.toByteArray(in), UTF_8), UTF_8.name(), force);
+```
+
+`DataRetrieverServer.importSolutionConfigFromFile` goes to
+`VCOPSCLIManager`, which builds
+`new ConfigFile(SOLUTION_CONFIG, title, fileName, content)`, sets
+description to the null second argument, and calls
+`ConfigFilesManager.importSolutionConfigFile(cf, force)`, which in turn
+calls `importConfigFile`:
+
+```java
+// ConfigFilesManager.importConfigFile(ConfigFile file, boolean force)
+if (!baseServerManager.isActionAllowed("content.manageMetricConfig.create",
+                                       "content.manageMetricConfig.edit")) {
+    addErrorToResult("Missing privilege.", _tr("Failed to import content.")); return;
+}
+ConfigFile existing = (ConfigFile) globalKvStore.get("configurationfiles_files", file.getUniqueKey());
+if (existing != null && !force) {
+    addErrorToResult("The following file of the same name already exist:" + file.getTitle(), ...);
+    return;                                          // no write
+}
+String now = Long.toString(System.currentTimeMillis());
+String user = userAuthentication.getCurrentUser().getUserName();
+... metadata map: type, original_name, title, folder, user_id, last_modified_time, description ...
+if (existing == null) existing = file;
+else {
+    existing.setType(file.getType());
+    existing.setTitle(file.getTitle());
+    existing.setContent(file.getContent());          // pak content replaces the user's
+    existing.setEncoding(file.getEncoding());
+    existing.setOriginalName(file.getOriginalName());
+    existing.setFolder(file.getFolder());            // null from the pak
+    existing.setUserId(user);
+    existing.setLastModifiedTime(now);
+}
+globalKvStore.putWithMetadata("configurationfiles_files", existing, metadata, false);
+
+// ConfigFile
+public String getUniqueKey() { return constructUniqueKey(type.getName(), title); }
+public static String constructUniqueKey(String type, String title) {
+    return (type + "." + title).toLowerCase();       // type.getName() == "SolutionConfig"
+}
+```
+
+### Upgrade bookkeeping (`installContent` tail)
+
+```java
+SolutionContent sc = kv.get("SolutionContentNamespace", SolutionContent.constructUniqueKey(pakId));
+if (sc == null) { sc = new SolutionContent(); sc.setPakId(pakId); }
+else if (this.forceUpdateContent) {
+    removeObsoleteContent(sc, ..., solutionConfigIds /* this run's successes */, ...);
+}
+sc.addSolutionConfigIds(solutionConfigIds);   // addAll, never replaces
+...
+kv.put("SolutionContentNamespace", sc, ...);
+
+// removeObsoleteContent, solution-config block
+if (this.solutionConfigIdsInstalled && sc.getSolutionConfigIds() != null) {
+    obsolete.addAll(sc.getSolutionConfigIds());
+    obsolete.removeAll(newSolutionConfigIds);
+    sc.getSolutionConfigIds().removeAll(obsolete);
+}
+... removeContent(..., obsolete /* solution configs */, ...);
+// removeContent: if (!set.isEmpty()) getDataRetriever().deleteSolutionConfigContent(set);
+```
+
+Consequences:
+
+- **Non-force upgrade:** the refused file is not added to this run's
+  set, but `removeObsoleteContent` does not run and `addSolutionConfigIds`
+  only adds, so the title recorded by the earlier install stays recorded.
+  Uninstall still deletes it.
+- **Force upgrade:** obsolete means recorded before but not
+  successfully imported in this run. A force import of an existing file
+  succeeds (overwrite), so only files actually removed from the pak, or
+  ones that failed for some other reason (such as missing privilege or a
+  KV error), are deleted. `solutionConfigIdsInstalled` is set `true` at the start
+  of every `installContent` and never cleared (the failure path clears
+  `txtWidgetIdsInstalled` instead), so this block always runs on a force
+  upgrade.
+
+### Uninstall
+
+`uninstallSolution(pakId, removeContent, unregister)` calls
+`uninstallContent(pakId)` only when `removeContent` is true. That
+gathers `sc.getSolutionConfigIds()` and passes them to `removeContent`,
+which calls `deleteSolutionConfigContent(ids)` →
+`ConfigFilesManager.deleteConfigFile(SOLUTION_CONFIG, ids)`:
+
+```java
+keys = ids.stream().map(id -> ConfigFile.constructUniqueKey(type.getName(), id)).collect(toSet());
+... getMetadata(keys) for folder bookkeeping ...
+globalKvStore.batchPutDeleteKeys("configurationfiles_files", null, keys, false);
+```
+
+No content or owner check, so a file the user edited in the UI is
+deleted with the pak. A null id set would delete **every** SolutionConfig
+file (`queryForKeysStartsWith("solutionconfig")`), but the installer
+never passes null (an empty set skips the call). The value of the
+`removeContent` flag for each uninstall entry point (Suite API, admin UI)
+was not traced past `ViewDataRetrieverServer`, which passes it through.
+
+### Side findings (same code)
+
+- **Subdirectory layout hazard.** The nested loop indexes `sub[i]` (the
+  outer index) instead of `sub[j]`. Put files directly in
+  `content/files/solutionconfig/`. A subdirectory either imports the
+  wrong file several times under the directory's name as title, or throws
+  `ArrayIndexOutOfBoundsException`. `installContent` has no handler, so
+  the exception escapes to `installSolutionContent`'s
+  `catch (Exception)` (`installSolutionContent failed Error: ...`). That
+  skips the `SolutionContent` KV update for the **whole** pak (dashboards,
+  SMs, everything installed so far go unrecorded, so uninstall cannot
+  remove them) and skips the temp-dir cleanup.
+- **Scorecard block typo.** `removeObsoleteContent`'s compliance-scorecard
+  block removes the obsolete scorecard ids from `getSolutionConfigIds()`
+  rather than `getComplianceScorecardIds()`. That is harmless for config
+  files unless a scorecard id equals a config-file title.
+- The import requires the installing user to hold
+  `content.manageMetricConfig.create` or `content.manageMetricConfig.edit`.
+  Without it, every file fails with `Missing privilege.`; on a force
+  upgrade, `removeObsoleteContent` then deletes every previously recorded
+  file, because none succeeded in this run.
+
+### What this means for an overrides file shipped in a pak
+
+- A user-editable file shipped in `content/files/solutionconfig/`
+  survives a normal (non-force) upgrade. It is clobbered by a
+  force-content-update upgrade and deleted by a content-removing uninstall.
+- The factory cannot have both "ship updated defaults" and "keep user
+  edits" in one file through this installer. Keep the shipped file a
+  template the user copies to a different name (which the pak never
+  records, so no upgrade or uninstall touches it). Otherwise document
+  that force content update resets it.
+- Runtime not exercised: code read only. A lab check would be: install,
+  edit in the UI, reinstall without force (expect the
+  `Import title: ... failed` line in the view-server plugin log (exact log file not checked) and the edit
+  intact), reinstall with force (expect the edit gone and the folder reset), then uninstall
+  (expect the file gone).
+
 ## What this means for the factory
 
 - A `.pak` (Tier 1 MPB or Tier 2 SDK) can carry the binding by adding
