@@ -1208,7 +1208,7 @@ reused. Field lines are `- **Field:** value` (parsed by
   explicit value is skipped instead of failed, inflating compliance scores
   (false pass)
 - **Severity:** blocking
-- **Status:** open
+- **Status:** closed
 - **Affects:** compliance
 - **First-seen:** adapter repo root commit `c6d9e73` (2026-06-08); in every
   build since, confirmed in builds 85 and 86
@@ -1240,7 +1240,20 @@ reused. Field lines are `- **Field:** value` (parsed by
   proposes close. Also reachable from the build 90 overrides file: an
   Override that drops "or Undefined" hit the same skip. Third review pass
   (APPROVE, eae8658, pak 26323577...b4c4) confirms the close condition met;
-  status flips to closed with the devel evidence from the build 90 install.
+  **Closed on devel evidence, build 91 (installed 11:33 AM, version
+  0.0.0.91 confirmed on /api/solutions):** at the 11:34 AM cycle the
+  previously skipped controls got their first samples as fails
+  (`esx.memory-tiering-encryption` 0 on both wld01 hosts with a new alert at
+  11:38 AM; `vm.efi-boot-types` on 25 VMs, `vm.limit-console-connections` on
+  23, `vm.vmrc-lock` on 22, all 0); environment avg score 86.02 to 78.81 with
+  scored 175 and non-compliant 140 unchanged; `esx.network-dvfilter` reads
+  Actual `""` Compliant 1 on real hosts, so the empty-value exception holds.
+- **Closing-evidence:** adapter commits `ed4236d` and `a285ce9` (tests
+  `ControlEvaluatorTest.absentAdvancedSetting`,
+  `OverridesTest.overrideDropsOrUndefined`); review
+  `knowledge/context/reviews/compliance-build-90.md` third pass APPROVE;
+  devel build 91 install 2026-10-13 11:33 AM (pak sha256 cdad54e3...36e4):
+  newly failing controls listed under Progress, avg score 86.02 to 78.81.
 - **Related:** `knowledge/lessons/unreadable-is-not-compliant.md`.
 
 ### DEF-023
@@ -1272,7 +1285,7 @@ reused. Field lines are `- **Field:** value` (parsed by
   `ethernet*.filter*.name` as a literal key, so a VM with a dvfilter
   attachment passes (false pass)
 - **Severity:** blocking
-- **Status:** open
+- **Status:** closed
 - **Affects:** compliance
 - **First-seen:** adapter repo root commit `c6d9e73` (2026-06-08); every
   build since, under SCG 7.0, 8.0, 9.0 and 9.1
@@ -1292,6 +1305,15 @@ reused. Field lines are `- **Field:** value` (parsed by
   parameter carries `*` unmatched; `sdk-adapter-reviewer` confirms.
 - **Progress 2026-10-13:** fix landed in build 90, adapter commit `eae8658`
   (`ControlEvaluatorTest.patternParameter`); third review pass confirms the
-  close condition met and the canonical CSV scan; status flips to closed
-  with the devel evidence from the build 90 install.
+  close condition met and the canonical CSV scan. **Closed on devel
+  evidence, build 91:** all 25 wld01 VMs read `vm.dvfilter` Actual
+  `(undefined)` Compliant 1 (no filter keys present, pattern evaluated);
+  the fail path is covered by `ControlEvaluatorTest.patternParameter`
+  since no devel VM carries a dvfilter.
+- **Closing-evidence:** adapter commit `eae8658`
+  (`ControlEvaluatorTest.patternParameter`, canonical CSV scan: only
+  vm.dvfilter 7.0 to 9.1 carries `*`); review
+  `knowledge/context/reviews/compliance-build-90.md` third pass APPROVE;
+  devel build 91 (2026-10-13): 25 wld01 VMs read `vm.dvfilter` Actual
+  `(undefined)` Compliant 1 through the pattern path.
 - **Related:** DEF-022 (same evaluator, same lesson).
