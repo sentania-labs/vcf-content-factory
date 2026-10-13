@@ -399,6 +399,25 @@ scripts/bootstrap_references.sh --update # also git pull existing
   content. Public repo, VMware-by-Broadcom IP; see repo LICENSE
   before redistribution.
 
+### vmware/vmware-vcf-operations-integration-sdk
+
+- **URL:** https://github.com/vmware/vmware-vcf-operations-integration-sdk
+- **Local path:** `reference/references/vmware-vcf-operations-integration-sdk/`
+- **Docs:** https://vmware.github.io/vmware-vcf-operations-integration-sdk/sdk/latest/
+  (rendered from the repo's docs tree; read the clone, not the site)
+- **Owner:** VMware / Broadcom. Public repo, the official Python
+  Integration SDK for VCF Operations container adapters (the `mp-init`,
+  `mp-build`, `mp-test` CLI and the adapter library).
+- **Scope:** authoritative source for how a Python pack must talk to the
+  platform: the container REST contract, adapter definitions, credential
+  types, the certificate hand-off, result objects, the local test loop
+  and the pak layout. Registered 2026-10-13 when the factory forked two
+  third-party Python packs (`managed_paks.md`, third-party section).
+  Python packs are a secondary vehicle; this clone backs
+  `knowledge/context/python_integration_sdk.md`.
+- **Attribution:** cite `vmware-vcf-operations-integration-sdk/<path>`.
+  See the repo LICENSE before redistributing any of it.
+
 ### brockpeterson.com — blog articles (NOT a clone; extracts only)
 
 - **URL:** https://www.brockpeterson.com/
