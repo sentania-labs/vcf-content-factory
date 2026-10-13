@@ -798,3 +798,20 @@ Changes from the design text above, found while building and proving locally:
   (assessment finding 9 corrected).
 
 Proof tag `v1.3.0-rc.1` pushed to the fork 2026-10-13 ~3:45 PM; run 38471417171.
+
+### Proof run, cluster-perf-risk fork, 2026-10-13 ~3:50 PM
+
+Run 38471417171 on tag `v1.3.0-rc.1`: verify, publish and release all
+succeeded on the first run; code-scanning skipped on the tag ref by design.
+Package `ghcr.io/sentania-labs/cluster-perf-risk` was created public by the
+workflow's own first push (design open question 2 answered: public). Release
+`v1.3.0-rc.1` (prerelease) carries `ClusterPerfRisk_1.3.0.pak`, its sigstore
+bundle and SHA256SUMS. Verified from the workstation: `gh attestation
+verify` passes for the image digest
+`sha256:f995d4535d380379329d61b2a4c4f98de3efec9fcb65c2dd1f94f5bc7f0a5e51`
+and for the pak; the pak's adapter conf pins exactly that registry,
+repository and digest. cosign verify not run locally (cosign not
+installed); the workflow's own self-verify step passed. Still unproven: the
+Cloud Proxy pulling that digest from GHCR at install, which needs the rc
+pak installed on devel under its own go (copied to
+`dist/ClusterPerfRisk_1.3.0.pak`).

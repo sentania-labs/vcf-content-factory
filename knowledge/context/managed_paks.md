@@ -190,4 +190,7 @@ an `upstream` remote and fast-forward from it); do work on branches.
   (`investigations/2026-10-13-cluster-perf-risk-tuneup-assessment.md`); fork
   issues #1 to #9 track the tune-ups (silent login failure, unverified TLS,
   publish-to-native edges, per-cluster exception, timeouts, request volume,
-  token at DEBUG, empty Test Connection, packaging); PRs upstream on Scott's go
+  token at DEBUG, empty Test Connection, packaging); PRs upstream on Scott's go.
+  CI: branch `tuneup/ci-ghcr-attestation` proven by tag `v1.3.0-rc.1` (run
+  38471417171, image and pak attested and signed, Trivy gated), see
+  `knowledge/designs/ci/python-pack-ghcr-attestation.md`
