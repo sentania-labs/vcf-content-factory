@@ -179,3 +179,74 @@ All seven prior findings are closed, and DEF-022 is fixed as its close condition
 ### If shipped as-is
 
 Scores are now honest for unset advanced settings. But the landing README tells operators the opposite. `vm.dvfilter` keeps passing VMs that carry a dvfilter attachment, as it has in every build.
+
+## Third pass (fix commit eae8658, HEAD eae8658)
+
+- **Reviewer:** sdk-adapter-reviewer
+- **Date:** 2026-10-13, 11:08 AM (local, America/Chicago)
+- **Scope:** `git diff a285ce9..eae8658`, 10 files: `ControlEvaluator.java` (W3, now DEF-024), `ComplianceOverrides.java` (N6), `ControlEvaluatorTest.java`, `OverridesTest.java`, README, `docs/overrides.md`, `docs/data-reference.md`, CANONICAL_SCHEMA, the template, CHANGELOG. `ComplianceAdapter.java`, `VimOptions.java` and `ComplianceStitcher.java` untouched, so the read-fault routing confirmed in the re-review still holds. `build_number` stays 90. Working tree clean before and after.
+- **Artifacts:** author's `dist/vcfcf_sdk_compliance.0.0.0.90.pak` (built 11:04 AM, commit stamped 11:04 AM), sha256 `26323577...b4c4`, matches the brief. Reviewer build from HEAD into the scratchpad, sha256 `f7bd16f0...cf24`.
+- **Verdict:** APPROVE (0 BLOCKING / 0 WARNING / 1 NIT)
+- **Fit for a devel install: YES.** Fit for release once the orchestrator closes DEF-022 and DEF-024 (both close conditions are met, see below). DEF-023 is `tracked`, not blocking.
+
+### Bottom line
+
+All five re-review findings are closed. `vm.dvfilter` now fails a VM with a dvfilter attachment and names the keys in Actual, passes a VM with none, and stays unreadable on a failed read. The glob is segment-bounded and case-insensitive as claimed. NULL and blank quoted Overrides are rejected on text advanced settings, and `""` is accepted only on `esx.network-dvfilter`. The empty-value-is-unset choice stands; I found no realistic false pass from it.
+
+### Independent verification
+
+| Check | Result |
+|---|---|
+| `validate-sdk` | OK (only the existing `-source 11` warning) |
+| `build-sdk` from HEAD | builds `0.0.0.90`, template at `content/files/solutionconfig/` |
+| Author pak vs HEAD build (recursive, nested zips and jar unpacked) | 242 / 242 entries, **zero content differences** |
+| `pak-compare` 90 vs 89 | gate PASS, 0 BLOCKING / 2 WARNING / 1 INFO, same as both earlier passes |
+| `ci/run_java_tests.sh` | 13 Java suites pass (ControlEvaluatorTest and OverridesTest included); generator 17 OK; AlertList 6, widget types 2, template 5 OK |
+| `pytest tests/` | 30 passed, 11 subtests |
+| Em-dashes in added lines | 0 |
+
+### Prior findings
+
+| Finding | Status | Evidence |
+|---|---|---|
+| B1 (README says absent settings are skipped) | **Closed** | `README.md:59-62` now states the rule: unset fails with Actual "(undefined)" unless the guide value is `X or Undefined`, `X or Not Present` or bare `Not Present`. Matches `ControlEvaluator` behavior. |
+| W3 (`vm.dvfilter` false pass, DEF-024) | **Closed** | See the matcher checks below. |
+| N6 (NULL / blank Override enables the explicit-empty pass) | **Closed** | `ComplianceOverrides.checkTextAdvanced` (line 501), reached only for a text (`default` case) advanced setting. Integer and boolean advanced settings already reject `""` and `NULL` as non-numbers / non-booleans. |
+| N7 (no-channel alert cannot fire) | **Closed** | `docs/overrides.md` reason table and a following paragraph say the status reaches Compliance World only and the vCenter alert cannot fire. |
+| N8 (`(undefined)` missing from data-reference) | **Closed** | `docs/data-reference.md:97-112` lists the value, `(undefined)` with both outcomes, `""`, the pattern form and `(unreadable)`. `(unreadable)` maps to Compliant -1 (`ComplianceDecisions.java:130`, `COMPLIANT_NOT_EVALUATED`), as the doc says. |
+
+### The dvfilter matcher (DEF-024)
+
+Code: `ControlEvaluator.java:146-174` (branch), `keyPattern`, `matchKeys`, `describeMatches` (around 341-394). Probe: a scratch harness compiled against `src/`, loading the five bundled profiles through `BenchmarkLoader` (nothing written to the repo).
+
+- **Glob semantics.** `keyPattern` splits on `*`, quotes each literal part, and joins with `[^.]+`, compiled `CASE_INSENSITIVE` and matched with `matches()` (whole key). Each `*` is one or more characters inside one segment. Probe: `ethernet12.filter3.name` matches; `ETHERNET0.FILTER0.NAME` matches; the upper-case pattern `ETHERNET*.Filter*.NAME` matches a lower-case key; `ethernet*.name` does not match `ethernet0.filter0.name` (no crossing a dot); `ethernet.filter0.name` (empty segment) and `ethernet0.filter0.name.extra` do not match; regex characters in the literal parts are quoted (`a+b*.c` matches `a+b1.c`, not `aab1.c`). One looseness: `ethernet0.filter0x.name` matches, because `*` is any non-dot text, not digits. It errs toward a fail, never a pass, and no such VMX key exists. Acceptable.
+- **Bare `Not Present` fails on any match**, Actual `key=value; key=value`. Probe under SCG 7.0, 8.0, 9.0 and 9.1: `ETHERNET0.FILTER0.NAME=vsip` gives pass 0 / fail 1 / total 1 with that Actual. Test: two keys give one fail with both listed. The list is sorted by a case-sensitive TreeMap, so `Ethernet1...` sorts before `ethernet0...`. Cosmetic.
+- **No match passes with `(undefined)`.** Probe: a VM with only `ethernet0.present` and `ethernet0.virtualDev` gives pass 1 / total 1, Actual `(undefined)`. A VM with `ethernet0.filter0.onFailure` and `ethernet0.filter0.param1` but no `.name` also passes; that is the guide's parameter, not a gap in the matcher.
+- **Unreadable stays unreadable.** `evaluateControlsUnreadable` counts every `advanced_setting` control with a usable parameter, pattern or not (lines 287-316). Probe: pass 0 / unreadable 1 on all four profiles. A pattern match only runs against the map from a successful `config.extraConfig` read (`VSphereClient.java:478-492`, the whole property, not a key filter), and faults route to the unreadable path (unchanged since the re-review).
+- **Other modes under a site Override.** For a non-`Not Present` expected value every match must pass `presentValueMatches`, the same comparison a literal present key gets (the refactor moved the mode chain into that method without changing it). `(non-empty)` and `vsip or Undefined` are accepted Overrides on `vm.dvfilter` and would pass an attached VM; that is the operator's stated rule, marked "(site override)", not a hidden widening.
+
+**The empty-value-is-unset choice.** `matchKeys` drops a matching key whose value is empty, so `ethernet0.filter0.name = ""` passes with `(undefined)`. A whitespace-only value is not empty and fails (probe: Actual `ethernet0.filter0.name=  `, fail 1). Can the empty case hide a real attachment? Not in practice, for two reasons. First, the filter name is what selects the dvfilter agent; with an empty name there is nothing to bind, so no filter is attached. Second, through the vSphere API, setting an `extraConfig` value to an empty string removes the option (my knowledge of the `VirtualMachineConfigSpec.extraConfig` contract; that vendor text is not under `reference/docs/`). So a present empty value can only come from a hand-edited VMX. It also matches the literal-key rule from DEF-022: a present empty value counts as unset, and bare `Not Present` passes it. The only divergence is cosmetic: the guide's PowerCLI check (`Get-AdvancedSetting "ethernet*.filter*.name*"`) would list that empty entry. **The choice should stand.**
+
+**`*` scan of the five canonical CSVs** (read by header, every column). The `parameter` column carries `*` only in `vm.dvfilter` for 7.0, 8.0, 9.0 and 9.1 (`ethernet*.filter*.name`, `advanced_setting`, `Not Present`). In 6.7, `vm.dvfilter` is `manual_audit` (parameter `ethernetX.filterX.name = filtername`) and `vm.disable-independent-nonpersistent` is `powercli_only` (`scsiX:Y.mode`). Neither is scored: the probe gives total 0 for 6.7 `vm.dvfilter`. 6.7 `vm.pci-passthrough` is a `vim_property` with no `*` in its parameter. Every other `*` sits in remediation text or `expected_value` prose. Through the loader, the only control with `*` in `configParameter` is `vm.dvfilter`, in 7.0 to 9.1. **Confirmed.**
+
+### N6 checks
+
+`OverridesTest.valueChecks` (lines 214-230) asserts: on `esx.log-level`, `NULL`, `null`, `Null`, `" "`, whitespace only, `""` and `not:null` are rejected and `info` is accepted; on `esx.network-dvfilter`, `""` and `10.0.0.1` are accepted and `NULL` and `"  "` are rejected. Probe on `vm.dvfilter` (7.0 to 9.1, a text advanced setting with a non-empty guide value): `""` is rejected ("accepted only where the guide's own value is empty"), `NULL` and `" "` are rejected. On 6.7 the check returns null for these values because `vm.dvfilter` is not an advanced setting there, but `resolve` rejects any Override of a control the pack does not score (first pass). `checkValue` runs against every loaded profile and rejects on any failure, so `""` survives only where the guide value is empty in all of them. `esx.network-dvfilter` is `""` (7.0 to 9.1) or `NULL` (6.7); `expectsExplicitEmpty` accepts both. **Confirmed.**
+
+### New findings
+
+#### NIT
+
+**N9. The landing README does not warn that `vm.dvfilter` scores can drop.** Authority: review dimension 11. The CHANGELOG flags the behavior change, and data-reference describes the Actual. The README and overview say nothing. VMs that carry a dvfilter through the VMX (for example NSX for vSphere distributed firewall or older agentless security appliances) will now fail this control on every collect. The guide itself says that is non-compliant, so the fail is correct. **Fix:** one README sentence saying that VMs with an intentional dvfilter now fail `vm.dvfilter`, and that a `<Skip control="vm.dvfilter"/>` in the overrides file is the supported opt-out. Non-blocking.
+
+### Registry check (`knowledge/context/defects.md`)
+
+- **DEF-022: RESOLVED, close condition met. Propose close.** Fix in adapter commit `ed4236d` (`ControlEvaluator.java`, the absent / empty branch), build 90, pak sha256 `26323577...b4c4`. Tests: `ControlEvaluatorTest.absentAdvancedSetting` asserts "plain TRUE, unset: fail", "X or Undefined, unset: pass", "X or Not Present, unset: pass", "Not Present, unset: pass", "(non-empty), unset: fail" and "not:X, unset: fail (absence is never 'not equal')", with Actual `(undefined)`. `OverridesTest.overrideDropsOrUndefined` asserts "unset FAILS under the site TRUE" with Actual `(undefined)`, where an Override drops "or Undefined". All pass on HEAD. The re-review's only blocker against this defect (B1, the stale README line) is fixed in `eae8658`. No live proof is required by the close condition. A devel collect showing `vm.vmrc-lock` Compliant 0 with Actual `(undefined)` would corroborate it.
+- **DEF-024: RESOLVED, close condition met. Propose close.** Fix in adapter commit `eae8658` (`ControlEvaluator.java:146-174` plus `keyPattern` / `matchKeys` / `describeMatches`), build 90, same pak. Tests in `ControlEvaluatorTest.patternParameter`: "no filter keys: pass" and "no filter keys: Actual (undefined)"; "one filter key: fail" and "Actual names the matched key" (`ethernet0.filter0.name=dvfilter-generic-vmware`); "Actual lists every match"; "empty filter name: unset, pass"; "keys outside the pattern: pass"; "read failure: unreadable", "read failure: no pass", "read failure: marked unreadable". The read-failure assertions call `evaluateControlsUnreadable` directly; routing a real fault there is unchanged code covered by `Build77FaultTest`. The canonical CSV scan is confirmed above (only `vm.dvfilter`, 7.0 to 9.1). No live proof is required by the close condition. A devel VM with `ethernet0.filter0.name` set showing `vm.dvfilter` Compliant 0 would corroborate it.
+- **DEF-023: open, unchanged.** `ComplianceStitcher.java` is untouched by `eae8658`. Closure still needs the devel paging proof from a build 90 install.
+
+**Registration candidates:** none. N9 is a doc NIT.
+
+### If shipped as-is
+
+Scores are honest for unset advanced settings and for dvfilter attachments. Operators who use dvfilters on purpose will see a new `vm.dvfilter` fail and will have to find the Skip remedy in overrides.md, because the landing README does not mention it.

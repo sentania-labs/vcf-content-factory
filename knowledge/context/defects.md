@@ -1238,8 +1238,9 @@ reused. Field lines are `- **Field:** value` (parsed by
   (`OverridesTest.overrideDropsOrUndefined`); the build 90 re-review
   (`knowledge/context/reviews/compliance-build-90.md`) confirms both and
   proposes close. Also reachable from the build 90 overrides file: an
-  Override that drops "or Undefined" hit the same skip. Status flips to
-  closed when build 90 passes its final review pass.
+  Override that drops "or Undefined" hit the same skip. Third review pass
+  (APPROVE, eae8658, pak 26323577...b4c4) confirms the close condition met;
+  status flips to closed with the devel evidence from the build 90 install.
 - **Related:** `knowledge/lessons/unreadable-is-not-compliant.md`.
 
 ### DEF-023
@@ -1289,6 +1290,8 @@ reused. Field lines are `- **Field:** value` (parsed by
   `ControlEvaluatorTest` cases (no filter keys pass, one filter key fails
   naming it, read failure unreadable) and confirms no other canonical CSV
   parameter carries `*` unmatched; `sdk-adapter-reviewer` confirms.
-- **Progress 2026-10-13:** fix in flight on build 90
-  (`feat/build-90-overrides-file`).
+- **Progress 2026-10-13:** fix landed in build 90, adapter commit `eae8658`
+  (`ControlEvaluatorTest.patternParameter`); third review pass confirms the
+  close condition met and the canonical CSV scan; status flips to closed
+  with the devel evidence from the build 90 install.
 - **Related:** DEF-022 (same evaluator, same lesson).
