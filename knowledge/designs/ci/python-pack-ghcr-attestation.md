@@ -189,29 +189,37 @@ only per-repo edits are the three `env` values at the top. Actions are pinned
 to commit SHAs resolved 2026-10-13 via `gh api repos/<action>/commits/<tag>`.
 
 ```yaml
-# Build the adapter container on GitHub-hosted runners, publish it to GHCR
-# with signed build provenance, and attach the .pak to the GitHub Release.
+# As built and proven in sentania-labs/cluster-perf-risk (branch
+# tuneup/ci-ghcr-attestation, commit c6f46b5, proof tags v1.3.0-rc.1 and
+# rc.2). Signing (cosign keyless, image and pak), Trivy in verify and
+# publish, and both attestations are unconditional. The vsanhostmetrics
+# copy differs only in repo-specific values and the test command.
+# Build the adapter container on GitHub-hosted runners, scan it, publish it to
+# GHCR signed and with build provenance, and attach the .pak to a GitHub Release.
 #
 # Why this shape:
 # - A .pak does not contain the adapter. adapter.zip!<AdapterKind>.conf names
-#   REGISTRY, REPOSITORY and DIGEST, and the Cloud Proxy pulls that digest
-#   ANONYMOUSLY. So the image must be public, and the provenance attestation
-#   must be on the exact digest the pak names.
+#   REGISTRY, REPOSITORY and DIGEST. Per the VMware SDK documentation, the
+#   Cloud Proxy pulls this digest on first collection, ANONYMOUSLY. So the
+#   image must be public, and the signature, attestation and scan must be on
+#   the exact digest the pak names.
 # - mp-build always builds, pushes, and writes the pushed digest into the pak.
 #   So mp-build is the one build of record; this workflow drives it at GHCR and
-#   reads the digest back out of the pak to attest it.
+#   reads the digest back out of the pak to scan, sign and attest it.
 # - Pull requests (including from forks) only run `verify`, with a read-only
 #   token. Nothing is published except from a v* tag pushed to this repo.
 #
-# Releasing: bump "version" in manifest.txt, merge to the default branch, then
-#   git tag v<version> && git push origin v<version>
-# A tag vX.Y.Z-rc.N (same X.Y.Z as manifest.txt) publishes a prerelease and may
-# come from any branch.
+# Releasing: merge to the default branch, then
+#   git tag vX.Y.Z && git push origin vX.Y.Z
+# The tag sets the version. The publish job writes X.Y.Z into manifest.txt in
+# the runner's working copy before mp-build (never committed), so the pak is
+# named and versioned X.Y.Z. The committed manifest.txt stays at the last
+# released version for hand builds; there is nothing to bump before tagging.
+# A tag vX.Y.Z-rc.N publishes a prerelease and may come from any branch; its
+# pak carries version X.Y.Z, and its Release and image tag keep the full name.
 #
-# Verifying a release (anyone, no account needed for the pull):
-#   gh attestation verify oci://ghcr.io/<owner>/<repo>@sha256:<digest> --repo <owner>/<repo>
-#   gh attestation verify <Pak>.pak --repo <owner>/<repo>
-name: release-pak
+# Verifying a release: see "Build and release" in README.md.
+name: build-and-publish
 
 on:
   pull_request:
@@ -222,19 +230,25 @@ on:
 permissions: {}
 
 concurrency:
-  group: release-pak-${{ github.ref }}
+  group: build-and-publish-${{ github.ref }}
   cancel-in-progress: false
 
 env:
   PROJECT_DIR: .               # holds manifest.txt, Dockerfile, commands.cfg, conf/
   SDK_VERSION: "1.3.1"         # vmware-aria-operations-integration-sdk (mp-build)
-  TEST_COMMAND: ""             # optional unit tests, run from PROJECT_DIR
+  TRIVY_VERSION: "v0.75.0"     # scanner version used by trivy-action
+  TRIVY_IGNOREFILE_PATH: .trivyignore.yaml  # documented exceptions, each with an expiry
+  # Unit tests, run INSIDE the adapter image (same Python and libraries the
+  # Cloud Proxy runs) with PROJECT_DIR mounted read-only at /src as the
+  # working directory. Leave empty to skip.
+  TEST_COMMAND: "python3 -m pip install --user -q --disable-pip-version-check --no-warn-script-location pytest==8.4.2 && python3 -m pytest -q -p no:cacheprovider tests"
 
 jobs:
   verify:
     # Plain docker, no registry, read-only token. Proves the image builds from
-    # the SDK base and the adapter answers adapterDefinition, which is what
-    # mp-build needs at release time.
+    # the SDK base, the unit tests pass inside it, it has no fixable HIGH or
+    # CRITICAL vulnerability, and the adapter answers adapterDefinition, which
+    # is what mp-build needs at release time.
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -272,6 +286,44 @@ jobs:
         working-directory: ${{ env.PROJECT_DIR }}
         run: docker build -t adapter-under-test:ci .
 
+      - name: Unit tests (inside the adapter image)
+        if: env.TEST_COMMAND != ''
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: |
+          docker run --rm --entrypoint bash -e PYTHONDONTWRITEBYTECODE=1 \
+            -v "$PWD:/src:ro" -w /src adapter-under-test:ci \
+            -euo pipefail -c "$TEST_COMMAND"
+
+      - name: Vulnerability report for code scanning (all severities, never fails)
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/')
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: ${{ env.TRIVY_VERSION }}
+          image-ref: adapter-under-test:ci
+          format: sarif
+          output: trivy-results.sarif
+          trivyignores: ${{ env.TRIVY_IGNOREFILE_PATH }}
+          exit-code: "0"
+
+      - name: Keep the report for the code scanning job
+        if: ${{ !cancelled() && github.event_name == 'push' && startsWith(github.ref, 'refs/heads/') }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: trivy-sarif
+          path: trivy-results.sarif
+          if-no-files-found: ignore
+
+      - name: Vulnerability gate (fails on fixable HIGH or CRITICAL)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: ${{ env.TRIVY_VERSION }}
+          image-ref: adapter-under-test:ci
+          format: table
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          trivyignores: ${{ env.TRIVY_IGNOREFILE_PATH }}
+          exit-code: "1"
+
       - name: Boot it and fetch the adapter definition
         run: |
           set -euo pipefail
@@ -288,10 +340,32 @@ jobs:
         if: failure()
         run: docker logs adapter || true
 
-      - name: Unit tests
-        if: env.TEST_COMMAND != ''
-        working-directory: ${{ env.PROJECT_DIR }}
-        run: bash -euo pipefail -c "$TEST_COMMAND"
+  code-scanning:
+    # Branch pushes only: a pull request token from a fork cannot write
+    # security events. Runs no repository code, only uploads the report.
+    needs: verify
+    if: ${{ !cancelled() && github.event_name == 'push' && startsWith(github.ref, 'refs/heads/') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: trivy-sarif
+
+      - name: Upload to code scanning (skipped with a warning where code scanning is not enabled)
+        id: upload
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+        with:
+          sarif_file: trivy-results.sarif
+          category: trivy-adapter-image
+
+      - name: Say so if the upload was refused
+        if: steps.upload.outcome == 'failure'
+        run: echo "::warning::Code scanning refused the Trivy report (not enabled on this repository?). The verify job's gate still applies."
 
   publish:
     needs: verify
@@ -299,8 +373,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write          # push to ghcr.io/<owner>/<repo>
-      id-token: write          # Sigstore identity for attestation / cosign
+      packages: write          # push the image, its signature and attestation to ghcr.io/<owner>/<repo>
+      id-token: write          # Sigstore identity for attestation and cosign
       attestations: write      # store the attestation on this repo
       artifact-metadata: write # storage record for push-to-registry attestations
     outputs:
@@ -327,10 +401,6 @@ jobs:
             echo "::error::Tag $tag is not vX.Y.Z or vX.Y.Z-rc.N"; exit 1
           fi
           ver="${BASH_REMATCH[1]}"; rc="${BASH_REMATCH[2]}"
-          mver="$(python3 -c 'import json; print(json.load(open("manifest.txt"))["version"])')"
-          if [ "$ver" != "$mver" ]; then
-            echo "::error::Tag $tag does not match manifest.txt version $mver. Bump manifest.txt, merge, re-tag."; exit 1
-          fi
           if [ -z "$rc" ]; then
             git fetch --no-tags origin "$DEFAULT_BRANCH"
             if ! git merge-base --is-ancestor "$GITHUB_SHA" "origin/$DEFAULT_BRANCH"; then
@@ -340,6 +410,7 @@ jobs:
           {
             echo "image=ghcr.io/${GITHUB_REPOSITORY,,}"
             echo "image_tag=${tag#v}"
+            echo "version=$ver"
             echo "prerelease=$([ -n "$rc" ] && echo true || echo false)"
           } >> "$GITHUB_OUTPUT"
 
@@ -349,15 +420,21 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Refuse to reuse a published version tag
+      - name: Fail early if the version tag is already published
         env:
           IMAGE: ${{ steps.tag.outputs.image }}
           IMAGE_TAG: ${{ steps.tag.outputs.image_tag }}
         run: |
           set -euo pipefail
           command -v skopeo >/dev/null || { sudo apt-get update -q && sudo apt-get install -yq skopeo; }
-          if skopeo inspect --raw --authfile "$HOME/.docker/config.json" "docker://${IMAGE}:${IMAGE_TAG}" >/dev/null 2>&1; then
+          # Courtesy check only; the gate is "Add the immutable version tag"
+          # below, which re-checks once the package certainly exists.
+          if err="$(skopeo inspect --raw --authfile "$HOME/.docker/config.json" "docker://${IMAGE}:${IMAGE_TAG}" 2>&1 >/dev/null)"; then
             echo "::error::${IMAGE}:${IMAGE_TAG} already exists. Version tags are immutable; release a new patch version."; exit 1
+          elif grep -qi 'manifest unknown' <<<"$err"; then
+            echo "${IMAGE}:${IMAGE_TAG} is not published yet."
+          else
+            echo "::warning::Could not tell whether ${IMAGE}:${IMAGE_TAG} exists (expected on the first release, before the package exists): ${err}"
           fi
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -367,30 +444,59 @@ jobs:
       - name: Install the SDK CLI
         run: python -m pip install --disable-pip-version-check "vmware-aria-operations-integration-sdk==${SDK_VERSION}"
 
+      - name: Stamp the manifest version from the tag (runner copy only, never committed)
+        working-directory: ${{ env.PROJECT_DIR }}
+        env:
+          VERSION: ${{ steps.tag.outputs.version }}
+        run: |
+          set -euo pipefail
+          python3 - "$VERSION" <<'EOF'
+          import json, sys
+          version = sys.argv[1]
+          with open("manifest.txt", encoding="utf-8") as f:
+              manifest = json.load(f)
+          if "version" not in manifest:
+              sys.exit("manifest.txt has no version field to stamp")
+          committed = manifest["version"]
+          manifest["version"] = version
+          with open("manifest.txt", "w", encoding="utf-8") as f:
+              json.dump(manifest, f, indent=4, ensure_ascii=False)
+              f.write("\n")
+          with open("manifest.txt", encoding="utf-8") as f:
+              if json.load(f)["version"] != version:
+                  sys.exit("manifest.txt did not take the stamped version")
+          print(f"manifest.txt version {committed} -> {version} (this runner only; the committed file is unchanged)")
+          EOF
+
       - name: mp-build (builds, pushes to GHCR, writes the digest into the pak)
         env:
           IMAGE: ${{ steps.tag.outputs.image }}
         run: |
           set -euo pipefail
-          # -r overrides config.json. No credentials on argv: docker login
-          # reuses the ones docker/login-action stored above.
-          mp-build -p "$PROJECT_DIR" --no-ttl -r "$IMAGE"
+          # -r and --push-registry override config.json. No credentials on
+          # argv: mp-build's docker login reuses the ones docker/login-action
+          # stored above.
+          mp-build -p "$PROJECT_DIR" --no-ttl -r "$IMAGE" --push-registry "$IMAGE"
 
       - name: Read the digest the pak points at, and check it
         id: pak
         working-directory: ${{ env.PROJECT_DIR }}
         env:
           IMAGE: ${{ steps.tag.outputs.image }}
+          VERSION: ${{ steps.tag.outputs.version }}
         run: |
           set -euo pipefail
           shopt -s nullglob
           paks=(build/*.pak)
           [ "${#paks[@]}" -eq 1 ] || { echo "::error::expected one pak in build/, found ${#paks[@]}"; exit 1; }
-          digest="$(python3 - "${paks[0]}" "$IMAGE" <<'EOF'
+          digest="$(python3 - "${paks[0]}" "$IMAGE" "$VERSION" <<'EOF'
           import io, json, re, sys, zipfile
-          pak, image = sys.argv[1:]
+          pak, image, version = sys.argv[1:]
           with zipfile.ZipFile(pak) as z:
-              kind = json.loads(z.read("manifest.txt"))["adapter_kinds"][0]
+              manifest = json.loads(z.read("manifest.txt"))
+              if manifest.get("version") != version:
+                  sys.exit(f"pak manifest version {manifest.get('version')!r}, expected {version} from the tag")
+              kind = manifest["adapter_kinds"][0]
               with zipfile.ZipFile(io.BytesIO(z.read("adapter.zip"))) as a:
                   conf = a.read(kind + ".conf").decode()
           f = dict(l.split("=", 1) for l in conf.splitlines() if "=" in l)
@@ -407,9 +513,24 @@ jobs:
           [ "$got" = "$digest" ] || { echo "::error::registry manifest $got != pak DIGEST $digest"; exit 1; }
           {
             echo "digest=$digest"
+            echo "image_ref=${IMAGE}@${digest}"
             echo "pak_name=$(basename "${paks[0]}")"
             echo "pak_path=${PROJECT_DIR}/${paks[0]}"
           } >> "$GITHUB_OUTPUT"
+
+      - name: Vulnerability gate on the pushed digest (fails on fixable HIGH or CRITICAL)
+        # mp-build rebuilds without cache, so this scans the exact bytes the
+        # pak names, not the verify job's sibling build. Nothing is signed,
+        # attested, version-tagged or released if it fails.
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: ${{ env.TRIVY_VERSION }}
+          image-ref: ${{ steps.pak.outputs.image_ref }}
+          format: table
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          trivyignores: ${{ env.TRIVY_IGNOREFILE_PATH }}
+          exit-code: "1"
 
       - name: Check the image is anonymously pullable (Cloud Proxies pull without login)
         env:
@@ -418,14 +539,20 @@ jobs:
         run: |
           set -euo pipefail
           repo="${IMAGE#ghcr.io/}"
-          tok="$(curl -fsS "https://ghcr.io/token?scope=repository:${repo}:pull" | jq -r .token)"
+          hint="Make the package public (Package settings > Change visibility), then re-run failed jobs. Nothing has been signed, tagged or released yet."
+          # A private package already fails here: the anonymous token request is refused.
+          if ! tok="$(curl -fsS "https://ghcr.io/token?scope=repository:${repo}:pull" | jq -er .token)"; then
+            echo "::error::Anonymous token for ${IMAGE} was refused, so Cloud Proxies cannot pull it. ${hint}"
+            exit 1
+          fi
           code="$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer ${tok}" \
             -H 'Accept: application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json, application/vnd.oci.image.index.v1+json' \
             "https://ghcr.io/v2/${repo}/manifests/${DIGEST}")"
           if [ "$code" != "200" ]; then
-            echo "::error::Anonymous pull of ${IMAGE}@${DIGEST} returned HTTP ${code}. Make the package public (Package settings > Change visibility), then re-run this job. Nothing has been tagged or released yet."
+            echo "::error::Anonymous pull of ${IMAGE}@${DIGEST} returned HTTP ${code}. ${hint}"
             exit 1
           fi
+          echo "Anonymous pull of ${IMAGE}@${DIGEST} OK"
 
       - name: Attest build provenance on the image digest
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
@@ -439,16 +566,27 @@ jobs:
         with:
           subject-path: ${{ steps.pak.outputs.pak_path }}
 
-      - name: Install cosign
-        if: vars.COSIGN_SIGN == 'true'
-        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          cosign-release: v3.0.6
 
-      - name: Cosign keyless signature (opt-in via repo variable COSIGN_SIGN=true)
-        if: vars.COSIGN_SIGN == 'true'
+      - name: Cosign keyless signatures on the image digest and the pak
+        working-directory: ${{ env.PROJECT_DIR }}
         env:
-          IMAGE: ${{ steps.tag.outputs.image }}
-          DIGEST: ${{ steps.pak.outputs.digest }}
-        run: cosign sign --yes "${IMAGE}@${DIGEST}"
+          IMAGE_REF: ${{ steps.pak.outputs.image_ref }}
+          PAK_PATH: ${{ steps.pak.outputs.pak_path }}
+        run: |
+          set -euo pipefail
+          # Keyless: the certificate is issued to this workflow run's OIDC
+          # identity; no key or secret exists to manage.
+          cosign sign --yes "$IMAGE_REF"
+          pak="build/$(basename "$PAK_PATH")"
+          cosign sign-blob --yes --bundle "${pak}.sigstore.json" "$pak"
+          # Prove the commands the README gives consumers work on what we just made.
+          id="https://github.com/${GITHUB_REPOSITORY}/.github/workflows/build-and-publish.yml@${GITHUB_REF}"
+          iss="https://token.actions.githubusercontent.com"
+          cosign verify --certificate-identity "$id" --certificate-oidc-issuer "$iss" "$IMAGE_REF" >/dev/null
+          cosign verify-blob --certificate-identity "$id" --certificate-oidc-issuer "$iss" --bundle "${pak}.sigstore.json" "$pak"
 
       - name: Add the immutable version tag (same digest, no rebuild)
         env:
@@ -458,20 +596,28 @@ jobs:
         run: |
           set -euo pipefail
           auth=(--authfile "$HOME/.docker/config.json")
-          skopeo copy --preserve-digests "${auth[@]}" --dest-authfile "$HOME/.docker/config.json" \
+          # The package exists and this token can read it now, so anything
+          # other than "manifest unknown" is a reason to stop, not to tag.
+          if err="$(skopeo inspect --raw "${auth[@]}" "docker://${IMAGE}:${IMAGE_TAG}" 2>&1 >/dev/null)"; then
+            echo "::error::${IMAGE}:${IMAGE_TAG} already exists. Version tags are immutable; release a new patch version."; exit 1
+          elif ! grep -qi 'manifest unknown' <<<"$err"; then
+            echo "::error::Could not check ${IMAGE}:${IMAGE_TAG} before tagging: ${err}"; exit 1
+          fi
+          skopeo copy --preserve-digests "${auth[@]}" \
             "docker://${IMAGE}@${DIGEST}" "docker://${IMAGE}:${IMAGE_TAG}"
           got="$(skopeo inspect "${auth[@]}" --format '{{.Digest}}' "docker://${IMAGE}:${IMAGE_TAG}")"
           [ "$got" = "$DIGEST" ] || { echo "::error::${IMAGE}:${IMAGE_TAG} resolves to $got, expected $DIGEST"; exit 1; }
 
       - name: Checksums
         working-directory: ${{ env.PROJECT_DIR }}/build
-        run: sha256sum -- *.pak > SHA256SUMS
+        run: sha256sum -- *.pak *.pak.sigstore.json > SHA256SUMS
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: pak
           path: |
             ${{ env.PROJECT_DIR }}/build/*.pak
+            ${{ env.PROJECT_DIR }}/build/*.pak.sigstore.json
             ${{ env.PROJECT_DIR }}/build/SHA256SUMS
           if-no-files-found: error
 
@@ -497,20 +643,30 @@ jobs:
           PRERELEASE: ${{ needs.publish.outputs.prerelease }}
         run: |
           set -euo pipefail
+          id_re="^https://github\\.com/${GITHUB_REPOSITORY//./\\.}/\\.github/workflows/build-and-publish\\.yml@refs/tags/v"
           cat > notes.md <<EOF
-          Adapter image (per the SDK docs the Cloud Proxy pulls this on first collection; needs outbound 443 to ghcr.io):
+          Adapter image. The pak names it by digest. Per the VMware SDK
+          documentation, the Cloud Proxy pulls this digest on first collection,
+          from ghcr.io (outbound 443). VCF Operations does not check signatures,
+          attestations or scans when it installs a pak; check them yourself:
 
               ${IMAGE}:${IMAGE_TAG}
               ${IMAGE}@${DIGEST}
 
-          The pak references the image by digest. Built by GitHub Actions run
+          Built by GitHub Actions run
           ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
           from commit ${GITHUB_SHA}.
 
-          Verify that the image and the pak were built by this repository's workflow:
-
+              sha256sum -c SHA256SUMS
+              cosign verify ${IMAGE}@${DIGEST} \\
+                --certificate-identity-regexp '${id_re}' \\
+                --certificate-oidc-issuer https://token.actions.githubusercontent.com
+              cosign verify-blob ${PAK} --bundle ${PAK}.sigstore.json \\
+                --certificate-identity-regexp '${id_re}' \\
+                --certificate-oidc-issuer https://token.actions.githubusercontent.com
               gh attestation verify oci://${IMAGE}@${DIGEST} --repo ${GITHUB_REPOSITORY}
               gh attestation verify ${PAK} --repo ${GITHUB_REPOSITORY}
+              trivy image --severity HIGH,CRITICAL --ignore-unfixed ${IMAGE}@${DIGEST}
 
           The pak is not Broadcom-signed: install with "Ignore the PAK file signature checking".
           EOF

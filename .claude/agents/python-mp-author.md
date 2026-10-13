@@ -86,7 +86,7 @@ never port one to the Java SDK.
 
 ## Workflow
 
-1. Fast-forward `main` from `upstream`, branch.
+1. Fast-forward the registry's release branch from `upstream` (rule 1), branch from it.
 2. Read the issue, the assessment section it came from, and the files it
    names. Confirm the finding still holds at HEAD.
 3. Make the change. Add or update the pack's tests where it has them.
