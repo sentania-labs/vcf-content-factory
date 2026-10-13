@@ -86,3 +86,18 @@ prompt.
 
 - The buildkit release if the hook is missing from the version CI builds
   against (the investigation says which); if so, 93 waits on that tag.
+
+## Scope extension (Scott, verbatim, 2026-10-13)
+
+> also ensure that unifi and synology handle SSL verification identically
+
+The same TLS model applies to the unifi and synology adapters (own repos,
+own builds): strict validation against the platform trust store, the
+`certificateCheckUrls` hook returning the controller / DSM HTTPS root so
+Validate Connection offers the accept dialog, `allowInsecure` removed with
+the same stored-value handling, hostname rule in the docs. Those targets
+are self-signed almost everywhere, so the accept dialog is the normal path
+for them, not the exception. Order: compliance 93 proves the hook on
+devel first; then unifi and synology get one build each with the same
+change, serially (one author at a time), each reviewed and installed on
+devel under its own go.
