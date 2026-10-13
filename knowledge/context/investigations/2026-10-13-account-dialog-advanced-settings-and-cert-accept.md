@@ -110,10 +110,18 @@ custom VCF panel, so it would not test the generic dialog.)
    removing `custom_profile_path` (`knowledge/context/reviews/compliance-build-92.md` §(a)).
 2. **`advanced="true"`** with `identType` unchanged. The platform honours it
    and the split does not look at identity, so the uniqueness tuple is
-   untouched. Not proven for a third-party pak: no non-hidden use exists,
-   the attribute is outside every shipped XSD, and the SDK's
-   `XMLParserUtil` references schema validation (not traced). Would need one
-   devel install to confirm it imports and renders.
+   untouched. Not proven for a third-party pak: no non-hidden use exists
+   and the attribute is outside every shipped XSD. The import path does not
+   reject it, though (traced in a second pass, same day):
+   `AdapterDescribe` parses describe.xml with plain DOM
+   (`XMLParserUtil.getDocument`, no schema validator on that path; the
+   validator helper `getSecureSchemaValidator` is not called from the
+   describe classes), `DescribeConversionUtil`
+   (`persistence-1.0-SNAPSHOT.jar`) copies `ResourceIdentifierDescribe.isAdvanced()`
+   into the persisted `ResourceKindIdentifier.setAdvanced`, and
+   `ResKndIdentDescriber` copies it again on a describe upgrade, so an
+   upgraded pak should update existing accounts' placement. Still needs one
+   devel install to see it render.
 
 ## 2. The `certificateCheckUrls` hook
 
@@ -157,6 +165,18 @@ itself: `ComplianceConfig.java:79`, `"true".equalsIgnoreCase(allowInsecure)`
   `getConnectionURLs(AdapterConfig)` and `getConnectionURL`, so the override
   point exists on 9.0.2, not only on the 9.1.1 jars the original analysis used.
 
+- The released build is already blocked on a buildkit release for a
+  separate reason: compliance calls `SuiteApiStitcher.addChild` and
+  `findSingletonResourceId` (`ComplianceAdapter.java` 845 to 847), added to
+  the framework in `e2720b7` (2026-10-06, #193), also after 1.0.10. The
+  newest compliance release tag is `v1.0.0.80`; nothing since has been built
+  by CI.
+- All five other managed paks (synology, unifi, vcommunity, vcommunity-os,
+  vcommunity-vsphere) also pin `BUILDKIT_TAG: sdk-buildkit-v1`, so moving
+  the floating tag changes the framework under every pak's next tag build.
+  Framework commits since 1.0.10: `6045435` and `70b44de` (the
+  `vcfops_*` to `vcfcf_*` package rename), `c97bee4`, `e2720b7`.
+
 Answer: a devel build can use the hook now; a released (`v*` tag) build
 needs a buildkit release (1.0.11 or later, which moves `sdk-buildkit-v1`)
 first. That release also carries the rest of `c97bee4` (allowInsecure
@@ -172,10 +192,13 @@ says "recorded 2026-09-25, not yet applied". The only repo documents naming
 the hook are that file, the framework review
 (`knowledge/context/reviews/framework/adapter-framework-cert-hook-2026-09-25.md`,
 unit tests only: CertificateReviewTest 49/49, VcfCfAdapterTest 11/11, no
-live run), FB-004 (still open) and the build 93 design. Caveat: synology,
-unifi and vcommunity-os clones are on feature branches behind `origin/main`;
-the not-yet-applied note and the absence of any review or install record make
-an unseen remote adoption unlikely, but the remote mains were not grepped.
+live run), FB-004 (still open) and the build 93 design. The synology, unifi
+and vcommunity-os clones are on feature branches behind `origin/main`, so the
+remotes were checked too: GitHub code search for `certificateCheckUrls` across
+the `sentania-labs` org returns only factory files (`VcfCfAdapter.java`,
+`CertificateReviewTest.java`, `sdk_builder.py` scaffold,
+`tests/managementpacks/test_scaffold_sdk_cert_review.py`,
+`tier2_architecture.md`); no pak repo's default branch overrides it.
 
 Gap: `tier2_architecture.md` cites
 `knowledge/context/investigations/tls_certificate_unknown_2026_09_25.md` as
@@ -203,5 +226,6 @@ them to `identType="2"`, since that also changes identity; `advanced="true"`
 is the identity-neutral way to merely move a field, but it needs one devel
 proof first. The devel build can be cut now with local `build-sdk`; the
 released build waits on a buildkit 1.0.11 tag so `sdk-buildkit-v1` carries
-the hook, and the devel verification is the first time anyone will have seen
+the hook (it already waits on one for the 2026-10-06 stitch facade, and that
+tag moves the framework under all six paks at once), and the devel verification is the first time anyone will have seen
 the accept dialog driven by this framework.
