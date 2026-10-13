@@ -176,7 +176,10 @@ an `upstream` remote and fast-forward from it); do work on branches.
   (`investigations/2026-10-13-vsanhostmetrics-tuneup-assessment.md`); fork
   issues #1 to #6 track the tune-ups (accepted certificate unused, silent
   collect errors, one cluster aborts all, username outside the credential,
-  undeclared pyvmomi, foldered datacenters skipped); PRs upstream on Scott's go
+  undeclared pyvmomi, foldered datacenters skipped; #7 README package name); PRs upstream on Scott's go.
+  CI: branch `tuneup/ci-ghcr-attestation-release` off the author's release branch
+  `agent/beta-vsan-host-metrics` (main is stale at 1.2.3), proof tag `v1.4.6-rc.1`
+  (run 38477153855), see `knowledge/designs/ci/python-pack-ghcr-attestation.md`
 
 ### cluster-perf-risk (fork of gillaspy/cluster-perf-risk)
 

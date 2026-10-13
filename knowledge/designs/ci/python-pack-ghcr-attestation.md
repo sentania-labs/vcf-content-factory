@@ -815,3 +815,22 @@ installed); the workflow's own self-verify step passed. Still unproven: the
 Cloud Proxy pulling that digest from GHCR at install, which needs the rc
 pak installed on devel under its own go (copied to
 `dist/ClusterPerfRisk_1.3.0.pak`).
+
+### vsanhostmetrics, as built (branch tuneup/ci-ghcr-attestation-release, fce9f17, 2026-10-13)
+
+Base is the author's release branch `agent/beta-vsan-host-metrics` (v1.4.6
+plus five docs commits), not `main` (stale at 1.2.3, one failing test):
+Scott confirmed the release branch. Three commits: the mp-build project
+files generated once and compared byte for byte with the published v1.4.6
+pak and image (manifest, resources, schemas, app/, dashboards and views
+identical; pyvmomi pinned 8.0.3.0.1 as the image carries); a views refresh
+(the committed views were older than the shipped ones; the author's own
+generator reproduces all 30 shipped views, so once the checkout is the
+build source this commit keeps the release unchanged); the workflow
+cherry-picked with `RELEASE_BRANCHES: "main agent/beta-vsan-host-metrics"`
+and the test step working on a copy inside the container because one test
+rewrites a source file. Verify steps all pass locally (56 tests). Extra
+files in the pak versus the shipped one: the content/*.md and help HTML,
+untested on install. Proof tag `v1.4.6-rc.1`, run 38477153855. A main-based
+branch (`tuneup/ci-ghcr-attestation`, 461951d) is kept locally for
+reference, not pushed.
