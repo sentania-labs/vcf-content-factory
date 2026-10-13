@@ -27,3 +27,10 @@
 
 - Other instance settings, prod or qa, pushes, PRs, tags, the Summary
   rebind (parked).
+
+## Amendment 2026-10-13, 11:12 AM
+
+Build 90 failed to install (describe rejected: the new overrides alert wrapped
+one symptom set in a composite container; devel rolled back to 89, instances
+unaffected). Build 91 is build 90 plus that describe fix. The same scope and
+evaluation plan apply to the build 91 pak under this approval.
