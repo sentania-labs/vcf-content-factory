@@ -172,8 +172,11 @@ an `upstream` remote and fast-forward from it); do work on branches.
 - **Target:** `content/sdk-adapters/vsanhostmetrics/`
 - **Upstream:** `https://github.com/nickfirefoot/vsanhostmetrics.git`
 - **Type:** Python Integration SDK container adapter (upstream's)
-- **Status:** forked 2026-10-13; first tune-up pass pending (certificate
-  validation options, credential storage)
+- **Status:** forked 2026-10-13; assessed
+  (`investigations/2026-10-13-vsanhostmetrics-tuneup-assessment.md`); fork
+  issues #1 to #6 track the tune-ups (accepted certificate unused, silent
+  collect errors, one cluster aborts all, username outside the credential,
+  undeclared pyvmomi, foldered datacenters skipped); PRs upstream on Scott's go
 
 ### cluster-perf-risk (fork of gillaspy/cluster-perf-risk)
 
@@ -183,4 +186,8 @@ an `upstream` remote and fast-forward from it); do work on branches.
 - **Type:** Python Integration SDK container adapter (upstream's); credential
   posture already mapped in
   `investigations/2026-10-13-cluster-perf-risk-credential-reuse.md`
-- **Status:** forked 2026-10-13; first tune-up pass pending
+- **Status:** forked 2026-10-13; assessed
+  (`investigations/2026-10-13-cluster-perf-risk-tuneup-assessment.md`); fork
+  issues #1 to #9 track the tune-ups (silent login failure, unverified TLS,
+  publish-to-native edges, per-cluster exception, timeouts, request volume,
+  token at DEBUG, empty Test Connection, packaging); PRs upstream on Scott's go
