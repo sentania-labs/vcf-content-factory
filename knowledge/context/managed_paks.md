@@ -168,7 +168,7 @@ an `upstream` remote and fast-forward from it); do work on branches.
 
 ### vsanhostmetrics (fork of nickfirefoot/vsanhostmetrics)
 
-- **Remote:** `https://github.com/sentania-labs/vsanhostmetrics.git`
+- **Remote:** https://github.com/sentania-labs/vsanhostmetrics
 - **Target:** `content/sdk-adapters/vsanhostmetrics/`
 - **Upstream:** `https://github.com/nickfirefoot/vsanhostmetrics.git`
 - **Type:** Python Integration SDK container adapter (upstream's)
@@ -177,7 +177,7 @@ an `upstream` remote and fast-forward from it); do work on branches.
 
 ### cluster-perf-risk (fork of gillaspy/cluster-perf-risk)
 
-- **Remote:** `https://github.com/sentania-labs/cluster-perf-risk.git`
+- **Remote:** https://github.com/sentania-labs/cluster-perf-risk
 - **Target:** `content/sdk-adapters/cluster-perf-risk/`
 - **Upstream:** `https://github.com/gillaspy/cluster-perf-risk.git`
 - **Type:** Python Integration SDK container adapter (upstream's); credential
