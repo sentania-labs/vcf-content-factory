@@ -138,6 +138,25 @@ that build. Any pak dashboard whose bound dashboard uses a widget type
 unknown to the target build therefore fails silently. Evidence:
 `../investigations/2026-10-12-compliance-pak-summary-binding.md`.
 
+## The Summary clone can carry no widget config (9.0.2)
+
+Seen live on devel (9.0.2.0 Build 25137845) on 2026-10-13 with compliance
+pak 89. The binding ran, and the Summary tab showed the right layout and
+titles, but every widget fell back to its defaults. The cause: the importer
+parks each widget's non-empty config in `WidgetDTONew.configKey`, still
+holding import placeholders, and a per-user `DashboardImporter` thread
+resolves it into `config` on a 10-minute tick. The installer's
+`saveDashboardAsTemplate` runs seconds after the import, so the SUMMARY
+clone copies widgets that still have `config = null`. Nothing ever resolves
+the templates key (user `null`). This also means the "widget state copied"
+statement above holds only for a source that has already resolved. No
+YAML or renderer change can fix it. Re-bind (`bind-summary`) once the source's widgets
+all show `isLoading: false`. To check a clone, read
+`getDashboardConfig?isTemplate=true`: `isLoading: true` with no
+`widgetConfig` means it is unresolved. Do not rely on `getWidgetConfigs`,
+which is scoped to the user and returns `{}` for every template. Evidence:
+`../investigations/2026-10-13-compliance-summary-clone-config-loss.md`.
+
 ### 9.0.2 WidgetType keys (complete list)
 
 Read on 2026-10-12 from `WidgetDTONew$WidgetType` in
