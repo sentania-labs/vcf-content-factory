@@ -5,7 +5,7 @@
 - **Adapter repo:** `content/sdk-adapters/compliance/`
 - **Date:** 2026-10-13
 - **Builds on:** build 92 (`compliance-build-92-drop-custom-skip-cancel.md`)
-- **Status:** go from Scott 2026-10-13 ("okay - go ahead."); design written;
+- **Status:** go from Scott 2026-10-13 ("okay - go ahead."); design written; build 92 identity result PASS (remove, do not hide);
   authoring starts when the build 92 identity result and the Advanced
   Settings placement investigation are in
 

@@ -24,3 +24,16 @@
 ## Not covered
 
 - Any other instance setting change, prod or qa, pushes, PRs, tags.
+
+## Outcome 2026-10-13
+
+Installed 2:44 to 2:49 PM, version 0.0.0.92 on /api/solutions, pak results
+all successful, jar matches. Identity: all three account ids and stored
+settings unchanged except custom_profile_path no longer stored; wld01 saved
+unchanged at 2:54 PM with no error. Skip pushes -1 every cycle (samples
+2:45, 2:52, 2:58, 3:03 PM on both hosts); overrides and VM pin in force;
+Suite API POST count per two cycles 1182 before and after. Not proven: the
+Skip alert cancel, because both shell-timeout alerts were already CANCELED
+at 1:10 and 1:15 PM before the upgrade (not by the adapter: no samples after
+11:54 AM). Proof needs the alerts re-fired (remove the Skip, then restore),
+which is outside this approval.
