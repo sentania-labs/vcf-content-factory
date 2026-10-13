@@ -723,8 +723,16 @@ default always false (§2.4); `get_objects_by_type` compares the wrong field
 `_paged_request` (§5); the lib imports `requests` and `urllib3` but declares
 only `aenum==3.1.11` and `cryptography==44.0.0`
 (`sdk:lib/python/setup.cfg:25-27`, confirmed in the PyPI 1.1.0 wheel
-metadata). Whether the base image supplies `requests` transitively (through
-`connexion`) was not verified; declare it.
+metadata). The base image does supply `requests` (and so `urllib3`)
+transitively: connexion 3.3.0 declares `requests>=2.27`, so the import only
+fails outside the image (verified 2026-10-13; a clean venv with lib 1.1.0
+raises `ModuleNotFoundError: requests`). Declare it anyway. Draft upstream
+issues for all of these, plus the cryptography pin, the Suite API client
+defaults and two `mp-build` defects, verified with repros against the PyPI
+releases, are in `investigations/2026-10-13-sdk-upstream-issue-drafts.md`
+(not filed). Trivy's findings for pip's vendored msgpack, urllib3 and
+setuptools in the base image are **not** an SDK defect: they ship inside
+current pip (26.2.1), so a base-image rebuild cannot clear them.
 
 ---
 
