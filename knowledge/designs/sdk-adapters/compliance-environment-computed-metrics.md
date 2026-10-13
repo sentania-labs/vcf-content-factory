@@ -4,7 +4,7 @@
 - **Slug:** compliance-environment-computed-metrics
 - **Adapter repo:** `content/sdk-adapters/compliance/` (sentania-labs/vcf-content-factory-sdk-compliance)
 - **Date:** 2026-10-01
-- **Status:** proven on devel 2026-10-05 (builds 84 to 87); adapter PR pending; factory PR #193 open
+- **Status:** proven on devel 2026-10-05 (builds 84 to 87); adapter PR #37 and factory PR #193 merged 2026-10-11 (build 87)
 
 ## Initial prompt
 

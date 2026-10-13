@@ -5,7 +5,7 @@
 - **Adapter repo:** `content/sdk-adapters/compliance/` (sentania-labs/vcf-content-factory-sdk-compliance)
 - **Date:** 2026-10-13
 - **Tracking:** adapter issue #40 (docs trigger); this design supersedes the "custom profile how-to" as written
-- **Status:** go from Scott 2026-10-13 ("let's move forward on that"); build 90 authored on feat/build-90-overrides-file (a27fea6..0f833bd), review in progress; devel install awaits a separate go
+- **Status:** built as build 90 (rejected by Ops: composite symptom set) and build 91 (installed on devel 2026-10-13 11:33 AM, evaluation PASS except the Skip alert clear, adapter issue #41); doc path corrections and #41 are build 92 items
 
 ## Initial prompt (Scott, verbatim, 2026-10-13)
 

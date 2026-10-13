@@ -34,3 +34,11 @@ Build 90 failed to install (describe rejected: the new overrides alert wrapped
 one symptom set in a composite container; devel rolled back to 89, instances
 unaffected). Build 91 is build 90 plus that describe fix. The same scope and
 evaluation plan apply to the build 91 pak under this approval.
+
+## Outcome 2026-10-13
+
+Build 91 installed 11:30 to 11:33 AM, version 0.0.0.91 confirmed on
+/api/solutions. Evaluation per plan PASS, except the Skip's existing alert
+did not clear (adapter issue #41). Left on devel under this approval: config
+file `compliance_overrides_wld01.xml` (valid content) and the wld01 instance
+Overrides file setting pointing at it.
