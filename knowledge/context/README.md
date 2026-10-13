@@ -74,6 +74,16 @@ Tier 2 framework v2 migration record (componentLogger, keyed constructors,
 the SPI reshape) — cross-referenced throughout `tier2_architecture.md` and the
 SDK adapter reviews.
 
+### `python_integration_sdk.md`
+VMware's Python Integration SDK (container adapters, `mp-init` / `mp-test` /
+`mp-build`, `aria.ops` lib): REST contract, AdapterDefinition to describe.xml
+(identType = advanced = identity), certificate hand-off and how to verify with
+pyVmomi / requests, credentials, the Suite API client's insecure defaults,
+error reporting, pak layout (image referenced by registry digest, never
+embedded), today's fork defects, and a Python pack PR review checklist. Read
+before authoring or reviewing a Python pack (the third-party forks in
+`managed_paks.md`).
+
 ---
 
 ## Read for content authoring
