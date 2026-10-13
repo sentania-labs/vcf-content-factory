@@ -9,7 +9,7 @@
 - **Pak reviewed:** `dist/vcfcf_sdk_compliance.0.0.0.93.pak`, sha256
   `55b45435bf0864da14280a646d07d64a46101aa5a939db6b8fa3a40d4029f3aa`
   (built 3:27 PM today), reference `0.0.0.92` (`d212c970...`)
-- **Verdict:** CHANGES REQUESTED (2 BLOCKING / 1 WARNING / 5 NIT)
+- **Verdict:** first pass CHANGES REQUESTED (2 BLOCKING / 1 WARNING / 5 NIT); re-review at `da0c25f` APPROVE (see Re-review below)
 
 ## Bottom line
 
@@ -352,3 +352,215 @@ The design's list, plus:
 3. Before the upgrade, confirm no two accounts differ only in
    `benchmark_profile` or `allowInsecure` for the same vCenter: the
    uniqueness tuple shrinks to `vcenter_host`.
+
+## Re-review (HEAD da0c25f)
+
+- **Date:** 2026-10-13
+- **Scope:** five fix commits `0fd34c2..da0c25f` on top of `8021a1c`
+- **Pak reviewed:** `dist/vcfcf_sdk_compliance.0.0.0.93.pak`, sha256
+  `2cf49998e76ba71500b75119932eccaec48ab3d66d547dbbde100a8d8e34533d`
+  (built 3:57 PM today), reference `0.0.0.92`
+- **Verdict:** APPROVE (0 BLOCKING / 0 WARNING / 1 NIT). B1, B2, W1 and
+  N1 to N4 are closed. N5 is factory issue #204 (docs_gen, not this pak).
+
+### Bottom line
+
+The certificate name is now really checked, on every vCenter client, and
+I reproduced it myself against a local HTTPS server rather than taking
+the author's table on faith. A chain failure still comes first (accept
+dialog intact), accepting a certificate does not excuse a wrong name,
+and IP, IPv6 and DNS names all behave as the docs say. The not-collected
+marker pushes exactly one key, the alert fires on it alone, and the docs
+now tell operators to record their settings before upgrading instead of
+promising log lines.
+
+### Claims check (independent re-runs)
+
+| Check | Result |
+|---|---|
+| `validate-sdk` | OK (javac `-source 11` options warning only) |
+| `build-sdk` from HEAD `da0c25f` (scratch output) | builds 0.0.0.93. Every loose file in the pak and `adapters.zip` is hash-identical to the author's; the two jars differ only as archives (entry contents identical). The pak's `describe.xml` is byte-identical to HEAD. Adapter work tree clean afterwards. |
+| `pak-compare` 93 vs 92 | gate PASS, 0 BLOCKING / 1 WARNING (instance identifier count 3 vs 5) / 1 INFO (manifest description), unchanged from the first pass |
+| `ci/run_java_tests.sh` | all 14 Java suites pass (CertificateTest prints its handshake evidence), all 6 Python suites pass, generator `up to date` |
+| `pytest` | adapter `tests/`: 37 passed; factory `tests/`: 2063 passed, 5 skipped |
+| Symptom sets (built pak, parsed independently) | 152 `SymptomDefinition`, 152 `SymptomSet` refs, 0 dangling, 7 `SymptomSets` containers each with 2 or more children, all wait/cancel cycles integers |
+
+### B1: closed (name now enforced; verified by my own handshakes)
+
+**Code.** `sslContextFor()` (`ComplianceAdapter.java:231`) returns
+`VCenterCertificates.nameChecking(getAdapterTrustManager(), getKeyManagers())`,
+the same two inputs the framework's `getPlatformSslContext()` used
+(`VcfCfAdapter.java:1018-1029`), so the trust set (trust store plus
+accepted certificates) is unchanged; only the wrapper is new.
+`sslSocketFactoryFor()` takes that context's factory. Every client goes
+through one of the two: REST (`:172`), SOAP (`:176`, which threads the
+factory into esxcli), Test Connection (`:315`), VAMI (`:2100`). The SOAP
+and esxcli connection sites call `VCenterCertificates.secure`, which sets
+the factory and the always-false verifier. A source grep over all five
+client classes finds no other `SSLContext`, socket factory, trust
+manager or verifier, and `CertificateTest.sourceContract` now pins that
+(it closes N3 too). The only non-wrapper path is the fallback when the
+platform trust manager is unavailable (null or not X509): `null` context
+for `HttpClient` and `SSLSocketFactory.getDefault()` for SOAP, both of
+which run the JDK's own chain and name checks. Never trust-all.
+
+**Chain failure can never become a pass.** In both `checkServerTrusted`
+overloads the platform check runs first with no `try`, so its exception
+propagates unchanged before `checkName` is reached; the 2-argument form
+and a missing peer host both refuse (fail closed); client certificates
+are refused outright.
+
+**Independent reproduction.** My own harness (scratch dir, no lab, not
+the author's test), compiled against the `vcfcf_compliance.jar` from the
+shipped pak, JDK 17. A CA, CA-signed certificates for `othername.example`
+(wrong), `localhost` + IP SANs `127.0.0.1` and `::1` (right), DNS-only
+and CN-only variants, and two self-signed ones (untrusted). The
+"platform" is a chain-only `X509ExtendedTrustManager` (trust store plus
+an accepted set, throwing a `CustomCertificateException` like the real
+one), plus a plain `X509TrustManager` variant. Every expectation met:
+
+| Case | localhost | 127.0.0.1 | [::1] |
+|---|---|---|---|
+| Control: raw platform, `HttpClient` and `HttpsURLConnection` (default verifier), wrong name | 200 | 200 | 200 |
+| `nameChecking`, `HttpClient` (REST, VAMI, Test Connection), wrong name | NAME_MISMATCH | NAME_MISMATCH | NAME_MISMATCH |
+| `nameChecking` + `secure()` (SOAP, esxcli), wrong name | NAME_MISMATCH | NAME_MISMATCH | NAME_MISMATCH |
+| `nameChecking` alone (default verifier), wrong name | NAME_MISMATCH | NAME_MISMATCH | NAME_MISMATCH |
+| Strict verifier alone over the raw platform factory | NAME_MISMATCH ("HTTPS hostname wrong") | same | same |
+| `nameChecking` over a plain X509TrustManager, wrong name | NAME_MISMATCH | NAME_MISMATCH | NAME_MISMATCH |
+| Right name, both client shapes, both platform variants | 200 | 200 | 200 |
+| DNS-only SAN | 200 | NAME_MISMATCH | NAME_MISMATCH |
+| CN-only, no SANs | 200 | NAME_MISMATCH | n/a |
+| Untrusted chain + wrong name, both shapes | UNTRUSTED | UNTRUSTED | UNTRUSTED |
+| Untrusted chain + right name | UNTRUSTED | UNTRUSTED | UNTRUSTED |
+| After accept (same context, accepted set updated): right name | 200 | 200 | 200 |
+| After accept: wrong name | NAME_MISMATCH | NAME_MISMATCH | NAME_MISMATCH |
+
+IPv6: `HttpsURLConnection` reports the peer as `[::1]` and `HttpClient`
+as `0:0:0:0:0:0:0:1`; both normalize and match the IP SAN, and the SAN
+side is compared as an `InetAddress`, so `::1`, `0000::0001` and the
+long form are equal. A zone-scoped literal (`fe80::1%lo`) fails closed.
+An IP never matches a DNS SAN or CN; a CN is used only without DNS SANs.
+
+**Deliberate breaks.** In my harness, three breaks are each detected:
+no wrapper on `HttpClient` (200 on a wrong name), SOAP with the raw
+factory and the JDK default verifier set explicitly (200: confirms the
+author's finding that setting the default verifier is a no-op), and a
+wrapper that swallows the chain failure (200 on an untrusted chain). I
+also mutated scratch copies of the source and re-ran the author's
+`CertificateTest`: removing `checkName` from the wrapper, removing the
+strict verifier from `secure()`, and swallowing the platform exception
+on the engine path. The suite fails on all three.
+
+**Validate Connection now checks the name.** Test Connection uses the
+same wrapped context, so an IP-entered vCenter whose certificate lacks
+that IP fails at Validate, even after its certificate is accepted.
+`docs/installing.md` describes exactly that (TLS section, new step 3:
+"fails here with the name message, even after you accept its
+certificate in step 2: edit the host and validate again"), and the
+troubleshooting entry and Upgrading bullet add that accounts which
+collected on 92 by IP stop collecting. `overview.md`, README and the
+CHANGELOG line agree (README says "an IP or a name not on its
+certificate", which is correct: a CA certificate with an IP SAN passes
+by IP). The stale claims from the first pass ("the SOAP connection checks
+the name", "JDK default hostname verifier stays in place") are gone from
+code comments and docs.
+
+### B2: closed
+
+Every log-line claim is now conditional ("if the platform still hands
+the adapter the stored value"): README, `installing.md` (Upgrading),
+`data-reference.md`, `overrides.md`, both `ComplianceConfig` javadocs,
+and the CHANGELOG. `installing.md` adds the pre-upgrade step: record
+Compliance Profile and Allow Insecure SSL per account from the edit
+dialog or `GET /api/adapters/{id}` (`benchmark_profile`,
+`allowInsecure`), citing the build 92 evidence, and README points to it.
+Post-upgrade: Validate Connection each formerly insecure account and
+check status. Whether the lines fire is still worth recording on devel,
+but the docs no longer depend on it.
+
+### W1: closed
+
+`collectWorldCycle` catches any non-interrupt failure of
+`ensureVCenterConnected`, calls `markCycleNotCollected`, and rethrows
+the original, so the cycle still fails and the account still goes to
+error. `ComplianceDecisions.markNotCollected` uses the id the last
+successful cycle resolved (set only after a cycle that reached vCenter,
+from the UUID-matched `vcEntry`, cleared on every configure), else a
+lookup by VCURL equal (case-insensitive) to the entered host with no
+UUID, else pushes nothing and the caller WARNs. Any exception inside is
+caught and logged; it cannot mask the real cause.
+
+`notCollectedStats()` is a single entry, `VCF-CF Compliance|Rollup|incomplete`
+= 1 (`ComplianceRollup.PREFIX` is `VCF-CF Compliance|Rollup|`), pinned
+by `CertificateTest.notCollected`. Nothing else is pushed: no
+per-object stats, no rollup counts, so no stale pass is refreshed. In
+the built pak, symptom
+`vcfcf_compliance_collection_vcenter_rollup_incomplete` (VMwareAdapter
+Instance, key `VCF-CF Compliance|Rollup|incomplete`, `= 1`) is one of
+three bare `SymptomSet`s under the `operator="or"` container of alert
+`vcfcf_compliance_collection_vcenter`, so it fires on that key alone.
+The next complete cycle's `toStats()` writes 0. The docs
+(`installing.md` TLS and troubleshooting, `overview.md`,
+`data-reference.md`) state the resolution limits and the "only key
+pushed" behavior accurately.
+
+### N1 to N4: closed
+
+- N1: `checkUrls(String)` takes only the host; the hook no longer reads
+  `read_appliance_settings`. (The javadoc still mentions
+  `readAppliance` to explain why no second URL exists; accurate.)
+- N2: the three stale javadoc passages in `ComplianceOverrides` are
+  rewritten; no fixed-mode wording remains.
+- N3: the no-own-trust-path pins cover all five client classes.
+- N4: the blank-profile (former SCG 8.0) note is in `installing.md`,
+  `data-reference.md` and `overrides.md`, with the pin to add.
+
+### New finding
+
+- **N-R1 (NIT)** `VCenterCertificates.ipLiteral`
+  (`VCenterCertificates.java`, `isIpLiteral` + `InetAddress.getByName`).
+  A host that looks like dotted IPv4 but is not a valid literal (for
+  example `300.1.1.1`) passes the `IPV4` regex, and `getByName` then
+  does a DNS lookup inside the handshake and compares the result with
+  IP SANs. Not reachable with a sane entry and fails closed unless DNS
+  answers for that odd name. Optional: validate octets (0 to 255) before
+  `getByName`, or use the JDK's literal-only parse. Not a ship blocker.
+
+Observation, not a finding: the "no peer host" refusal text is not
+classified as a certificate failure, so it would surface as a generic
+error. JSSE always supplies the peer host for these URL-based clients,
+so it is unreachable in practice.
+
+### Registry check (`knowledge/context/defects.md`)
+
+- **DEF-023** open. Code fixed in build 88; still owed: devel proof
+  (paging seen in the log, or the vCenter collection alert path
+  exercised). `ComplianceStitcher.fetchResources`
+  (`ComplianceStitcher.java:277`) is not in this delta. Note: the W1
+  VCURL fallback now also calls it through `loadVCenterAdapterInstance`,
+  and the new not-collected marker exercises the same vCenter collection
+  alert, so a devel run with vCenter unreachable could supply part of
+  that proof.
+- **DEF-025** open, unchanged. `cleanBatch` (`ComplianceAdapter.java:1208`)
+  and `ComplianceDecisions.staleControls` (called at `:1255`) are not in
+  this delta; still more reachable on upgrade as noted in the first pass.
+- No other open defect names compliance.
+- Registration candidates: none. The first pass's B1 and W1 candidacies
+  lapse with their fixes.
+
+### Devel verification still owed (under its own go)
+
+The first pass's list stands, sharpened by the fixes:
+
+1. After the upgrade, whether `benchmark_profile` and `allowInsecure`
+   are still stored, and whether the INFO/WARN lines appear.
+2. Validate Connection on wld01 by FQDN (dialog, accept, test passes,
+   next cycle collects); then by IP: expect the name message at
+   Validate (if the certificate has no IP SAN), and record whether the
+   platform's own probe shows the dialog first.
+3. With vCenter unreachable for a cycle: `Rollup|incomplete` = 1 on the
+   vCenter object, "Compliance data not collected (vCenter)" raised,
+   the "not reached this cycle" WARN in the log, no other key changed;
+   then 0 and the alert cancelled on the next good cycle.
+4. Before the upgrade, no two accounts differ only in
+   `benchmark_profile` or `allowInsecure` for the same vCenter.
