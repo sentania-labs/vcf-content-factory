@@ -73,7 +73,7 @@ The intent is to skip an unknown widget. But the message reads `"Title"` and
 installer moves on to the next directory without sharing or binding.
 
 `WidgetDTONew$WidgetType` (in `common/lib/vcops-bridge-client-1.0-SNAPSHOT.jar`)
-on this build has no `Section` entry. It has 48 constants, including Scoreboard,
+on this build has no `Section` entry. It has 47 constants, including Scoreboard,
 PropertyList, View, MetricChart, AlertList and IntSummaryAlertVolume; zero
 strings match "section". World Summary is the only one of the five dashboards
 with a `Section` widget (widget `7b1f2093`, the 12-wide row 1 container). The

@@ -138,6 +138,76 @@ that build. Any pak dashboard whose bound dashboard uses a widget type
 unknown to the target build therefore fails silently. Evidence:
 `../investigations/2026-10-12-compliance-pak-summary-binding.md`.
 
+### 9.0.2 WidgetType keys (complete list)
+
+Read on 2026-10-12 from `WidgetDTONew$WidgetType` in
+`/usr/lib/vmware-vcops/common/lib/vcops-bridge-client-1.0-SNAPSHOT.jar`
+on devel, VCF Operations 9.0.2.0 Build 25137845 (decompiled with `javap`,
+key strings taken from the enum's static initializer). The enum has 47
+constants, not the 48 the investigation note gives (48 is the count of
+static fields including the synthetic `$VALUES` array). `fromKey` matches with case-sensitive
+`String.equals` against the Key column, so the dashboard JSON widget
+`type` field must match that string exactly. The enum name is the Java
+constant and never appears in dashboard JSON.
+
+| # | Key (dashboard JSON `type`) | Enum name |
+|---|---|---|
+| 1 | `ResourceList` | `RESOURCE` |
+| 2 | `MetricPicker` | `METRIC_PICKER` |
+| 3 | `MetricChart` | `METRIC_CHART` |
+| 4 | `Scoreboard` | `SCOREBOARD` |
+| 5 | `Heatmap` | `HEAT_MAP` |
+| 6 | `HealthChart` | `HEALTH` |
+| 7 | `ResourceRelationship` | `RESOURCE_RELATIONSHIP` |
+| 8 | `ResourceRelationshipAdvanced` | `RESOURCE_RELATIONSHIP_ADVANCED` |
+| 9 | `ProblemAlertsList` | `PROBLEM_ALERT_LIST` |
+| 10 | `ParetoAnalysis` | `PARETO_ANALYSIS` |
+| 11 | `TextDisplay` | `TEXT_DISPLAY` |
+| 12 | `AlertList` | `ALERT` |
+| 13 | `IntSummaryStress` | `INT_SUMMARY_STRESS` |
+| 14 | `Skittles` | `SKITTLES` |
+| 15 | `SparklineChart` | `SPARKLINE` |
+| 16 | `ScoreboardHealth` | `SCOREBORD_HEALTH` |
+| 17 | `View` | `VIEW` |
+| 18 | `EnvironmentStatus` | `ENVIRONMENT_STATUS` |
+| 19 | `TagPicker` | `TAG_PICKER` |
+| 20 | `ParetoChart` | `PARETO_CHART` |
+| 21 | `Forensics` | `FORENSICS` |
+| 22 | `WeatherMap` | `WEATHER_MAP` |
+| 23 | `ContainerOverview` | `APPLICATION_OVERVIEW` |
+| 24 | `Geo` | `GEO` |
+| 25 | `ContainerDetails` | `APPLICATION_DETAIL` |
+| 26 | `RollingViewChart` | `ROLLING_VIEW_CHART` |
+| 27 | `MashupChart` | `MASHUP_CHART` |
+| 28 | `IntSummaryHealth` | `INT_SUMMARY_HEALTH` |
+| 29 | `IntSummaryWorkload` | `INT_SUMMARY_WORKLOAD` |
+| 30 | `IntSummaryAnomalies` | `INT_SUMMARY_ANOMALIES` |
+| 31 | `IntSummaryFaults` | `INT_SUMMARY_FAULTS` |
+| 32 | `IntSummaryRisk` | `INT_SUMMARY_RISK` |
+| 33 | `IntSummaryTimeRemaining` | `INT_SUMMARY_TIME_REMAINING` |
+| 34 | `IntSummaryCapacity` | `INT_SUMMARY_CAPACITY` |
+| 35 | `IntSummaryEfficiency` | `INT_SUMMARY_EFFICIENCY` |
+| 36 | `IntSummaryWaste` | `INT_SUMMARY_WASTE` |
+| 37 | `IntSummaryDensity` | `INT_SUMMARY_DENSITY` |
+| 38 | `IntSummaryAlertVolume` | `INT_SUMMARY_ALERT_VOLUME` |
+| 39 | `IntSummaryCurrentPolicy` | `INT_SUMMARY_CURRENT_POLICY` |
+| 40 | `IntSummaryEnvironment` | `INT_SUMMARY_ENVIRONMENT` |
+| 41 | `ActionsResult` | `ACTIONS_RESULT` |
+| 42 | `TopologyGraph` | `TOPOLOGY_GRAPH` |
+| 43 | `PropertyList` | `PROPERTIES` |
+| 44 | `WorkloadBalance` | `WORKLOAD_BALANCE` |
+| 45 | `ClusterSettings` | `CLUSTER_SETTINGS` |
+| 46 | `RecommendedActions` | `RECOMMENDED_ACTIONS` |
+| 47 | `LogAnalysis` | `LOG_ANALYSIS` |
+
+Not in this list, so rejected by the 9.0.2 importer: `Section`. Of the 14
+widget types the factory renderer (`src/vcfcf_core/dashboards/render.py`)
+can emit (ResourceList, View, TextDisplay, Section, Scoreboard,
+MetricChart, HealthChart, ParetoAnalysis, AlertList, ProblemAlertsList,
+IntSummaryAlertVolume, Heatmap, PropertyList,
+ResourceRelationshipAdvanced), `Section` is the only one absent from
+9.0.2. A dashboard targeting 9.0.x must not carry a Section widget.
+
 ## Uninstall behavior
 
 `removeContent` deletes the tracked dashboard ids (`deleteDashboardTabs`
