@@ -569,3 +569,62 @@ The first pass's list stands, sharpened by the fixes:
 
 APPROVE, 0 BLOCKING / 0 WARNING / 0 NIT: the diff from `da0c25f` is only `VCenterCertificates.isIpLiteral` (four octets 0 to 255; IPv6 by colon, bracket stripped by normalizeHost), its CertificateTest cases and one CHANGELOG line; 300.1.1.1 and 10.0.0.256 are not literals, 10.0.0.1, 255.255.255.255 and [::1] are, [fd00::5] still matches its IP SAN, and a wrong-name literal still refuses (IP SAN mismatch, IP never matches CN, 127.0.0.1 handshake fails); `ci/run_java_tests.sh` and pytest (37 passed) pass, validate-sdk OK, and `build-sdk` from HEAD matches the author's pak in all 180 nested entries; DEF-023 and DEF-025 untouched by this commit, unchanged.
 Final pak: `dist/vcfcf_sdk_compliance.0.0.0.93.pak`, sha256 `6c436c55136d4b2640dc297b5e7710f7bf85cb91ddd58406fff88395115d941c`.
+
+## Codex round confirmation (HEADs `20113ad`, `218a538`, `4792114`)
+
+Reviewed 2026-10-13, 6:52 PM local. **APPROVE, 0 BLOCKING / 0 WARNING / 1 NIT.**
+
+**Scope matches the brief.** Previous approved origin heads (from the remote reflog): build 88 branch `72c44e6`, build 90 branch `f22c3d8`, build 93 branch `54ca857`.
+
+- PR #44 (`72c44e6..20113ad`): `.github/workflows/tests.yml` only. Matrix `java: ['17', '25']`, temurin, `fail-fast: false`, pinned actions SHAs unchanged.
+- PR #45 (`f22c3d8..218a538`): `196d481` touches `OverridesStore.java`, `OverridesTest.java`, `docs/overrides.md`, `CHANGELOG.md`. The merge `218a538` adds only `tests.yml` (first-parent diff), with no conflict edits.
+- PR #46 (`54ca857..4792114`): the merge `5d916e4` carries `196d481` byte for byte. Its one conflict is in CHANGELOG.md, resolved by keeping both lines. `9471649` touches `VCenterCertificates.java`, `CertificateTest.java`, `CHANGELOG.md`. The merge `4792114` adds only `tests.yml`, identical to `20113ad`.
+- No describe.xml, adapter.yaml, generator or profile change. `build_number` stays 93. The diff adds no em dashes.
+- Each PR is its own commits plus a merge of its base: 88 is 8 commits on main, 90 is 88 plus its own, 93 is 90 plus its own.
+
+**1501 match.** `API_ERROR_1501` keys on the field name (`"?apiErrorCode"?\s*[:=]\s*"?1501\b`) and needs `HTTP 400` too. A file name cannot fake it: `path()` URL-encodes the name, so `=`, `:` and `"` arrive as `%3D`, `%3A` and `%22`. I probed the names `site-1501`, `1501`, `apiErrorCode=1501`, `apiErrorCode:1501` and `"apiErrorCode":1501` on a bare 400. None classify as absent. `errorCode:1501`, a 503 carrying 1501, `HTTP 4000` and `HTTP 1400` are not absent either.
+
+**Bare 400 (store probe).**
+- With a copy loaded, a bare 400 keeps the copy for cycles 1 and 2, with no alert and status `fetch failed: HTTP 400 (no such file, or a bad request), last good from ... -05:00`. Cycle 3 raises `notLoaded`.
+- With no copy, a fresh store raises `notLoaded` on the first cycle: `... no copy in force`.
+- A 404 after a load drops the copy and reads ABSENT.
+- docs/overrides.md describes exactly this.
+
+**Time format.** Pattern `yyyy-MM-dd HH:mm xxx`, Locale.ROOT. I tested every available zone ID at 14 instants (7852 samples): 0 contain `Z`, and 0 fail to round-trip through `OffsetDateTime.parse` to the same instant. UTC renders `+00:00`, and a null zone falls back to the system zone (`-05:00` here). No other source or doc parses the old `z` form.
+
+**Classifier.**
+- JDK 17 `HTTPS hostname wrong:` and JDK 25 `Wrong HTTPS hostname:` both read NAME_MISMATCH.
+- A chain failure stays UNTRUSTED even when its text holds both "hostname" and "should be". The PKIX-text and exception-type checks return at once, and a name hit only sets a flag, so cause order does not matter. Probes that all return UNTRUSTED:
+  - an SSLHandshakeException whose text is PKIX plus both words
+  - a name-hint wrapper around a CertPathValidatorException
+  - a CertPathBuilderException whose message has both words
+  - a name-hint exception with PKIX text in a suppressed exception
+- Plain errors stay null: `certificate_unknown` alone, UnknownHost and connection refused.
+- See N1 for the one case that misclassifies.
+
+**Checks.**
+
+| Check | Result |
+|---|---|
+| `ci/run_java_tests.sh` (local JDK 17.0.20.1) | exit 0, all 14 Java suites plus the 6 Python suites pass |
+| JDK 25 leg | not installed locally. GitHub Actions `tests` runs on all three heads passed on both `tests (17)` and `tests (25)` (for example run 38486286121 on `4792114`) |
+| adapter pytest | 37 passed |
+| `validate-sdk` | OK (javac `-source 11` options warning only) |
+| `build-sdk` from `4792114` (scratch) | builds 0.0.0.93. All 180 nested entries are hash-identical to the author's pak. The author's pak sha256 `443e97a0...ffd6e` matches the brief. The jar's `OverridesStore.class` carries the `xxx` pattern and `apiErrorCode`, and `VCenterCertificates.class` carries the new wording. Work tree clean afterwards. |
+| `pak-compare` 93 vs 92 | gate PASS, 0 BLOCKING / 1 WARNING (instance identifier count 3 vs 5, by design since build 93) / 1 INFO (manifest description). Same as the earlier passes. |
+| describe.xml in the built pak | byte-identical to HEAD. 7 `<SymptomSets>` containers, none with fewer than 2 children. 152 `<SymptomSet ref>`, all resolving to the 152 symptom definitions. Every `waitCycles` / `cancelCycles` is an integer. |
+
+**N1 (NIT).** `VCenterCertificates.java:175`. The loose clause `hostname` plus `should be` can classify a non-certificate error as NAME_MISMATCH. Probe: `UnknownHostException("hostname vc01 should be resolvable")` returns NAME_MISMATCH, where the code before this change returned null.
+
+Effect: Test Connection, or the cycle-start message, would tell the operator to re-enter vCenter by its certificate name, while the real error survives only in the log (Test Connection logs it at WARN, and the cycle keeps it as the cause). The result stays a failure either way, so nothing turns into a pass (skill § *Unreadable is NOT compliant* is not engaged). I know of no JDK or vim25 message carrying both words, so this is about a future reword, not a live path.
+
+Fix: require the HTTPS context, for example `https hostname` plus `should be`. That still covers both JDK wordings. Add the UnknownHost probe as a near-miss test.
+
+**Registry.**
+- DEF-023 (open, tracked) is unchanged. Resource-list paging is not in any of these diffs.
+- DEF-025 (open, tracked) is unchanged. Retired-control cleanup is not in any of these diffs.
+- No new registration candidate.
+
+**If shipped as-is.** On every JDK, a missing overrides file shows `fetch failed: HTTP 400 ...` and alerts on the first cycle. A file deleted after it loaded keeps its last copy, and the alert fires on the third cycle. Status times show a numeric offset. A JDK 25 hostname rejection gets the name-mismatch guidance.
+
+Final pak: `dist/vcfcf_sdk_compliance.0.0.0.93.pak`, sha256 `443e97a07bb5aa05e7fb270830852126adc0441b64a8effde7e042ef712ffd6e`.
