@@ -701,3 +701,22 @@ after merge. Nothing publishes until the maintainer pushes a tag.
    `sentania-labs/air-gap-gitlab-ci-tools` (GHCR, attest, cosign) and the
    compliance pak's `build-pak-on-tag.yml` (tag-equals-version gate, Release
    upload).
+
+## Decision 2026-10-13: vsanhostmetrics CI manufactures the project
+
+Scott, verbatim: "or our build for vsanmetris must manufactor the project and
+manifest". The vsanhostmetrics workflow does not require the upstream author
+to commit the mp-build project files. Instead:
+
+1. A small, layout-neutral upstream PR makes `scaffold_project.py` honor its
+   directory argument (today it ignores it and writes under a hard-coded home
+   path) and accept the version to stamp into `manifest.txt`.
+2. The `publish` job scaffolds into a work directory, stamps the version from
+   the tag, runs `mp-build --no-ttl -r ghcr.io/<owner>/<repo>` there, and
+   continues with the digest check, attestation, immutable tag and release
+   steps exactly as for cluster-perf-risk. Nothing generated is committed.
+3. If the author later commits the project files, the scaffold step is
+   dropped and the rest of the workflow is unchanged.
+
+The `verify` job runs the same scaffold step so a PR proves the project
+still assembles.
