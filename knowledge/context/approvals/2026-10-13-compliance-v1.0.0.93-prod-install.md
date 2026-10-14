@@ -30,3 +30,17 @@
 
 - Any other instance, any non-compliance change, deleting anything, rebinding
   the Summary tab, the stuck admin dashboards.
+
+## Outcome so far (2026-10-13, 11:10 PM)
+
+Installed 10:39 to 10:41 PM: /api/solutions 1.0.0.93; pak results all
+successful; adapter jar 07115606 on both nodes matches the release. Same three
+account ids (mgmt 1fc78d19, wld01 78497279, wld02 cb8f2737), all on collector01
+(172.27.8.52). Before: every account stored allowInsecure=true; after each
+save those identifiers were gone. Validate Connection showed the accept dialog
+on all three (issuer sentania Lab Issuing 2), accepted, test passed. **But all
+three accounts are resourceState FAILED, GREY, empty message, no collection
+since 10:08 PM** (last 1.0.0.80 cycle). Summary binding exists
+(f72ad9cf), all six widgets isLoading (blank clone, as predicted for 9.1.1
+without a templates importer). Root cause under investigation on collector01,
+read-only.
