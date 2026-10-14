@@ -30,3 +30,54 @@
 
 - Any other instance, any non-compliance change, deleting anything, rebinding
   the Summary tab, the stuck admin dashboards.
+
+## Outcome so far (2026-10-13, 11:10 PM)
+
+Installed 10:39 to 10:41 PM: /api/solutions 1.0.0.93; pak results all
+successful; adapter jar 07115606 on both nodes matches the release. Same three
+account ids (mgmt 1fc78d19, wld01 78497279, wld02 cb8f2737), all on collector01
+(172.27.8.52). Before: every account stored allowInsecure=true; after each
+save those identifiers were gone. Validate Connection showed the accept dialog
+on all three (issuer sentania Lab Issuing 2), accepted, test passed. **But all
+three accounts are resourceState FAILED, GREY, empty message, no collection
+since 10:08 PM** (last 1.0.0.80 cycle). Summary binding exists
+(f72ad9cf), all six widgets isLoading (blank clone, as predicted for 9.1.1
+without a templates importer). Root cause under investigation on collector01,
+read-only.
+
+## Root cause and remediation (2026-10-13, 11:25 PM)
+
+collector01's collector.log (read through the UI Support Logs browser, the
+node's root SSH password having expired): at 10:40:50 PM the controller sent
+Start monitoring for all three instances, and the collector rejected each with
+`Unknown adapter type is specified in collector configuration. (Type =
+vcfcf_compliance)`; it loaded the new adapter lazily at 10:42:15 PM on the
+first Test Connection and no Start monitoring was resent. Later Test Connection
+calls logged Test OK. A pak-upgrade race on a remote collector, not an adapter,
+credential or vCenter fault. Remediation, within this approval's goal of
+leaving the accounts collecting: Start Collecting on each of the three
+accounts, then confirm a Start monitoring with no error and fresh cycles.
+
+## After Start Collecting (11:14 PM)
+
+Start monitoring accepted (11:13:52 PM, no "Unknown adapter type"), accounts
+STARTED, but every 1.0.0.93 cycle fails in about 300 ms:
+`certificate_unknown(46)` from `CertificateException: The vCenter certificate
+name cannot be checked: the connection has no peer host`, in
+VCenterCertificates$NameCheckingTrustManager.checkServerTrusted, under the
+BouncyCastle JSSE provider the 9.1.1 collector uses. Devel 9.0.2 (SunJSSE)
+works; Validate Connection takes a different path. The adapter pushes
+Rollup|incomplete = 1; per-vCenter values stay at the 10:08 PM 1.0.0.80 cycle.
+Hotfix build 94 (name check against the dialed host, not the TLS session)
+in progress; applying it, or rolling prod back to v1.0.0.80, needs Scott's go.
+
+## Hotfix ready (2026-10-14, about 12:10 AM)
+
+Build 94 on adapter PR #49 (branch fix/build-94-name-check-expected-host,
+a9eba2e): the name check uses the host the adapter dialed in every
+checkServerTrusted overload, so it no longer needs a peer host from the TLS
+provider. Reproduced and fixed under BouncyCastle JSSE (review
+`../reviews/compliance-build-94.md`, APPROVE twice). CI green on JDK 17 and 25.
+Dev pak 0.0.0.94 sha256 121e8b96. Waiting on Scott: merge #49, tag
+v1.0.0.94, install the release on prod, restart collection if the collector
+race recurs. Untested: the FIPS build of BouncyCastle prod likely runs.
