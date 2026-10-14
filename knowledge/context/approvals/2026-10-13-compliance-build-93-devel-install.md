@@ -74,3 +74,7 @@ Scott: "and make sure 0.0.0.93 is installed to devel". Devel ran the 4:19 PM
 (overrides 400 handling, offset timestamps, JDK 25 hostname wording, tightened
 classifier). Install the current dist/vcfcf_sdk_compliance.0.0.0.93.pak over it,
 same scope as above, API-only verification.
+Outcome: installed 10:41 to 10:45 PM; /api/solutions 0.0.0.93; pak results all
+successful; adapter jar on disk 8c076ca5 matches the post-Codex pak
+(de3ebcd1); three accounts kept their ids, fresh cycles at 10:44 to 10:45 PM;
+wld01 overrides_status OK.
