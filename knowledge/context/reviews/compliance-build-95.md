@@ -172,3 +172,163 @@ Open defects with `Affects: compliance`: DEF-023, DEF-025, DEF-026.
 ## If shipped as-is
 
 Normal cycles show correct numbers. But when a kind (or a single-object kind like vCenter) can't be read, its Controls Passing cell keeps showing the last, possibly green, percentage with nothing on the page to say it is stale, where build 94 showed 0. And every install runs the bulk shadow reads on top of the normal collection.
+
+## Re-review (2026-10-14, branch at `e527b03`)
+
+- **Scope:** 15 review-fix commits `d95cd22..7f29351`, then 8 commits `0ee869b..e527b03` implementing "Decision 2026-10-14: unreadable data is skipped and flagged per object" (design `knowledge/designs/sdk-adapters/compliance-build-95-control-pass-rate.md`).
+- **Pak:** `dist/vcfcf_sdk_compliance.0.0.0.95.pak`, sha256 `f8878cbe...6153c`, reference 0.0.0.94.
+
+### Verdict: CHANGES REQUESTED (1 BLOCKING, 2 WARNING, 4 NIT)
+
+B1, W1 to W7 and the adapter-side NITs are closed. The decision is implemented as written. The arithmetic, the alerts, the shadow switch and the new list view are correct, and the build reproduces. The one blocker is what the decision leaves on screen for an object with nothing readable. Its score and its Controls Evaluated keep their last values. The per-object views, the ESX Hosts heatmap and the host property list carry no `has_unreadable` (or `collection_failed`) beside them. Meanwhile the README, overview, data-reference, installing guide and all six per-kind view descriptions tell the operator either that the flag is beside the score, or that only "Controls Evaluated = 0" marks a retained score. A host that stops responding while at 100% therefore still shows a green 100 in the host table, next to a description that implies the value is current.
+
+### Independent verification
+
+| Check | Result |
+|---|---|
+| `validate-sdk` on a clean `git archive e527b03` tree | OK (exit 0) |
+| `build-sdk` of the same tree | Built. Every class in `vcfcf_compliance.jar`, `views.zip` content, `overview.packed` content and `describe.xml` match the author's pak byte for byte; only the zip timestamps differ. **Confirmed.** |
+| `pak-compare` 0.0.0.95 vs 0.0.0.94 (both directions) | PASS, 0 BLOCKING / 0 WARNING / 2 INFO (the new Unreadable Objects report bundle). **Confirmed.** |
+| `ci/run_java_tests.sh` (JDK 17.0.20.1) | All pass: 18 Java tests, including `Build95UnreadableTest`, `Build95PrefixBoundsTest` (27 recipes) and `BcHandshakeTest` (jars fetched, not skipped), plus every Python guard, now including `test_pass_rate_bindings` and `test_build95_dashboards`. JDK 25 not run locally (CI matrix). |
+| Factory `pytest tests/` | 2063 passed, 5 skipped. Compliance `pytest tests/`: 48 passed. |
+| `generate_compliance_alerts.py --check` | Up to date (136 control alerts, 6 collection alerts on `has_unreadable` = 1, wait 2 / cancel 1, plus `Rollup|incomplete` on the vCenter) |
+| Dimension 13 (built pak `describe.xml`, own parser) | 146 symptom definitions and 146 SymptomSet refs, none dangling, none unreferenced. No `<SymptomSets>` with fewer than two children: the five single-symptom collection alerts carry a bare `<SymptomSet>` and the vCenter alert keeps a two-child `or`. All wait/cancel cycles are integers. Every describe `nameKey` resolves in `resources.properties`, including the retired 38 and 2020 to 2025. |
+| ShadowMode against real stamps | Dev pak `conf/version.txt`: `0` / `0` / `0.95`, so 0.0.0.95, on. The CI release asset `v1.0.0.94` (downloaded from the pak repo's Release): `1` / `0` / `0.94`, so 1.0.0.94, off. |
+| Em-dashes in added lines (`660999d..e527b03`) | None. The generated `docs/README.md` (2) and `docs/inventory-tree.md` (4) still carry the factory template's em-dashes (N6, tooling). |
+
+### Prior findings
+
+- **B1: closed by decision.** `controls_unreadable` is gone. A kind with nothing readable still keeps its last `pass_rate` (`ComplianceRollup.java` `passRate`). Scott chose to accept that, with the objects behind it surfaced on the Objects with Unreadable Controls list beside the tile and in the per-object alert after two cycles. The README (`:185`), the overview (`:280-286`), the data-reference (`:323-325`) and the by-vCenter view description now say the cell keeps its last value. The docs half of B1 is fixed. The residual (no per-cell tell in the by-vCenter table) is the owner's accepted cost.
+- **W1: closed by decision.** There is no unreadable rollup at any granularity. The signal is per object.
+- **W2: closed.** The by-vCenter view has All Controls Passing, Passed and Evaluated. The totals indices `[2,3,6,7,8,10,...,25]` sum counts only, with no percentage (checked against the column order). `test_pass_rate_bindings` pins it.
+- **W3: closed** (`cf5f08b`). Session fields are set only after Login succeeds. A failed `connect()` is latched until `beginCycle` / `ensureConnected`. Login was already sent without a Cookie header before this change, so taking the session cookie only from the Login response does not regress real vCenters. The test fails against the old client.
+- **W4: closed** (`71610f3`). Configure builds the new clients, swaps them in, then releases the old ones, and no field is nulled. A closed client refuses re-login. Logout is bounded at 5 s + 5 s. Residual: N13.
+- **W5: closed.** Page bytes are logged, VM pages are 50, and one switch is decided per cycle from `conf/version.txt` (point 6, below).
+- **W6: closed in code** (`Build95PrefixBoundsTest` walks every loaded `vim_property` recipe and fails on a missing row). It counts 27 recipes against my 31: my count included manual-review and duplicate recipes. The devel check that the `prefix-cap` count is 0 is still owed.
+- **W7: closed.** Both guards run in `ci/run_java_tests.sh`.
+- **N1 to N5, N9: closed** (`eefd4f5`, `08edfd7`, `1732bb3`, `188f929`, `4b7aa43`, `6635c2d`). The tests behind them pass.
+- **N6, N7, N8: open, outside the adapter.** N6 is the factory template (route to `tooling`). N7 is devel timing. N8: the VMWARE `* 100` evidence is still not committed to the factory.
+
+### The new commits, against the brief
+
+**(a) Could not pushing leave a stale passing value that reads as current with nothing flagging it?**
+
+The flag family is pushed whenever anything was unreadable:
+- `complianceStats` pushes `has_unreadable` in both branches.
+- `complianceProps` pushes `unreadable_reason` and `unreadable_controls` in both branches.
+- The version-unreadable path pushes the flag, `collection_failed`, the reason and a fixed "not known" controls text.
+- The no-benchmark and nothing-evaluated paths push `has_unreadable` = 0 and both properties as "".
+- `object_kind` is added on all four push paths.
+- `beginObject` resets the per-object reason before every object (host and VM loops, vCenter, `collectVimObject`; no path calls it twice for one object), and the reason text is never empty beside a non-zero count.
+- `pushedIds` still includes unreadable controls, so the stale-key cleanup holds them at their last value instead of retiring them to -1 (tested).
+
+The list view filters on `has_unreadable` EQUALS 1 on all six subject kinds, and its unbound columns are `object_kind`, `unreadable_count` and `unreadable_reason`.
+
+Fully passing, then fully unreadable (a host goes notResponding):
+- The cycle pushes `has_unreadable` 1, `unreadable_count` N, `collection_failed` 1, and the reason "host not responding (host-not-connected: connectionState=notResponding)".
+- `score` (100), `total_count`, `pass_count`, `fail_count`, `non_compliant` (0) and every `Compliant` (1) keep their last values.
+- The rollup leaves the host out of `scored`, `non_compliant` and the control counts, so the Host pass rate is computed over the other hosts.
+- The host appears on the list immediately, and its alert fires after two cycles.
+
+The flag is therefore pushed and listed, but it is not beside the stale value on any per-object surface (B2).
+
+**(b) The cardinal rule in its new form**
+- `ControlEvaluator.score(pass, fail)` is pass over (pass + fail). The placeholder 100 is returned only when nothing was read, and no caller pushes or rolls it up: `complianceStats` checks `totalCount > 0`, `recordEvaluated` returns early on `totalCount <= 0`, and `cs.hostsScored` is counted on `totalCount > 0`.
+- `isNonCompliant(failCount)` covers read failures only.
+- No path computes a fresh 100 from nothing, and the zero-divisor contract holds.
+- Plainly: **yes, an all-unreadable object can show a stale 100%.** Its `score` key keeps its last value. That shows in the host, VM, vCenter, cluster, vDS and portgroup views, the ESX Hosts heatmap (green), the host property list and the object's metrics.
+- **What sits beside it:**
+  - In the per-kind views, only the Unreadable column (current, N) beside a stale Controls Evaluated.
+  - For a version-unreadable object, nothing current at all: `unreadable_count` is not pushed, so its last value shows, usually 0.
+  - In the heatmap, nothing.
+  - Elsewhere: the separate list on the two environment dashboards, and the alert in the dashboards' alert lists after two cycles (10 minutes at the default interval).
+- A partial outage moves the score both ways. Hiding failing controls raises it. Hiding passing ones lowers it, and that can raise Host Compliance Score Degraded. This is decision point 7 working as designed, but `docs/overview.md:237` ("a read outage no longer moves the score") and `:251-253` ("no longer lowers a host's score, so it no longer raises ... Score Degraded") are false for a partial outage. That is part of B2.
+
+**(c) Alerts: correct.**
+- The six collection symptoms are `has_unreadable` = 1, `waitCycle="2" cancelCycle="1"`.
+- The retired `collection_failed` and `unreadable_count > 0` symptoms and their name keys are gone.
+- The vCenter alert keeps `Rollup|incomplete` (wait 1) as its second child.
+- The generator `--check` is clean and the two-child rule holds (table above).
+- Score Degraded (`score < 95` / `< 80`, wait 1, cancel 3) is no longer fired by a whole-object outage, because no score is pushed. A partial outage can still fire or cancel it (above).
+- Recommendation 2100 is rewritten to match.
+
+**(d) ShadowMode: correct.**
+- `ShadowMode.decide` is on only for a parsed `0.0.0.<digits>`. A missing file, unreadable file, incomplete stamp, garbage or any other version is off. It never throws.
+- The path is the same `conf` directory `getAdapterDescribeFile` already resolves.
+- The builder stamps `Implementation-Version=<patch>.<build>` (`sdk_builder.py:806-833`), so a dev build reads 0.0.0.95 and a tagged release 1.0.0.95. Both were confirmed on real paks (table).
+- One INFO line is logged per change. Off records nothing and makes no bulk read (`runShadow` returns on no records).
+
+**(e) object_kind and the list view: correct statically.**
+- The labels map all six kinds.
+- The view's six SubjectType pairs (descendant and self) each carry the metric filter, and the columns are unbound so they resolve on every kind.
+- The widget type is `View` on both dashboards, already on the 9.0.x allowlist (`test_dashboard_widget_types` passes).
+- Coordinates don't overlap: scoreboard x1-4, list x5-9, About/Scan x10-12, every row below shifted by one (`test_build95_dashboards`).
+- Not provable statically, so owed on devel (W11): whether a list view pinned to vSphere World, and on the World Summary to ComplianceWorld (through the cross-MP edge to VMwareAdapter Instance), returns descendants of all six kinds.
+
+**(f) Docs:** largely updated. README, overview, data-reference, installing, CANONICAL_SCHEMA, the CHANGELOG line and the view descriptions all describe skip-and-flag. The contradictions are in B2 and W10.
+
+### Findings
+
+#### BLOCKING
+
+**B2. An object with nothing readable keeps its last score and Controls Evaluated on every per-object surface, with no flag beside them, and the docs say the flag is there.**
+- Where:
+  - Columns and descriptions of `views/compliance-host-detail.yaml:13`, `compliance-vm-detail.yaml:13`, `compliance-vcenter-list.yaml:13`, `compliance-cluster-list.yaml:16`, `compliance-vds-list.yaml:16`, `compliance-portgroup-list.yaml:14`.
+  - `dashboards/compliance-esxi-hosts.yaml` (heatmap on `score`, property list without `has_unreadable`).
+  - `README.md:178-180`.
+  - `docs/overview.md:228-229`, `:237`, `:251-253`.
+  - `docs/data-reference.md:134`, `:160-161`, `:292-299`.
+  - `docs/installing.md:288-289`.
+- Authority: reviewer dimension 11 (docs that contradict behavior are BLOCKING); skill section *Unreadable is NOT compliant* and `knowledge/lessons/unreadable-is-not-compliant.md` contract 1 (the explicit unreadable signal must be visible, never a healthy-looking datapoint alone); decision point 2 ("flag the stale metric").
+- What's wrong:
+  - `ComplianceDecisions.complianceStats` (nothing-readable branch) and `versionUnreadableStats` push no `score` and no `total_count`, so both keep their last values. That is the decision.
+  - None of the six per-kind views, nor the ESX Hosts heatmap or property list, shows `has_unreadable` or `collection_failed`.
+  - The six view descriptions give "a score beside Controls Evaluated = 0 is retained" as the staleness tell, but here Controls Evaluated is stale and non-zero.
+  - `data-reference.md:134` says `total_count` is 0 when nothing was evaluated, and `:298` says to read a retained score with `total_count`.
+  - README, overview, data-reference and installing say the last score "stays on screen with the flag beside it". It does not: the flag lives only on the separate list and the alert.
+  - For a version-unreadable object even the Unreadable column is stale, usually 0.
+  - `overview.md:237`, `:251-253` say a read outage no longer moves the score or raises Score Degraded. A partial outage does both (see (b)).
+- Smallest correct fix:
+  1. Add `VCF-CF Compliance|has_unreadable` (for example "Not Fully Read", or 1/0) beside the score in the six per-kind views and the ESX Hosts property list.
+  2. Reword the six descriptions to "a score beside Not Fully Read = 1 is from what could be read, and if Controls Evaluated did not change this cycle, from an earlier cycle; see the reason".
+  3. Correct `data-reference.md:134` and `:298`, and the "flag beside it" sentences, to name where the flag actually is.
+  4. Correct `overview.md:237` / `:251-253` to "a whole-object outage no longer moves the score; a partial one scores what was read and can move it either way".
+
+  No change to the decision's push behavior is needed.
+
+#### WARNING
+
+**W10. The list's Count column shows a stale number for a version-unreadable object, while its description says it has none.**
+- Where: `views/compliance-unreadable-objects.yaml:13-14`; `ComplianceDecisions.versionUnreadableStats`.
+- Authority: dimension 11.
+- What's wrong: `unreadable_count` is (correctly) not invented for a version-unreadable object. But VCF Ops shows the last value, typically 0 from the previous scored cycle, so the row reads "0 unreadable controls" next to "product version unreadable".
+- Fix: say so in the description ("the count shown is from an earlier cycle"), or add `unreadable_controls` as a column (it reads "(not known: ...)").
+
+**W11. Platform behaviors the decision rests on are asserted in the docs but not yet seen on devel.**
+- Authority: shared reviewer doctrine (unproven is a finding); `knowledge/rules/validate-before-install.md`.
+- Owed on devel:
+  1. An open per-control alert on a key that stops receiving samples stays open, as the docs claim ("its alert stays").
+  2. A view's CURRENT transform over the 24 hour window still shows the last value after more than 24 hours with no sample. If it blanks instead, the docs' "keeps its last value" is wrong in the other, safe direction.
+  3. The multi-subject list returns descendants of all six kinds from vSphere World and from ComplianceWorld.
+  4. Pushing "" to `unreadable_reason` clears it (precedent: `overrides_file` "" since build 90).
+  5. `prefix-cap` count is 0 (W6).
+- Fix: run these on devel before the tag. They are not code changes.
+
+#### NIT
+
+- **N10** `docs/data-reference.md:424`: "An empty list means every object was fully read on its last cycle". Objects of a held-back kind, and every object when vCenter was not reached, are not visited, so they are not on the list. `Rollup|incomplete` raises the vCenter alert for those cases. Say so.
+- **N11** The ESX Hosts heatmap colors by `score` only, so an unreachable host stays its last color. Accepted by the decision. Mention it in the dashboard's About text, or adopt the fix in B2.
+- **N12** `ObjectUnreadable` cause ordering: on a tie, causes keep first-seen order (documented), so the reason can differ between cycles when read order changes. It is cosmetic, but it can churn the property.
+- **N13** W4 residual: a cycle running across a reconfigure re-reads `vsphere` per call, so it can switch to the new client part-way and mix two configurations in one cycle. Rare (edit during a cycle), and never a pass.
+
+### Registry check (`knowledge/context/defects.md`)
+
+- **DEF-023: open, unchanged.** `ComplianceStitcher.java` is untouched in `660999d..e527b03`. The close condition (page-count line, a fixture over 10,000 objects, or a forced-failure devel cycle) is unmet.
+- **DEF-025: open, unchanged.** `ComplianceDecisions.staleControls` (`:573`) and `cleanBatch` are untouched. Only the doc comment of `pushedIds` (`:725`) changed. Holding unreadable controls is a separate, correct behavior. The retired-key single -1 push is still as registered.
+- **DEF-026: open, unchanged since the first review.** There is still no cycle budget or failure cutoff (no deadline in `ComplianceAdapter.java`). Point 6 turns shadow reads off in releases, which removes the build 95 addition to cycle length, but the close condition is unmet.
+
+**Registration candidate (orchestrator's call, RULE-012):** B2, if it survives. A stale healthy score with no tell beside it is the "unreadable shown as healthy" class at object level, now on the most-viewed per-object surfaces.
+
+### If shipped as-is
+
+Rollups, pass rates and alerts behave as Scott decided. But a host that stops responding keeps its last score (often a green 100) and its old control counts in the host table, the heatmap and the host details, with no flag beside them. Those views' own descriptions imply the number is current, and the only tell is a separate list on the environment dashboards and an alert that appears ten minutes later.
