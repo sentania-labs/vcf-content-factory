@@ -409,3 +409,155 @@ What this changes:
    `SolutionManagerDistributedTask.associateResourceKindDashboards` and
    `ImportExportManager.importDashboard` from 9.1.1 and diff them against
    9.0.2.
+
+## Addendum 2: what makes the 9.1.1 clone complete (bytecode and logs, read about 10:50 PM, 2026-10-13)
+
+**Answer:** none of the four candidates exactly. On 9.1.1 the clone is
+taken the same way as on 9.0.2: a snapshot within a second or two of the
+import, with config still parked. Parking, the importer loop and the
+snapshot clone are unchanged. What 9.1.1 adds is a **templates-side
+importer**, started by the installer itself: the 9.1.1 installer is back
+to importing any directory named `GenericTemplates*` with `userId = null`.
+The VCF Automation 9.1.1 pak ships two such directories. A null-user
+import starts (or pokes) the importer thread for the templates key. That
+thread's pass finishes every SUMMARY clone still holding parked config,
+whichever pak created it, because each clone keeps the source's
+`entryKeys`, `configKey` and `importComplete = false`. The logs fit this
+chain but do not show the templates thread itself (no bridge log reaches
+back to the install), so it is a strong inference, not an observed fact.
+
+**Access.** The prod/qa name is a CNAME over two nodes. Both were read by
+address (`172.27.8.42` = `vcf-lab-operations01`, `172.27.8.43` =
+`vcf-lab-operations02`) with the session-scratchpad `prod_known_hosts` and
+the prod SSH credentials from `.env`. Read only: `scp` of three jars and
+one class file to the scratchpad, `python3` zipfile listing of the pak
+files (the 9.1.1 nodes have no `unzip`; an earlier `unzip`-based scan
+reported no hits only because the command was missing), and `grep` of the
+audit and bridge logs. Nothing on the appliance was written. Jars, both
+nodes identical in size: `controller/plugins/vcops-view-server-1.0-SNAPSHOT.jar`,
+`controller/plugins/vcops-bridge-server-1.0-SNAPSHOT.jar`,
+`common/lib/vcops-bridge-client-1.0-SNAPSHOT.jar` (dated Aug 13), plus
+`tomcat-web-app/webapps/ui/WEB-INF/classes/com/vmware/vcops/ui/action/DashboardAction.class`.
+They were disassembled with `javap -c -p` and compared with the 9.0.2
+disassembly already in the scratchpad (`probe/installer`, `clone/jar`,
+`iem_full.txt`, `dm_full.txt`).
+
+### Bytecode comparison, 9.0.2 Build 25137845 vs 9.1.1 Build 25679751
+
+| Piece | 9.0.2 | 9.1.1 | Effect |
+|---|---|---|---|
+| `ImportExportManager.importDashboard`, parking | non-empty, non-`{}` config goes to `setConfigKey`, otherwise `setConfig` | **identical** (offsets 1587 to 1625) | config still parked at import |
+| `ImportExportManager.importDashboardTabs`, importer start | start a new `DashboardImporter(userId)` if none is alive, else `update(true)` | **identical** | same |
+| `DashboardImporter.run` | first pass at once; sleep 600000 ms while anything is unresolved, up to 144 times; `userId` null or `"0"` means the templates key | **same loop**. Reads through `getDashboardDTONew(userId, new DashboardSearchParam(true))`; `processDashboardsImport` lost its `isTemplate` argument | no change in timing |
+| `SolutionManagerDistributedTask.installDashboardContent` | imports every directory as the super admin | **adds** `isTemplate = dir.getName().startsWith("GenericTemplates")` and passes `userId = isTemplate ? null : adminUserId` (offsets 267 to 340) | **a `GenericTemplates*` directory is imported to the templates key and starts the templates importer** |
+| `associateResourceKindDashboards` | `getUserDashboardSummaries` lookup, then `saveDashboardAsTemplate(tabId, name, SUMMARY, user)`, then `putGlobalValue("associationMap")` | same lookup, then **5-arg** `saveDashboardAsTemplate(..., true)`, then `setDashboardAssociation(old, new)` | the extra `true` only copies per-widget UI states (`getDashboardStates` / `proceedToSaveUIStates`). It still runs right after the import. |
+| `DashboardManager.saveDashboardAsTemplate` worker | reads the source tab from storage, gives it new ids, `userId = null`, stores it under the templates key | same, via `getDashboardDTONew`, plus the UI-state copy | still a snapshot. A parked source gives a parked clone. |
+| UI `DashboardAction` `scheduleImport` (pokes the templates and admin importers) | present, gated on SaaS mode | **removed** | not the cause |
+
+There is no synchronous resolution, and nothing waits for
+materialization. `getConfigKey` and `setImportComplete` are touched only by
+`DashboardImporter`, as on 9.0.2.
+
+### Which 9.1.1 paks bind, and which ship `GenericTemplates*`
+
+From `/storage/db/casa/pak/dist_pak_files/VA_LINUX/` on node .42, using
+Python zipfile:
+
+| Pak | `dashboards.properties` | `GenericTemplates*` dirs |
+|---|---|---|
+| `VCFAutomation-911025679827` | `VCF91ProviderNamespaceSummary=VMWARE:NamespaceV2`, `VCF91ProviderOrganizationSummary=VCFAutomation:VCFAOrganization`, `VCF91ProviderProjectSummary=VCFAutomation:ProjectAssignment`, `VCF91ProviderReqionQuotaSummary=VCFAutomation:RegionQuota` | **`GenericTemplatesVCF91CommonTenantTemplate`, `GenericTemplatesVCF91TenantTemplate`** |
+| `ManagementPackforStorageAreaNetwork-911025679860` (vSAN) | `SummaryVirtualSANFaultDomain=VirtualAndPhysicalSANAdapter:VirtualSANFaultDomain` | none |
+| `SupervisorAdapter-911025679865` | `vksCluster=SupervisorAdapter:GuestCluster` | none |
+| `AppOSUCPAdapter-911025679817` | `dsm-postgres=APPOSUCP:dsm_postgresql_cluster`, `dsm-mysql=APPOSUCP:dsm_mysql_cluster` | none |
+| `VMSP-911025679840` | none (dirs `li-next`, `vmspDashboards`, `vodap`) | none |
+
+So the vendor description holds for 9.1.1: VCF Automation binds
+`NamespaceV2`, and Supervisor binds too. VMSP's 68 dashboard-backed Summary
+mappings do not come from `dashboards.properties`; their mechanism was not
+traced. The Supervisor `GuestCluster` and AppOS DSM clones were outside
+the earlier 73-clone sweep and were not read.
+
+### Timeline on qa (audit log, node .42; 9.1.1 audit IDs are dotted, for example `DASHBOARD.ADD_TEMPLATE`)
+
+| Local time (America/Chicago) | Event |
+|---|---|
+| Sep 8, 12:38:45.495 PM | `DASHBOARD.IMPORT` (vSAN pak, `SummaryVirtualSANFaultDomain`) |
+| **Sep 8, 12:38:47.438 PM** | `DASHBOARD.ADD_TEMPLATE` "New Summary Page: vSAN Fault Domain", SourceTabId `8be0cd6a-...`, **2 s after its import** |
+| Sep 8, 12:40, 12:43, 12:46, 12:49 PM | `DASHBOARD.IMPORT` by `subject="system"` on one thread every 3 minutes (a startup-style content import; it also follows the Sep 21 restart) |
+| Sep 8, 12:48:35.662 PM | `DASHBOARD.IMPORT` (VCFA, Namespace Summary dir) |
+| **Sep 8, 12:48:36.609 PM** | `DASHBOARD.ADD_TEMPLATE` "VCFA Provider Namespace Summary", **0.95 s after** |
+| Sep 8, 12:48:37.246 and 12:48:37.992 PM | two `DASHBOARD.IMPORT` with no clone after them |
+| Sep 8, 12:48:38.898 to 12:48:42.531 PM | Organization, Project and Region Quota imports, each cloned 0.6 to 0.9 s later |
+| Sep 8, 12:48:43.042 to 12:48:44.232 PM | three more `DASHBOARD.IMPORT` with no clone |
+
+The VCFA pak has nine dashboard directories: four bound, two
+`GenericTemplates*`, `VCF90`, `VCF90chargeback` and `VCF91ProviderSummary`.
+The nine imports at 12:48 PM match that count, and the five without a
+clone are the unbound five. Which two of those five are the
+`GenericTemplates*` directories cannot be told from the audit line,
+because it carries no name. The clone timing (0.6 to 2 s) is the same
+losing race as on 9.0.2 devel. Yet all those clones are complete today,
+so something resolved them after the fact, and the only code path that
+does that for templates is a templates-key importer. The 9.1.1 installer
+starts one exactly when it imports VCFA's `GenericTemplates*` directories,
+in the same 9 seconds. The bridge logs do not reach back to Sep 8 (the
+oldest are Sep 14 on node .43 and Oct 6 on node .42), so the templates
+thread itself was not seen.
+
+Tonight's importer bursts on qa (10:18 PM and 10:22 PM, after
+`maintenanceAdmin` `DASHBOARD.IMPORT` plus a `DASHBOARD.DELETE` of
+`3d84205c-...`, the same id devel deleted at its first login) were admin
+importer passes over the five stuck admin dashboards. They exit after one
+pass because those imports create no new tab. They are not template work
+and not caused by my reads.
+
+### What this means for our pak
+
+- **On 9.1.1 the race is the same as on 9.0.2.** Our clone would still be
+  taken parked. It ends up complete only if a templates-key importer
+  passes over it later: within 10 minutes if one is alive and ticking,
+  immediately if a `GenericTemplates*` import happens after our clone. A
+  templates thread stays alive only while some template cannot finish, and
+  only for 24 hours after the last null-user import. On an instance where
+  VCFA (or another `GenericTemplates*` pak) was installed or upgraded long
+  before our pak, our clone would stay parked until the next such
+  install. This is inference from the code; it was not run.
+- **The smallest in-pak change that could make it reliable on 9.1.1:**
+  ship a `GenericTemplates*` directory in our pak alongside the bound
+  Summary. It is untested and carries side effects. The installer imports
+  it with `userId = null` and starts the templates importer. Directory
+  order is not controllable (`File.listFiles()`), so two cases matter:
+  - If the templates directory comes **after** our Summary directory, its
+    first pass finishes our clone.
+  - If it comes **before**, the thread must still be alive when our clone
+    lands. That happens only if some template stays unresolvable, for
+    example a deliberately unresolvable entry, which keeps the thread
+    ticking every 10 minutes for 24 hours. That is a hack.
+
+  The directory's dashboard also becomes a visible template. On 9.0.2 the
+  branch does not exist, so the directory would import as an ordinary
+  admin dashboard and change nothing.
+- **Deterministic on both versions:** the post-install re-bind once the
+  source reports `isLoading: false` (issue #200), or the ops-cli templates
+  import from a post-install script. Both are already noted above.
+
+### Corrections to Addendum 1
+
+- "Something in the installer or importer differs from 9.0.2: the clone
+  waits for materialization, a templates importer runs, or config is not
+  parked." It is the second: a templates importer, started by the
+  installer's `GenericTemplates*` branch. The other two do not differ.
+- `../api-surface/summary_dashboard_pak_binding.md` says the
+  `GenericTemplates` branch is absent on 9.0.2 GA. It is present again on
+  9.1.1 (and was seen on the 9.2 pre-release builds in August).
+
+### Open
+
+- Direct proof: on the next VCFA (or other `GenericTemplates*`) install or
+  upgrade on qa, read the bridge log for a `DashboardImporter` thread that
+  processes templates, and read `getDashboardConfig?isTemplate=true` on any
+  SUMMARY clone created shortly before it.
+- Whether older orphaned vSAN clones (" 1" to " 7") on qa are also
+  resolved. No UI action lists templates, so they could not be found
+  without their ids.
+- How VMSP's 68 Summary mappings are created.
