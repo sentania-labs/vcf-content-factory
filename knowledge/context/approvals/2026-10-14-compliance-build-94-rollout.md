@@ -46,3 +46,19 @@ PR #49 merged (squash e92baab); read back PR MERGED, main at e92baab,
 build_number 94; tag v1.0.0.94 pushed, guard clear; release run 38576298501
 success; asset vcfcf_sdk_compliance.1.0.0.94.pak sha256 ce738ab1306d378b...
 PASS.
+
+## Step 3 outcome (prod, 2026-10-14)
+
+v1.0.0.94 installed 9:01 AM (profile qa resolves to the prod appliance);
+/api/solutions 1.0.0.94; pak results all exit 0; jar abf3a5df identical on both
+nodes and in the pak. The start-monitoring race recurred: all three accounts
+FAILED with "Unknown adapter type" at 9:02:05 AM, adapter loaded 9:03:35 AM;
+Start monitoring sent to exactly the three accounts at 9:11:23 AM, accepted.
+Cycle at 9:11:24 AM refreshed all metrics with no certificate or SSL error
+(the build 93 failure is gone under the 9.1.1 BouncyCastle provider). Rollup|All
+mgmt 67/60/76.49, wld01 61/38/84.74, wld02 49/43/78.65, incomplete 0 (scores
+lower per DEF-022; wld01 down 18 scored and 18 non-compliant, which is the 18
+Supervisor Pod VMs build 88 stopped scoring). Open: ComplianceWorld
+Rollup|Environment reads 0/0/0 (adapter issue to follow). Prod log level is
+WARN, so no collection-complete line; fresh metrics are the evidence. PASS
+apart from the world rollup.
