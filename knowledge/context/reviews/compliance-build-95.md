@@ -332,3 +332,117 @@ The flag is therefore pushed and listed, but it is not beside the stale value on
 ### If shipped as-is
 
 Rollups, pass rates and alerts behave as Scott decided. But a host that stops responding keeps its last score (often a green 100) and its old control counts in the host table, the heatmap and the host details, with no flag beside them. Those views' own descriptions imply the number is current, and the only tell is a separate list on the environment dashboards and an alert that appears ten minutes later.
+
+## Fix confirmation (2026-10-14, branch at `2cd25f5`)
+
+- **Scope:** 7 commits on top of the re-reviewed `e527b03`: `075578f` (B2), `fb40985` (W10), `528831a` (N10), `8326450` (N11), `6dc4de0` (N12), `fb729e8` (N13), `2cd25f5` (CHANGELOG).
+- **Pak:** `dist/vcfcf_sdk_compliance.0.0.0.95.pak`, sha256 `cb83a80a...0047` (matches the brief), reference 0.0.0.94.
+
+### Verdict: APPROVE (0 BLOCKING, 2 WARNING, 2 NIT)
+
+B2, W10, N10, N11 and N12 are closed as claimed. N13 is mostly closed: the vCenter, Suite API and loader clients and the account are now copied once per cycle, the old vSphere client cannot log in again, and the next cycle picks up the new settings. The copy is not complete, though. The benchmark memory and the last resolved vCenter id are written by the cycle and read by the next one, and they sit outside the copy. A cycle that runs on after an edit refills them with the old vCenter's values after the edit cleared them. The commit's stated residual ("flagged unreadable, never a pass") is therefore wrong (W12). The new guard also lets four of five scratch bypasses through (W13). Neither is a regression: the same race existed before N13, and it needs an edit that changes the vCenter host to land during a running cycle. Both should be fixed in the same re-brief, per the factory rule that findings are fixed before the PR.
+
+### Independent verification
+
+| Check | Result |
+|---|---|
+| `validate-sdk` on a clean `git archive 2cd25f5` tree | OK (exit 0) |
+| `build-sdk` of the same tree | Built. All 203 files inside the pak (nested jar, views.zip and content zips walked) are byte-identical to the author's pak. **Confirmed.** |
+| `pak-compare` 0.0.0.95 vs 0.0.0.94 | PASS, 0 BLOCKING / 0 WARNING / 2 INFO. **Confirmed.** |
+| `ci/run_java_tests.sh` (JDK 17) | Exit 0. All 18 Java tests pass, `BcHandshakeTest` ran (jars fetched, not skipped), and every Python guard passes, including the new `test_cycle_snapshot.py` |
+| Factory `pytest tests/` | 2063 passed, 5 skipped. Compliance `pytest tests/`: 53 passed |
+| Em-dashes in added lines (`e527b03..2cd25f5`) | None |
+| `build_number` | Stays 95, as the CHANGELOG line says |
+
+### Prior findings
+
+- **B2: closed.**
+  - All six per-kind views have `has_unreadable` ("Not Fully Read") directly after the score. I checked this in the built pak's rendered views, not only the YAML.
+  - The totals indices are correct in all six: host and VM `[5..10]`, vCenter and vDS `[3..8]`, cluster and portgroup `[2..7]`. In the rendered pak each one maps to has_unreadable, total, fail, unreadable, non-compliant and No SCG. The score and the string columns are never summed.
+  - The vCenter, cluster, vDS and portgroup views add Unreadable Reason as an unsummed string column. Host and VM point to the list instead.
+  - The ESX Hosts Compliance Details PropertyList has the row after SCG Applied. I compared the rendered dashboard's six `gridsterCoords` with 0.0.0.94: identical.
+  - No view description still names "Controls Evaluated = 0" as the tell. The old wording ("flag beside it", "0 when nothing was evaluated", "no longer moves the score") is gone from every .md, .yaml, .xml and .properties file outside the CHANGELOG.
+  - `data-reference.md` (total_count, the read-them-with paragraph), `overview.md` (Score Degraded, partial versus whole outage), README and installing now match the code.
+- **W10: closed.** The list adds Control IDs (`unreadable_controls`). The version-unreadable path pushes "(not known: the benchmark depends on the version)" (`ComplianceDecisions.java:385`). The description says the count is from an earlier cycle.
+- **N10: closed.** `data-reference.md` now limits the empty list to the objects that were visited, and names `Rollup|incomplete` and the collection status for the other cases.
+- **N11: closed.** The ESX Hosts description, and the dashboard tables in README, overview and docs/README, say the heatmap keeps an unreadable host's last color.
+- **N12: closed.** `ObjectUnreadable` sorts equal counts by plain words and keeps the alphabetically smallest detail. The new test records the same causes in two orders and gets one text.
+- **N13: mostly closed, residual W12.** Details below.
+- **W11: still owed on devel** (unchanged; not code).
+- **N6, N7, N8: unchanged, outside the adapter.**
+- **Descriptions:** every view and dashboard description is under 1024 characters. The longest are vDS at 1012 and Clusters at 1000 in the source, and 1015 and 1003 in the rendered XML. All are ASCII.
+
+### N13, the snapshot, point by point
+
+1. **Does any read later in the cycle bypass the copy? No.**
+   - `configured*` is read only at the copy block (`ComplianceAdapter.java:576-580`) and in `onDiscard`.
+   - Nothing from `collectWorld` through `onDiscard` reads `config.` or `this.config`.
+   - The methods above `collectWorld` that the cycle calls (`sslContextFor`, `sslSocketFactoryFor`, `clientLog`) take the host as a parameter.
+   - The VAMI client is built from `cycleConfig`.
+2. **Can the closed old clients log in again? The vSphere client cannot. The Suite API client can (N14).**
+   - `VSphereClient` checks `closed` in `connect()` (`:265`), after an in-flight login (`:358`, which logs the new session straight out), in `ensureSession` (`:483`), and in the mid-cycle re-login (`:2179`).
+   - `SuiteApiStitcher.discard()` only releases the token. `SuiteApiStitchClient.ensureToken` acquires a new one on the next call.
+   - So a cycle running across an edit keeps pushing through the old Suite API client to the local VCF Ops. The pushes land on the old cycle's own objects, so nothing goes to the wrong host.
+3. **Does the next cycle pick up the new settings? Yes.** Every cycle copies `config` and the four `configured*` fields before its `try` block.
+4. **Can the residual only produce unreadable, never a pass? No (W12).**
+5. **Do the tests fail when the copy is bypassed? Only for some bypasses (W13).** Scratch mutations, each run against `test_cycle_snapshot.py` and the `CertificateTest`, `Build95TriageTest` and `OverridesTest` source pins:
+
+| Mutation | Caught by |
+|---|---|
+| M3: bare `config.overridesFile` in `skipInForce` | `test_cycle_snapshot` |
+| M6: configure also assigns `this.vsphere` | `test_cycle_snapshot` |
+| M5: VAMI client from `this.config` | `CertificateTest` only |
+| M1: `this.config.vcenterHost` in `collectVCenter` | **nothing** |
+| M2: `configuredStitcher.matchVCenterAdapterInstance` in `collectVCenter` | **nothing** |
+| M4: `configuredVsphere.ensureConnected()` | **nothing** |
+| M7: a `configuredLoader` read after the copy | **nothing** |
+
+### Findings
+
+#### WARNING
+
+**W12. The snapshot leaves out the state the cycle hands to the next cycle, and it is not taken atomically.**
+- Where: `ComplianceAdapter.java:165`, `:168` and `:212` (configure clears `lastVcResourceId` and `memory`); `:235-238` (the swap); `:747` (`memory.retain`); `:773-775` (`lastVcResourceId = vcEntry.resourceId`); `afterPush` (`memory.record`, `:1263`); `LastBenchmarkMemory` (key `<Kind>|<moid>`; the vCenter's moid is the constant `"vcenter"`); `ComplianceDecisions.markNotCollected` (`:1118`, prefers the last id).
+- Authority: skill section *Unreadable is NOT compliant*; reviewer dimension 5 (a moid on its own is not an identity across vCenters, which is the hazard the N13 commit names itself); shared reviewer doctrine (unproven is a finding).
+- What's wrong:
+  - **(a) Leak into the next cycle.**
+    - The edit clears `memory` and `lastVcResourceId` mid-cycle. The old cycle then carries on. `afterPush` records a benchmark for every object it decides, even one whose reads all fail. `memory.retain(seen)` keeps those entries. Line 774 stores the old vCenter's resource id, because `vcEntry` comes from the stitcher cache loaded at the start of the cycle.
+    - The first cycle on the new vCenter then inherits both.
+    - If the new vCenter cannot be reached, `Rollup|incomplete` = 1 is pushed to the **old** vCenter's resource every failed cycle. The log line names the new host and the old resource id. If no instance monitors the old vCenter any more, its alert never clears.
+    - If the new vCenter is reached but its version read fails, `decide` takes the old vCenter's benchmark from the `VCENTER|vcenter` key. That key always collides. Clusters, vDS and portgroups follow too when their moids happen to match. The new vCenter's real reads are then scored against the other vCenter's SCG, pushed, and alerted on. That is a scored result, passes included, not "flagged unreadable", so the commit's residual claim does not hold.
+  - **(b) Torn copy.**
+    - Configure writes `this.config` at `:165` and the clients only at `:235-238`, after building the vSphere client and running `SuiteApiStitcher.create`.
+    - A cycle that starts in that gap copies the new account with the old clients. For example, it would match the vCenter by the new host name while reading the version through the old client.
+    - The window is short, but nothing rules it out.
+- Smallest correct fix:
+  - In configure, build one immutable per-configuration holder: the account, the vSphere client, the loader, the Suite API client, the stitcher, a fresh `LastBenchmarkMemory` and a slot for the last resolved vCenter id. Publish it with a single volatile write after the clients are built.
+  - `collectWorld` copies that one reference. The cycle reads and writes memory and the vCenter id only through it.
+  - An old cycle then writes into its own orphaned holder, and the edit no longer has to clear anything in place.
+  - Correct the residual sentence in the commit history's successor (CHANGELOG or overview).
+- Not a regression (the same race existed before N13). It needs an edit that changes the vCenter host to land during a running cycle. **Registration candidate (RULE-012) if it is not fixed before the tag.**
+
+**W13. `test_cycle_snapshot.py` does not fail on the most likely bypasses.**
+- Where: `tests/test_cycle_snapshot.py`, `test_cycle_reads_the_account_copy` (its regex `(?<![\w.])config\.` skips `this.config.`) and `test_cycle_copies_once_at_start` (it counts assignments, not reads).
+- Authority: reviewer dimension 9 (prove the behavior, do not assert it); shared reviewer doctrine. The adapter cannot run without the SDK, so this guard is the only proof N13 has.
+- What's wrong: M1, M2, M4 and M7 pass every guard (table above).
+- Fix:
+  - Assert that `configured(Vsphere|Loader|Suite|Stitcher)` appears only in the field declarations, `configureAdapter`, the copy block and `onDiscard`.
+  - Assert that `this.config` and bare `config.` appear nowhere from `collectWorld` through `onDiscard`.
+  - With W12's holder, pin instead that the cycle reaches the clients only through the copied holder.
+
+#### NIT
+
+- **N14** The old Suite API client is not closed by the edit. `SuiteApiStitchClient.discard()` only releases its token, and `ensureToken` acquires a new one. A cycle spanning an edit therefore logs in again to the local VCF Ops, keeps pushing to its own objects, and leaves that token unreleased until it expires. The `onDiscard` comment ("instead of an NPE or a fresh login") and the W4 "closed client refuses re-login" are true only of the vSphere client. Fix: correct the comment. A closed state in `SuiteApiStitchClient` is framework code (route to `tooling`).
+- **N15** `docs/overview.md` (N13 paragraph): "its remaining reads are unreadable". The appliance (VAMI) client is built per cycle from the cycle's account copy, and the edit does not close it, so those reads go on against the old vCenter. That is the right object, so nothing goes to the wrong host, but the sentence overstates. Say "its remaining vCenter inventory reads".
+
+### Registry check (`knowledge/context/defects.md`; no `defects.local.md` in this clone)
+
+- **DEF-023: open, unchanged.** `ComplianceStitcher.java` is not touched in `e527b03..2cd25f5`. The close condition is unmet.
+- **DEF-025: open, unchanged.** `ComplianceDecisions.java` is not touched in this delta (`staleControls` still at `:573`).
+- **DEF-026: open, unchanged.** There is still no cycle budget or deadline in `ComplianceAdapter.java` (no match for deadline or budget).
+
+**Registration candidate:** W12, if it ships unfixed.
+
+### If shipped as-is
+
+A host, VM, vCenter, cluster, switch or portgroup that could not be read now shows "Not Fully Read = 1" beside its score everywhere that score is shown, except the heatmap, and the docs say so. The leftover risk is narrow. If someone edits an instance to point at a different vCenter while a cycle is running, the next cycle can raise the "not collected" flag on the old vCenter, or, when the new vCenter's version cannot be read, score it against the old vCenter's benchmark for a cycle.
