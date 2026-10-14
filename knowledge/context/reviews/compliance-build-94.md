@@ -171,3 +171,8 @@ unchanged (pak-compare and nested-entry diff), no alert change.
 Prod 9.1.1 collectors collect again on correctly named accounts, wrong
 names and untrusted chains are still refused, and only an account whose
 vCenter Host contains `?` or `#` gets a weaker name check than intended.
+
+## Warning fix confirmation
+
+APPROVE, 0/0/0: a9eba2e (one commit on 7cdc0d8, PR #49) changes only the HOST_PORT pattern, its javadoc, CertificateTest cases, the run_java_tests.sh SKIPPED banner and the CHANGELOG line; my old-vs-new probe accepts every previously valid form (FQDN, short name, trailing dot, IPv4, IPv4:port, bracketed and bare IPv6, host:port, underscore, punycode) and refuses `vc?`, `vc#`, `user@`, `%2e` and raw-Unicode hosts (the last never dialable by java.net.URI); ci/run_java_tests.sh passes locally with BcHandshakeTest exercised, PR #49 CI green on JDK 17 and 25 (push and pull_request, both at a9eba2e), validate-sdk OK, DEF-023 and DEF-025 untouched.
+Final pak `dist/vcfcf_sdk_compliance.0.0.0.94.pak` sha256 121e8b96fc4d4358a5d8b56111a8239f4ad9af49f224b6be8a7a8de91d95c1ee; my build-sdk from HEAD hashes differently (zip timestamps) but every nested entry (adapter jars, views.zip, overview.packed) is byte-identical to it.

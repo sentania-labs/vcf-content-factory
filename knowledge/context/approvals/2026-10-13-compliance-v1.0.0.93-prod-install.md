@@ -70,3 +70,14 @@ works; Validate Connection takes a different path. The adapter pushes
 Rollup|incomplete = 1; per-vCenter values stay at the 10:08 PM 1.0.0.80 cycle.
 Hotfix build 94 (name check against the dialed host, not the TLS session)
 in progress; applying it, or rolling prod back to v1.0.0.80, needs Scott's go.
+
+## Hotfix ready (2026-10-14, about 12:10 AM)
+
+Build 94 on adapter PR #49 (branch fix/build-94-name-check-expected-host,
+a9eba2e): the name check uses the host the adapter dialed in every
+checkServerTrusted overload, so it no longer needs a peer host from the TLS
+provider. Reproduced and fixed under BouncyCastle JSSE (review
+`../reviews/compliance-build-94.md`, APPROVE twice). CI green on JDK 17 and 25.
+Dev pak 0.0.0.94 sha256 121e8b96. Waiting on Scott: merge #49, tag
+v1.0.0.94, install the release on prod, restart collection if the collector
+race recurs. Untested: the FIPS build of BouncyCastle prod likely runs.
