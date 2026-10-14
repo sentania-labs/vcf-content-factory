@@ -301,3 +301,111 @@ five-directory pak is close to the worst case.
   then read `getDashboardConfig?isTemplate=true` on the new clone.
 - The vendor description's AWS, aggregator and VCF Automation
   `NamespaceV2` bindings could not be checked on this build.
+
+## Addendum: the other lab instance (read about 10:20 PM, 2026-10-13)
+
+**Scope.** The coordinator asked for qa and main. `.env` has no `main`
+profile: it has `prod`, `qa` and `devel`, and `prod` and `qa` point at the
+same appliance (`vcf-lab-operations`). So there is one other instance, read
+here through the `qa` profile. It runs **VCF Operations 9.1.1.0 Build
+25679751**, not 9.0.2, so it differs from devel by version as well as by
+history. The "qa 9.2" and "main 9.2" appliances in
+`../api-surface/summary_dashboard_pak_binding.md` (2026-08-25) are no longer
+in `.env`.
+
+**Posture.** Read only, as on devel: Suite API `GET /api/versions/current`,
+`/api/solutions` and `/api/resources`; UI Struts `getDashboardList`,
+`getResourceKindList`, `getSummaryTabId`, `getDashboardConfig` (both
+`isTemplate` values); one headless browser session as the local `admin`.
+The login page there defaults to "VCF SSO", so Local Account was selected
+before typing, and the credentials went to the browser over stdin. **SSH
+was not used.** The appliance's host key no longer matches
+`~/.ssh/known_hosts` line 167, and the key check was not bypassed. The qa
+bridge and audit logs were therefore not read. Nothing was created,
+changed or installed.
+
+### Stuck admin dashboards
+
+`getDashboardList` returns 292 dashboards. Five are owned by `admin` and
+report `isLoading: true`:
+
+| Dashboard | Widgets parked (qa) | Same dashboard on devel | Why it cannot finish |
+|---|---|---|---|
+| Chargeback (VM Price) | 8 of 8 | 1 of 8 ("Select a Group") | Stock cost dashboard. On devel the bridge log names `AZURE_VIRTUAL_MACHINE` and other unresolvable resource kinds for its "Select a Group" widget. Inferred to be the same on qa (no log access). |
+| Showback (VM Cost) | 7 of 7 | 1 of 7 ("Select a Group") | Same as above. |
+| VM Cost vs. Price | 5 of 5 | 1 of 5 ("Select a Group") | Same as above. |
+| Rubrik Overview | 1 of 5 ("Environment Overview") | 1 of 5 (same widget) | Third-party. On devel the log names the missing `mpb_rubrik_rubrik_event` kind. |
+| Data Services View | 3 of 3 | not present | Not resolved from evidence. The name and widgets ("DSM Inventory") suggest Data Services Manager kinds that are not installed, but that is a guess. |
+
+So qa also has a permanently stuck admin importer, and three of its five
+stuck dashboards are the same stock cost dashboards as on devel. This
+answers the first open question above: those stock cost dashboards do
+stay unresolved on an instance without the Azure pack, on 9.1.1 as well.
+The fact that they are parked whole on qa but only partly on devel was not
+explained.
+
+### Bound Summary clones
+
+| Kind | `getSummaryTabId` | Clone | Widgets |
+|---|---|---|---|
+| `002028VirtualAndPhysicalSANAdapterVirtualSANFaultDomain` (vSAN 9.1.1.0.25679860) | `0a2c2d1a-...`, `isDashboard: true` | "New Summary Page: vSAN Fault Domain 8" | 5, all `isLoading: false` |
+| `002006VMWARENamespaceV2` (VCF Automation 9.1.1) | `bfed902f-...`, `isDashboard: true` | "VCFA Provider Namespace Summary 4" | 7, all `isLoading: false` |
+| `002016vcfcf_complianceComplianceWorld` (ours, 1.0.0.80) | `{"isDashboard": false}` | none (not bound on qa) | n/a |
+
+The " 8" and " 4" name suffixes are the installer's unique-name counter:
+these paks have bound a new clone on each install or upgrade.
+
+**Every dashboard-backed Summary binding on qa was checked.** That is
+every resource kind under VMSP, VCFAutomation, VirtualAndPhysicalSANAdapter
+and VMWARE whose mapping is neither a compiled page nor "Summary Detail".
+All **73 of 73** clones have zero widgets with `isLoading: true` (VMSP 68,
+VCFAutomation 3, vSAN 1, VMWARE `NamespaceV2` 1). The vendor description's
+VMSP and `NamespaceV2` bindings are real on 9.1.1. The mechanism that
+created the VMSP and VCFA bindings (`dashboards.properties` or something
+else) was not checked, because the paks could not be listed without SSH.
+
+**A 9.1.1 response-shape difference.** On 9.1.1, `getDashboardConfig?isTemplate=true`
+emits **no** `widgetConfig` or `isPreconfigured` key on any template
+widget, complete or not. Only `isLoading` is meaningful there. The 9.0.2
+rule "`widgetConfig` present means materialized" does not carry over.
+The browser confirmed a complete clone renders. Screenshot (session
+scratchpad, not committed): `shots/first-party-summary-NamespaceV2-qa.png`,
+Summary tab of Namespace `svc-cci-ns-11uq0`. It shows the custom
+"Workloads" scoreboard (Virtual Machines, VKS Clusters, Data Services, CPU
+Usage, Memory, Disk Profile Usage), a "Cost" tile reading Monthly Cost,
+and "VMware Kubernetes Service" and "Virtual Machine Service" view widgets,
+with no hourglasses. The view widget reads "The view cannot be rendered for
+the specified Object", which is a configured view with no data, not
+"The widget is not configured". vSAN Fault Domain could not be opened
+because qa has no `VirtualSANFaultDomain` objects either.
+
+### Conclusion: does a clean customer instance win the race?
+
+On 9.1.1 the evidence says yes, and that it is probably not a race at all.
+qa carries the same kind of permanently stuck admin importer that defeats
+us on devel: the three stock cost dashboards plus Rubrik and Data Services.
+Yet all 73 first-party Summary clones there are complete, including clones
+re-created on repeated installs (" 8", " 4"). If the 9.0.2 timing applied,
+most of those multi-dashboard installs would have lost. So on 9.1.1
+something in the installer or importer differs from 9.0.2: the clone
+waits for materialization, a templates importer runs, or config is not
+parked. Which one was not checked, because the 9.1.1 jars need SSH. On
+9.0.2 the answer is no, not normally. The only first-party success on
+9.0.2 (vSAN on devel) came from a first-boot install, before the stock
+cost dashboards existed. A day-2 install on a 9.0.2 instance carries those
+same stuck dashboards and should lose the way ours does. That last point
+is inference from devel's code and logs; no second 9.0.2 instance was
+available.
+
+What this changes:
+
+1. The pak-bound Summary loss looks **9.0.2-specific**. A 9.1.1 install of
+   our pak with `summary_for` would very likely produce a complete clone.
+   That is unverified for our pak: qa's compliance 1.0.0.80 is not bound.
+   One install of a current build on qa would prove it, and it needs
+   Scott's go.
+2. Next step on the mechanism: once the qa host key is re-verified (a host
+   change for Scott, not something an agent should accept), disassemble
+   `SolutionManagerDistributedTask.associateResourceKindDashboards` and
+   `ImportExportManager.importDashboard` from 9.1.1 and diff them against
+   9.0.2.
