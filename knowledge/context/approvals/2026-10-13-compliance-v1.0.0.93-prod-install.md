@@ -44,3 +44,16 @@ since 10:08 PM** (last 1.0.0.80 cycle). Summary binding exists
 (f72ad9cf), all six widgets isLoading (blank clone, as predicted for 9.1.1
 without a templates importer). Root cause under investigation on collector01,
 read-only.
+
+## Root cause and remediation (2026-10-13, 11:25 PM)
+
+collector01's collector.log (read through the UI Support Logs browser, the
+node's root SSH password having expired): at 10:40:50 PM the controller sent
+Start monitoring for all three instances, and the collector rejected each with
+`Unknown adapter type is specified in collector configuration. (Type =
+vcfcf_compliance)`; it loaded the new adapter lazily at 10:42:15 PM on the
+first Test Connection and no Start monitoring was resent. Later Test Connection
+calls logged Test OK. A pak-upgrade race on a remote collector, not an adapter,
+credential or vCenter fault. Remediation, within this approval's goal of
+leaving the accounts collecting: Start Collecting on each of the three
+accounts, then confirm a Start monitoring with no error and fresh cycles.
