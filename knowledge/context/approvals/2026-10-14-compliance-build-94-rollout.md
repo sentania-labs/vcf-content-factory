@@ -29,3 +29,13 @@
 
 - Any other instance, any account setting change, rotating credentials,
   rebinding the Summary tab, the expired root passwords.
+
+## Step 1 outcome (devel, 2026-10-14)
+
+0.0.0.94 installed 8:39 to 8:55 AM; /api/solutions 0.0.0.94 at 8:46 AM; pak
+results all successful; adapter jar 606f04e2 matches the pak; same three
+account ids, STARTED and DATA_RECEIVING; full cycles at 8:48 and 8:54 AM with
+collection-complete lines and no certificate or SSL errors; wld01
+overrides_status OK; Rollup|All fresh (mgmt 67/60/76.49, wld01 61/38/81.66,
+wld02 48/42/78.87), incomplete 0. One transient Suite API read timeout on mgmt
+cleanup at 8:53 AM, not certificate related. PASS.
