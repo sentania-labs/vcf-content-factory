@@ -735,3 +735,22 @@ Empirical basis: `knowledge/context/investigations/suiteapi_ambient_auth_devel_2
 | 2026-06-09 | **v2 rehome**: `VcfCfAdapter` now extends `AdapterBase` directly. `aria-ops-core` (`com.vmware.tvs.*`) eliminated from compile classpath and runtime. New SPI: `VcfCfTester`, `VcfCfDiscoverer`, `VcfCfCollector` (all under `com.vcfcf.adapter.spi`). `RelationshipBuilder` rebuilt on SDK `Relationships` API. `ForeignResourceResolver` decoupled from TVS via `SuiteApiBridge` functional interface. `HttpClientBuilder` default SSL changed to platform trust store. `MetricPusher.property()` bug fixed (was using `isProperty=false`). Build script narrowed to SDK jar only. See `knowledge/context/framework_v2_migration.md` for adapter migration guide. |
 | 2026-05-19 | Pak format hard-won lessons documented after 42 install attempts. |
 | 2026-05-16 | Pass 23 field evidence added to spec/01. Per-instance single-thread collect confirmed. |
+
+## SDK jar by platform version (read 2026-10-13)
+
+| Source | Jar | sha256 (12) | Notes |
+|---|---|---|---|
+| devel 9.0.2.0 build 25137845 | `common/lib/vrops-adapters-sdk.jar` and 20+ copies under packs, controller and tomcat | 2d53a91fc2b9 | 1,002,682 bytes; manifest carries no version; Apache Maven 3.3.9, JDK 17.0.16 |
+| factory `adapter_runtime/vrops-adapters-sdk-2.2.jar` | the buildkit's compile target | 2d53a91fc2b9 | byte-identical to devel's |
+| prod 9.1.1 (both nodes) | `common/lib/vrops-adapters-sdk.jar` and 31 copies, one named `vrops-adapters-sdk-9.1.1.0.jar` | 9e905f1a5164 | 1,001,089 bytes; Maven JAR Plugin 3.5.0, Java-Version 25; 512 entries vs 518 |
+| all three | `aria-ops-core-8.0.0.jar` | 8743cc28a010 | only inside the Synology MPB adapter's own lib; absent from `common/lib` |
+
+Class delta between the two SDK jars: only in 9.1.1, `LIExtractedFieldDescribe`,
+`vcd/CalculationModelDescribe`, `vcd/RecurringChargesDescribe`,
+`Legacy{INI,Properties,XML}Configuration`; only in 9.0.2 and ours,
+`adapter3/RollUpType`, `Logger$1`, `VcopsLicenseEdition$1`, `CPURateDescribe$1`
+and a few `describe/policy/vcd/*Describe` classes. No framework or adapter
+source references a class that 9.1.1 dropped. The buildkit still compiles
+against the 9.0.2 jar; a two-jar compile matrix is factory issue #211.
+Devel's one outlier is the `VrAdapter` pack's bundled copy (0f2f3a8c5722, a
+smaller build). The `2.2` and `1.0` in file names are names, not versions.
