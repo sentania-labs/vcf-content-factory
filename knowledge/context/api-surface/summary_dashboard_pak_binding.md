@@ -286,6 +286,13 @@ factory. It exists on the 9.0 devel build too.
 
 ## Field check: no installed pak uses it yet
 
+**Corrected 2026-10-13:** wrong for 9.0.2. The `find` below cannot see the file, which exists only inside
+the pak zip (`/storage/db/casa/pak/dist_pak_files/`) and the installer's temp dir. On devel 9.0.2 the vSAN pak
+(`ManagementPackforStorageAreaNetwork-902025137912`) ships
+`SummaryVirtualSANFaultDomain=VirtualAndPhysicalSANAdapter:VirtualSANFaultDomain`, and its clone is
+materialized because it was installed at first boot before any stuck admin dashboards existed. See
+`../investigations/2026-10-13-first-party-summary-binding.md`.
+
 `find / -name dashboards.properties` on all three appliances: zero
 hits. The installed solutions that ship `content/dashboards/`
 (several Broadcom first-party packs) bind nothing. `feature.properties` is likewise absent.
@@ -540,8 +547,8 @@ was not traced past `ViewDataRetrieverServer`, which passes it through.
   `content/dashboards/` tree through untouched is a separate question
   for `tooling` / `sdk-adapter-author`; the earlier
   `v20-step5-silent-drop.md` note about a SAN pak's `dashboards.properties`
-  was a misread (that pak ships `resources.properties` files only; the
-  local copy confirms it).
+  was correct after all: the 9.0.2 SAN (vSAN) pak ships one (corrected
+  2026-10-13, `../investigations/2026-10-13-first-party-summary-binding.md`).
 - Runtime not exercised: the code was read, not run. Before relying on
   it, repackage a small pak with one bound dashboard on `main`, install, read
   `getResourceKindList?appendDetailPageMappings=true` and
