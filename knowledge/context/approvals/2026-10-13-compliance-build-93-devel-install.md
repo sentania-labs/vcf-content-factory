@@ -66,3 +66,11 @@ main (squash 9d0e985). Tag `v1.0.0.93` at 9d0e985, guard clear (no blocking
 defects), release run 38498170034 success, asset
 `vcfcf_sdk_compliance.1.0.0.93.pak`. First CI-built release since v1.0.0.80;
 built against sdk-buildkit 1.0.11.
+
+## Refresh 2026-10-13 late evening
+
+Scott: "and make sure 0.0.0.93 is installed to devel". Devel ran the 4:19 PM
+0.0.0.93 build (6c436c55); the dev preview was rebuilt after the Codex round
+(overrides 400 handling, offset timestamps, JDK 25 hostname wording, tightened
+classifier). Install the current dist/vcfcf_sdk_compliance.0.0.0.93.pak over it,
+same scope as above, API-only verification.
