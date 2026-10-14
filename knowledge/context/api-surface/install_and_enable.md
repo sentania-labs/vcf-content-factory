@@ -5,18 +5,29 @@ instance, and how to enable it in a policy after install.
 
 ## Credentials
 
-Credentials live in three named profiles in `.env`, never as flat vars:
+Credentials live in named profiles in `.env`, never as flat vars. This lab
+(as of 2026-10-14):
 
 ```
-VCFOPS_PROD_HOST / VCFOPS_PROD_USER / VCFOPS_PROD_PASSWORD
-  vcf-lab-operations.int.sentania.net, user claude (read-only recon)
+VCFOPS_PROD_HOST / _USER / _PASSWORD
+  vcf-lab-operations.int.sentania.net (VCF Operations 9.1.1.0 build 25679751,
+  two nodes plus remote collector collector01, FIPS-approved-only mode)
 
-VCFOPS_QA_HOST / VCFOPS_QA_USER / VCFOPS_QA_PASSWORD
-  vcf-lab-operations.int.sentania.net, user admin (uninstall round-trips)
+VCFOPS_DEVEL_HOST / _USER / _PASSWORD
+  vcf-lab-operations-devel.int.sentania.net (9.0.2.0 build 25137845,
+  destructive playground, collector on the primary)
 
-VCFOPS_DEVEL_HOST / VCFOPS_DEVEL_USER / VCFOPS_DEVEL_PASSWORD
-  vcf-lab-operations-devel.int.sentania.net, user admin (destructive playground)
+VCFOPS_DEVEL_9_1_HOST / _USER / _PASSWORD
+  vcf-lab-operations-devel-91.int.sentania.net (9.1.1.0 build 25795063,
+  added 2026-10-14; primary plus Cloud Proxy collector
+  vcf-lab-operations-devel-91-collector, which is in no collector group yet;
+  no vCenter account and no factory pak at first recon)
 ```
+
+The former `qa` profile pointed at the prod appliance and was removed
+2026-10-14; anything that used `--profile qa` targets prod and should say
+`--profile prod`. Profile names are lowercased from the variable prefix
+(`devel_9_1`).
 
 Each profile also has `_AUTH_SOURCE` (default `Local`) and `_VERIFY_SSL`.
 
