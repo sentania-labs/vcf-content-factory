@@ -446,3 +446,91 @@ B2, W10, N10, N11 and N12 are closed as claimed. N13 is mostly closed: the vCent
 ### If shipped as-is
 
 A host, VM, vCenter, cluster, switch or portgroup that could not be read now shows "Not Fully Read = 1" beside its score everywhere that score is shown, except the heatmap, and the docs say so. The leftover risk is narrow. If someone edits an instance to point at a different vCenter while a cycle is running, the next cycle can raise the "not collected" flag on the old vCenter, or, when the new vCenter's version cannot be read, score it against the old vCenter's benchmark for a cycle.
+
+## Holder confirmation (2026-10-14, branch at `3ef7eaf`)
+
+- **Scope:** 4 commits on top of the fix-confirmed `2cd25f5`: `ca48013` (W12, the holder), `41c2179` (W13, the guard), `e8db013` (N14), `3ef7eaf` (N15).
+- **Pak:** scratch `b95final/vcfcf_sdk_compliance.0.0.0.95.pak`, sha256 `4e034d8c...a8120d` (matches the brief), reference 0.0.0.94.
+
+### Verdict: APPROVE (0 BLOCKING, 0 WARNING, 1 NIT)
+
+W12, W13, N14 and N15 are closed. Configure now builds one `Configured` holder and publishes it with one volatile write. Each cycle copies that reference once and touches the account, the clients and the cross-cycle state only through the copy. A cycle running across an edit can only refill its own, orphaned holder. Every bypass I tried against the new guard fails it, including ten at sites the author did not pick. Stopping setting the platform's `this.config` is safe: neither the framework nor the platform reads that field for this adapter. One NIT: a guard comment claims a check the code does not make.
+
+### Independent verification
+
+| Check | Result |
+|---|---|
+| `validate-sdk` on a clean `git archive 3ef7eaf` tree | OK (exit 0) |
+| `build-sdk` of the same tree | Built. All 204 files inside the pak (nested jar, views.zip and content zips walked) are byte-identical to the scratch pak, `Configured.class` included. Only the outer zip timestamps differ. **Confirmed.** |
+| `pak-compare` 0.0.0.95 vs 0.0.0.94 | PASS, 0 BLOCKING / 0 WARNING / 2 INFO. **Confirmed.** |
+| `ci/run_java_tests.sh` (JDK 17) | Exit 0. Every Java test passes, `SnapshotHolderTest` included, `BcHandshakeTest` ran (not skipped), and every Python guard passes |
+| Factory `pytest tests/` | 2063 passed, 5 skipped. Compliance `pytest tests/`: 51 passed, 64 subtests (53 before, because `test_cycle_snapshot.py` went from four test methods to two) |
+| Em-dashes in added lines (`2cd25f5..3ef7eaf`) | None |
+| `build_number` | Stays 95, as the CHANGELOG line says |
+
+### The holder, point by point
+
+1. **Contents and immutability: as claimed.** `Configured.java` holds `account`, `vsphere`, `loader`, `suite`, `stitcher`, a `LastBenchmarkMemory` created fresh with each holder, the vCenter id slot (`AtomicReference`) and the retired-Custom flag (`AtomicBoolean`). Every field is final, and `SnapshotHolderTest.immutable()` checks that by reflection. The memory and the two atomics change inside one holder, but the holder never swaps them out, which is what the design needs.
+2. **One publish.** `configureAdapter` builds the vSphere client, the loader, the Suite API client and the stitcher first. It then makes its only write to `configured` (`ComplianceAdapter.java:224`), and only after that releases the old holder's clients (`:226-228`). A cycle can no longer pair the new account with the old clients: the account exists only inside the holder, so the torn copy in W12(b) cannot happen.
+3. **One copy, used only through the copy.**
+   - `collectWorld` reads `configured` once (`:561`) and assigns `cycle = c` (`:566`). That is the only write to `cycle` anywhere.
+   - Every read of the memory, the vCenter id and the Custom flag goes through `cycle.`: `:634` (`markNotCollected`), `:737` (`retain`), `:764` (`rememberVcResourceId`), `:1015`/`:1029` (Custom bucket), `:1187` (`previous`), `:1253` (`record`).
+   - `configured` appears only in its declaration, in configure, in the copy block and in `onDiscard`. There are no `this.config` or bare `config.` reads left in the adapter.
+   - `cycle` is a field, not a local. That relies on the platform never running two collect cycles of one instance at the same time, which is the same assumption the code made before. Configure never writes `cycle`, so an edit cannot move a running cycle onto a new holder.
+4. **A cycle spanning an edit refills only the old holder: confirmed.** All six writes listed above go through the holder the cycle copied at its start. The edit publishes a new holder whose memory and vCenter id are empty. Nothing reads the old holder again, and the `cycle` field drops it at the next cycle's start. The two W12(a) leaks (`Rollup|incomplete` on the old vCenter, and the new vCenter scored against the old benchmark through the `VCENTER|vcenter` key) are closed.
+5. **Not setting `this.config` is safe.**
+   - Framework (`src/vcfcf_managementpacks/adapter_framework/.../VcfCfAdapter.java`, unchanged since `sdk-buildkit-v1.0.11`, the tag CI's floating `sdk-buildkit-v1` resolves to): `config` is a protected field the framework declares itself, so the platform's `AdapterBase` cannot see it. `onConfigure` already set it to null (`:610`) before it called `configureAdapter`. Beyond that, the framework only passes it as an argument:
+     - `onTest` (`:644`): the compliance tester ignores `cfg` and builds its own config from the `TestParam`. That has been true since build 46, because Test Connection runs on an instance that has never been configured.
+     - `onDiscover` (`:684`): `getDiscoverer()` is not overridden, so nothing runs.
+     - `needsRediscovery`, `collectEvents` and `collectRelationships` (`:728`, `:802`, `:806`): the `VcfCfCollector` interface defaults, which never dereference it.
+     - `collect` (`:778`): the adapter's lambda ignores `cfg` and calls `collectWorld`.
+   - `onDescribe` reads the adapter kind and describe.xml, not `config`. `onDiscard` does not read it.
+   - `SuiteApiStitcher.create(this, ...)` and `SuiteApiStitchClient` read the platform's `adapter.getAdapterConfig()`, not this field.
+   - The history has never contained a `config == null` check in `VcfCfAdapter.java`, so no framework path can skip a cycle because the field is null.
+6. **SnapshotHolderTest runs the two scenarios through real code, with one limit.**
+   - The holder, `ComplianceDecisions.markNotCollected` and `ComplianceDecisions.decide` (with the real bundled profiles) are real code. The test's control case shows that the old memory *would* score the new vCenter (`reusedPrevious`). The new holder gives `VERSION_UNREADABLE` instead, and `Rollup|incomplete` goes only to B's object or to nothing.
+   - The publish-then-copy sequence itself is simulated with local variables, because the adapter cannot load without the SDK. The guard pins that sequence in the adapter source. I accept that split (the same one the review asked for in W13).
+
+### Bypass mutations against the new guard
+
+The review's M1, M2, M4 and M7 are in the test as subtests, and all fail the check. I also wrote ten mutations of my own, at sites the author did not anchor on, and applied each to the clean tree (script outside the repo):
+
+| Mutation | Result |
+|---|---|
+| R1: `this.config.vcenterHost` in the `markCycleNotCollected` log | caught |
+| R2: `configured.stitcher.pushStats` in `pushRollup` | caught |
+| R4: `configured.vsphere.getVCenterVersion()` | caught |
+| R7: `configured.loader.lastManualReviewApplied()` | caught |
+| R8: `configured.memory.retain(seen)` | caught |
+| R9: `configured.rememberVcResourceId(...)` | caught |
+| R10: `markNotCollected(configured.lastVcResourceId(), ...)` | caught |
+| R11: `ComplianceAdapter.this.configured.suite` in `refreshOverrides` | caught |
+| R12: bare `config.overridesFile` in `refreshOverrides` | caught |
+| R13: a lambda that sets `cycle = configured` mid-cycle | caught |
+| R14: a new field written in configure and read in the cycle | **escapes** (N16) |
+
+### Prior findings
+
+- **W12: closed.** Points 1 to 4 above. The CHANGELOG corrects the N13 residual claim and says the leak could produce a scored result before this fix.
+- **W13: closed.** All of the review's M1 to M7 fail the guard, and so do R1 to R13.
+- **N14: closed.** The `onDiscard`, configure and `releaseClients` comments now say that only the vSphere client is closed, and that the Suite API client gets a new token if a running cycle calls it. The CHANGELOG notes that the issue #23/#28 entry overstated this. A closed state for the Suite API client stays framework work.
+- **N15: closed.** The overview now says "remaining vCenter inventory reads", says appliance reads still go to the old vCenter (its own object), and says nothing carries over to the next cycle.
+- **W11: still owed on devel** (unchanged; not code). **N6, N7, N8: unchanged, outside the adapter.**
+
+### Findings
+
+#### NIT
+
+- **N16** `tests/test_cycle_snapshot.py`, the comment above the configure checks: "writes no other account or client field". The code checks only `this.config` and `cycle`. A new field that configure fills with a client and the cycle then reads (R14) passes the guard. That needs someone to add a field on purpose, so the risk is low. Fix: either drop the clause from the comment, or check that configure assigns only `this.configured` among instance fields. Authority: reviewer dimension 9 (prove the behavior, do not assert it).
+
+### Registry check (`knowledge/context/defects.md`; no `defects.local.md` in this clone)
+
+- **DEF-023: open, unchanged.** `ComplianceStitcher.java` is not touched in `2cd25f5..3ef7eaf`.
+- **DEF-025: open, unchanged.** `ComplianceDecisions.java` is not touched in this delta (`staleControls` still at `:573`).
+- **DEF-026: open, unchanged.** There is still no cycle budget or deadline in `ComplianceAdapter.java` (zero matches for deadline or budget).
+
+**Registration candidate:** none. W12 is fixed, so the earlier candidate falls away.
+
+### If shipped as-is
+
+An instance edit during a running cycle now leaves that cycle on its own vCenter to the end. The next cycle starts fresh, with no carried-over benchmark and no vCenter id, so it can neither flag the old vCenter nor score the new one against the old one's SCG. Nothing an operator sees changes otherwise.
