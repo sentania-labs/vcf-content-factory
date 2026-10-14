@@ -57,3 +57,16 @@ calls logged Test OK. A pak-upgrade race on a remote collector, not an adapter,
 credential or vCenter fault. Remediation, within this approval's goal of
 leaving the accounts collecting: Start Collecting on each of the three
 accounts, then confirm a Start monitoring with no error and fresh cycles.
+
+## After Start Collecting (11:14 PM)
+
+Start monitoring accepted (11:13:52 PM, no "Unknown adapter type"), accounts
+STARTED, but every 1.0.0.93 cycle fails in about 300 ms:
+`certificate_unknown(46)` from `CertificateException: The vCenter certificate
+name cannot be checked: the connection has no peer host`, in
+VCenterCertificates$NameCheckingTrustManager.checkServerTrusted, under the
+BouncyCastle JSSE provider the 9.1.1 collector uses. Devel 9.0.2 (SunJSSE)
+works; Validate Connection takes a different path. The adapter pushes
+Rollup|incomplete = 1; per-vCenter values stay at the 10:08 PM 1.0.0.80 cycle.
+Hotfix build 94 (name check against the dialed host, not the TLS session)
+in progress; applying it, or rolling prod back to v1.0.0.80, needs Scott's go.
