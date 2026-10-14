@@ -46,3 +46,28 @@ bind the summary dashboards. I thought we had solved this problem".
 3. Finish the #200 branch from the review report, orchestrator items
    included, re-review, PR.
 4. Rebind on devel either way so the demo tab is not blank.
+
+## Update 2026-10-13 evening: the mechanism works; devel is the broken instance
+
+Scott: "check it out" on a vendor note naming first-party paks that ship
+`dashboards.properties`. Findings
+(`2026-10-13-first-party-summary-binding.md`):
+
+- On devel 9.0.2 the vSAN pak's bound clone is complete: its import won the
+  same race we lose, because it was installed at first boot before the admin
+  account had dashboards the server can never finish. Devel now carries ten
+  such dashboards (six stock cost dashboards referencing Azure kinds, Rubrik,
+  cluster-perf-risk, our MSSQL and Oracle ones), which keep the admin's
+  materialization thread in ten-minute sleeps, so every pak import on devel
+  clones an unmaterialized source. Nothing in our JSON, layout, flags or
+  folder changes that.
+- On qa/prod 9.1.1 all 73 first-party bound clones are complete even with
+  five stuck admin dashboards, so on 9.1.1 the binding is not a race; the
+  9.1.1 installer or importer differs (being read now).
+
+Consequences for the parked items: the #200 tooling branch stays parked (a
+factory rebind is still only a workaround for 9.0.2); the `summary_for`
+binding stays in the pak; the adapter post-install script idea is still the
+only in-pak fix for a 9.0.2 instance in devel's state. Open decisions for
+Scott: install build 93 on qa to prove our clone on 9.1.1; clean devel's ten
+unfinishable dashboards so devel stops losing the race.
