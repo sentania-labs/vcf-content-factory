@@ -754,3 +754,16 @@ source references a class that 9.1.1 dropped. The buildkit still compiles
 against the 9.0.2 jar; a two-jar compile matrix is factory issue #211.
 Devel's one outlier is the `VrAdapter` pack's bundled copy (0f2f3a8c5722, a
 smaller build). The `2.2` and `1.0` in file names are names, not versions.
+
+### API delta for the classes we use (read 2026-10-13)
+
+Class files: every class in the 9.0.2 jar is major version 61 (Java 17);
+every class in the 9.1.1 jar is major 69 (Java 25), so the 9.1.1 collector
+runs Java 25 and compiling against the 9.1.1 jar needs JDK 25. Our adapters
+target Java 11 bytecode and run on both.
+
+Public API (`javap -public`, JDK 25) of the 22 SDK classes our framework and
+the compliance, unifi, synology and vcommunity adapters import: 21 identical.
+The one difference is additive: `adapter3.describe.AdapterDescribe` gains
+`getDictionaryDir()`, `getLiExtractedFields()` and `setLiExtractedFields(...)`
+in 9.1.1. Nothing we call was removed or changed signature.
