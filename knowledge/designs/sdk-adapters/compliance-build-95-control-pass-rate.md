@@ -85,3 +85,44 @@ disagreement with the per-object path while scoring stays on it. Switching
 scoring to bulk reads, batched pushes (framework change) and a shorter
 interval follow in later builds once shadow mode shows zero disagreements on
 devel.
+
+## Decision 2026-10-14: unreadable data is skipped and flagged per object
+
+Scott, verbatim, across the discussion:
+
+> so I think we hvae a stale or not metric that we judge based on if the most
+> recent colelction was successful, and if we have missing data we just don't
+> log it - but flag the stale metric, and then that becomes an alarm.
+> DOes that cover it?
+
+> How are we publishing a reason?
+> What value does stale count give us? Just tell us the object has unreadable
+> controls.
+
+Supersedes the earlier "unreadable excluded and reported as a count" wording
+(Vision items 1 to 3) and closes build 95 review B1 and W1:
+
+1. **Per control:** a control that could not be read this cycle is not pushed
+   (its last pushed value and its alert stay as they were; no -1, no
+   "(unreadable)" overwrite). Applies to every unreadable cause, including a
+   host vCenter reports as not responding.
+2. **Per object:** `VCF-CF Compliance|has_unreadable` (1 or 0, pushed every
+   cycle), `unreadable_count` (existing), `unreadable_reason` (property: the
+   cause in plain words, for example "host not responding", "esxcli
+   unavailable", "permission refused", "appliance session refused", plus the
+   detail the adapter logs), `unreadable_controls` (property: affected control
+   ids, capped). An object with nothing readable this cycle pushes the flag and
+   reason only.
+3. **Rollups:** pass_rate and the counts come from what was read this cycle.
+   No stale or unreadable rollup keys; drop `controls_unreadable` from the
+   rollups, the Environment ComputedMetrics, the view and the tiles.
+4. **Dashboards:** an "Objects with unreadable controls" list (object, kind,
+   count, reason) next to the Controls Passing tile on the Environment
+   Overview and World Summary.
+5. **Alert:** "Compliance data not collected" fires on `has_unreadable` = 1
+   after two consecutive cycles (wait 2), cancels after one clean cycle.
+6. **Shadow mode default** (no answer yet from Scott; orchestrator default):
+   on in dev-preview builds (0.0.0.N), off in tagged releases, through the
+   internal switch.
+7. Per-object `score` stays pass / evaluated over what was read; unreadable
+   controls no longer count as failing in it (consistent with 1 and 3).
