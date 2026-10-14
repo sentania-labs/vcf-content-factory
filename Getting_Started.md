@@ -109,17 +109,22 @@ they can never be confused with a release.
 
 Every management pak this factory builds or publishes is unsigned (Broadcom
 offers no way for a third party to sign one), and fresh VCF Operations 9.0
-and 9.1 installs refuse unsigned paks. Before the first pak install on an
-instance, an administrator turns it on once:
+and 9.1 installs refuse unsigned paks (8.x is unverified). For each install
+or upgrade of an unsigned pak:
 
-1. Log in to `https://<your Ops node>/admin` as `admin`.
-2. Administrator Settings, Security Settings: activate **Allow Unsigned PAK
-   Installation**.
+1. Log in to the primary node's `https://<primary node>/admin` as `admin`.
+2. Administrator Settings, Security Settings: click **Activate Unsigned PAK
+   Installation** (9.0: **Enable Unsigned PAK Installation**). The change is
+   refused while any cluster node is down.
+3. When uploading the pak (Integrations, Repository, Add), tick **Ignore the
+   PAK file signature checking**; the box only appears once the setting is on.
+   The factory's installer sends this flag for you.
 
-Without it, an install fails with `unsigned_pak_installation.not.allowed`.
+Without step 2 an install fails with `unsigned_pak_installation.not.allowed`.
 This is a cluster-wide security setting: it lets any unsigned pak be
-installed, not only ours, so decide it deliberately and consider turning it
-off again after installing. Upgraded appliances may already have it on.
+installed, not only ours. If you turn it off again after installing, turn it
+back on before the next install or upgrade. Upgraded appliances keep whatever
+state the setting had before the upgrade.
 Details: `knowledge/context/investigations/2026-10-14-unsigned-pak-policy-9-1-1.md`.
 
 ### 5. Open Claude Code in this directory
