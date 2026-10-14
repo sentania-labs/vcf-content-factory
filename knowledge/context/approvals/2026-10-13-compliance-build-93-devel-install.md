@@ -56,3 +56,13 @@ No stored-value INFO/WARN lines fired (the platform does not hand the
 adapter removed identifiers). Screenshots in the session scratchpad shots/:
 build93-wld01-dialog.png, build93-wld01-cert-dialog.png,
 build93-wld01-ip-validate.png.
+
+## Release 2026-10-13
+
+Scott: "merge when ready and tag". PRs #44 (builds 88 and 89) merged to main;
+#45 and #46 squashed into their base branches by mistake (lesson
+`stacked-squash-merge-needs-retarget.md`); #47 re-landed builds 90 to 93 on
+main (squash 9d0e985). Tag `v1.0.0.93` at 9d0e985, guard clear (no blocking
+defects), release run 38498170034 success, asset
+`vcfcf_sdk_compliance.1.0.0.93.pak`. First CI-built release since v1.0.0.80;
+built against sdk-buildkit 1.0.11.
