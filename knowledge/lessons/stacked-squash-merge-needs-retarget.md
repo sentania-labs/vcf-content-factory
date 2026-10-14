@@ -26,3 +26,15 @@ PR from the top branch to main (#47), re-tag after it merges.
 - A release tag is cut only after reading `build_number` at the tagged
   commit and comparing it to the intended tag, locally, before pushing. The
   CI check is the backstop, not the first line.
+
+## And then it happened again, ten minutes later
+
+The recovery PR (#47, top branch to main) was CONFLICTING against main's
+squash commit. The merge script ran `gh pr merge` inside an `if` on the
+checks result, but the tag step that followed did not depend on the merge
+succeeding, so the tag was pushed at the same wrong commit a second time.
+The release workflow refused it again. A tag step must be gated on three
+things read back after the merge, not assumed: the PR state is MERGED, the
+local main fast-forwarded to the merge commit, and `build_number` at HEAD
+equals the number in the tag. Each check prints its value into the log
+before the tag is created.
