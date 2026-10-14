@@ -289,8 +289,8 @@ The flag is therefore pushed and listed, but it is not beside the stale value on
   - For a version-unreadable object even the Unreadable column is stale, usually 0.
   - `overview.md:237`, `:251-253` say a read outage no longer moves the score or raises Score Degraded. A partial outage does both (see (b)).
 - Smallest correct fix:
-  1. Add `VCF-CF Compliance|has_unreadable` (for example "Not Fully Read", or 1/0) beside the score in the six per-kind views and the ESX Hosts property list.
-  2. Reword the six descriptions to "a score beside Not Fully Read = 1 is from what could be read, and if Controls Evaluated did not change this cycle, from an earlier cycle; see the reason".
+  1. Add `VCF-CF Compliance|has_unreadable` (for example "Not Read", or 1/0) beside the score in the six per-kind views and the ESX Hosts property list.
+  2. Reword the six descriptions to "a score beside Not Read = 1 is from what could be read, and if Controls Evaluated did not change this cycle, from an earlier cycle; see the reason".
   3. Correct `data-reference.md:134` and `:298`, and the "flag beside it" sentences, to name where the flag actually is.
   4. Correct `overview.md:237` / `:251-253` to "a whole-object outage no longer moves the score; a partial one scores what was read and can move it either way".
 
@@ -357,7 +357,7 @@ B2, W10, N10, N11 and N12 are closed as claimed. N13 is mostly closed: the vCent
 ### Prior findings
 
 - **B2: closed.**
-  - All six per-kind views have `has_unreadable` ("Not Fully Read") directly after the score. I checked this in the built pak's rendered views, not only the YAML.
+  - All six per-kind views have `has_unreadable` ("Not Read") directly after the score. I checked this in the built pak's rendered views, not only the YAML.
   - The totals indices are correct in all six: host and VM `[5..10]`, vCenter and vDS `[3..8]`, cluster and portgroup `[2..7]`. In the rendered pak each one maps to has_unreadable, total, fail, unreadable, non-compliant and No SCG. The score and the string columns are never summed.
   - The vCenter, cluster, vDS and portgroup views add Unreadable Reason as an unsummed string column. Host and VM point to the list instead.
   - The ESX Hosts Compliance Details PropertyList has the row after SCG Applied. I compared the rendered dashboard's six `gridsterCoords` with 0.0.0.94: identical.
@@ -445,7 +445,7 @@ B2, W10, N10, N11 and N12 are closed as claimed. N13 is mostly closed: the vCent
 
 ### If shipped as-is
 
-A host, VM, vCenter, cluster, switch or portgroup that could not be read now shows "Not Fully Read = 1" beside its score everywhere that score is shown, except the heatmap, and the docs say so. The leftover risk is narrow. If someone edits an instance to point at a different vCenter while a cycle is running, the next cycle can raise the "not collected" flag on the old vCenter, or, when the new vCenter's version cannot be read, score it against the old vCenter's benchmark for a cycle.
+A host, VM, vCenter, cluster, switch or portgroup that could not be read now shows "Not Read = 1" beside its score everywhere that score is shown, except the heatmap, and the docs say so. The leftover risk is narrow. If someone edits an instance to point at a different vCenter while a cycle is running, the next cycle can raise the "not collected" flag on the old vCenter, or, when the new vCenter's version cannot be read, score it against the old vCenter's benchmark for a cycle.
 
 ## Holder confirmation (2026-10-14, branch at `3ef7eaf`)
 
@@ -534,3 +534,60 @@ The review's M1, M2, M4 and M7 are in the test as subtests, and all fail the che
 ### If shipped as-is
 
 An instance edit during a running cycle now leaves that cycle on its own vCenter to the end. The next cycle starts fresh, with no carried-over benchmark and no vCenter id, so it can neither flag the old vCenter nor score the new one against the old one's SCG. Nothing an operator sees changes otherwise.
+
+## Final confirmation (2026-10-14, branch at `eb612fe`)
+
+- **Scope:** 2 commits on top of the holder-confirmed `3ef7eaf`: `afeaa71` (N16, configure assigns only `configured`) and `eb612fe` (the `has_unreadable` column is headed "Not Read").
+- **Pak:** `dist/vcfcf_sdk_compliance.0.0.0.95.pak`, sha256 `486631cec9aa46487f610a8ede841f4e1cc7aeefff076e3d228ecda5e15bfb57` (matches the brief), reference 0.0.0.94.
+
+### Verdict: APPROVE (0 BLOCKING, 0 WARNING, 0 NIT)
+
+N16 is closed and the relabel is complete. The delta is exactly what the brief says: no Java source changed, only the guard test, the dashboard test, six view YAMLs, the ESX Hosts dashboard, README, three docs and the CHANGELOG.
+
+### Independent verification
+
+| Check | Result |
+|---|---|
+| Delta `3ef7eaf..eb612fe` | 14 files, none under `src/`. Every non-test hunk is the label change "Not Fully Read" to "Not Read" (six view `display_name`s, the host details `label`, descriptions, README, overview, data-reference, installing) plus one CHANGELOG line. **Only what the brief claims.** |
+| `validate-sdk` on a clean `git archive eb612fe` tree | OK (exit 0) |
+| `build-sdk` of the same tree | Built. All 204 files inside the pak (nested jar, views.zip and content zips walked) are byte-identical to the author's pak. **Confirmed.** |
+| `pak-compare` 0.0.0.95 vs 0.0.0.94 | PASS, 0 BLOCKING / 0 WARNING / 2 INFO. **Confirmed.** |
+| "Fully Read" in the pak | Zero hits across every nested entry (also checked "Fully" alone, URL-encoded and UTF-16). "Not Read" appears in 14 entries. Zero hits in the adapter tree outside the CHANGELOG and the test that forbids it. |
+| `ci/run_java_tests.sh` | Exit 0, every Java test and Python guard passes |
+| Compliance `pytest tests/` | 51 passed, 68 subtests (64 before, plus M10 to M13) |
+| Factory `pytest tests/` | 2063 passed, 5 skipped |
+| Em-dashes in added lines | None |
+| `build_number` | Stays 95, as the CHANGELOG line says |
+
+### N16 guard: mutations
+
+The clean tree passes the check. I applied the four new subtests' mutations myself (script outside the repo), plus three of my own, and read the reason each one fails, so none fails for an unrelated reason:
+
+| Mutation | Result |
+|---|---|
+| M10: `this.cycleConfDir = ...` in configure | caught: "configure assigns this.cycleConfDir" |
+| M11: bare `bulkShadow = true` | caught: "configure assigns field `bulkShadow`" |
+| M12: new package-private `String lastHost`, set in configure | caught: "configure assigns field `lastHost`" |
+| M13: `cycleSkippedInForce += 1` | caught: "configure assigns field `cycleSkippedInForce`" |
+| X1: `this.config = null` in configure | caught (both the new check and the old one) |
+| X2: new `private int hits`, `hits++` in configure | caught |
+| X3: a local `String cycleConfDir` declared and reassigned in configure | passes, as it should (a shadowing local is not a field write) |
+
+The guard also now fails if its own field scan misses `configured`, `cycle` or `cycleConfDir`, so a source reformat cannot quietly turn the field checks off. That closes R14 from the holder confirmation.
+
+### Prior findings
+
+- **N16: closed.** Mutations above.
+- **W11: still owed on devel** (not code). **N6, N7, N8: unchanged, outside the adapter.**
+
+### Registry check (`knowledge/context/defects.md`; no `defects.local.md` in this clone)
+
+- **DEF-023: open, unchanged.** No file under `src/` changed in `3ef7eaf..eb612fe`.
+- **DEF-025: open, unchanged.** Same.
+- **DEF-026: open, unchanged.** Same.
+
+**Registration candidate:** none.
+
+### If shipped as-is
+
+Same behavior as the holder-confirmed build. The flag column beside the score now reads "Not Read" and fits on screen in the host and VM views. A value of 1 there means at least one control could not be read this cycle, not that the object went unread entirely. The view descriptions and the docs say so.
