@@ -39,3 +39,10 @@ collection-complete lines and no certificate or SSL errors; wld01
 overrides_status OK; Rollup|All fresh (mgmt 67/60/76.49, wld01 61/38/81.66,
 wld02 48/42/78.87), incomplete 0. One transient Suite API read timeout on mgmt
 cleanup at 8:53 AM, not certificate related. PASS.
+
+## Step 2 outcome (release, 2026-10-14)
+
+PR #49 merged (squash e92baab); read back PR MERGED, main at e92baab,
+build_number 94; tag v1.0.0.94 pushed, guard clear; release run 38576298501
+success; asset vcfcf_sdk_compliance.1.0.0.94.pak sha256 ce738ab1306d378b...
+PASS.
