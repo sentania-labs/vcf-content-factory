@@ -4,7 +4,7 @@
 - **Slug:** compliance-bulk-collection
 - **Adapter repo:** `content/sdk-adapters/compliance/` (sentania-labs/vcf-content-factory-sdk-compliance)
 - **Date:** 2026-10-02
-- **Status:** drafted, awaiting Scott's review. Nothing built.
+- **Status:** phase 1 (measure, #17 quick wins, shadow-mode bulk reads) folded into build 95 on Scott's word 2026-10-14; switch, batched pushes and interval follow
 
 ## Initial prompt
 

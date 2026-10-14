@@ -69,3 +69,19 @@ object-weighted mean (verified: the object-weighted mean of the table rows is
 After two cycles: per-kind pass_rate equals passed/evaluated from the keys;
 Environment pass_rate equals the sum ratio across the three vCenters; the tile
 and table agree; avg_score still present but not displayed.
+
+## Scope addition: issue #17, phase 1 (Scott, 2026-10-14)
+
+> what's the plan for #17?
+> i though twe were talking about this for build 95?
+
+Build 95 also carries the user-invisible part of adapter issue #17 and the
+bulk collection design (`compliance-bulk-collection.md`, drafted 2026-10-02,
+now in play): (1) per-phase timing and call counts in the cycle summary;
+(2) the #17 quick wins: one keepalive per cycle, names kept from the
+inventory listing, connections reused instead of closed per call, the prefix
+fallback bounded; (3) bulk reads per kind in shadow mode, logging every
+disagreement with the per-object path while scoring stays on it. Switching
+scoring to bulk reads, batched pushes (framework change) and a shorter
+interval follow in later builds once shadow mode shows zero disagreements on
+devel.
