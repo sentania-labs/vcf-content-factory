@@ -1037,3 +1037,11 @@ VsanHostMetrics_1.4.6.pak with sigstore bundles and checksums. Commits
 50f7ffd and 598b3e8 on the fork branches. Maintainer instructions
 (package write access, workflow permissions, then tag) were handed to
 Scott for the vsanhostmetrics author.
+
+### Platform proof, devel_9_1 (9.1.1, Cloud Proxy), 2026-10-14
+
+Both rc paks installed (after Scott enabled unsigned paks), accounts on a
+Cloud Proxy collector group, and the proxy pulled each image at exactly the
+digest the pak pins: cluster-perf-risk collected 3 clusters and published
+risk metrics; vsanhostmetrics attached its objects under the native hosts
+and published stats from the second cycle. The design is proven end to end.

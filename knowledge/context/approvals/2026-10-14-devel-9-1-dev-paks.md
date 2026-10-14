@@ -33,3 +33,20 @@ even with ignoreSignatureChecking=true. Scott, verbatim: "i've enabled allowing
 unsigned paks" (changed by Scott himself in the UI). Installs resume under the
 standing scope. Investigation of the setting and its customer impact:
 `investigations/2026-10-14-unsigned-pak-policy-9-1-1.md` (in progress).
+
+## Outcome (2026-10-14, 2:33 to 3:20 PM)
+
+- Compliance 0.0.0.94: three accounts on factory-cloud-proxy (the Cloud
+  Proxy), certificate accepted, full cycles with no certificate error;
+  Rollup mgmt 66/59/76.6, wld01 61/38/84.7, wld02 52/46/78.1; Environment 179
+  scored after one lag interval. The framework's "FIPS-approved-only mode
+  detected" WARN appears on the Cloud Proxy: devel_9_1 runs FIPS, so it
+  reproduces prod's TLS conditions, and build 94 collects there.
+- cluster-perf-risk rc.3: container on the Cloud Proxy runs
+  ghcr.io/sentania-labs/cluster-perf-risk at the pak's digest; 3 clusters,
+  9 hosts; metrics landed (mgmt-cl01 risk 74.8, yellow). End-to-end proof of
+  the fork CI design.
+- vsanhostmetrics rc.4: container at the pak's digest; one account on the
+  vSAN cluster (verify vCenter certificate set false for the lab, the gap fork
+  issue #1 covers); objects attached under native hosts; first cycle wrote no
+  stats, second cycle about 200 objects with stats.
