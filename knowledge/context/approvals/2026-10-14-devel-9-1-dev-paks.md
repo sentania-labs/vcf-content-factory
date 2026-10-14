@@ -25,3 +25,11 @@
 No vCenter credential is held in `.env`, so compliance and vsanhostmetrics
 accounts need a credential Scott enters once in the UI (or Scott creates those
 accounts); cluster-perf-risk needs none.
+
+## Unsigned paks enabled (2026-10-14, about 2:35 PM)
+
+devel_9_1 refused every factory pak upload with `unsigned_pak_installation.not.allowed`
+even with ignoreSignatureChecking=true. Scott, verbatim: "i've enabled allowing
+unsigned paks" (changed by Scott himself in the UI). Installs resume under the
+standing scope. Investigation of the setting and its customer impact:
+`investigations/2026-10-14-unsigned-pak-policy-9-1-1.md` (in progress).
