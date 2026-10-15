@@ -19,3 +19,13 @@ was already in error).
 
 Open: 9.0.2 collector-group creation through the API fails with 500 (works on
 9.1.1); worth a note in the API surface doc if it recurs.
+
+## Afternoon follow-through
+
+- UniFi 0.0.0.14 (merged main cdf0476, sha b7ac9e9b) installed on devel
+  2:06 to 2:08 PM; the account stayed DATA_RECEIVING through the upgrade and
+  collected at 2:18 PM. Reinstalled on devel_9_1 2:21 to 2:24 PM (same
+  version over this morning's build); the account went FAILED, was started at
+  2:34 PM per the race lesson, DATA_RECEIVING by 2:39 PM.
+- Synology 0.0.0.31 (merged main 804203f, sha 8ea76f21) same-version
+  reinstall on both: in progress at the time of writing.

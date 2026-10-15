@@ -27,3 +27,8 @@ accounts run on the primary node's collector.
 - The collector's logs are readable without SSH through the admin UI's Support
   Logs browser (Administration, Control Panel, Support Logs, per node), which
   matters when a node's root password has expired.
+- Seen again 2026-10-15 on devel_9_1 (Cloud Proxy): a same-version reinstall
+  of UniFi 0.0.0.14 put its account FAILED with no message for over nine
+  minutes until started by hand. The race is not limited to version bumps;
+  any pak install that reloads the adapter on a remote collector can trip it.
+  The 9.0.2 instance with its collector on the primary did not.
