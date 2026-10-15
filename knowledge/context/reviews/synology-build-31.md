@@ -621,3 +621,67 @@ credential factory-synology-b31-cred, NAS certificate accepted, password
 correct, Allow Insecure SSL false. Nothing changed on the NAS. Screenshots in
 the session scratchpad (02-cert-dialog, 05-account-page-healthy, inv,
 10-volume-environment, 11-log-viewer-wrongpw, 12-account-page-restored).
+
+## Final: e58f881 (2026-10-15)
+
+APPROVE: 0 BLOCKING, 0 WARNING, 0 NIT. I reviewed
+`git diff ff836ef..e58f881` (two adapter commits; the CI caller commits
+up to `ff836ef` are out of scope) from a detached worktree. All five
+checks hold.
+
+1. **Classification on the attempt cycle is unchanged.** The cache
+   classifies the original exception once (`authCode`, `isUnreachable`)
+   and records the result before it throws the stackless
+   `CachedFailureException` (`SnapshotCache.java:220-258`). So the caller
+   whose build failed sees the same DSM refusal code and unreachable flag
+   as every caller served from the cache. The failure text keeps the
+   original's class name and its already-redacted message chain, so
+   DEF-001 still holds.
+2. **Nothing `mapCollectException` needs is lost.** It reads only
+   `SynologyFailures.isUnreachable`, which answers from the copy's
+   fields. The framework's collect path uses nothing else from the
+   exception (`VcfCfAdapter.onCollect` catch). Test Connection never goes
+   through the cache, so its certificate-trust detection still sees the
+   real chain.
+3. **The hook cannot throw into collect.** The debug sink is stored once,
+   at construction (`:125`, `:168`). The call is guarded by
+   `catch (RuntimeException | LinkageError)` (`:250`), after the failure
+   state and the WARN are recorded, so a logger fault cannot replace the
+   classified exception.
+4. **The logger is resolved once, and only in configure.**
+   `componentLogger(SnapshotCache.class)` is called once in the source,
+   in `configureAdapter` (`SynologyAdapter.java:211`). It is stored on
+   the immutable `Configured` holder (`:160`) and handed over as
+   `snapshotLog::debug` (`:224`). `currentSnapshot` looks up no logger.
+   `test_snapshot_logger_once.py` pins this. As on UniFi, a level an
+   operator raises holds until the next reconfigure, where the framework
+   resets it to INFO (factory #224). The remaining per-call
+   `componentLogger(SynologyApiClient.class)` in Test Connection (`:420`)
+   loses nothing, because `SynologyApiClient` has no DEBUG line.
+5. **Stop and interrupt still bypass the cache.** The
+   `catch (InterruptedException | AbortedException)` clause still comes
+   first and rethrows without caching.
+
+**Re-runs.**
+- `ci/run_java_tests.sh`: 12/12 (10 Java, 2 Python).
+- validate-sdk: OK.
+- The author's pak `dist/vcfcf_sdk_synology_diskstation.0.0.0.31.pak`,
+  sha256 `e65d2997cc2252d5cc604a3024c7a294cc7237d2923d88e010a06ed6ae5fe541`:
+  confirmed.
+- pak-compare: 0/0/0 against v1.0.0.30 on that pak and on my own
+  rebuild.
+
+**Mutations.** All 7 were caught: removing the sink guard, rethrowing the
+original on the attempt cycle, dropping the unreachable flag or the
+refusal code from the attempt copy, caching an interrupt, never calling
+the sink, and adding a per-call logger lookup back.
+
+**Docs.** The docs match the behavior: overview says one line per
+framework entry, with the stack at DEBUG, and that the instance shows
+Collecting during a back-off. installing and README say to enter the NAS
+by a name its certificate carries, and that the IP-address dialog case is
+unproven. No added line carries an em-dash.
+
+**Defect registry.** Unchanged: no open defect affects `synology`.
+
+Remaining before a `v1.0.0.31` tag: the RULE-012 defect gate.
