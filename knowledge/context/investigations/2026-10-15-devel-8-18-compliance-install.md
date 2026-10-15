@@ -44,3 +44,20 @@ Both came up STOPPED and needed monitoringstate/start, as on devel 9.0.2.
 The account POST needs the flat body (a nested resourceKey body gets 400 for
 empty name and adapterKindKey). No WARN or ERROR; messageFromAdapterInstance
 empty on all three accounts.
+
+## UniFi 0.0.0.14 and Synology 0.0.0.31 on 8.18.7 (same day, content-installer)
+
+| Pak | Install | Account | Certificate dialog on 8.18 | Collection |
+|---|---|---|---|---|
+| UniFi 0.0.0.14 (sha b7ac9e9b, main cdf0476) | 2:21 to 2:25 PM, read back 0.0.0.14 | factory-unifi-b14, controller by DNS name, port 443, Allow Insecure SSL false | appeared (CN int.sentania.net 2027, expires 2028-09-18); accepted; "Test connection successful" | 147 objects, 794 metrics, all DATA_RECEIVING GREEN by 2:34 PM |
+| Synology 0.0.0.31 (sha 8ea76f21, main 804203f) | about 2:25 PM, read back 0.0.0.31 | factory-synology-b31, NAS by DNS name, port 5001, Allow Insecure SSL false | appeared (CN int.sentania.net 2026, expired 2026-09-17); accepted; successful | 31 objects, 151 metrics, all GREEN by 2:38 PM; Volume 1 has 19 children and 1 parent |
+
+Neither pak carries dashboards or views in its pak (describe, resources,
+images only); that content lives only on each repo's parked, unpushed
+`feat/dashboards` branch. The 8.18 widget-allowlist question is therefore
+answered only by compliance today.
+
+devel_8_18 inventory at 2:39 PM: compliance 0.0.0.95, UniFi 0.0.0.14,
+Synology 0.0.0.31, vSAN Host Metrics 1.4.6, Cluster Performance Risk 1.3.0,
+one account each, all collecting. The NAS certificate has been expired since
+2026-09-17 (flagged to Scott).
