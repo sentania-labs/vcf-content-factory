@@ -591,3 +591,95 @@ The guard also now fails if its own field scan misses `configured`, `cycle` or `
 ### If shipped as-is
 
 Same behavior as the holder-confirmed build. The flag column beside the score now reads "Not Read" and fits on screen in the host and VM views. A value of 1 there means at least one control could not be read this cycle, not that the object went unread entirely. The view descriptions and the docs say so.
+
+
+## Codex round: cf354ed (2026-10-15, branch `feat/build-95-control-pass-rate` at `cf354ed`)
+
+- **Scope:** 1 commit on top of the final-confirmed `eb612fe`: `cf354ed` "keep benchmark memory for held-back kinds" (Codex P2 on PR #53). 4 files: `ComplianceAdapter.java` (one call), `LastBenchmarkMemory.java` (`retain(seen, heldBackKinds)`), `Build95TriageTest.java` (new `heldBackKindKeepsMemory`), CHANGELOG.
+- **Pak:** clean `git archive cf354ed` build, `vcfcf_sdk_compliance.0.0.0.95.pak`, sha256 `360831642a1d53d6e4ba88db8ed6bd77728321a817cb6466ffe76aaa49514f55`.
+
+### Verdict: APPROVE (0 BLOCKING, 0 WARNING, 1 NIT)
+
+The fix is correct on every held-back path, memory stays bounded by inventory, and the test fails on the old retain.
+
+### Independent verification
+
+| Check | Result |
+|---|---|
+| `validate-sdk` on the clean tree | OK (exit 0) |
+| `build-sdk` | Built. The shipped `vcfcf_compliance.jar` (inside `adapters.zip`) carries `retain(Set<String>, Set<Kind>)`, and `ComplianceAdapter` calls the two-argument form (javap). |
+| `pak-compare` vs release `1.0.0.94` | PASS, 0 BLOCKING / 0 WARNING / 2 INFO (the new Unreadable Controls report, already known). |
+| `ci/run_java_tests.sh` | Exit 0. Every Java test passes, BcHandshakeTest ran (not skipped), all nine Python guards pass. |
+| Compliance `pytest tests/` | 51 passed, 68 subtests |
+| Em-dashes in added lines | None |
+| `build_number` | Stays 95, as the CHANGELOG says |
+
+Build ran at 10:29 with the factory on `docs/prod-incident-hotfix-94`. The factory checkout moved to `chore/retire-vcommunity-paks` at 10:30. The only `src/` difference between those branches is `vcfcf_packaging/managed_paks.py`, which the build does not use.
+
+### 1. Every held-back path
+
+`markIncomplete` call sites (all in `ComplianceAdapter.java` unless noted):
+
+| Site | Path | Seen keys of the kind | Kept after the fix |
+|---|---|---|---|
+| `ComplianceDecisions.java:678` via `:1497` | host listing fails | none | yes |
+| `:1469` `kindPushable`, host `:1520` | VCF Ops HostSystem list failed, or no stitcher | present hosts were already added (`:1526` runs before `if (!pushable) continue`) | yes, the whole kind, deleted hosts too |
+| `:1818` | VM listing fails | none | yes |
+| `:1469` VM `:1828` | VirtualMachine list failed, or no stitcher | present VMs added (`:1845`) | yes |
+| `:2053` / `:2088` / `:2130` | vDS / portgroup / cluster listing fails | none | yes |
+| `:1469` via `:2061` / `:2096` / `:2139` | resource list failed | none (returns before `collectVimObject`) | yes |
+
+The vCenter kind is never held back, and its key is always added (`:1955`). `retain` runs at `:740` after all six collectors, on the same `rollup`, so `incompleteKinds()` is complete when it is read. On the paths that end the cycle early (Stop Collecting throws `InterruptedException` from `StopCheck.java:44`; vCenter not reached rethrows at `:671`; any other exception escapes `collectWorldCycle`), `retain` does not run at all. Nothing is trimmed then, which is the safe direction. `heldBack` matches on `kind.name() + "|"`, the same format `key()` writes. The delimiter keeps `VM|` from matching `VCENTER|` or `VDS|`.
+
+### 2. Bounded
+
+An entry is created only by `afterPush` (`:1256`), for an object that was listed and matched in that cycle. A held-back kind creates no entries (listing failed: no objects; `kindPushable` false: `continue` or `return` before `afterPush`). So while a kind is held back its entries are frozen at the count from the last cycle it was listed, and that count is bounded by that cycle's inventory. The first cycle the kind is listed again trims it to the current inventory. A deleted object is kept only while its kind is held back. Memory lives in the per-configuration holder, so an edit starts it empty. No leak.
+
+### 3. A kept entry and a stale pass
+
+Reuse happens on one path only: `ComplianceDecisions.decide:143-148`, reached when `select` returns `unreadable` (`BenchmarkSelector.java:140`, major.minor not parseable). A readable version always picks its own benchmark or no benchmark. Keys are `kind|moid` inside one holder, and the holder is tied to one vCenter. vCenter does not reuse MOIDs, so a re-created object gets a new key and no stale entry. The real case is an object upgraded while its kind is held back, whose version is then unreadable. It gets scored against the older SCG. That is the existing B2 fallback risk: an object whose version stays unreadable for many cycles already reuses its benchmark the whole time, because `afterPush` records the reused name again each cycle. The fix makes the gap between the last read version and the reuse longer. It does not add a new kind of risk. Each reuse logs a WARN (`:1191`); see N17 for its wording.
+
+### 4. The test fails on the old code
+
+The mutations were applied to a scratch copy of `cf354ed` (script outside the repo):
+
+| Mutation | Result |
+|---|---|
+| clean | passes |
+| M1: `retain` body set back to `retainAll(seenKeys)` | fails at `Build95TriageTest.java:96` ("benchmark kept through the held-back cycle") |
+| M2: adapter passes an empty set instead of `rollup.incompleteKinds()` | fails (wiring check, `:119`) |
+| M3: `heldBack` always true | fails at `:98` ("a listed kind is still trimmed") |
+| M5: `retain` moved ahead of the collectors | fails (wiring order) |
+| M4: `retain` moved after `cleanStaleControls` | passes, as it should (still after every collector) |
+
+The test holds back VM, vDS, portgroup and cluster through `listOrHoldBack`. The adapter holds those back with a direct `markIncomplete`. `retain` reads only the rollup's set, so the two are equivalent.
+
+### 5. The author's residual (no Suite API connection)
+
+Partly confirmed: with `cycle.stitcher == null`, `collectDvs`, `collectDvpg` and `collectClusters` return at `:2047` / `:2082` / `:2122` without marking the kind. But it has no effect. The stitcher is a final field of the holder (`Configured.java:32`), set once at configure, so it is null for the holder's whole life. With no stitcher nothing is matched, so `afterPush` never runs and the memory never gets an entry (host and VM `continue` at `!pushable`, and vCenter returns at `:1958`). There is nothing to trim. A later stitcher means a new configure, which means a new, empty memory. Nothing in that state is scored or pushed.
+
+### Findings
+
+#### NIT
+
+- **N17** `ComplianceAdapter.java:1191-1193`: the reuse WARN says "scoring against last cycle's benchmark". After this fix the benchmark can come from any number of cycles back (the kind was held back in between), and that was already true for a version that stays unreadable. An operator reading the log would think the SCG choice was one cycle old. Fix: "scoring against the benchmark it was last scored against" (or similar). The javadoc at `:1181` ("benchmark from last cycle") and `LastBenchmarkMemory.previous` ("Benchmark applied last cycle") have the same wording. Authority: reviewer dimension 6 (logs must let an operator see what actually happened).
+
+### Prior findings
+
+- **W11: still owed on devel** (not code). **N6, N7, N8: unchanged, outside the adapter.**
+
+### Registry check (`knowledge/context/defects.md` as of `bc8b98c`; no `defects.local.md` in this clone)
+
+- **DEF-023: open, unchanged.** `ComplianceStitcher.java` is not touched in `eb612fe..cf354ed`.
+- **DEF-025: open, unchanged.** `ComplianceDecisions.java` is not touched (`staleControls` still at `:573`).
+- **DEF-026: open, unchanged.** No cycle deadline or budget in `ComplianceAdapter.java` (zero matches). The stop flag is checked per object (build 95 #16), which this commit does not change.
+
+**Registration candidate:** none.
+
+### If shipped as-is
+
+A cycle where the host, VM, vDS, portgroup or cluster listing fails, or where its VCF Ops resource list fails, no longer makes that kind forget its benchmarks. If an object's version can't be read in the next cycle, it is scored against its last SCG and the log says so. It is no longer reported as version-unreadable with no score.
+
+### Merge record
+
+PR #53 squash-merged to main as bd2eba6 on 2026-10-15 at 10:41 AM with build_number 95 read back from main. Not tagged: Scott, 2026-10-15, "let's make sure we are commited to main on this, but let's not tag yet - since we are really just doing debugging." The reviewer NIT (reuse WARN wording, ComplianceAdapter.java:1191) carries to the next compliance build.
