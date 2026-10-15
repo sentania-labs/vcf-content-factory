@@ -4,7 +4,7 @@
 - **Slug:** compliance-build-95-control-pass-rate
 - **Adapter repo:** `content/sdk-adapters/compliance/`
 - **Date:** 2026-10-14
-- **Status:** go from Scott 2026-10-14; authoring
+- **Status:** merged to compliance main (bd2eba6, 2026-10-15, PR #53, Codex round cf354ed); not tagged on Scott's word; proven on devel_9_1
 
 ## Initial prompt (Scott, verbatim, 2026-10-14)
 
