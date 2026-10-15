@@ -98,13 +98,6 @@ declare -a PATHS=()
 current_url=""
 in_comment=false
 while IFS= read -r line; do
-    # Entries under the "## Retired paks" heading are kept for the record
-    # only: not cloned, not refreshed, not reported. Exact heading text,
-    # level 2, case-sensitive; src/vcfcf_packaging/managed_paks.py matches
-    # the same line. Keep the registry's heading and this check in step.
-    if [[ "$line" =~ ^##[[:space:]]+Retired[[:space:]]+paks ]]; then
-        break
-    fi
     # Skip the documentation/template block enclosed in <!-- ... -->
     if [[ "$line" == *"<!--"* ]]; then
         in_comment=true
@@ -114,6 +107,15 @@ while IFS= read -r line; do
             in_comment=false
         fi
         continue
+    fi
+
+    # Entries under the "## Retired paks" heading are kept for the record
+    # only: not cloned, not refreshed, not reported. Exact heading text,
+    # level 2, case-sensitive, nothing after it on the line; checked after
+    # comment skipping so a comment that mentions the heading does not stop
+    # the parse. src/vcfcf_packaging/managed_paks.py matches the same line.
+    if [[ "$line" =~ ^##\ Retired\ paks[[:space:]]*$ ]]; then
+        break
     fi
 
     if [[ "$line" =~ \*\*Remote:\*\*[[:space:]]+(https://[^[:space:]]+) ]]; then
