@@ -685,3 +685,124 @@ unproven. No added line carries an em-dash.
 **Defect registry.** Unchanged: no open defect affects `synology`.
 
 Remaining before a `v1.0.0.31` tag: the RULE-012 defect gate.
+
+## Final: 47e0d4d (2026-10-15)
+
+APPROVE: 0 BLOCKING, 0 WARNING, 1 NIT. I reviewed
+`git diff e58f881..47e0d4d` (one commit, the Codex P2 fix) from a
+detached worktree. The P2 is closed: the dedicated logout client is now
+discarded once, on the first `close()`, after close's own logout
+attempt, whether or not there was a session.
+
+**Test Connection keeps its client.** The tester builds its API client
+with the four-argument constructor (`SynologyAdapter.java:420`). That
+constructor passes the same client for both roles, so
+`logoutHttp != http` is false and no release step is wired
+(`SynologyApiClient.java:63-65`). The tester also never calls `close()`:
+it calls `logout()` and then discards `testHttp` itself in its own
+`finally`. `test_logout_client_discard.py` pins the `!= http` guard.
+
+**close still never throws.**
+- Close's own logout goes through `logoutQuietly`, which catches
+  `RuntimeException`.
+- `sendLogout` catches every `Exception` and an interrupt.
+- The release step runs in a `finally`, wrapped in
+  `catch (RuntimeException | LinkageError)` (`DsmSession.java:141-151`),
+  so a release fault never escapes.
+- Only an unrelated JVM `Error` from the logout transport could
+  propagate, and that was already true before this commit. The release
+  step still runs in that case (a test covers it).
+
+**Can release run before the in-flight login's logout? Yes, and today
+that costs nothing (NIT).** A login started before `close()` stores
+nothing. When it returns, it sees `closed` and logs its new session out
+over `logoutHttp`, after `close()` may already have run the release
+step. This is harmless today: `ManagedHttpClient.discard()` only
+releases a framework auth strategy, and the logout client has none, so
+the late logout still goes out. If `discard()` ever closed the
+transport, that late logout would fail quietly, both catches would
+swallow it, and that single session would be left for DSM to expire.
+Nothing would throw and no login would be attempted. Fix, if wanted:
+count logins in flight under the existing lock and run the release step
+when the last one finishes after close. Or correct the comment ("after
+close's own logout attempt").
+
+**Re-runs.**
+- `ci/run_java_tests.sh`: 13/13 (10 Java, 3 Python).
+- validate-sdk: OK.
+- The author's pak `dist/vcfcf_sdk_synology_diskstation.0.0.0.31.pak`,
+  sha256 `6bc915398fa2ad061525b1e32238452368461d03076441d4b7bc86d113a18803`:
+  confirmed.
+- pak-compare: 0/0/0 against v1.0.0.30 on that pak and on my own
+  rebuild.
+
+**Mutations.** All 5 were caught: release on every close, release
+skipped when there is no session, a release fault escaping, the
+tester's main client discarded, and the logout moved into the
+`finally` so it no longer runs before the release.
+
+**Docs and registry.** No added line carries an em-dash. No open defect
+affects `synology`, and DEF-001 still holds.
+
+Remaining before a `v1.0.0.31` tag: the RULE-012 defect gate.
+
+## Final: f58f409 (2026-10-15)
+
+APPROVE: 0 BLOCKING, 0 WARNING, 0 NIT. I reviewed
+`git diff 47e0d4d..f58f409` (one commit, `DsmSession.java` plus its test)
+from a detached worktree. The 47e0d4d nit is closed: the logout client
+is now released only after every login that was in flight at close has
+done its own logout.
+
+**No deadlock.** There is one lock and nothing nested under it. No DSM
+call runs under it: `loginCall.login()`, every `logoutQuietly` and
+`releaseQuietly` all run with the lock released. Only the test-only
+`beforeStore` hook runs inside the lock, and it is null in production.
+
+**No lost or double release, in any order.** Each case below I worked
+through by hand:
+- **Login completing exactly as close takes the lock.**
+  - If the login stores first, its `finally` sees no release owed. Close
+    then takes that session, logs it out, and releases, because no login
+    is in flight.
+  - If close marks closed first, the login logs its own session out.
+    Then whichever runs its locked decision second does the release:
+    close (when the login has already finished) or the login's `finally`
+    (when close found it in flight and marked the release owed).
+  - Both decisions are made under the lock, and paying the owed release
+    clears the flag, so the step runs exactly once.
+- **A login that throws before incrementing.** The only such throw is
+  the closed check, inside the same locked step that would increment
+  (`:114`), so the counter never moves. A failure in `loginCall` itself
+  is decremented by the `finally` (`:136`).
+- **A second close during an owed release.** It sees `first == false`
+  and touches neither the counter nor the owed flag.
+- **No new login after close.** A login started after close is refused
+  before it increments, so nothing can pay the release a second time.
+  That is why mutation J3 survives: not clearing the flag cannot cause a
+  second release.
+
+**Nothing else changed behaviour.** On an open client, a login
+increments and decrements with no release owed, so normal collection is
+unchanged. Tester clients have no release step and are unaffected. The
+closed check moved inside the lock with the same meaning. `close()`
+still never throws: `releaseQuietly` catches `RuntimeException` and
+`LinkageError` (`:192`).
+
+**Re-runs.**
+- `ci/run_java_tests.sh`: 13/13.
+- validate-sdk: OK.
+- The author's pak `dist/vcfcf_sdk_synology_diskstation.0.0.0.31.pak`,
+  sha256 `8ea76f212cbdc3578dd4525996c1d871aa77b902aea7f4eaebd4af6504e3ce1e`:
+  confirmed.
+- pak-compare: 0/0/0 against v1.0.0.30 on that pak and on my own
+  rebuild.
+
+**Mutations.** 4 of 5 were caught: close always releasing, the owed
+release never paid, no decrement, and any login paying the release. The
+fifth (J3, the owed flag not cleared) is equivalent, as explained above.
+
+**Docs and registry.** No added line carries an em-dash. No open defect
+affects `synology`.
+
+Remaining before a `v1.0.0.31` tag: the RULE-012 defect gate.
