@@ -28,4 +28,21 @@ Open: 9.0.2 collector-group creation through the API fails with 500 (works on
   version over this morning's build); the account went FAILED, was started at
   2:34 PM per the race lesson, DATA_RECEIVING by 2:39 PM.
 - Synology 0.0.0.31 (merged main 804203f, sha 8ea76f21) same-version
-  reinstall on both: in progress at the time of writing.
+  reinstall: devel 2:42 to 2:44 PM, account never left DATA_RECEIVING, next
+  stat 2:48 PM; devel_9_1 2:49 to 2:52 PM, account FAILED for six minutes,
+  started 2:58 PM per the race lesson, DATA_RECEIVING 3:03 PM. Volume 1
+  keeps its 19 children on both.
+
+## End state, 3:03 PM
+
+| Pak | devel (9.0.2) | devel_9_1 (9.1.1) | devel_8_18 (8.18.7) |
+|---|---|---|---|
+| Compliance | 0.0.0.95, 3 accounts | 0.0.0.95, 3 accounts | 0.0.0.95, 1 account |
+| UniFi | 0.0.0.14, 1 | 0.0.0.14, 1 | 0.0.0.14, 1 |
+| Synology | 0.0.0.31, 1 | 0.0.0.31, 1 | 0.0.0.31, 1 |
+| vSAN Host Metrics (fork) | 1.4.6, 1 | 1.4.6, 1 | 1.4.6, 1 |
+| Cluster Perf Risk (fork) | 1.3.0, 1 | 1.3.0, 1 | 1.3.0, 1 |
+| vCommunity vSphere | removed | absent | absent |
+
+All accounts collecting. The three pak builds are the merged main content
+(compliance bd2eba6, unifi cdf0476, synology 804203f), none tagged.
