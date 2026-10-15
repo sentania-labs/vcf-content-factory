@@ -98,6 +98,11 @@ declare -a PATHS=()
 current_url=""
 in_comment=false
 while IFS= read -r line; do
+    # Entries under the "## Retired paks" heading are kept for the record
+    # only: not cloned, not refreshed, not reported.
+    if [[ "$line" =~ ^##[[:space:]]+Retired[[:space:]]+paks ]]; then
+        break
+    fi
     # Skip the documentation/template block enclosed in <!-- ... -->
     if [[ "$line" == *"<!--"* ]]; then
         in_comment=true
