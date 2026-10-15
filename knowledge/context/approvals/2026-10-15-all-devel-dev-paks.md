@@ -22,9 +22,16 @@
 ## Not covered
 
 - Prod, in every form.
-- Uninstalling anything, including the retired vCommunity pak still on devel
-  9.0.2 (an uninstall is a delete and needs its own go).
+- Uninstalling anything, with one exception granted the same day (below).
 - Global settings on any instance; Broadcom stock packs; the vCenter
   accounts Scott created.
 - SSH-based evidence on 8.18 (issue #212 step 1) is still gated on Scott
   providing access.
+
+## Addendum: vCommunity vSphere uninstall on devel 9.0.2
+
+- **Verbatim (Scott, 2026-10-15):** "uninstall vcommunity vsphere from devel
+  9.0.2"
+- **Scope:** remove the vcfcf_vcommunity_vsphere pak (0.0.0.13, three
+  instances) from devel (vcf-lab-operations-devel, 9.0.2) only. Nothing else,
+  nowhere else.
