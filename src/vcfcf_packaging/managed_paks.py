@@ -9,7 +9,8 @@ kept in the file for the record but are not live, so they are never returned.
 Public API
 ----------
 load_registry(registry_path) -> List[ManagedPak]
-    Parse the registry file and return all live (non-comment) entries.
+    Parse the registry file and return the live (non-comment) entries that
+    carry an ``adapter_kind:`` line; entries without one are skipped.
 
 lookup_by_adapter_name(name, registry_path) -> ManagedPak | None
     Look up an entry by the adapter directory name (``content/sdk-adapters/<name>``).
@@ -88,7 +89,11 @@ _DEFAULT_REGISTRY_PATH = Path(__file__).parent.parent.parent / "knowledge" / "co
 # ---------------------------------------------------------------------------
 
 def load_registry(registry_path: "str | Path | None" = None) -> List[ManagedPak]:
-    """Parse the managed-paks registry and return all live entries.
+    """Parse the managed-paks registry and return the live entries that carry
+    an ``adapter_kind:`` line.
+
+    Live entries without an ``adapter_kind:`` line (the third-party Python
+    fork entries) are never returned; the bootstrap script still clones them.
 
     Skips lines inside HTML comment blocks (``<!-- ... -->``), which is where
     the entry template is embedded, and stops at the ``## Retired paks``

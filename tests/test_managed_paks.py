@@ -412,8 +412,11 @@ class TestRetiredPaksHeading:
 
 class TestRealRegistryOnDisk:
     def test_real_registry_live_entries(self):
-        """The checked-in registry returns exactly the live SDK paks and none
+        """The checked-in registry includes the known live SDK paks and none
         of the retired vcommunity entries.
+
+        A subset check, not an exact list: adding a pak is one registry line
+        and must not turn this test red.
 
         The third-party Python fork entries (vsanhostmetrics,
         cluster-perf-risk) carry no ``adapter_kind:`` line, so this reader
@@ -421,6 +424,8 @@ class TestRealRegistryOnDisk:
         Target only, still clones them).  Unchanged by the Retired cut-off.
         """
         names = [p.name for p in load_registry()]
-        assert names == ["compliance", "unifi", "synology"], names
+        live = set(names)
+        assert {"compliance", "unifi", "synology"} <= live, names
         for retired in ("vcommunity", "vcommunity-vsphere", "vcommunity-os"):
+            assert retired not in live, (retired, names)
             assert lookup_by_adapter_name(retired) is None, retired
