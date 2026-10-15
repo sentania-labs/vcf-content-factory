@@ -544,3 +544,44 @@ SDK ADAPTER REVIEW
   if shipped as-is: wrong passwords back off without tripping Auto Block, an unreachable NAS is DOWN at one attempt per cycle, scoped or iSCSI-less NASes collect, a self-signed NAS is accepted once through the review dialog, and a failed cycle logs one line per object instead of a stack each
   report: knowledge/context/reviews/synology-build-31.md
 ```
+
+## Final: 2e619d9 (2026-10-15)
+
+APPROVE: 0 BLOCKING, 0 WARNING, 0 NIT. I reviewed
+`git diff f8e45fa..2e619d9` (three commits) from a detached worktree.
+The tests run 11/11. My own build-sdk and the author's pak
+(`dist31n/...0.0.0.31.pak`, sha256 `2de24801f9d88e2c7a4d88301a6c715084d47f622d1030f28ff82e644ed8645f`,
+verified) both score pak-compare 0/0/0 against v1.0.0.30.
+
+All three residual nits are closed, and 8 more mutations against the
+new code were all caught:
+- **NIT-R1 (DSM error 102).** A first 102 on the LUN or target list is
+  unread: no WARN, existing LUNs go ERROR, Volume edges are kept. Only a
+  second consecutive 102 for the same endpoint in the same configuration
+  is read as "not installed". A successful read or any other failure
+  resets the count (`SnapshotReads.java:145`, `:195`, `:215-221`,
+  `:250`). The docs now say an iSCSI-less NAS costs one cycle after a
+  create or edit.
+- **NIT-R2 (login race).** `DsmSession`'s login check-and-store and
+  `close()`'s mark-and-take share one lock. The lock never spans a DSM
+  network call: `loginCall.login()` runs before the lock is taken, and
+  every `logoutQuietly` (in-flight login at close, `logout()`,
+  `close()`) runs after it is released.
+- **The test hook cannot fire in production.** `beforeStore` is a
+  package-private field that defaults to null. The only assignment
+  anywhere in the repo is `DsmSessionTest.java:127`, and nothing under
+  `src/` sets it.
+- **NIT-R3 (per-share freeze).** A refused probe now freezes only the
+  Volume whose `vol_path` matches the share. The freeze is applied
+  consistently to all three of that Volume's child kinds (LUN, NFS
+  export, SSD cache, `SynologyTopology.java:228`, `:257`, `:288-289`),
+  so a frozen Volume emits no partial full-set. An unread list, or a
+  failed share with an unknown `vol_path`, still freezes every Volume
+  (`SnapshotIsolation.java:130-145`).
+- **Docs and registry.** The docs match the behavior, and no added line
+  carries an em-dash. The registry is unchanged: no open defect for
+  `synology`, and DEF-001 still holds.
+
+The only item still owed is the devel proof already in the brief
+(wrong-password edit, no Auto Block entry), plus one look at the 102
+INFO on a NAS without iSCSI if one is available.
