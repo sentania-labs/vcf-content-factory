@@ -437,3 +437,42 @@ SDK ADAPTER REVIEW
 ## Final: 219ae6d (2026-10-15)
 
 APPROVE, 0 BLOCKING / 1 WARNING (W4, the devel dialog check, unchanged) / 0 NIT: N1 is closed. The one-commit delta (`git diff 765dbe3..219ae6d`, checkout clean at the tip) narrows the per-site stop to `UniFiFailures.isConnectFailure` (`UniFiFailures.java:120`, used at `SiteReads.java:91`), leaves `isUnreachable` unchanged, so a whole-controller read timeout is still DOWN, and updates CHANGELOG and overview.md with no new em-dashes. The connect-level set matches what the framework client actually throws. `HttpClientBuilder.java:143` sets `connectTimeout(timeout)`, so a blackholed controller surfaces from `java.net.http` as `HttpConnectTimeoutException` (in the set), not as a request timeout. Connection refused, and in the JDK client also an unresolvable host, surfaces as `ConnectException`. `RetryPolicy` rethrows that unchanged, and `ManagedHttpClient.sendWithRoundRobin` (`:248-318`) only ever rethrows the original or last `ConnectException`, so the stop still fires after round-robin. `UnknownHostException` and `NoRouteToHostException` are harmless extras for the same conditions. `SessionCookieAuth`'s wrapper keeps the cause, and the chain walk finds it. A request timeout (`HttpTimeoutException`, not a connect timeout) now fails only its own site. Re-runs: validate-sdk OK; `ci/run_java_tests.sh` 7/7. The author's pak sha256 `afa85e4eca2d9f924bbfef8b65795accb406e2bbaed31cccd08c3ad3f6ab1e05` is confirmed, and pak-compare is 0/0/0 vs v1.1.0.13 on both that pak and my own rebuild. Two mutations, the loop stopping on any unreachable failure and the connect timeout dropped from the set, are both caught (SiteReadsTest, FailureMappingTest). Defect registry: no open defect affects unifi. Remaining before a `v1.1.0.14` tag: the W4 devel check (Validate Connection with the console entered by IP), then the RULE-012 defect gate.
+
+## devel_9_1 proof (2026-10-15, content-installer)
+
+Pak 0.0.0.14 (pre-nit sha256 ded7e6c2) installed 11:20 to 11:23 AM, read back
+as "VCF Content Factory UniFi Controller 0.0.0.14". Fresh install, no prior
+UniFi pak, no FAILED account.
+
+- **Certificate dialog: appeared.** Account factory-unifi-b14 on
+  factory-cloud-proxy, port 443, Allow Insecure SSL false, controller entered
+  by DNS name. Validate Connection at 11:27 AM showed Review and Accept
+  Certificate for the wildcard *.int.sentania.net certificate; accepted;
+  "Test connection successful". The IP-address case is untested (the lab
+  addresses the console by name).
+- **Collection: PASS.** 147 objects, gateway with 24 metrics, snapshot every
+  5 minutes.
+- **Wrong password: PASS.** Saved 12:03 PM (controller answered HTTP 403).
+  Six cycles to 12:28: three login attempts (12:03, 12:08 after the re-save
+  reset the back-off, 12:28; the 12:23 cycle fell milliseconds short of the
+  900 s window). One "UniFi snapshot build failed" WARN per attempt naming
+  the back-off; one framework WARN per resource (146) with a one-line
+  CachedFailureException and no stack. Correct password restored 12:31 PM;
+  12:33 cycle collected.
+- **Insecure WARN: PASS.** Allow Insecure SSL true at 12:35 logged one
+  configure-time WARN; the 12:38 cycle did not repeat it; back to false at
+  12:41, 12:43 cycle collected.
+
+Found during the proof:
+- The login-attempt cycle logs a 24-line stack under the framework's
+  "collect-path discovery failed (non-fatal)" WARN. Fixed on the branch after
+  219ae6d (attempt cycle throws the stackless classified copy).
+- The account list shows "Collecting" for the whole wrong-password window.
+  Framework limitation, filed as factory #223.
+- Login refusal was HTTP 403, not 401; both are in the auth set.
+
+Left on the instance: pak 0.0.0.14, account factory-unifi-b14 with credential
+factory-unifi-cred, controller certificate accepted, password correct, Allow
+Insecure SSL false. Screenshots in the session scratchpad: shot_account_green,
+shot_objects, shot_gateway_summary, validate_cert_dialog,
+shot_log_wrongpw_backoff, shot_log_insecure_warn, log_excerpt_wrongpw_window.
