@@ -126,3 +126,11 @@ python -m vcfcf_supermetrics list
 python -m vcfcf_supermetrics delete "<name>"
 python -m vcfcf_supermetrics enable supermetrics/<file>.yaml  # Default policy
 ```
+
+## Collector groups (API)
+
+`POST /api/collectorgroups` returns HTTP 500 "Internal Server error, cause
+unknown" on 8.18.7 unless the body includes `"systemDefined": false` alongside
+`name`, `description` and `collectorIds`. 9.0.2 returned the same 500 on
+2026-10-15 for bodies without that key (not retried with it); 9.1.1 accepted
+the body without it on 2026-10-14. Always send `systemDefined: false`.
