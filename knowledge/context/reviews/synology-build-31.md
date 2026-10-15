@@ -458,3 +458,89 @@ instance against a stock self-signed DSM would fail Test Connection
 until they import the certificate or set Allow Insecure SSL to true. On
 a NAS without iSCSI, new SSD caches would never appear under their
 Volume.
+
+## Re-review: f8e45fa (2026-10-15)
+
+- **Scope:** `git diff d9fd2cf..f8e45fa`, 12 commits, reviewed from a detached worktree of `f8e45fa`.
+- **Verdict:** APPROVE (0 BLOCKING, 0 WARNING, 3 NIT)
+
+### Bottom line
+
+All 13 findings are closed. Both blockers are fixed in code and docs.
+Every warning is fixed in code with a test. I agree with the author's
+choice not to pin the configuration per cycle, for the author's reason.
+What remains is three small residuals, none of which can publish a wrong
+value or land data on the wrong object. They are listed as nits below,
+with one devel check owed: that a NAS without SAN Manager really answers
+DSM error 102.
+
+### Claims check (independently re-run)
+
+| Claim | Result |
+|---|---|
+| validate-sdk | Confirmed: OK. The SDK compile includes the `@Override certificateCheckUrls`, so the factory buildkit carries the hook. |
+| pak `dist31r/...0.0.0.31.pak` sha256 `26fdb834...` | Confirmed: `26fdb83466e038fad8f5fb62a5f5cb56fd924f054049387b5420524d0ab80d80`. My own `build-sdk` of `f8e45fa` builds 0.0.0.31. |
+| pak-compare 0/0/0 vs v1.0.0.30 | Confirmed for both paks: `0 BLOCKING, 0 WARNING, 0 INFO`. |
+| `ci/run_java_tests.sh` 11/11 | Confirmed: 10 Java and 1 Python, all pass. |
+| Tests catch the new logic | 20 new mutations; 19 caught. The survivor, N2 (dropping the closed check in `DsmSession.ensure`), is equivalent except in the race in NIT-R2, where the guard is what stops a closed client from being used. |
+
+### Findings, one by one
+
+- **B1 closed.** CHANGELOG #12, #14 and #21, overview `:101-106`, installing `:36-42`, `SynologyAdapter.java:651-660` and `SnapshotCache.java:24-34` now say "one `Synology snapshot build failed` WARN per attempted login, plus the framework's own line for the discovery step and each resource". They say the first caller is usually the discovery step. installing `:180` remains accurate because it quotes the WARN text.
+- **W3 closed.** `CachedFailureException(message, authCode, unreachable)` calls `super(message, null, false, false)`: no cause and no stack (`SnapshotCache.java:94`). `authCode` and `isUnreachable` answer from the fields (`SynologyFailures.java:37`, `:86`), and the values are computed once at failure time (`SnapshotCache.java:194-195`). Mutations N12, N13 and N14 were caught.
+- **W2 closed.** `SnapshotIsolation` holds the decisions: `requireListRead`, `requireNfsProbe`, `volumeChildrenKnown` and `replaced`. The adapter delegates at `:702` (before the kind switch, for LUN and NFS export), `:1025` and `:1098`, and `:290` for reconfigure. SnapshotIsolationTest drives them. Mutations N9, N10, N11 and N20 were caught.
+- **B2 closed.** `NfsProbes.run` records failed probes with their reason (`:85`). `collectNfsExport` throws for such a share (`:1025`), so the export goes ERROR and no `rule_count` is published. `volumeChildrenKnown` is false while any probe failed, so the export keeps its Volume edge. The installing.md row is corrected and now also says a share not yet known as an export is not discovered until its probe succeeds. Mutations N7, N9 and N10 were caught.
+- **W4 closed.** The case that hurt (a NAS without iSCSI) refreshes again: error 102 on the LUN and target lists only is read as empty, with one INFO (`SnapshotReads.java:195-213`). The permanent missing-privilege case is now documented honestly (installing `:65-80`, overview), including that a share whose probe is always refused freezes Volume edges and that the WARN names the cause.
+  - **Can 102 turn a real failure into an empty read?** Only if DSM answers 102 for something other than "API not installed". The code checks narrowly. The code comes from the response body of a data call typed `login=false` (`SynologyApiClient.java:229`). `dataApiCode` reads only non-login exceptions. A missing code is 0, not 102. A refused re-login or a timeout ends the build before the 102 check (`:192`). FanSpeed and the NFS service keep 102 as unread (mutation N5 caught). Any other code stays unread (mutation N6 caught). The residual is NIT-R1.
+- **NIT-4 closed.** `endsBuild` = login refusal, unreachable (connect or timeout), or closed client (`SynologyFailures.java:108`). It is used for optional reads (`SnapshotReads.java:192`), UPS (`SynologyAdapter.java:1423`) and probes (`NfsProbes.java:80`). Mutations N8, N15 and N16 were caught.
+- **W5 closed.** `DsmSession` sets the closed flag before logout (`:91-94`). `login` and `ensure` refuse once closed (`:60`, `:74`), and a login in flight at close is logged straight out (`:62-66`). The re-login after 106/107/119 goes through `login()`, so it throws `SynologyClientClosedException`, which ends the build as ERROR. Teardown calls `c.api::close` (`:307`). The logout uses a dedicated client, built with the same TLS settings: one attempt, 5 s timeout (`:208`). Mutations N1, N3 and N4 were caught.
+  - **The per-cycle holder decision, on its merits: correct.** `currentSnapshot` reads the holder on every call. A cycle that spans an edit therefore loses at most the one resource whose build was in flight on the old client (ERROR for that cycle), and every later resource builds from the new holder.
+    - Pinning the old holder for the cycle, as compliance does, would fail every remaining resource on the closed client, which is strictly worse here.
+    - Compliance needs pinning because its cycle state crosses calls. Synology's only cross-call state is the holder itself, so per-call reads cannot mix one configuration's client with another's cache.
+    - Every lookup is by identifier, so nothing lands on the wrong object. The one exception is the Diskstation and World singletons after a host change to a different NAS. That is #11, which the brief deferred, and it happens on every cycle after such an edit, not only on the spanning one.
+- **NIT-1 closed.** The dead discard step is removed, and the comments now say the framework discards the old client before `configureAdapter`.
+- **NIT-3 closed.** `cp.check(LOGIN)` runs before `ensureSession` (`SnapshotReads.java:151`). Mutation N19 was caught.
+- **W1 closed.** The `@Override certificateCheckUrls` is at `:332`, backed by `SynologyConfig.certificateCheckUrls` (`:74`). It returns empty while insecure, judged by the pak's own untrimmed parse (mutations N17 and N18 caught), when the host is blank, or when the port is outside 1 to 65535. Blank or non-numeric ports fall back to 5001, the same as the client. The URL format `https://host:port/` matches compliance. The docs (README, installing TLS, CHANGELOG) describe the dialog, the thumbprint check and re-acceptance after a certificate renewal.
+- **NIT-5 closed** by documentation (overview `:128-131`). The framework offers no "stopped" outcome, so this is accepted as is.
+- **NIT-2 closed** by a CHANGELOG line pointing at #32 (CI7). CI coverage remains owed before the tag, tracked there.
+- **NIT-6** is unchanged: generator output (factory #204). No em-dash in any added line of this round.
+
+### Residual NITs (do not block)
+
+- **NIT-R1** `SnapshotReads.java:195`: error 102 is taken at face value on every build. Two consequences:
+  - If DSM answers 102 transiently, for example while SAN Manager is still starting after a NAS reboot, that cycle reads "no LUNs". Existing LUN objects then take the pre-existing "absent from snapshot" path (no data for one cycle), and Volume LUN edges are dropped for one cycle, then restored. No value is fabricated.
+  - That a NAS without SAN Manager answers 102 at all is unverified live.
+  - Owed in the devel proof: one look at the INFO on a NAS without iSCSI, or accept the assumption. Optional hardening: take 102 as empty only once this configuration has never read a LUN, or after two consecutive builds.
+- **NIT-R2** `DsmSession.java:62-68`: a narrow race. A login can pass the second `closed` check, then `close()` runs, sees no session yet, and logs nothing out, and only then does the login store its sid. That one session is left for DSM to expire. The `ensure()` guard still stops the closed client from using it, which is why mutation N2 survives. Fix: make `login`'s check-and-store and `close` mutually exclusive (synchronize them), or re-check `closed` after storing the sid.
+- **NIT-R3** (`SnapshotIsolation.volumeChildrenKnown`): one share whose probe is always refused freezes every Volume's relationships, not just the Volume that share sits on. It is documented and named by a per-cycle WARN. Narrowing it to the Volume whose `vol_path` matches the failed share would be the precise fix.
+
+### Defect registry
+
+There is still no open defect for `synology`. DEF-001 still holds. The
+new data-API `SynologyDsmException` keeps the old message (endpoint
+label plus response body, no URL). The logout over the dedicated client
+goes through the same redacted `callRaw` and redacted WARN. DEF-003,
+DEF-005 and DEF-006 are not affected. The W1 registration candidate is
+withdrawn because the hook landed. The B2 candidate is withdrawn because
+the code fix was chosen.
+
+### SDK ADAPTER REVIEW (re-review)
+
+```
+SDK ADAPTER REVIEW
+  adapter: content/sdk-adapters/synology
+  build reviewed: 31 (tip f8e45fa)
+  verdict: APPROVE
+  findings: 0 BLOCKING / 0 WARNING / 3 NIT
+  claims check: validate-sdk confirmed; pak-compare confirmed 0/0/0 vs v1.0.0.30 (author pak 26fdb834... verified, own build matches); 11/11 tests pass; 19 of 20 new mutations caught (N2 equivalent outside the NIT-R2 race)
+  registry check (knowledge/context/defects.md):
+    - none open affect this pak; DEF-001 (closed) re-checked at SynologyApiClient.java:229 and the logout path, still holds; DEF-003/005/006 unaffected
+  BLOCKING: none
+  WARNING: none
+  NIT:
+    - [SnapshotReads.java:195] a transient 102 reads as "no LUNs" for one cycle; 102-when-not-installed unverified live (devel check owed)
+    - [DsmSession.java:62-68] a login that completes as close() runs can leave one session for DSM to expire; synchronize the check-and-store with close
+    - [SnapshotIsolation volumeChildrenKnown] one permanently refused share probe freezes every Volume, not just its own (documented)
+  if shipped as-is: wrong passwords back off without tripping Auto Block, an unreachable NAS is DOWN at one attempt per cycle, scoped or iSCSI-less NASes collect, a self-signed NAS is accepted once through the review dialog, and a failed cycle logs one line per object instead of a stack each
+  report: knowledge/context/reviews/synology-build-31.md
+```
