@@ -585,3 +585,39 @@ new code were all caught:
 The only item still owed is the devel proof already in the brief
 (wrong-password edit, no Auto Block entry), plus one look at the 102
 INFO on a NAS without iSCSI if one is available.
+
+## devel_9_1 proof (2026-10-15, content-installer)
+
+Pak 0.0.0.31 (sha256 2de24801, tip 2e619d9) installed 12:46 to 12:49 PM,
+fresh install, read back as 0.0.0.31.
+
+- **Certificate dialog: appeared** (12:52 PM) for the NAS entered by DNS
+  name on port 5001 with Allow Insecure SSL false; accepted; "Test connection
+  successful". The NAS certificate is lab-CA issued (sentania Lab Issuing 2,
+  CN int.sentania.net 2026) and its expiry reads September 17, 2026, which
+  is in the past. Accepted anyway by the dialog.
+- **Collection: PASS.** 31 objects, 628 stats across 9 kinds, Volume 1 with
+  2 LUNs, 16 NFS exports, SSD cache and 2 cache disks; datastore cross-link
+  through the ambient Suite API on the Cloud Proxy (12 datastores, 2 LUN and
+  3 NFS matches).
+- **Wrong password: PASS.** Saved 1:02 PM. Seven cycles to 1:32 PM: two login
+  attempts (1:02:58, 1:22:59 PM), matching the 15 then 30 minute back-off,
+  one "Synology snapshot build failed" WARN per attempt, 30 per-resource
+  framework WARNs per cycle each with a one-line CachedFailureException.
+  DSM Auto Block list does not contain the Cloud Proxy 172.27.10.11 (policy
+  10 attempts in 5 minutes). Correct password restored 1:38 PM; 1:42 PM
+  cycle logged in and collected.
+- **Optional endpoints:** no 102 or unread lines; this NAS has iSCSI, so the
+  "not installed" branch is unexercised (still owed on a NAS without SAN
+  Manager).
+- **Caveat:** the two attempt cycles log an 18-frame stack under the
+  framework's "collect-path discovery failed" WARN, the same gap UniFi build
+  14 closed after its proof (stackless attempt exception, logger resolved
+  once at configure). Mirrored onto the Synology branch after this proof.
+- Expected WARN only: the FIPS-approved-only line once.
+
+Left on the instance: pak 0.0.0.31, account factory-synology-b31 with
+credential factory-synology-b31-cred, NAS certificate accepted, password
+correct, Allow Insecure SSL false. Nothing changed on the NAS. Screenshots in
+the session scratchpad (02-cert-dialog, 05-account-page-healthy, inv,
+10-volume-environment, 11-log-viewer-wrongpw, 12-account-page-restored).
