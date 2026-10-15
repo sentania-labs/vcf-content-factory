@@ -99,7 +99,9 @@ current_url=""
 in_comment=false
 while IFS= read -r line; do
     # Entries under the "## Retired paks" heading are kept for the record
-    # only: not cloned, not refreshed, not reported.
+    # only: not cloned, not refreshed, not reported. Exact heading text,
+    # level 2, case-sensitive; src/vcfcf_packaging/managed_paks.py matches
+    # the same line. Keep the registry's heading and this check in step.
     if [[ "$line" =~ ^##[[:space:]]+Retired[[:space:]]+paks ]]; then
         break
     fi

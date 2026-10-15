@@ -31,7 +31,8 @@ editing when a pak ships a new version.
 ## Hard rules
 
 1. **Registered remotes only.** The bootstrap and publish flows act only on
-   paks listed here. The orchestrator adds entries after the pak's repo exists;
+   paks listed under `## Paks` below (entries under `## Retired paks` are
+   records, not registrations). The orchestrator adds entries after the pak's repo exists;
    agents do not add entries on their own.
 2. **No SHAs, no versions.** Entries name the repo and where it mounts —
    nothing more. "Latest release" is derived, not pinned. (A future opt-in tag
@@ -158,10 +159,13 @@ an `upstream` remote and fast-forward from it); do work on branches.
 
 ## Retired paks
 
-Kept for the record. The bootstrap script stops reading at this heading, so
-nothing below is cloned, refreshed or reported, and issue sweeps skip these
-repos. Local clones under `content/sdk-adapters/` may remain; they are
-gitignored. Retiring a pak is the orchestrator's edit on Scott's word, and
+Kept for the record. The bootstrap script and the Python registry reader
+(`src/vcfcf_packaging/managed_paks.py`) both stop reading at this heading
+(exact text `## Retired paks`, level 2, parsed by both), so nothing below is
+cloned, refreshed, reported or published. Local clones under
+`content/sdk-adapters/` may remain; they are gitignored, and
+`scripts/path_reference_audit.sh` still counts their paths as known roots on
+purpose, because older docs cite them. Retiring a pak is the orchestrator's edit on Scott's word, and
 the word is quoted in the entry.
 
 ### vcommunity, vcommunity-vsphere, vcommunity-os (retired 2026-10-15)

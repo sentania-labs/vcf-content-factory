@@ -17,7 +17,8 @@ never port one to the Java SDK.
 ## Boundaries (read these first)
 
 - `sdk-adapter-author` owns the factory's Java adapters. You never touch
-  `content/sdk-adapters/compliance|unifi|synology|vcommunity*`.
+  `content/sdk-adapters/compliance|unifi|synology` (or any other Java pak
+  in the registry).
 - `tooling` owns `src/vcfcf_*/`. You never edit it; the factory build
   commands (validate-sdk, build-sdk, pak-compare) do not apply to Python
   packs, so do not run them.
