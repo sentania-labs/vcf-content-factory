@@ -24,7 +24,9 @@ VCFOPS_DEVEL_9_1_HOST / _USER / _PASSWORD
   no vCenter account and no factory pak at first recon)
 
 VCFOPS_DEVEL_8_18_HOST / _USER / _PASSWORD
-  vcf-lab-operations-devel-8.int.sentania.net (8.18.x; added by Scott
+  vcf-lab-operations-devel-8.int.sentania.net (Aria Operations 8.18.7 build
+  25423534, one node plus Cloud Proxy vcf-lab-operations-devel-8-collector
+  172.27.10.15 in no collector group; added by Scott
   2026-10-15 for the 8.18 support work in factory issue #212; exact version,
   node layout and what is installed: investigations/2026-10-15-devel-8-18-recon.md)
 ```
