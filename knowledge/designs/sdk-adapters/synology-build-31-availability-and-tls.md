@@ -4,7 +4,7 @@
 - **Slug:** synology-build-31-availability-and-tls
 - **Adapter repo:** `content/sdk-adapters/synology/` (branch from `origin/main`, not from the parked `feat/dashboards` branch)
 - **Date:** 2026-10-15
-- **Status:** go from Scott 2026-10-15; authoring queued behind the UniFi build 14 (serial authors)
+- **Status:** merged to synology main (804203f, PR #38, 2026-10-15); proven on devel_9_1; not tagged
 
 ## Initial prompt (Scott, verbatim, 2026-10-15)
 
