@@ -22,6 +22,11 @@ VCFOPS_DEVEL_9_1_HOST / _USER / _PASSWORD
   added 2026-10-14; primary plus Cloud Proxy collector
   vcf-lab-operations-devel-91-collector, which is in no collector group yet;
   no vCenter account and no factory pak at first recon)
+
+VCFOPS_DEVEL_8_18_HOST / _USER / _PASSWORD
+  vcf-lab-operations-devel-8.int.sentania.net (8.18.x; added by Scott
+  2026-10-15 for the 8.18 support work in factory issue #212; exact version,
+  node layout and what is installed: investigations/2026-10-15-devel-8-18-recon.md)
 ```
 
 The former `qa` profile pointed at the prod appliance and was removed
