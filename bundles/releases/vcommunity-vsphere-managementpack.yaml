@@ -1,0 +1,27 @@
+artifacts:
+- headline: true
+  source: content/sdk-adapters/vcommunity-vsphere/adapter.yaml
+deprecates: []
+description: >
+  Tier 2 SDK port of the VCF Operations vCommunity pack's vSphere/vCenter
+  surface. Connects to vCenter alongside the native VMWARE adapter and
+  stitches advanced ESXi/VM configuration, licensing, and network/storage
+  detail onto existing VMWARE resources (ARIA_OPS-style, no new object
+  types). Collects HostSystem advanced system settings, VIB packages, and
+  version-aware (8.x/9.x) license Remaining Days; VirtualMachine options,
+  advanced parameters, and passive Guest OS detail; and
+  ClusterComputeResource HA/DRS/EVC configuration + DRS Score. Bundles 109
+  views and 11 CSV-export VOA reports.
+name: vcommunity-vsphere-managementpack
+release_date: '2026-07-13'
+release_notes: 'v1.0.0.12 (first factory-line release; prior shipped line was
+  the source project''s 1.0.0.2): localization-key-length fix carried through
+  the parity closeout; the four-tier instanced ESXi Host License Expiring
+  alert is now version-aware (8.x/9.x) and no-metric-no-fires on perpetual
+  keys; licensing columns added to the instanced-group view; VM Network Top
+  Talkers plus three further ported views; 11 CSV-export VOA reports with
+  co-bundled views; dashboard self-provider widget binding fixes (factory
+  renderer PR #54); four ESXi distribution views fixed to render string
+  resource properties as DISCRETE distributions instead of numeric
+  histograms. Devel-verified with two browser QA passes.'
+version: '1.0'
