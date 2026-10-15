@@ -326,3 +326,108 @@ the others, an unreachable controller shows DOWN. An operator reading
 the CHANGELOG would expect one WARN and find one stack trace per UniFi
 object per cycle, and a new instance against a stock self-signed console
 fails Test Connection until they set Allow Insecure SSL to true.
+
+---
+
+## Re-review: 765dbe3 (2026-10-15)
+
+- **Delta reviewed:** `git diff aeecdae..765dbe3`, eight commits, one per
+  finding. The adapter checkout was already on the branch at `765dbe3`
+  (clean), so no worktree was needed.
+- **Verdict:** APPROVE (0 BLOCKING, 1 WARNING, 1 NIT). All eight original
+  findings are closed. The one new WARNING is a live-proof item for the
+  devel install, not a code defect.
+
+### Claims check (re-run)
+
+| Claim | Result |
+|---|---|
+| validate-sdk pass | Confirmed. |
+| `ci/run_java_tests.sh` 7 checks pass | Confirmed: 6 Java tests (SiteIsolationTest added) plus the Python check. |
+| Pak `scratchpad/dist14r/...0.0.0.14.pak` sha256 `ded7e6c2...` | Confirmed (`ded7e6c208d31d277e1ab51b4a0c9eaa72637ec56635c4730b7f294cef37d699`). My rebuild is 0.0.0.14 with a different sha (timestamps). `javap` on the built `unifi_controller.jar` shows the `certificateCheckUrls(ResourceConfig)` override compiled in. |
+| pak-compare 0/0/0 vs v1.1.0.13 | Confirmed on my rebuild. |
+
+Ten new mutations against the fixes, each caught: hook offered while
+insecure, hook using the trimmed parse (both AllowInsecureTest); cached
+failure keeping a cause, cached auth field ignored, cached unreachable
+field ignored, 429 worded as a refusal (SnapshotCacheTest, plus
+FailureMappingTest for unreachable); no stop after an unreachable site
+(SiteReadsTest); findDevice not throwing, failed site emitted as a
+parent, NVR emitted under a failed first site (SiteIsolationTest).
+
+### Original findings
+
+| Finding | Status | Evidence |
+|---|---|---|
+| B1 "one WARN" docs | Closed | CHANGELOG #11 and #19 entries, `docs/overview.md` failed-snapshot and unreadable-site bullets, `UniFiAdapter.java:598-606` javadoc and the `SnapshotCache` class javadoc now say: one `UniFi snapshot build failed` WARN, plus the framework line for the discovery step and for each failing resource; first caller is usually the discovery step. Matches `VcfCfAdapter.onCollect` (`:759`, `:823`). |
+| W1 no review hook | Closed (see W4 for the live residual) | `UniFiAdapter.java:298-302` overrides with `@Override`, as compliance build 93 does; derived only from the passed config via `getIdentifier`. `UniFiConfig.java:47-65` returns `https://<host>:<port>/` and empty when host is blank, port is not 1 to 65535, or `parseAllowInsecure` (the pak's untrimmed parse, the one the client uses) is true. URL vs what the client dials: client is `baseUrl()` = `https://` + host + `:` + port, port defaulting to `443` when blank (`UniFiConfig.java:81-83`, constructor), so host, port and scheme match; the trailing `/` is the same root form compliance's `VCenterCertificates.rootUrl` returns. Only inputs that already break the client's `URI.create` (spaces around host or port) differ. Insecure mode: the hook returns empty, so `VcfCfAdapter.getConnectionURLs` falls back to the SDK default (`NOT_SUPPORTED`, no dialog), per the hook contract (`VcfCfAdapter.java:1310-1371`). Docs (README, installing.md TLS, steps, troubleshooting; CHANGELOG #13) updated to the dialog flow. |
+| W2 adapter wiring untested | Closed | `SiteIsolation.java` (SDK-free) holds findDevice, requireSiteRead, emitsChildren, nvrParentSite; `Snapshot.findDevice`/`requireSiteRead` delegate (`UniFiAdapter.java:1490-1500`), `buildRelationships` uses `emitsChildren` (`:1094`) and `nvrParentSite` (`:1178`). Behavior identical to aeecdae by reading (the NVR comparison reduces to the old first-site-not-failed test). SiteIsolationTest covers both move directions. |
+| W3 stack per resource | Closed | `CachedFailureException` is built with `super(message, null, false, false)`: no cause, no stack (`SnapshotCache.java:76`); auth status and unreachable are classified once from the original and stored (`:171-172`); `UniFiFailures.authStatus` and `isUnreachable` read those fields (`:32`, `:92`). The first caller still gets the original exception with its chain, so DOWN vs ERROR is unchanged for it. |
+| NIT-1 cycle hook contract | Closed | Comment at `UniFiAdapter.java:543-544` points at vcf-content-factory#221. |
+| NIT-2 isLogin unused | Closed | `UniFiFailures.refusalKind` (`:52`) uses `isLogin()`: 429 is "rate limiting logins/requests", 401/403 is "refused the login" or "refused a request even after a fresh login". |
+| NIT-3 move across a failed site | Closed | Sentence in `docs/overview.md` unreadable-site bullet and `SiteIsolation` class javadoc. |
+| NIT-4 per-site timeout cost | Closed (see N1) | `SiteReads.java:82-95` stops after the first site whose failure `isUnreachable`, marks the rest failed with one WARN; 403 and 5xx continue. |
+| NIT-5, NIT-6 | NIT-5 closed by W2; NIT-6 is generator output, unchanged, out of scope. |
+
+### Defect registry (knowledge/context/defects.md)
+
+Re-read. No open defect names `unifi` (DEF-002, DEF-007 closed, not
+reopened). The original registration candidate (W1) is now resolved in
+code; it needs no registry entry unless the W4 devel check fails.
+
+### New findings
+
+**W4 (WARNING). The review dialog for a console entered by an address
+its certificate does not carry is unproven, and the docs promise a
+self-signed console never needs Allow Insecure SSL.** Authority:
+reviewer doctrine (unproven is a finding); `knowledge/context/tier2_architecture.md`
+"Accepting an untrusted target certificate", hostname bullet (the
+platform's review probe checks the name with `CustomHostnameVerifier`,
+while the collection client checks the chain only); compliance build 93
+review left the same question for devel ("devel will show what the
+dialog does on a mismatch") and it is still not recorded. UniFi consoles
+are commonly entered by IP, and the factory certificate does not list
+that IP. If the probe rejects the name instead of offering the
+certificate, the operator is back to `allowInsecure=true` despite
+`README.md` and `docs/installing.md` saying "A self-signed console does
+not need it". Close it in the brief's devel step: create a fresh
+instance against the devel console entered the way it is really
+addressed (by IP, or a name its certificate lacks), click Validate
+Connection, and record whether the dialog appears and Test Connection
+then passes. If it does not, add a docs line to enter the console by
+the name on its certificate (as compliance does), and note that
+collection matches the chain only, not the name. No code change
+expected either way.
+
+**N1 (NIT). A request timeout on one site now skips the remaining
+sites.** `SiteReads.java:82` stops on any `isUnreachable` failure, which
+includes `HttpTimeoutException` and `SocketTimeoutException` for a
+request that connected but answered slowly (a large site). The other,
+healthy sites then go ERROR for that cycle where at aeecdae they were
+read. This follows my own NIT-4 suggestion. Data correctness is intact
+(ERROR, never defaults) and it heals next cycle. If wanted, narrow the
+stop to connect-level failures (`ConnectException`,
+`HttpConnectTimeoutException`, `UnknownHostException`,
+`NoRouteToHostException`) and keep request timeouts per site.
+
+### Re-review verdict block
+
+```
+SDK ADAPTER REVIEW
+  adapter: content/sdk-adapters/unifi
+  build reviewed: 14 (re-review, tip 765dbe3)
+  verdict: APPROVE
+  findings: 0 BLOCKING / 1 WARNING / 1 NIT
+  claims check: validate-sdk confirmed; ci/run_java_tests.sh confirmed (7/7); pak sha256 ded7e6c2 confirmed; pak-compare confirmed (0/0/0 vs v1.1.0.13); 10 new mutations all caught
+  registry check (knowledge/context/defects.md):
+    - none open affect this pak (DEF-002, DEF-007 closed; not reopened)
+  original findings: B1, W1, W2, W3, NIT-1, NIT-2, NIT-3, NIT-4 closed; NIT-5 closed via W2; NIT-6 generator-owned, out of scope
+  BLOCKING:
+    - none
+  WARNING:
+    - [README.md, docs/installing.md TLS section] doctrine (unproven) / tier2_architecture hostname bullet: the review dialog for a console entered by an IP or name its certificate lacks is unproven, while the docs say a self-signed console never needs Allow Insecure SSL. → Prove on devel with the console entered as it is really addressed; if the probe rejects the name, add the "enter it by the name on its certificate" line and the chain-only note.
+  NIT:
+    - [SiteReads.java:82] a request (read) timeout on one slow site skips the healthy sites after it for that cycle. → Optionally stop only on connect-level failures.
+  if shipped as-is (dev build): correct collection, quiet failure logs (one line per failing resource), a dialog to accept a self-signed certificate; whether that dialog appears when the console is entered by IP is the open devel question.
+  report: knowledge/context/reviews/unifi-build-14.md
+```
