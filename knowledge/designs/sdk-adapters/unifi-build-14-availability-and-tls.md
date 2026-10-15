@@ -4,7 +4,7 @@
 - **Slug:** unifi-build-14-availability-and-tls
 - **Adapter repo:** `content/sdk-adapters/unifi/` (branch from `origin/main`, not from the parked `feat/dashboards` branch)
 - **Date:** 2026-10-15
-- **Status:** go from Scott 2026-10-15; authoring queued behind the compliance build 95 Codex fix (serial authors)
+- **Status:** merged to unifi main (cdf0476, PR #35, 2026-10-15); proven on devel_9_1; not tagged
 
 ## Initial prompt (Scott, verbatim, 2026-10-15)
 
