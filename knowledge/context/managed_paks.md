@@ -31,7 +31,8 @@ editing when a pak ships a new version.
 ## Hard rules
 
 1. **Registered remotes only.** The bootstrap and publish flows act only on
-   paks listed here. The orchestrator adds entries after the pak's repo exists;
+   paks listed under `## Paks` below (entries under `## Retired paks` are
+   records, not registrations). The orchestrator adds entries after the pak's repo exists;
    agents do not add entries on their own.
 2. **No SHAs, no versions.** Entries name the repo and where it mounts —
    nothing more. "Latest release" is derived, not pinned. (A future opt-in tag
@@ -80,54 +81,6 @@ adapter is extracted to its own sentania-labs repo. Template for an entry:
 The hello-world adapter is intentionally absent — it seeds the template repo,
 it is not a published pak.
 -->
-
-### vcommunity
-
-- **Remote:** https://github.com/sentania-labs/vcf-content-factory-sdk-vcommunity
-- **Target:** `content/sdk-adapters/vcommunity/`
-- **adapter_kind:** vcfcf_vcommunity
-- **Owner:** sentania-labs. Public repo.
-- **Notes:** Native Java SDK rewrite of vmbro/VCF-Operations-vCommunity
-  (Onur Yuzseven, CC) — vSphere enrichment stitched onto VMWARE
-  Cluster/Host/VM under the `vCommunity|` namespace; central
-  SolutionConfig check lists; Windows guest-ops monitoring.
-  Design: `knowledge/designs/managementpacks/vcommunity-sdk.md`.
-  **Being split** (`vcommunity-three-adapter-split.md`): guest-OS surface
-  moved to `vcommunity-os`; this entry retires once vsphere+os reach
-  devel parity.
-
-### vcommunity-vsphere
-
-- **Remote:** https://github.com/sentania-labs/vcf-content-factory-sdk-vcommunity-vsphere
-- **Target:** `content/sdk-adapters/vcommunity-vsphere/`
-- **adapter_kind:** vcfcf_vcommunity_vsphere
-- **Owner:** sentania-labs. Public repo.
-- **Notes:** vSphere half of the vCommunity three-adapter split (Onur
-  Yuzseven / vmbro/VCF-Operations-vCommunity, CC) — the large-majority
-  surface: full vSphere/vCenter read (clusters, hosts, VMs) plus the
-  passive Tools-path `Guest OS|Operating System|*` keys, stitched onto
-  VMWARE Cluster/Host/VM via the vim25 vCenter session. Ships the central
-  SolutionConfig check lists (incl. `Critical Business Applications`).
-  Reviewer APPROVE 0 BLOCKING; migrated onto devel, GREEN. This is the
-  primary split artifact; the unified `vcommunity` entry retires once
-  vsphere+os reach devel parity.
-  Design: `knowledge/designs/managementpacks/vcommunity-three-adapter-split.md`.
-
-### vcommunity-os
-
-- **Remote:** https://github.com/sentania-labs/vcf-content-factory-sdk-vcommunity-os
-- **Target:** `content/sdk-adapters/vcommunity-os/`
-- **adapter_kind:** vcfcf_vcommunity_os
-- **Owner:** sentania-labs. Public repo.
-- **Notes:** Guest-OS half of the vCommunity three-adapter split (Onur
-  Yuzseven / vmbro/VCF-Operations-vCommunity, CC). Windows guest-ops —
-  services, in-guest CSV OS-info, event logs — stitched onto VMWARE
-  VirtualMachine via its OWN vCenter session + GuestOperationsManager.
-  Ships the 2 Windows SolutionConfig check lists. **In-guest collection
-  is a KNOWN-OPEN, intentionally-shelved blocker** (execution-policy /
-  ConstrainedLanguage theory; privilege ELIMINATED) — see README +
-  `knowledge/context/investigations/vcommunity-windows-services-empty-2026-06-23.md`.
-  Design: `knowledge/designs/managementpacks/vcommunity-three-adapter-split.md`.
 
 ### compliance
 
@@ -203,3 +156,74 @@ an `upstream` remote and fast-forward from it); do work on branches.
   CI: branch `tuneup/ci-ghcr-attestation` proven by tag `v1.3.0-rc.1` (run
   38471417171, image and pak attested and signed, Trivy gated), see
   `knowledge/designs/ci/python-pack-ghcr-attestation.md`
+
+## Retired paks
+
+Kept for the record. The bootstrap script and the Python registry reader
+(`src/vcfcf_packaging/managed_paks.py`) both stop reading at this heading
+(exact text `## Retired paks`, level 2, parsed by both), so nothing below is
+cloned, refreshed, reported or published. Local clones under
+`content/sdk-adapters/` may remain; they are gitignored, and
+`scripts/path_reference_audit.sh` still counts their paths as known roots on
+purpose, because older docs cite them. Retiring a pak is the orchestrator's edit on Scott's word, and
+the word is quoted in the entry.
+
+### vcommunity, vcommunity-vsphere, vcommunity-os (retired 2026-10-15)
+
+Scott, verbatim (2026-10-15): "vcommunity <- these are deprecated and
+experiemnts that we shouldn't worry about for now. I'm not sure how we
+handle/mark this so it doesn't keep coming up."
+
+Three repos, one experiment: the Java rewrite of
+vmbro/VCF-Operations-vCommunity and its three-adapter split. Open issues and
+the unsigned-pak README PRs on those repos stay as they are; nothing further
+is scheduled. The GitHub repos are not archived; that is Scott's call.
+
+#### vcommunity
+
+- **Remote:** https://github.com/sentania-labs/vcf-content-factory-sdk-vcommunity
+- **Target:** `content/sdk-adapters/vcommunity/`
+- **adapter_kind:** vcfcf_vcommunity
+- **Owner:** sentania-labs. Public repo.
+- **Notes:** Native Java SDK rewrite of vmbro/VCF-Operations-vCommunity
+  (Onur Yuzseven, CC) — vSphere enrichment stitched onto VMWARE
+  Cluster/Host/VM under the `vCommunity|` namespace; central
+  SolutionConfig check lists; Windows guest-ops monitoring.
+  Design: `knowledge/designs/managementpacks/vcommunity-sdk.md`.
+  **Being split** (`vcommunity-three-adapter-split.md`): guest-OS surface
+  moved to `vcommunity-os`; this entry retires once vsphere+os reach
+  devel parity.
+
+#### vcommunity-vsphere
+
+- **Remote:** https://github.com/sentania-labs/vcf-content-factory-sdk-vcommunity-vsphere
+- **Target:** `content/sdk-adapters/vcommunity-vsphere/`
+- **adapter_kind:** vcfcf_vcommunity_vsphere
+- **Owner:** sentania-labs. Public repo.
+- **Notes:** vSphere half of the vCommunity three-adapter split (Onur
+  Yuzseven / vmbro/VCF-Operations-vCommunity, CC) — the large-majority
+  surface: full vSphere/vCenter read (clusters, hosts, VMs) plus the
+  passive Tools-path `Guest OS|Operating System|*` keys, stitched onto
+  VMWARE Cluster/Host/VM via the vim25 vCenter session. Ships the central
+  SolutionConfig check lists (incl. `Critical Business Applications`).
+  Reviewer APPROVE 0 BLOCKING; migrated onto devel, GREEN. This is the
+  primary split artifact; the unified `vcommunity` entry retires once
+  vsphere+os reach devel parity.
+  Design: `knowledge/designs/managementpacks/vcommunity-three-adapter-split.md`.
+
+#### vcommunity-os
+
+- **Remote:** https://github.com/sentania-labs/vcf-content-factory-sdk-vcommunity-os
+- **Target:** `content/sdk-adapters/vcommunity-os/`
+- **adapter_kind:** vcfcf_vcommunity_os
+- **Owner:** sentania-labs. Public repo.
+- **Notes:** Guest-OS half of the vCommunity three-adapter split (Onur
+  Yuzseven / vmbro/VCF-Operations-vCommunity, CC). Windows guest-ops —
+  services, in-guest CSV OS-info, event logs — stitched onto VMWARE
+  VirtualMachine via its OWN vCenter session + GuestOperationsManager.
+  Ships the 2 Windows SolutionConfig check lists. **In-guest collection
+  is a KNOWN-OPEN, intentionally-shelved blocker** (execution-policy /
+  ConstrainedLanguage theory; privilege ELIMINATED) — see README +
+  `knowledge/context/investigations/vcommunity-windows-services-empty-2026-06-23.md`.
+  Design: `knowledge/designs/managementpacks/vcommunity-three-adapter-split.md`.
+
