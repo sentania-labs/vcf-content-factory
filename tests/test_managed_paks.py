@@ -351,3 +351,76 @@ class TestInlineComment:
         assert "real-entry" in names, (
             f"Entry after comment line should be parsed; got: {names}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Retired paks heading ends the live registry
+# ---------------------------------------------------------------------------
+
+_RETIRED_REGISTRY = """\
+# Registry with a retired section
+
+## Paks
+
+<!--
+## Retired paks
+(a heading inside a comment block does not stop the parse)
+-->
+
+### live-entry
+
+- **Remote:** https://github.com/sentania-labs/vcf-content-factory-sdk-live
+- **Target:** `content/sdk-adapters/live-entry/`
+- **adapter_kind:** vcfcf_live
+
+### Retired paks
+
+### also-live
+
+- **Remote:** https://github.com/sentania-labs/vcf-content-factory-sdk-also-live
+- **Target:** `content/sdk-adapters/also-live/`
+- **adapter_kind:** vcfcf_also_live
+
+## Retired paks   
+
+### retired-entry
+
+- **Remote:** https://github.com/sentania-labs/vcf-content-factory-sdk-retired
+- **Target:** `content/sdk-adapters/retired-entry/`
+- **adapter_kind:** vcfcf_retired
+"""
+
+
+class TestRetiredPaksHeading:
+    @pytest.fixture
+    def registry(self, tmp_path):
+        return _write_fixture(tmp_path, _RETIRED_REGISTRY)
+
+    def test_only_live_entries_returned(self, registry):
+        """Entries below the level-2 heading are dropped; a level-3 heading
+        and a heading inside a comment block do not stop the parse; trailing
+        whitespace on the real heading is tolerated."""
+        names = [p.name for p in load_registry(registry)]
+        assert names == ["live-entry", "also-live"], names
+
+    def test_lookup_by_name_retired_returns_none(self, registry):
+        assert lookup_by_adapter_name("retired-entry", registry) is None
+
+    def test_lookup_by_adapter_kind_retired_returns_none(self, registry):
+        assert lookup_by_adapter_kind("vcfcf_retired", registry) is None
+
+
+class TestRealRegistryOnDisk:
+    def test_real_registry_live_entries(self):
+        """The checked-in registry returns exactly the live SDK paks and none
+        of the retired vcommunity entries.
+
+        The third-party Python fork entries (vsanhostmetrics,
+        cluster-perf-risk) carry no ``adapter_kind:`` line, so this reader
+        does not emit them (the bootstrap script, which keys on Remote and
+        Target only, still clones them).  Unchanged by the Retired cut-off.
+        """
+        names = [p.name for p in load_registry()]
+        assert names == ["compliance", "unifi", "synology"], names
+        for retired in ("vcommunity", "vcommunity-vsphere", "vcommunity-os"):
+            assert lookup_by_adapter_name(retired) is None, retired

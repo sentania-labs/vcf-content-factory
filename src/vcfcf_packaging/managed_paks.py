@@ -2,7 +2,9 @@
 
 Parses ``knowledge/context/managed_paks.md`` into a list of :class:`ManagedPak` entries.
 HTML-comment blocks (the entry template) are skipped, mirroring the field
-names and parse logic of ``scripts/bootstrap_managed_paks.sh``.
+names and parse logic of ``scripts/bootstrap_managed_paks.sh``.  Like that
+script, parsing stops at the ``## Retired paks`` heading: entries below it are
+kept in the file for the record but are not live, so they are never returned.
 
 Public API
 ----------
@@ -33,6 +35,10 @@ Each non-commented entry has at least::
     - **adapter_kind:** vcfcf_<name>
 
 Lines inside ``<!-- ... -->`` comment blocks are skipped entirely.
+
+Parsing stops at the first line outside a comment block that is exactly the
+level-2 heading ``## Retired paks`` (trailing whitespace tolerated).  A
+level-3 heading with the same text does not stop it.
 """
 from __future__ import annotations
 
@@ -63,6 +69,10 @@ _REMOTE_RE = re.compile(r"\*\*Remote:\*\*\s+(https://[^\s]+)")
 _TARGET_RE = re.compile(r"\*\*Target:\*\*\s+`content/sdk-adapters/([^/`]+)/?`")
 _ADAPTER_KIND_RE = re.compile(r"\*\*adapter_kind:\*\*\s+(\S+)")
 
+# Level-2 heading that ends the live registry.  Entries under it are retired:
+# kept for the record, never returned (bootstrap_managed_paks.sh breaks here too).
+_RETIRED_HEADING_RE = re.compile(r"^## Retired paks\s*$")
+
 # GitHub https remote pattern for deriving the API URL:
 #   https://github.com/<owner>/<repo>  -->  owner, repo
 _GITHUB_REMOTE_RE = re.compile(
@@ -81,7 +91,8 @@ def load_registry(registry_path: "str | Path | None" = None) -> List[ManagedPak]
     """Parse the managed-paks registry and return all live entries.
 
     Skips lines inside HTML comment blocks (``<!-- ... -->``), which is where
-    the entry template is embedded.
+    the entry template is embedded, and stops at the ``## Retired paks``
+    heading so retired entries are never returned.
 
     Args:
         registry_path: Path to the registry markdown file.  Defaults to
@@ -116,6 +127,10 @@ def load_registry(registry_path: "str | Path | None" = None) -> List[ManagedPak]
             if "-->" in line:
                 in_comment = False
             continue
+
+        # Retired entries below this heading are not live: stop parsing.
+        if _RETIRED_HEADING_RE.match(line):
+            break
 
         # --- Remote ---
         m = _REMOTE_RE.search(line)
