@@ -36,9 +36,10 @@ Active profile resolution order (first wins):
 2. `VCFOPS_PROFILE` environment variable
 3. Per-command default (`prod` for validate/list/recon; `devel` for sync/enable/delete)
 
-The project's `.claude/settings.local.json` has a PreToolUse/Bash
-hook that sources `.env` before every Bash tool call, so Claude
-doesn't need to re-export them each session.
+No hook sources `.env`, and nothing should (RULE-008: never `source .env`,
+never read it directly). The CLIs resolve the profile themselves via
+`--profile <name>` and the `vcfcf_common` loader; agents pass the profile
+name and never touch the file.
 
 ## Install path — content zip
 
