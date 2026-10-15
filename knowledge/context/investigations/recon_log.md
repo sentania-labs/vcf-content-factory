@@ -5147,3 +5147,18 @@ Findings:
 5. Several vendor blocks point at dashboard ids absent from devel (solutions not installed there). They install and render without error, so a dangling target is tolerated silently by the product.
 6. Cluster Performance is `533e14ed-2796-4ead-a644-468beb6396f8` on devel and is the same id the Oracle Database 9.1 pak targets: vendor paks link to stock dashboards by fixed id.
 7. Vendor quirk: Troubleshoot SD-WAN (`3800758d-03d2-407b-9b7b-030431ab47da`) has two nested widget ids that are JSON strings stuffed into the `id` field rather than UUIDs.
+
+## 2026-10-15: factory pak inventory across devel profiles (read-only, ops-recon)
+
+Intent: which factory paks are installed on each devel instance, at what version, with how many adapter instances and in what state. Read at 2026-10-15 1:30 PM CDT via Suite API (/api/versions/current, /api/solutions, /api/adapterkinds, /api/adapters, /api/resources). No instance writes.
+
+| Pak (adapter kind) | devel (VCF Ops 9.0.2.0) | devel_9_1 (VCF Ops 9.1.1.0) | devel_8_18 (Aria Ops 8.18.7) |
+|---|---|---|---|
+| Compliance (vcfcf_compliance) | 0.0.0.94; 3 instances, all DATA_RECEIVING/STARTED | 0.0.0.95; 3 instances, all DATA_RECEIVING/STARTED | not installed |
+| UniFi Controller (unifi_controller) | 0.0.0.11; 1 instance, DATA_RECEIVING/STARTED | 0.0.0.14; 1 instance, DATA_RECEIVING/STARTED | not installed |
+| Synology DiskStation (synology_diskstation) | 0.0.0.26; 1 instance, DATA_RECEIVING/STARTED | 0.0.0.31; 1 instance, DATA_RECEIVING/STARTED | not installed |
+| vSAN Host Metrics (VsanHostMetrics) | 1.4.6; 0 instances | 1.4.6; 1 instance, DATA_RECEIVING/STARTED | not installed |
+| Cluster Performance Risk (ClusterPerfRisk) | 1.3.0; 0 instances | 1.3.0; 1 instance, DATA_RECEIVING/STARTED | not installed |
+| vCommunity vSphere (vcfcf_vcommunity_vsphere, extra) | 0.0.0.13; 3 instances (state not read) | not installed | not installed |
+
+Notes: devel_8_18 has no factory paks and no VCF Content Factory solutions. Python fork paks show as solutions iSDK_VsanHostMetrics and iSDK_ClusterPerfRisk. Compliance on devel_9_1 reports 0.0.0.95 vs 0.0.0.94 on devel.
