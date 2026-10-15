@@ -29,3 +29,18 @@ compliance-mgmt, the mgmt vCenter certificate accepted.
 
 Step 1 of #212 (SDK jar hash, bytecode level, class diff) and the Cloud Proxy
 log still need SSH.
+
+## Python fork paks on 8.18.7 (same day, content-installer, API only)
+
+Both containerized packs install and run on the 8.18.7 Cloud Proxy, which
+pulled both images from GHCR at the pinned digests with no registry issue.
+
+| Pak | Account | Result |
+|---|---|---|
+| vSAN Host Metrics 1.4.6 | vsan-mgmt (credential vsan-vc-cred, mgmt vCenter, verify_certs false, metric_scope dashboard) | DATA_RECEIVING by 2:20 PM: 620 resources, 6,644 metrics, 584 objects across 28 kinds; 5 of 10 native hosts carry VsanHostMetrics children (250), the mgmt cluster carries relatives. Counts identical to devel 9.0.2. |
+| Cluster Performance Risk 1.3.0 | cpr-8-18 (no credential, monster VM 50, publish_to_native_objects null) | DATA_RECEIVING: 13 resources, 237 metrics, 3 cluster and 9 host risk objects. Identical to devel. |
+
+Both came up STOPPED and needed monitoringstate/start, as on devel 9.0.2.
+The account POST needs the flat body (a nested resourceKey body gets 400 for
+empty name and adapterKindKey). No WARN or ERROR; messageFromAdapterInstance
+empty on all three accounts.
