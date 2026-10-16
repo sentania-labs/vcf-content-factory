@@ -4,7 +4,7 @@
 - **Slug:** unifi-build-15-correctness-and-hygiene
 - **Adapter repo:** `content/sdk-adapters/unifi/` (branch from `origin/main`)
 - **Date:** 2026-10-16
-- **Status:** in progress
+- **Status:** merged to unifi main (6c3c66d, PR #36, 2026-10-16), not tagged; devel_9_1 proof pending
 
 ## Initial prompt (Scott, verbatim, 2026-10-16)
 
