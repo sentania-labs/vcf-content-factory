@@ -1290,7 +1290,7 @@ reused. Field lines are `- **Field:** value` (parsed by
   2026-10-13 log read found no page-count line and lists under one page, so a
   log line or a test fixture over 10,000 objects is still owed (build 94
   candidate).
-- **Closed:** 2026-10-16, build 96. `Build96StitcherTest.elevenPages` walks a
+- **Closing-evidence:** 2026-10-16, build 96. `Build96StitcherTest.elevenPages` walks a
   105,000-row fake Suite API (11 page reads, every row indexed, last-page row
   matches); the empty-page-short-of-total case is held back with one read
   and no retry loop. Devel_9_1 proof on build 96 (investigations/
