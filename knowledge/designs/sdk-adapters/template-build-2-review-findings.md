@@ -4,7 +4,7 @@
 - **Slug:** template-build-2-review-findings
 - **Adapter repo:** `content/sdk-adapters/template/` (branch from `origin/main`)
 - **Date:** 2026-10-16
-- **Status:** done, not tagged: build 2 merged (df34aea, PR #21) and the release workflow hardening merged (f2f7ea8, PR #22) on 2026-10-16; CI2 and CI5 settings remain open on template #18; propagation to the three paks follows their open builds
+- **Status:** done, not tagged: build 2 merged (df34aea, PR #21), the release workflow hardening merged (f2f7ea8, PR #22) and the gate follow-up (indented and disguised headings, fences, BOM, unit tests in the tag build) merged (743ce31, PR #23) on 2026-10-16; CI2 and CI5 settings remain open on template #18; propagation to the three paks follows their open builds
 
 ## Initial prompt (Scott, verbatim, 2026-10-16)
 

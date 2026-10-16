@@ -245,3 +245,99 @@ account name in the adapter log on every configure, despite the docs
 saying it is not there. On a NAS with NFS turned off, export objects
 would drift away from their Volume with stale rule values and no
 explanation in the docs.
+
+## Round 2: re-review of 951e84e (2026-10-16)
+
+- **Scope:** `git diff 62861a4..951e84e`, 7 commits (`0c52432`, `241934f`, `d40d143`, `c29f587`, `6388566`, `2a235e9`, and the #227 docs commit `951e84e`, which has landed and is included). Reviewed on a detached worktree of `951e84e`.
+- **Verdict:** APPROVE (0 BLOCKING, 0 WARNING, 3 NIT)
+
+### Bottom line
+
+All 14 round 1 findings are closed: the blocker and all four warnings
+are fixed in code or docs with a test, and every in-scope nit is fixed.
+M9 and M21, which survived round 1, are now caught. Three small
+residuals remain. None can publish a wrong value, leak a credential, or
+put data on the wrong object.
+
+### Claims check (independently re-run)
+
+| Claim | Result |
+|---|---|
+| Tests | Confirmed: 16 Java + 8 Python, all pass. The new `tests/test_collect_wiring.py` is in the runner, and no test file is missing from the list. |
+| validate-sdk | Confirmed: OK. |
+| Pak sha256 `ef6b065c...` | Confirmed: `dist/vcfcf_sdk_synology_diskstation.0.0.0.32.pak` is `ef6b065c872d311f626060dceee147f31a86b3f12c1bfca9683233d3e18391a1`. My own build of `951e84e` also gives 0.0.0.32 (sha `e71db409...`; the difference is from build timestamps). |
+| pak-compare vs 0.0.0.31 (`8ea76f21...`) | Confirmed for both paks: `0 BLOCKING, 0 WARNING, 0 INFO`. |
+| Mutations | 17 run; 15 caught. **M9** (callRaw back to `catch (IOException e)`): caught by `test_collect_wiring.py`. **M21** (NFS-off guard call removed): caught by `test_collect_wiring.py`; making `requireNfsService` a no-op is caught by SnapshotIsolationTest. Also caught: `principal=`, userinfo, escaped quote and `user=` removed from redact; the empty-page throw removed; `minVersion` ignored; the Info asked-flag wrong on either path; the lowered WARN removed; the ovs skip removed; usage % without a total; `firstSighting` always true. **Survived:** R13 (the `firstSighting` call removed from `SynologyStitcher`) and R14 (`memoryUsagePct` wiring reverted in the adapter). See NIT-R1. |
+
+### Round 1 findings, one by one
+
+- **B1 closed.**
+  - `principal=`, `token=`, URL userinfo, JSON `authToken`, and escaped quotes inside JSON values are now masked (`SynologyRedaction.java:51-57`).
+  - My round 1 probe inputs are all masked now. So is the framework's real 401 shape (`... mechanism=explicit principal=svc-vcfops` comes out as `principal=<redacted>`).
+  - A query string containing `@` after the host is untouched, so the userinfo pattern does not over-match.
+  - The two doc claims are corrected (`CHANGELOG.md:12`, `docs/installing.md:222`). They now say the adapter's own lines do not name the account, the framework client still logs it at INFO, and they cite factory #227. #227 exists and is OPEN, and its title matches the defect.
+  - The docs and the behavior now agree. The framework half is tracked in #227; the orchestrator can register it under RULE-012 if it should gate.
+- **W1 closed.**
+  - With NFS off, an existing export is ERROR every cycle (`SnapshotIsolation.requireNfsService`, called at `SynologyAdapter.java:1113` before anything is published). The rule keys go back to their build 31 form for the NFS-on path.
+  - The upgrade note (CHANGELOG #20) and `docs/installing.md:89-97` state everything: ERROR, the Volume edge dropped, the Datastore edge kept, the object not removed, and recovery when NFS comes back on.
+  - The wiring is pinned (M21 caught).
+- **W2 closed.**
+  - README Install and Configure and `docs/installing.md:232-235` all give 9.x (Administration > Integrations > Repository / Accounts) with the 8.x path beside it. This is the UniFi idiom and matches the factory 9.1.1 investigation.
+  - The CHANGELOG honestly says it is not yet seen in a 9.x UI.
+- **W3 closed.** `test_collect_wiring.py` pins both `callRaw` overloads (M9 caught).
+- **W4 closed.**
+  - Lowered APIs are now a WARN that says their values are unverified and may read 0 (`SynologyApiClient.java:160-168`).
+  - `docs/installing.md:12-17` says the same.
+- **N1:** closed (see B1).
+- **N2:** closed. A desired version below DSM's `minVersion` counts as not offered and is called the build 31 way (`DsmApis.java:149-157`).
+- **N3:** closed.
+  - An empty page before `totalCount` throws, so there is no partial index (`DatastoreIndex.java:70-79`).
+  - Duplicate rows are indexed once (`firstSighting`; the signature is path, name and every identifier with its flag).
+  - The CHANGELOG #28 claim is now true.
+- **N4:** closed (README object table, overview highlights).
+- **N5:** closed. `ovs_X` is skipped when `X` is listed.
+- **N6:** closed.
+  - Info is asked once per client after any non-unreachable answer.
+  - An unreachable NAS still leaves it unasked, so the next login asks again.
+  - The WARN text says "Not asked again until the instance is edited", which matches: an edit builds a new client.
+- **N7:** closed. `memory_usage_pct` is published only with a positive `total_real`.
+- **N8:** no action needed.
+- **N9:** carry-over (factory #204). No added line has an em-dash.
+
+### Judgment: ERROR versus a property for NFS-off exports
+
+**ERROR is the right signal for this build.**
+
+- It matches the build 31 B2 precedent for a failed probe and the skill's "unreadable is not compliant" rule: the object's defining data (its NFS rules) was not read this cycle.
+- Status is the only channel that also covers the values VCF Ops keeps showing from the last collection. A green object with its last rule values on display was the round 1 problem, and a new property would still have left those values unexplained.
+- A property would mean a new `describe.xml` attribute, a design change outside this build's correctness scope.
+- The reason text names the cause, so the operator's choice is clear: delete the object, or turn NFS back on.
+- The cost: on a NAS where NFS is off for good, each old export logs one framework WARN per cycle until it is deleted. The docs say so ("ERROR each cycle ... The object is not removed").
+- A later design could add a "not an NFS export" state or prune such objects. That is an enhancement, not a defect.
+
+### NIT (round 2)
+
+- **NIT-R1** Two adapter-side wiring lines have no guard: the `firstSighting` call in `SynologyStitcher.java:133-137` (R13) and the `memoryUsagePct` call at `SynologyAdapter.java:850-851` (R14). The helpers themselves are tested. Two more asserts in `test_collect_wiring.py` would close both.
+- **NIT-R2** `SnapshotIsolation.java:85`: the ERROR reason says "its Volume edge is not refreshed", but the Volume is emitted full-set without the export, so the edge is dropped, as the docs and CHANGELOG correctly say. Say "dropped" so the status text matches the docs.
+- **NIT-R3** `SynologyStitcher.java:120`: `total` still counts a duplicate row, so the "loaded N VMWARE Datastores" INFO can be one higher than the indexed set during a concurrent change. Cosmetic.
+
+### Registry (re-asserted)
+
+No open defect affects `synology`. DEF-001 (closed) still holds and is
+stronger in round 2: the catch is now pinned and redaction covers the
+framework `principal=` shape. DEF-003, DEF-005 and DEF-006 (closed) are
+not affected: the round 2 stitcher change is index dedupe only, and
+uniqueness flags are still read from source.
+
+Registration candidate: factory #227 (framework logs the explicit Suite
+API principal). It affects every pak that uses `createExplicit`, with
+scope `factory:<adapter-framework area>`, if the orchestrator wants it
+to gate releases.
+
+### If shipped as-is (round 2)
+
+Memory, free space, SSD remaining life and LUN latency show real
+values, and DSM sessions no longer collide. NFS-off exports are
+visibly ERROR with the reason. The only remaining account-name logging
+is the framework's own INFO lines, which the docs now state openly and
+which factory #227 tracks.
