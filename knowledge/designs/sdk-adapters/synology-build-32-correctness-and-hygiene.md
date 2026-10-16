@@ -4,7 +4,7 @@
 - **Slug:** synology-build-32-correctness-and-hygiene
 - **Adapter repo:** `content/sdk-adapters/synology/` (branch from `origin/main`)
 - **Date:** 2026-10-16
-- **Status:** in progress
+- **Status:** PR open (synology #40, head cbe96a2), reviewer approve round 2, peer review items fixed; #33 and #26 closed as fixed in build 31
 
 ## Initial prompt (Scott, verbatim, 2026-10-16)
 
