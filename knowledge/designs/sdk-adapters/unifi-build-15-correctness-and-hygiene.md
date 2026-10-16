@@ -4,7 +4,7 @@
 - **Slug:** unifi-build-15-correctness-and-hygiene
 - **Adapter repo:** `content/sdk-adapters/unifi/` (branch from `origin/main`)
 - **Date:** 2026-10-16
-- **Status:** merged to unifi main (6c3c66d, PR #36, 2026-10-16), not tagged; devel_9_1 proof pending
+- **Status:** merged to unifi main (6c3c66d, PR #36, 2026-10-16), not tagged; devel_9_1 proof 2026-10-16 PASS with three follow-ups (unifi #32 reopened for the 9.1 menu path, new issues for the silent stitch log line and the missing NVR storage keys)
 
 ## Initial prompt (Scott, verbatim, 2026-10-16)
 
