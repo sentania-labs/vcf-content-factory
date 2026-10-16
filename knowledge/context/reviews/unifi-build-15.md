@@ -387,3 +387,120 @@ proof item.
 Operators get the build 15 behaviour as documented. The two nits are
 cosmetic: three stray em-dashes in REFERENCE.md and one badly wrapped
 comment.
+
+## Round 3 (tip `1876783`, 5 commits after `ddfac3e`), 2026-10-16
+
+**Verdict: APPROVE, 0 BLOCKING / 2 WARNING / 1 NIT.** The seven
+peer-review changes are correct and tested. Nothing in this round can fail
+the snapshot or publish a fabricated value. Two decisions need tightening
+before the PR: the skip set for device state codes, and how the host list
+treats an answer with no `resourceList`.
+
+### Claims check (re-run)
+
+| Claim | Result |
+|---|---|
+| Tests | `ci/run_java_tests.sh` 21/21 (SysinfoGateTest added), exit 0. |
+| validate-sdk | OK. |
+| Pak sha256 `0a4341c5...6d0a` | Confirmed on `dist/vcfcf_sdk_unifi_controller.0.0.0.15.pak`; own `build-sdk` reproduces 0.0.0.15. |
+| pak-compare vs 0.0.0.14, 0/6 | Confirmed on both paks. Gateway, Switch and AccessPoint each count one more attribute than in round 2 (`state_code`); the six warnings are all attribute counts. |
+| nameKeys 54/104/177 | No collision: no duplicate nameKey anywhere in describe.xml, no duplicate key in `resources.properties`, every nameKey labelled ("State Name"). 54 follows 53, 104 follows 103, 177 follows 176, and none was used before. |
+
+Mutations, all caught: state 6 not skipped; SysinfoGate never closing;
+a refusal not opening the window; the gate bypassed in `Snapshot.build`;
+a host the bulk answer omits not re-read; cameras parented under a null NVR.
+No em-dashes in added lines; REFERENCE.md now has none.
+
+### The four questions
+
+**SysinfoGate cannot block the snapshot.** `shouldAsk` does no I/O and
+takes only its own lock. The call (`UniFiAdapter.java:1813`) is in a
+`try` that catches every `Exception` except `InterruptedException`
+(rethrown on purpose, round 2 N4). A failed re-login from the framework's
+replay arrives as a `RuntimeException` and is caught too. `failed()` runs
+inside that catch; `UniFiFailures.authStatus` and `refusalKind` walk the
+cause chain null-safely, with a cycle guard, and a null message only puts
+"null" in the log text. So the handler cannot throw into the build. A
+build where every site failed has no `sysinfoSite` and never asks. The
+window is per configuration (an edit clears it) and treats a clock that
+stepped back past its start as passed (tested). A sysinfo timeout is not
+auth-class, so it is retried on the next build; it costs time, never the
+site.
+
+**State 6 is the right second skip code, but the set is too narrow (W-R3-1).**
+
+**The camera no-parent choice is acceptable.** A Protect bootstrap without
+`nvr.mac` is a theoretical case. Registering a MAC-less NVR would bring
+back the empty-identifier object #23 removes, and putting its cameras
+under the site would claim a topology the controller did not report.
+No parent is the honest option: the cameras still register and collect
+under their own MAC, existing edges are left alone (no full-set write from
+a null parent), and overview.md says so. No finding.
+
+**The other changes check out.** A host missing from a bulk answer is
+read per host and counted as unread if that read fails, giving a Partial.
+`byId.get` cannot return null for a host outside `perHost`. The
+`metricIfPresent` bodies are pinned. Device Count counts only discovered
+types with a MAC; Camera Count only cameras with a MAC. Radios with a
+blank code are skipped in enumeration, relationships, the snapshot index
+and `findRadioStats`, consistently.
+
+### WARNING
+
+**W-R3-1. Only states 0 and 6 stop the metrics; "inform error" (9), and
+"isolated" (11) and "adoption failed" (10), which the map does not name,
+keep publishing whatever the controller last stored.**
+`UniFiValues.java:79`. Authority: the method's own rationale (stop "when
+the controller then reports its last values or none"); skill § *Unreadable
+is NOT compliant*; issue #14. The pak's own name map says 9 is "inform
+error", meaning the controller is not receiving the device's informs. Its
+values then are as stale as in heartbeat missed (6), and unlike 6 the
+state can last for days (a device still informing an old controller
+address after a move). Neither the codes nor their meanings are in the
+repo's API map, which records only `"state": 1`
+(`knowledge/context/api-maps/unifi-network-api.md:1278`), so this decision
+rests on knowledge outside the repo.
+Failure scenario: an AP pointed at a retired controller IP sits in state 9.
+Its CPU, uptime, client count and radio metrics publish the last stored
+values with current timestamps every cycle, while `Status|state` reads 0.
+A chart shows a flat, healthy-looking line.
+Fix: invert to an allow-list. Publish metrics only for states where the
+device is informing (1, 4, 5, 7; absent state as today), and skip every
+other code, unknown codes included. Record the state-code table and its
+source in the API map (an `api-explorer` note, marked community-sourced
+until seen on devel). Alternatively, gate on `last_seen` age. Either way,
+pin it in UniFiValuesTest.
+
+**W-R3-2. A host-list answer with no `resourceList` always fails the
+refresh, even when it is a genuinely empty result.**
+`UniFiStitcher.java:135`, `VmnicLldp.requireResourceList`. Authority: the
+reference idiom, compliance `ComplianceDecisions.resourcePageOutcome`
+(`content/sdk-adapters/compliance/src/com/vcfcf/adapters/compliance/ComplianceDecisions.java:651-655`).
+It treats a page with no `resourceList` as complete when
+`pageInfo.totalCount` is 0, and as incomplete otherwise. The UniFi check
+has no such case.
+Failure scenario: a VCF Ops instance with no VMWARE HostSystems (UniFi
+only, or vCenter not yet added). If the Suite API leaves out an empty
+`resourceList`, which the compliance code was written to expect, every
+cycle logs `vmnic→port stitch: fetch/match failed` at WARN forever, with
+nothing ever cached. That is a misleading WARN, not data loss.
+Fix: mirror compliance. With no `resourceList` and `pageInfo.totalCount`
+equal to 0, return an empty host list. With no list and a non-zero or
+missing total, keep the failure. Add a VmnicLldpTest case.
+
+### NIT
+
+**R3-N1.** `docs/installing.md:48` runs well past the wrap ("...read once
+per cycle; that a View Only account may read"). Fix: rewrap.
+
+### Registry
+
+Still no open defect affects unifi. W-R3-1 is a registration candidate if
+it is accepted without the fix.
+
+### If shipped as-is
+
+A device stuck in "inform error" keeps charting frozen, healthy-looking
+metrics until someone notices it reads 0 on `Status|state`. On an Ops
+instance with no ESXi hosts, the log may carry one misleading stitch WARN
+every cycle.
