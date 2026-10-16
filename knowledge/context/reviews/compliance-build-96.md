@@ -202,3 +202,293 @@ Open defects with `Affects: compliance`: DEF-023, DEF-025, DEF-026.
 ## If shipped as-is
 
 On small inventories like devel, nothing visible changes except that retired-control alerts now clear. On any vCenter whose walk takes more than 80% of the collection interval, or that has one host with a hung hostd, everything after the cut point stops being collected for good. That includes the vCenter appliance, distributed switch, portgroup and cluster compliance, plus the host and VM tail. Those objects keep showing their old scores, and only the vCenter-level "not collected" alert says otherwise.
+
+## Round 2 (2026-10-16, branch at `d3fa2b5`)
+
+- **Scope:** 3 commits on `bcf4858`:
+  - `56ccd70`: code for B1, W1, W2, N2, N3, N5, N10.
+  - `5940891`: docs for W3, B1, N1, N7.
+  - `d3fa2b5`: N4.
+- **Pak:** `dist/vcfcf_sdk_compliance.0.0.0.96.pak`, sha256 `13292a60...51f1a`.
+
+### Verdict: CHANGES REQUESTED (1 BLOCKING, 0 WARNING, 2 NIT)
+
+W1, W2, W3 and N2 to N7 are closed, and N10 is fixed as well. B1 is only half fixed.
+- **What works:** small kinds first, resume within a kind, the hung-host mark, and no partial score. Hosts are covered across cycles.
+- **What doesn't:** the resume point is per kind, and every cycle still starts again at the small kinds and then hosts. VMs run only after a full host pass fits inside one cycle's remaining budget. When the host walk alone overruns, VMs are never collected. The author reads this as "VMs can wait a cycle"; in fact they wait indefinitely. Separately, an object that takes longer than the budget left when it starts is aborted every cycle, so the cursor never moves past it.
+
+### Independent verification
+
+| Check | Result |
+|---|---|
+| `ci/run_java_tests.sh` on a clean `git archive d3fa2b5` tree (JDK 17.0.20.1) | Exit 0. 26 Java tests (all "all assertions passed", BcHandshakeTest with jars) and 10 Python checks OK. **Confirmed.** |
+| N4 pin | `test_simple_json_matches_the_pinned_framework_sha256` ran in the archive. The pinned `501451fe...da2fe` equals the sha256 of both the vendored copy and the factory's `SimpleJson.java`. |
+| `validate-sdk` | OK. **Confirmed.** |
+| `build-sdk` | Built. Every unpacked file matches the author's pak (jar classes, views, overview, dashboards, describe). The jar adds `ResumeCursor` and `RetiredKeyRepeats` and still has no stub or test class. **Confirmed.** |
+| `pak-compare` vs 0.0.0.95 | PASS, 0 / 0 / 0. **Confirmed.** |
+| `generate_compliance_alerts.py --check` | Up to date. `describe.xml` untouched. |
+| Scoring | `git diff origin/main...HEAD` on `ControlEvaluator`, `BenchmarkSelector`, `ComplianceRollup`, `profiles/`, `views/`, `dashboards/` and `describe.xml` shows only the 7-line `evaluateAdvancedSettings` removal. Round 2 changes only order, which objects get pushed (abort), and cleanup. **Scoring untouched, confirmed.** No per-object score depends on order, and a kind's rollup is pushed only when the kind was fully read. |
+| Em-dashes in added lines | None. |
+
+### The coordinator's hunt list
+
+**A cursor that never advances: yes, it can (B1-r2, part b).**
+- `KindWalk.abortObject` records `stoppedAfter(kind, done)` with the object *before* the aborted one, so the next cycle starts with the aborted object again (`ComplianceAdapter.java` KindWalk; `ResumeCursor.java:56-59`).
+- If that object takes longer than the budget left after the small kinds, it is aborted again every cycle. The cursor never moves, and nothing after it in the kind (or in any later kind) is read again.
+- Example 1: a host whose hostd hangs costs one `QueryOptions` read timeout (120 s, plus up to 30 s connect) per cycle, because the hung mark is cleared by `beginCycle`. On a 5-minute interval it pins the host walk whenever the small kinds take over about 90 s.
+- Example 2: on any interval under about 3 minutes (budget 144 s or less), it pins the walk outright.
+- A pinned hung host is never pushed either, so it never gets its own `has_unreadable` flag.
+- `abortObject` decides by elapsed time, not by whether a call was refused for this object (N2-r2), which widens the window slightly.
+
+**A cursor surviving a reconfigure wrongly: no.**
+- `ResumeCursor` and `RetiredKeyRepeats` live in `Configured` (`Configured.java:35-39`), which `configureAdapter` builds fresh. A reconfigure starts every walk from the top and drops the repeat counts. Both are safe defaults: at most one extra round, or 4 more -1 pushes.
+- A cycle still running on the old holder writes to the old holder only (the per-cycle `cycle` copy).
+- A cursor whose MOID is gone falls back to listing order (`ResumeCursor.java:44`).
+
+**memory.retain trimming objects skipped by the cursor: no.**
+- A walk that ends early goes through `cycleOver`, and an abort goes through `markIncomplete`. Both put the kind in `incompleteKinds()`, which `retain(seen, incompleteKinds())` never trims.
+- A kind that completes its rotated walk has every object in `seen`.
+- `walk.finish()` for hosts and VMs runs only when the kind is pushable, so a held-back kind keeps its cursor.
+
+**W2 and the #52 hold-back: no conflict.**
+- A kind held by `EMPTY_UNCONFIRMED` is in `failedLoads`. `kindPushable` is false, so its objects match nothing and nothing is pushed. An abort in that kind calls `markIncomplete` again, which is harmless.
+- `walk.finish()` is unconditional for vDS, portgroups and clusters. That clears their cursor after a held but fully walked kind, which is correct, because every object was visited.
+- The vCenter object's own abort (`budgetExhausted()` after its reads) holds VCENTER back. It does not touch #52.
+
+### Prior findings
+
+- **B1: still BLOCKING, narrowed** (below).
+- **W1: closed.**
+  - `RetiredKeyRepeats` caps -1 at 4 pushes per key, the retirement included.
+  - `toPush` runs for every object in the plan, so a key that leaves the retired set is pruned and counts afresh if it retires again.
+  - The budget is checked before every cleanup batch.
+  - Tests: the decision table (pushes 1 to 4, then capped, a per-object count, a fresh retirement) and the adapter cycle (-1 on cycles 1 to 4, none on cycle 5).
+  - Residual: N1-r2.
+- **W2: closed.** An object read while the limit was reached is not pushed or counted. Its kind is held back, and the next cycle starts with it (host, VM, vDS, portgroup, cluster and the vCenter object). `noPartialScore` asserts that `r-host-10` keeps its earlier score and gets no push. This is also the source of B1-r2 part b.
+- **W3: closed, except where the docs now overpromise** (part of B1-r2).
+  - `data-reference.md` `Rollup|incomplete` now lists #52 and the early end.
+  - The one-cycle alert on a genuine removal, and the restart behaviour (N1), are documented.
+  - README, overview and installing describe the limit and its remedy.
+- **N1: closed** (documented).
+- **N2: closed.** `CycleBudget.Exhausted` is caught before IOException, so the host is not marked and the reason reads `esxcli-budget-reached`.
+- **N3: closed** (clamped 60 s to 24 h, and the source names the clamp).
+- **N4: closed** (the pin runs in CI).
+- **N5: closed** (the javadoc and overview give the 390 s worst case).
+- **N6/N10: closed.** VAMI `send` checks the budget, counts an `HttpTimeoutException` and resets on an answer.
+- **N7: closed** (confirmations CHANGELOG line).
+
+### Findings
+
+#### BLOCKING
+
+**B1-r2. VMs can still starve permanently, and an object longer than the remaining budget pins its kind's cursor.**
+- Where: `ComplianceAdapter.java` `collectWorldCycle` (always small kinds, then hosts, then VMs), `KindWalk.next` / `abortObject`, `ResumeCursor` (one cursor per kind, none across kinds).
+- Authority: `knowledge/lessons/unreadable-is-not-compliant.md` ("never ... a healthy-looking datapoint"); DEF-026's summary; reviewer dimension 11, because the docs now contradict the behaviour. README: "the next cycle carries on from where it stopped, so every object is still read every few cycles". `data-reference.md`: "every object is still read every two or three cycles". `overview.md`: "consecutive early-ended cycles together read every object" and "one hung hostd cannot use up the budget".
+- **(a) VM starvation.**
+  - The host walk ends only on the limit or after its whole rotated list, and `collectVms` runs only after it. So VMs are read only in a cycle where small kinds plus one full host pass fit in the budget.
+  - Scenario, two hosts with hung hostd at the default 5-minute interval:
+    - Each costs one 120 s `QueryOptions` timeout per cycle.
+    - Cycle N: H1 is pushed, then the limit is reached inside H2, so H2 is aborted.
+    - Cycle N+1 starts at H2, wraps round, and H1 is aborted.
+    - The pattern alternates, and the VM walk is never entered.
+  - Every VM keeps its old score and per-control keys, with a stale "Not Read" = 0, until both hosts are fixed. A vCenter with a few hundred healthy hosts gets the same result with no fault at all.
+  - `twoCyclesVisitEverything` uses hosts only, so it cannot catch this.
+- **(b) A pinned cursor.** As above: an aborted object is retried first, and an object longer than the budget left after the small kinds is aborted every cycle.
+- Smallest correct fix:
+  1. One resume point across kinds. When a cycle ends early in kind K, the next cycle starts at K's cursor and carries on through the kinds after K (VMs after hosts) before wrapping to the small kinds and hosts. Every object is then visited within a bounded number of cycles, whatever the per-kind sizes.
+  2. An object aborted on two consecutive cycles is pushed on the second with what was read (refused reads UNREADABLE, `has_unreadable` = 1, the build 95 skip-and-flag rule), or the cursor steps past it. Either way the walk always advances.
+  3. Tests: a harness with hosts and VMs where the host walk alone exceeds the budget, asserting every VM is pushed within N cycles; and an object longer than the budget, asserting the objects after it are reached.
+  4. Bring the README, overview and data-reference sentences in line with whatever the fix guarantees.
+
+#### NIT
+
+- **N1-r2** `RetiredKeyRepeats.java:93-125`: entries are pruned only when the object is cleaned again, so objects that leave inventory keep their counts for the life of the configuration. That is slow growth with VM churn on a long-running collector. Drop entries for resource ids absent from this cycle's `pendingCleanup` when a cleanup completes (or reuse `retain`'s seen set).
+- **N2-r2** `KindWalk.abortObject`: decides on `exhausted()`, which is also true when the deadline passes after an object's last read (during evaluation). A fully read object can therefore be dropped. Prefer "a call was refused while this object was read" (a refusal count on `CycleBudget`, compared before and after the object).
+
+### Registry check (round 2)
+
+- **DEF-023:** unchanged since round 1. Propose closing it on the 105,000-row fixture (orchestrator's call).
+- **DEF-025: open; code half met.**
+  - The repeat is now capped at 4 pushes (`RetiredKeyRepeats`; `Build96RetiredKeyTest` cycles 1 to 4, none on 5).
+  - Devel evidence (an open alert on a retired control cancels within three cycles) is still owed.
+- **DEF-026: open.** The budget, breaker, hung-host mark and resume are in, with tests. B1-r2 has to be fixed before closure can be proposed, and the devel check is still owed.
+
+**Registration candidate:** B1-r2 if it survives (permanent VM starvation while the docs promise full coverage).
+
+### If shipped as-is (round 2)
+
+Small inventories behave correctly, and retired-control alerts clear after 4 pushes. On a vCenter where two hosts have hung hostd, or where the host walk alone takes more than about 4 minutes, VM compliance stops updating altogether, while the docs say every object is still read every few cycles.
+
+## Round 3 (2026-10-16, branch at `fab413c`)
+
+- **Scope:** 2 commits on `d3fa2b5`:
+  - `b0d00e7`: code for B1-r2, N1-r2, N2-r2.
+  - `fab413c`: docs.
+- **Pak:** `dist/vcfcf_sdk_compliance.0.0.0.96.pak` (built 11:39 AM), sha256 `2fc2d279...`.
+
+### Verdict: APPROVE (0 BLOCKING, 0 WARNING, 0 NIT)
+
+B1-r2, N1-r2 and N2-r2 are closed. Every object is now visited within a bounded number of cycles, no single object can stop the walk from advancing, scoring is untouched, and the build reproduces.
+
+### Independent verification
+
+| Check | Result |
+|---|---|
+| `ci/run_java_tests.sh` on a clean `git archive fab413c` tree (JDK 17.0.20.1) | Exit 0. 26 Java tests (all "all assertions passed", including `vmsNotStarved`, `objectLongerThanBudget`, `deadlineAfterReadsDoesNotDrop`; BcHandshakeTest with jars) and 10 Python checks OK, including the SimpleJson sha256 pin. **Confirmed.** |
+| `validate-sdk` | OK. **Confirmed.** |
+| `build-sdk` | Built. Every unpacked file matches the author's pak (jar classes, views, overview, dashboards, describe). The jar holds only `com/vcfcf/adapters/compliance/*`, `META-INF` and `adapter.properties`. **Confirmed.** |
+| `pak-compare` vs 0.0.0.95 | PASS, 0 / 0 / 0. **Confirmed.** |
+| `generate_compliance_alerts.py --check` | Up to date. `describe.xml` untouched. |
+| Scoring | `git diff origin/main...HEAD` on `ControlEvaluator`, `BenchmarkSelector`, `ComplianceRollup`, `profiles/`, `views/`, `dashboards/` and `describe.xml` is still only the 7-line `evaluateAdvancedSettings` removal. **Untouched, confirmed.** |
+| VMs before hosts | `vmHostVersion` uses the same `getHostProductVersion` (`summary.config.product.version`, then `config.product.version`) as `collectHosts`, and `resolveVmHostVersion` caches it per host for the cycle. Same benchmark choice, one extra read per host and not one per VM. |
+| Em-dashes in added lines | None. |
+
+### Prior findings
+
+**B1-r2 (a), VM starvation: closed.**
+- `ResumeCursor.round()` (`ResumeCursor.java:105`) starts at `startKind`, runs to the end of `ROUND` (`:94`: vCenter, vDS, portgroups, clusters, hosts, VMs) and wraps.
+- `collectWorldCycle` iterates that round and sets `startAt(cycleEndedIn)` after it (`ComplianceAdapter.java:1044-1085`).
+- Within the start kind, `order` returns only the tail after the cursor, not a rotation, so the walk leaves the kind at the end of its list and goes on to VMs.
+- Trace, the round 2 scenario (two hung hosts at the default interval):
+  - Cycle N stops in hosts after H1.
+  - Cycle N+1 starts in hosts at H2, finishes the host tail, then reads VMs, then wraps to the small kinds. If it stops in VMs, N+2 starts there.
+  - VMs are reached every pass.
+- `vmsNotStarved` asserts all three VMs are pushed while every cycle ends early inside the host walk.
+
+**B1-r2 (b), cursor pinning: closed.**
+- `afterRead` (`ComplianceAdapter.java:751`) drops an object only when `CycleBudget.refusals()` (`CycleBudget.java:185`) grew while it was read.
+- A second consecutive cut of the same `KIND|moid` returns `PUSH_THEN_STOP`. The object is pushed with refused reads UNREADABLE and Not Read = 1 (the build 95 skip-and-flag rule, documented in overview), the cursor moves to that object, and the kind is held back. An object that never fits costs at most two cycles.
+- `objectLongerThanBudget`: cycle 1 drops it, cycle 2 pushes it flagged, cycle 3 reaches the next host.
+- The drop mark clears on any cycle without a drop.
+
+**Hung host: no pin.** A hung host's later reads are skipped by the hung mark, not refused, so it is never dropped. Its `QueryOptions` timeout counts once, and it is pushed flagged ("host not answering").
+
+**N1-r2: closed.** `RetiredKeyRepeats` is keyed by `LastBenchmarkMemory.key` and trimmed by `retain(seen, incompleteKinds())`, the same rule as the benchmark memory. A resumed or held kind is not trimmed.
+
+**N2-r2: closed.** `deadlineAfterReadsDoesNotDrop`: a host whose reads all finished before the deadline is pushed with its full score, and the walk stops before the next host.
+
+### The coordinator's hunt items, re-checked
+
+- **A cursor surviving a reconfigure:** still per `Configured` holder, rebuilt on configure. Safe.
+- **retain vs the cursor:** a resumed tail is marked incomplete in `KindWalk.order` *before* the walk, so neither `retain` trims objects before the cursor.
+- **W2 vs #52:** unchanged from round 2. No conflict.
+- **New residue (harmless, not a finding):**
+  - `PUSH_THEN_STOP` on the vCenter object records a VCENTER cursor that nothing reads (`collectVCenter` never calls `order`) and nothing clears.
+  - A held-back (not pushable) host or VM kind keeps its cursor until a pushable tail reaches the end. That costs one extra held-back cycle, then it converges.
+
+### The stated side effect: incomplete stays 1 until a full pass completes
+
+Correct, and acceptable.
+- **A single transient early end** gives `Rollup|incomplete` = 1 on that cycle and on the next. The next cycle reads only the stopped kind's tail and holds that kind back. A clean cycle after it starts at the top of the round, so the incomplete flag returns to 0 on the third cycle. The vCenter alert (wait 1, cancel 1) is active for two cycles.
+- **A vCenter whose full walk always needs more than one budget:** incomplete stays 1 and the alert stays active for as long as that lasts. The Rollup keys and Environment tiles for kinds never read whole in one cycle keep their last values, while every object keeps updating.
+- Why this is the right direction: a rollup assembled from different cycles would be a number no single moment produced, and holding it back is the conservative choice.
+- The docs say what it means and what to do: README, overview, data-reference and installing all say that if every cycle ends early, the collection interval should be lengthened.
+
+### Registry check (round 3)
+
+- **DEF-023:** unchanged. Propose closing it on the 105,000-row fixture (orchestrator's call).
+- **DEF-025: open; code half met** (4-push cap, tested). Devel evidence that an open alert on a retired control cancels is still owed.
+- **DEF-026: open; code half met.**
+  - The budget, breaker, hung-host mark, cross-kind resume and two-strike step-past are in, each tested (`Build96BudgetTest`).
+  - Still owed: the devel check that an unreachable or throttled vCenter ends inside the budget, marks incomplete and raises the alert.
+  - Propose closure after that devel proof.
+
+**Registration candidate:** none.
+
+### If shipped as-is (round 3)
+
+Normal cycles score exactly as build 95 did. A cycle that runs out of time stops cleanly, raises "Compliance data not collected", and the following cycles carry on from where it stopped until every object has been read. A host that stops answering costs one timeout per visit, and retired-control alerts clear after four pushes.
+
+## Round 4 (2026-10-16, branch at `1976619`)
+
+- **Scope:** 2 commits on `fab413c`:
+  - `5d0233e`: peer review items 1 to 8, code and tests.
+  - `1976619`: docs.
+- **Pak:** `dist/vcfcf_sdk_compliance.0.0.0.96.pak` (built 12:13 PM), sha256 `235cbf74...`.
+- **Measured context:** `knowledge/context/investigations/2026-10-16-compliance-cycle-durations.md` (longest build 95 cycle in 24 h: 42.5 s against 300 s).
+
+### Verdict: APPROVE (0 BLOCKING, 0 WARNING, 3 NIT)
+
+The carried share counts each object exactly once per pass. It cannot combine with the #52 hold-back, and a reconfigure drops it. The markers-only second cut, the narrowed hung-host skip, and the repeats riding the object's own push are all correct. Normal-cycle integer totals and the pass rate are unchanged. The one exception is in the last digits of `score_sum` / `avg_score` (N1-r4).
+
+### Independent verification
+
+| Check | Result |
+|---|---|
+| `ci/run_java_tests.sh` on a clean `git archive 1976619` tree (JDK 17.0.20.1) | Exit 0. 26 Java tests (all "all assertions passed", including `dropsMustBeConsecutive`, `resumeOrderByMoid`, `repeatsWhenEveryCycleEndsEarly`; BcHandshakeTest with jars) and 10 Python checks OK. **Confirmed.** |
+| `validate-sdk` | OK. **Confirmed.** |
+| `build-sdk` | Built. Every unpacked file matches the author's pak. The jar holds only adapter classes. **Confirmed.** |
+| `pak-compare` vs 0.0.0.95 | PASS, 0 / 0 / 0. **Confirmed.** |
+| `generate_compliance_alerts.py --check` | Up to date. `describe.xml` untouched. |
+| Evaluation path | `ControlEvaluator` (only the 7-line removal), `BenchmarkSelector`, `profiles/`, `views/`, `dashboards/` and `describe.xml`: unchanged since main. **Per-control and per-object scoring untouched, confirmed.** `ComplianceRollup` changed this round (below). |
+| Em-dashes in added lines | None. |
+
+### (3) The carried rollup: the hardest check
+
+- **Normal cycle.**
+  - The `ComplianceRollup` diff adds `bucketsByKind`, filled in `bump`, plus `Part`, `part`, `addPart` and `clearIncomplete`. `toStats` and `put` are untouched, and nothing reads `bucketsByKind` except `part`. `byBucket` is merged exactly as before.
+  - On a cycle that never ends early: `KindWalk.order` sees `resumed == false`, drops any carry, and returns the full list. `finish` takes the not-ended branch with no prior, so `completed` runs and nothing is added.
+  - So the integer counts, bucket counts and `pass_rate` (a ratio of integer counts) are identical to build 95 for the same per-object results.
+  - Exception: N1-r4.
+- **No double counting.**
+  - A pass accumulates `prior.part.plus(now)` only on an ended walk. The cursor only moves forward in MOID order (`ResumeCursor.java:45-66`), and the tail is strictly after the cursor, so no object is read in both the carried share and the tail.
+  - A dropped object is not recorded and is retried first next cycle, so it is counted once, then.
+  - A cut-twice object is recorded once, as a bucket only (`pushCutTwice`, `recordEvaluated(..., 0, 0, 0, 0.0)`), and the cursor steps past it.
+  - If the cursor's object leaves inventory mid-pass, `resumed()` is false, so `order` drops the carry and walks the full list (no double count).
+  - A new object with a MOID before the cursor is missed by this pass and counted by the next.
+  - `Tally` has seven fields, and `add` copies all seven. Pods carry with the VM share.
+  - The completing cycle's All is the sum of each kind's complete share, so each object is counted once.
+  - Covered by `twoCyclesVisitEverything` cycles 3 and 4: Host scored 3 with host-10 from the carry, then 3 again on a full pass, incomplete 0.
+- **Mixed cycles.**
+  - The completing cycle's kind rollup combines objects read across the cycles of one pass, each value at most one pass old.
+  - That is the stated design, and `overview.md` "Resume" says so ("the part read by the earlier cycles of the pass is carried and added").
+  - It is never fabricated: every object contributes its own last full read or its cut-twice bucket only.
+- **Reconfigure.** The carry lives in `ResumeCursor`, inside `Configured`, which `configureAdapter` rebuilds. A reconfigure drops it.
+- **#52 and the carry on one kind: they cannot both apply.**
+  - vDS, portgroup and cluster check `kindPushable` (which `markIncomplete`s on `loadFailed`) *before* the `KindWalk` is built, and return. No walk, no `finish`, carry untouched.
+  - Hosts and VMs call `walk.finish()` only `if (pushable)`. A held cycle neither adds to nor consumes the carry, and the next pushable cycle resumes with the prior share intact.
+  - No other path marks a kind incomplete inside a walk except the budget (`cycleOver` and `afterRead`), and both set `ended`.
+- **The 95% budget.** 285 s against a measured worst build 95 cycle of 42.5 s. Worst case with a call in flight is 435 s (documented). Sound.
+
+### (4) Repeats on the object's push; the carried cleanup
+
+- `withRetiredRepeats` folds only keys not live (not pushed with a value and not skipped this cycle) with fewer than 4 pushes, so a repeat can never overwrite a real value.
+- `toPush` skips keys the object's push already carried (`foldedThisCycle`), so there are no extra calls.
+- Item 6: an empty read-back changes nothing (`RetiredKeyRepeats.java:81`).
+- The deferred cleanup runs first in the next cycle, before the walk, and is budget-checked per batch (`ComplianceAdapter.java:1859-1880`).
+- **The noted window, judged harmless (N2-r4).**
+  - The deferred plan is last visit's. It can set a lingering 0 or 1 to -1 only for a key outside that benchmark which the object already has.
+  - After a version change to a new benchmark, the new benchmark's keys normally do not exist yet, and "never create a key" holds. The window needs an object that moves back to a benchmark it had before, between its visit and the deferred cleanup.
+  - Even then, only one -1 sample is written before the next visit pushes the real value. The cleanup's repeat rides the object's own push, and the visit's push marks the key live. One non-failing sample cannot cancel an alert that needs 3.
+
+### Other items
+
+- **(1)** The hung-host skip is narrowed to `QueryOptions` (`getAdvancedSettings`) and esxcli. The per-control vim25 skip was removed, so vCenter-answered property reads behave as in build 95. Correct.
+- **(2)** The second cut pushes only `has_unreadable` = 1 and the "cut by cycle budget twice" reason props (`ComplianceDecisions.java:394-406`): no score, no counters, no per-control keys. Last values stay. Correct.
+- **(5)** `dropsMustBeConsecutive` is present and passes.
+- **(7)** MOID order uses `nullsLast(naturalOrder)` (string order, so `host-10` sorts before `host-9`). It is consistent across cycles, which is what the cursor needs.
+- **(8)** The CHANGELOG records the interrupt behaviour.
+
+### Findings
+
+#### NIT
+
+- **N1-r4** `ResumeCursor.sorted` (item 7) changes the order in which `scoreSum` is accumulated, so `Rollup|<K>|score_sum` and `avg_score` can differ from build 95 in the last digits for the same per-object scores.
+  - A 300-object shuffle test gave 18 distinct sums over 2000 orders, around 1e-11 apart.
+  - Integer counts and `pass_rate` are exact.
+  - Build 95 itself depended on the ContainerView listing order, and no bundled content binds `avg_score`.
+  - Say so in the CHANGELOG, or accept it.
+- **N2-r4** `runDeferredCleanup`: the one-sample window above. Optional guard: skip a deferred entry whose object was already re-queued this cycle.
+- **N3-r4** A budget refusal during the version read sends the object down the version-unreadable path, which does not go through `afterRead`. It is pushed with version-unreadable markers and counted in bucket "unknown" (also inside a carried share) rather than being dropped. That is never a score, but the reason reads "version unreadable" rather than "cut by cycle budget".
+
+### Registry check (round 4)
+
+- **DEF-023:** unchanged. Propose closing it on the 105,000-row fixture (orchestrator's call).
+- **DEF-025: open; code half met.** Repeats ride the object's push, capped at 4 (`repeatsEveryCycle`, `repeatsWhenEveryCycleEndsEarly`). Devel evidence (an open alert on a retired control cancels within three cycles) is still owed.
+- **DEF-026: open; code half met.** Still owed: the devel check (an unreachable or throttled vCenter ends inside the budget, marks incomplete, and raises the alert). Propose closure after it.
+
+**Registration candidate:** none.
+
+### If shipped as-is (round 4)
+
+At measured cycle lengths (under 45 s against a 285 s budget) nothing changes from build 95 except that retired-control alerts clear. A vCenter that ever overruns finishes its pass over the next cycles, and then pushes complete totals with the "not collected" alert cleared, instead of holding the totals back.
