@@ -492,3 +492,61 @@ The carried share counts each object exactly once per pass. It cannot combine wi
 ### If shipped as-is (round 4)
 
 At measured cycle lengths (under 45 s against a 285 s budget) nothing changes from build 95 except that retired-control alerts clear. A vCenter that ever overruns finishes its pass over the next cycles, and then pushes complete totals with the "not collected" alert cleared, instead of holding the totals back.
+
+## Round 5 (2026-10-16, branch at `0c61f66`)
+
+- **Scope:** 1 commit on `1976619` (round 4 nits).
+- **Pak:** `dist/vcfcf_sdk_compliance.0.0.0.96.pak`, sha256 `d3d97068...61daa`, matching the coordinator's.
+
+### Verdict: APPROVE (0 BLOCKING, 0 WARNING, 0 NIT)
+
+N1-r4, N2-r4 and N3-r4 are closed. The per-kind cleanup touches only objects that some cycle actually visited and pushed. It makes the same number of read-back requests as before, and the Skip push and the zero cleanup see the same per-cycle state.
+
+### Independent verification
+
+| Check | Result |
+|---|---|
+| `ci/run_java_tests.sh` on a clean `git archive 0c61f66` tree (JDK 17.0.20.1) | Exit 0. 26 Java tests (all "all assertions passed", including the new `versionReadCutIsACut` and `carriedEntrySupersededByVisit`) and 10 Python checks OK. **Confirmed.** |
+| `validate-sdk` | OK. **Confirmed.** |
+| `build-sdk` | Built. Every unpacked file matches the author's pak. **Confirmed.** |
+| `pak-compare` vs 0.0.0.95 | PASS, 0 / 0 / 0. **Confirmed.** |
+| `generate_compliance_alerts.py --check` | Up to date. |
+| Scoring | The evaluation path since main is still only the 7-line removal. `ComplianceRollup` and `ComplianceDecisions` are untouched this round. **Confirmed.** |
+| Em-dashes in added lines | None. |
+
+### cleanKind, the four questions
+
+- **Can it retire a key for an object the walk has not reached this pass?** No.
+  - Cleanup entries are created only by `afterPush`, so only for objects pushed in this cycle or an earlier one. `cleanKind` (`ComplianceAdapter.java:1924`) takes this cycle's entries of the kind plus carried entries of the kind, and drops any carried entry whose object was queued again this cycle (`carriedSuperseded`).
+  - `runCarriedForStartKind` (`:1905`) runs only the resumed kind's carried entries. Those come from the early-ended cycle's walk of that kind, so they are objects before the cursor, which this cycle does not visit again.
+  - Edge: if the cursor's object left inventory, the walk restarts from the top. Those carried entries then run one walk before their objects are revisited, against a plan one cycle old. Harm needs a benchmark change in that same cycle, and the cost is at most one -1 sample, which cannot cancel an alert. Not a finding.
+- **Can a kind held back by #52 run its cleanup against a stale read-back?** No.
+  - The read-back is a fresh Suite API read of latest values by resource id. It does not depend on the kind's resource list.
+  - A held kind pushes nothing, so it has no fresh entries. Its carried entries are for objects not revisited, so their plan is still the latest known one.
+  - A failed read skips the batch (logged, `cleanupSkipped`), and the retirement is retried at the object's next visit.
+- **Cost: is the read-back now once per kind rather than once per cycle?** The request count is unchanged.
+  - The old `cleanStaleControls` already grouped entries by kind and batched within each kind (`1976619`, line 1797), so it already made at least one request per kind. Per-kind invocation adds no requests.
+  - `bundledForCleanup` now runs up to 6 times per cycle, but `BenchmarkLoader.loadAll` returns its cache (`BenchmarkLoader.java:129-132`).
+- **Do the build 76 zero cleanup and the build 92 Skip push see the same per-cycle state?** Yes.
+  - The Skip ids still go out in the object's own push, and `afterPush` adds them to the entry's live set.
+  - `cleanBatch` still uses `cycleOverrides.skipped`. The overrides are refreshed at cycle start (`:1037`), before the stitcher load (`:1045`) and before both `runCarriedForStartKind` (`:1081`) and every `cleanKind`.
+  - Retired-key folds for a kind's objects happen during that kind's walk, so they precede that kind's cleanup exactly as they preceded the old end-of-cycle cleanup.
+  - The one ordering change: `retiredRepeats.retain` now runs after the cleanups rather than between them. It only trims objects not seen, so the result is the same.
+
+### Prior nits
+
+- **N1-r4: closed.** The CHANGELOG notes that `score_sum` and `avg_score` can differ in the last digits.
+- **N2-r4: closed, structurally** (above).
+- **N3-r4: closed.** On all four version-unreadable paths (`:2162`, `:2508`, `:2657`, `:2908`), `afterRead` runs first. A refusal is a cut (dropped, or markers only on the second cut). A genuine unreadable version returns `CONTINUE` and takes the build 95 path unchanged. Covered by `versionReadCutIsACut`.
+
+### Registry check (round 5)
+
+- **DEF-023:** unchanged. Propose closing it on the 105,000-row fixture (orchestrator's call).
+- **DEF-025: open; code half met.** Devel evidence is still owed.
+- **DEF-026: open; code half met.** The devel check is still owed. Propose closure after it.
+
+**Registration candidate:** none.
+
+### If shipped as-is (round 5)
+
+Same as round 4. Normal cycles match build 95, retired-control alerts clear, and a vCenter that overruns finishes its pass over the following cycles. The cleanup now runs right after each kind and never acts on an object later in the walk than the current position.

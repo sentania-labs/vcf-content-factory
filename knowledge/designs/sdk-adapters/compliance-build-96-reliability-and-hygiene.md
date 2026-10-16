@@ -4,7 +4,7 @@
 - **Slug:** compliance-build-96-reliability-and-hygiene
 - **Adapter repo:** `content/sdk-adapters/compliance/` (branch from `origin/main`)
 - **Date:** 2026-10-16
-- **Status:** in progress
+- **Status:** PR #57 open on compliance (head 0c61f66), reviewer APPROVE at round 5, peer reviewed; Codex round pending
 
 ## Initial prompt (Scott, verbatim, 2026-10-16)
 
