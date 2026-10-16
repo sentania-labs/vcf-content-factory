@@ -4,7 +4,7 @@
 - **Slug:** template-build-2-review-findings
 - **Adapter repo:** `content/sdk-adapters/template/` (branch from `origin/main`)
 - **Date:** 2026-10-16
-- **Status:** in progress
+- **Status:** code and docs PR merged to template main (df34aea, PR #21, 2026-10-16), not tagged; CI PR (items 10 and 11) in peer review
 
 ## Initial prompt (Scott, verbatim, 2026-10-16)
 
