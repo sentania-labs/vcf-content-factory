@@ -38,7 +38,9 @@ and, on #52 and its neighbours:
    fixture test on `fetchResources` with a stubbed client (HTTP error,
    timeout, empty page with totalCount > 0, 11 pages), which also covers
    DEF-023's open test; restore the interrupt flag in the catch at
-   ComplianceStitcher.java:339; refresh the field comment at :89-92.
+   ComplianceStitcher.java:339 so a Stop Collecting during a Suite API read
+   ends the cycle at the next stop check (build 95 carried on); refresh the
+   field comment at :89-92.
    Close #52 with the recon evidence and this fix.
 2. **#41** push -1 for every skipped control on every cycle while the Skip
    is in force (same path as normal controls), so the symptom sees cancel
@@ -52,8 +54,8 @@ and, on #52 and its neighbours:
    its own: WARN, count in CycleStats, mark HOST incomplete, return an
    empty map so VMs fall back to vCenter-version selection, continue with
    the other kinds.
-5. **#16** per-cycle time budget (default 80 percent of the collection
-   interval, read from the instance setting if the SDK exposes it,
+5. **#16** per-cycle time budget (95 percent of the collection interval
+   after peer review; 80 was the first cut, read from the instance setting if the SDK exposes it,
    otherwise a constant) checked in the host, VM, DVS and cluster loops;
    a consecutive-timeout breaker (default 5) that ends the cycle; both end
    the cycle cleanly with incomplete = 1 and the affected kinds held back;
