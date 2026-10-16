@@ -4,7 +4,7 @@
 - **Slug:** synology-build-32-correctness-and-hygiene
 - **Adapter repo:** `content/sdk-adapters/synology/` (branch from `origin/main`)
 - **Date:** 2026-10-16
-- **Status:** merged to synology main (9c58c4a, PR #40, Codex +1, 2026-10-16), not tagged; 13 issues closed, #33 and #26 closed as fixed in build 31; devel_9_1 proof running
+- **Status:** merged to synology main (9c58c4a, PR #40, Codex +1, 2026-10-16), not tagged; 13 issues closed, #33 and #26 closed as fixed in build 31; devel_9_1 proof done (investigations/2026-10-16-synology-32-devel-9-1-proof.md): no regression, memory x1024 and network total row match DSM exactly, volume free and SSD remain_life now populated; load averages still DSM-scaled by 100 (follow-up issue), 9.1 menu path reading unresolved, NFS-off and datastore paging not exercised
 
 ## Initial prompt (Scott, verbatim, 2026-10-16)
 
