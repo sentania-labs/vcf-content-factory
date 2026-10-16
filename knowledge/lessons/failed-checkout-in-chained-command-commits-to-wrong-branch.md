@@ -30,3 +30,14 @@ worktree to be released.
 A pushed commit on the wrong branch cannot be removed without a force-push,
 which needs Scott's verbatim go (RULE-008). A revert pair is the only
 self-service recovery, and it leaves noise in a PR that was not involved.
+
+## Addendum (2026-10-16): a checkout in a clone an agent is reviewing is also a hazard
+
+Merging template PR #21 meant `git checkout main` in the template clone
+while the peer reviewer was still reading `ci/release-hardening` in that
+same clone. The reviewer noticed the working tree change mid-review and
+fell back to commit objects, so nothing was lost, but a less careful agent
+would have reviewed main. Rule: while any agent holds a clone (author,
+reviewer, peer reviewer), the orchestrator does not change that clone's
+branch. Merge from the GitHub side (`gh pr merge`) and fast-forward the
+local main only after the agents on that clone have reported.
