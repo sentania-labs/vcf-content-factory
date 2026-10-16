@@ -1270,7 +1270,7 @@ reused. Field lines are `- **Field:** value` (parsed by
   2xx body without `resourceList`, was taken as complete, so the objects
   past the page silently never received compliance data
 - **Severity:** tracked
-- **Status:** open
+- **Status:** closed
 - **Affects:** compliance
 - **First-seen:** every build through 87 (single `pageSize=10000` fetch in
   `ComplianceStitcher`); found 2026-10-12
@@ -1290,6 +1290,12 @@ reused. Field lines are `- **Field:** value` (parsed by
   2026-10-13 log read found no page-count line and lists under one page, so a
   log line or a test fixture over 10,000 objects is still owed (build 94
   candidate).
+- **Closed:** 2026-10-16, build 96. `Build96StitcherTest.elevenPages` walks a
+  105,000-row fake Suite API (11 page reads, every row indexed, last-page row
+  matches); the empty-page-short-of-total case is held back with one read
+  and no retry loop. Devel_9_1 proof on build 96 (investigations/
+  2026-10-16-compliance-96-devel-9-1-proof.md) shows incomplete 0 and the
+  not-collected alert firing and clearing on a failed cycle.
 
 ### DEF-024
 
@@ -1353,6 +1359,12 @@ reused. Field lines are `- **Field:** value` (parsed by
 - **Close condition:** fix landed with a test asserting the -1 push repeats
   on later cycles for a retired key; devel evidence that an open alert on a
   retired control cancels within three cycles of a version change.
+- **Progress:** fix landed in build 96 (compliance 982557d, PR #57):
+  `RetiredKeyRepeats` pushes -1 up to four times, counted only when the
+  maxSamples=5 read-back confirms the sample landed, with tests
+  (`Build96RetiredKeyTest`). Devel evidence still owed: the 2026-10-16
+  devel_9_1 proof found no retired control on any object, so the cancel path
+  was not exercised. Stays open on that half of the close condition.
 - **Related:** adapter issue #41, DEF-022.
 
 ### DEF-026
@@ -1380,4 +1392,13 @@ reused. Field lines are `- **Field:** value` (parsed by
   tests; a devel check with an unreachable or throttled vCenter shows the
   cycle ends within the budget, marks the kind incomplete and raises the
   not-collected alert.
+- **Progress:** fix landed in build 96 (compliance 982557d, PR #57):
+  `CycleBudget` at 95 percent of the interval (clamped 60 s to 24 h), breaker
+  after 5 timeouts, VAMI and post-relogin retry inside the budget, resume
+  cursor across cycles, with tests. Devel_9_1 proof 2026-10-16: budget line
+  "time budget 285 s" logged per account; a wrong-password cycle ended in 4 to
+  6 s with `Rollup|incomplete` 1 and the not-collected alert active, clearing
+  within two cycles of the credential swap back. The throttled or unreachable
+  vCenter case (a cycle actually cut by the budget) was not exercised, so the
+  entry stays open on that half of the close condition.
 - **Related:** adapter issues #16, #18, #17.
