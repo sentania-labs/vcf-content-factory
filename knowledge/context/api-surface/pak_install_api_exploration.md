@@ -512,6 +512,28 @@ Admin UI > Software Updates > Solutions grid > (context menu, if
 present). The framework can install its own pak; removing it is the
 operator's responsibility.
 
+## Post-install verification: presence is not an install (issue #202)
+
+`isPakInstalling=false` means the install task ended, not that it
+succeeded, and on an upgrade the adapter kind is already registered
+with `isInstalled=true` by the prior build. Observed on devel
+(9.0.2), 2026-10-13, installing compliance build 90 over 89: the pak
+manager's `apply_adapter` step failed ("Failed to install solution",
+describe rejected), the distributed task ended in ERROR after about
+37 s, `/suite-api/api/solutions` still reported `0.0.0.89`, and the
+`getIntegrations` entry for the adapter kind was still present and
+installed. The only field that distinguishes success from that
+failure without new endpoints is the entry's `version`.
+
+`vcfcf_managementpacks.installer._verify_adapter_registered()`
+therefore requires the matched `installedMPs[]` entry's `version` to
+equal the uploaded pak's manifest `version` (falling back to the
+upload reply's `solutionVersion`), re-reading `getIntegrations` for up
+to `VERSION_SETTLE_TIMEOUT` seconds before aborting. Trailing `.0`
+components are ignored in the comparison. Reading the pak repository
+`.results` file or the distributed task status would give the failure
+reason directly; neither is wired in yet.
+
 ## Unsupportability caveat
 
 All `/admin/*` and `/casa/*` endpoints documented here are

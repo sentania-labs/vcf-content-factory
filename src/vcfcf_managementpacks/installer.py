@@ -635,57 +635,146 @@ class _UISession:
 # Post-install adapter registration verification
 # ---------------------------------------------------------------------------
 
+#: How long the version check keeps re-reading getIntegrations after
+#: isPakInstalling flips False, in case the installed version lags the task
+#: end by a poll or two.  A failed apply never converges, so this only delays
+#: the loud failure; it never turns a failure into a pass.
+VERSION_SETTLE_TIMEOUT = 30
+
+
+def _normalize_version(v: Any) -> str:
+    """Normalize a pak version for comparison.
+
+    Strips whitespace and trailing ``.0`` components so ``1.0.0.90`` and
+    ``1.0.0.90.0`` compare equal; any non-numeric version is compared as the
+    stripped string.
+    """
+    s = str(v or "").strip()
+    parts = s.split(".")
+    if s and all(p.isdigit() for p in parts):
+        nums = [str(int(p)) for p in parts]
+        while len(nums) > 1 and nums[-1] == "0":
+            nums.pop()
+        return ".".join(nums)
+    return s
+
+
+def _expected_pak_version(manifest: Dict[str, str], server_version: str) -> str:
+    """Return the version the install must land: manifest first, upload reply second."""
+    for candidate in (manifest.get("version", ""), server_version):
+        c = str(candidate or "").strip()
+        if c and c != "(unknown)":
+            return c
+    return ""
+
+
 def _verify_adapter_registered(
     ui: "_UISession",
     manifest: Dict[str, str],
     server_name: str,
     server_version: str,
+    settle_timeout: int = VERSION_SETTLE_TIMEOUT,
+    settle_interval: int = POLL_INTERVAL,
 ) -> None:
-    """Verify that the adapter kind is registered after isPakInstalling=False.
+    """Verify that the pak just uploaded is the one installed after isPakInstalling=False.
 
     The silent-fail pattern (Synology Gap 2): VCF Ops accepts the pak upload,
-    triggers install, and flips isPakInstalling=False in ~35s — but without
+    triggers install, and flips isPakInstalling=False in ~35s, but without
     valid adapters.zip directory entries the adapter kind is never extracted
     or registered.  isPakInstalling=False alone is not sufficient to confirm
     a successful install.
 
-    This function calls getIntegrations and checks that:
+    The upgrade silent-fail pattern (issue #202): on an upgrade the adapter
+    kind is already registered with isInstalled=true by the PRIOR build, so
+    presence alone proves nothing.  Compliance build 90 over 89 on devel
+    (2026-10-13): the pak manager's apply_adapter step failed ("Failed to
+    install solution", describe rejected), the distributed task ended in
+    ERROR, the controller kept 0.0.0.89, and this check used to print
+    "OK: Install completed and verified ... 0.0.0.90".
+
+    This function calls getIntegrations (POST /ui/solution.action
+    mainAction=getIntegrations; installedMPs[] entries carry pakId, name,
+    version, isInstalled, adapterKind) and checks that:
       1. The expected adapterKind (from manifest adapter_kinds[0]) appears in
          installedMPs[] with isInstalled=true.
-      2. If manifest does not declare adapter_kinds, fall back to matching by
-         pak name and emit WARN instead of hard-fail.
+      2. The matched entry's ``version`` equals the version of the pak just
+         uploaded (manifest ``version``, falling back to the upload reply's
+         solutionVersion).  A mismatch is re-read for up to
+         *settle_timeout* seconds, then aborts.
+      3. If manifest does not declare adapter_kinds, fall back to matching by
+         pak name and emit WARN instead of hard-fail; a name match whose
+         version differs still aborts.
 
-    On success: prints "OK: Install completed" and returns.
-    On verification failure: calls _abort() with the silent-fail diagnosis.
-    On getIntegrations call failure: emits WARN and returns (defensive —
+    On success: prints "OK: Install completed and verified" and returns.
+    On verification failure: calls _abort() with the diagnosis.
+    On getIntegrations call failure: emits WARN and returns (defensive:
       network failure should not mask a potentially successful install).
     """
     # Extract expected adapterKind from manifest adapter_kinds (first entry).
     # _parse_manifest_txt stores the list as a comma-joined string.
     raw_ak_field = manifest.get("adapter_kinds", "").strip()
     expected_ak = raw_ak_field.split(",")[0].strip() if raw_ak_field else ""
+    expected_version = _expected_pak_version(manifest, server_version)
+
+    def _find(installed: list) -> Optional[Dict[str, Any]]:
+        if expected_ak:
+            for entry in installed:
+                # getIntegrations returns adapterKind (camelCase) on VCF Ops 9.0.2
+                ak_val = str(entry.get("adapterKind", "")).strip().lower()
+                if ak_val == expected_ak.lower():
+                    return entry
+            return None
+        want = server_name.strip().lower()
+        for entry in installed:
+            if (str(entry.get("name", "")).strip().lower() == want
+                    or str(entry.get("pakId", "")).strip().lower() == want):
+                return entry
+        return None
+
+    def _version_matches(entry: Dict[str, Any]) -> bool:
+        return _normalize_version(entry.get("version")) == _normalize_version(expected_version)
 
     try:
         installed = ui.get_integrations()
     except Exception as e:
         _warn(
             f"Post-install verification: getIntegrations call failed ({e}). "
-            f"Cannot confirm adapter registration — check Admin UI > "
+            f"Cannot confirm adapter registration; check Admin UI > "
             f"Software Updates > Solutions manually."
         )
         _info(f"OK: Install completed (unverified): {server_name} {server_version}")
         return
 
-    if expected_ak:
-        # Look for the expected adapterKind with isInstalled=true
-        matched = None
-        for entry in installed:
-            # getIntegrations returns adapterKind (camelCase) on VCF Ops 9.0.2
-            ak_val = str(entry.get("adapterKind", "")).strip().lower()
-            if ak_val == expected_ak.lower():
-                matched = entry
+    matched = _find(installed)
+
+    # Give the installed version a short window to catch up with the task end.
+    if matched is not None and expected_version and not _version_matches(matched):
+        deadline = time.time() + settle_timeout
+        while time.time() < deadline:
+            time.sleep(settle_interval)
+            try:
+                installed = ui.get_integrations()
+            except Exception as e:
+                _warn(f"getIntegrations re-read failed (will retry): {e}")
+                continue
+            matched = _find(installed)
+            if matched is None or _version_matches(matched):
                 break
 
+    def _abort_version_mismatch(entry: Dict[str, Any], label: str) -> None:
+        _abort(
+            f"Install task completed (isPakInstalling=False) but {label} is "
+            f"installed at version {str(entry.get('version', '')).strip()!r}, "
+            f"not the uploaded pak's version {expected_version!r} "
+            f"(re-read for {settle_timeout}s). The pak manager most likely "
+            f"failed to apply the adapter (apply_adapter 'Failed to install "
+            f"solution') and the controller kept the prior build. Check the "
+            f"pak repository .results file and the install task in Admin UI > "
+            f"Software Updates > Solutions; for a rejected describe run "
+            f"validate-sdk on the adapter project (issue #202)."
+        )
+
+    if expected_ak:
         if matched is None:
             _abort(
                 f"Install task completed (isPakInstalling=False) but adapter kind "
@@ -695,7 +784,7 @@ def _verify_adapter_registered(
                 f"Root cause: inspect the pak's adapters.zip directory entries "
                 f"and manifest.txt adapter_kinds declaration. "
                 f"The adapters.zip must contain explicit directory entries for "
-                f"'<adapter_dir>/' (e.g. '{expected_ak}_adapter3/') — Python's "
+                f"'<adapter_dir>/' (e.g. '{expected_ak}_adapter3/'); Python's "
                 f"zipfile does not emit these automatically when writing file members."
             )
 
@@ -707,24 +796,36 @@ def _verify_adapter_registered(
                 f"Check Admin UI > Software Updates > Solutions."
             )
 
+        if not expected_version:
+            _warn(
+                "Post-install verification: neither manifest.txt nor the upload "
+                "reply carried a version; cannot confirm the installed build "
+                "is the one just uploaded."
+            )
+            _info(
+                f"OK: Install completed (version unverified): {server_name} "
+                f"(adapterKind={expected_ak!r} isInstalled=true)"
+            )
+            return
+
+        if not _version_matches(matched):
+            _abort_version_mismatch(matched, f"adapter kind '{expected_ak}'")
+
         # Success
         _info(
-            f"OK: Install completed and verified: {server_name} {server_version} "
-            f"(adapterKind={expected_ak!r} isInstalled=true)"
+            f"OK: Install completed and verified: {server_name} {expected_version} "
+            f"(adapterKind={expected_ak!r} isInstalled=true "
+            f"version={str(matched.get('version', '')).strip()!r})"
         )
     else:
-        # No adapter_kinds in manifest — fall back to name match with WARN
+        # No adapter_kinds in manifest: fall back to name match with WARN
         _warn(
             "Post-install verification: manifest does not declare adapter_kinds. "
-            "Cannot verify adapterKind registration — matching by pak name only."
+            "Cannot verify adapterKind registration; matching by pak name only."
         )
-        matched_names = [
-            e.get("name", e.get("pakId", ""))
-            for e in installed
-            if str(e.get("name", "")).strip().lower() == server_name.strip().lower()
-            or str(e.get("pakId", "")).strip().lower() == server_name.strip().lower()
-        ]
-        if matched_names:
+        if matched is not None:
+            if expected_version and not _version_matches(matched):
+                _abort_version_mismatch(matched, f"pak '{server_name}'")
             _info(
                 f"OK: Install completed (name-only verification): "
                 f"{server_name} {server_version}"
@@ -732,7 +833,7 @@ def _verify_adapter_registered(
         else:
             _warn(
                 f"Post-install: pak name '{server_name}' not found in "
-                f"getIntegrations — install may have silently failed. "
+                f"getIntegrations; install may have silently failed. "
                 f"Check Admin UI > Software Updates > Solutions."
             )
 
@@ -763,6 +864,8 @@ def install_pak(
       4:   _UISession.upload_pak()  (/ui/admin/services/solution/upload)
       5:   _UISession.trigger_install()  (/ui/solution.action mainAction=install)
       6:   Poll _UISession.get_installed_statuses() until completed
+      6a:  _verify_adapter_registered(): adapter kind present, isInstalled=true,
+           and installed version == the uploaded pak's version (issue #202)
       7:   _UISession.logout()
 
     Credentials resolve order: CLI flags > VCFOPS_USER/VCFOPS_PASSWORD env vars >
@@ -876,7 +979,8 @@ def install_pak(
 
                 if not installing:
                     _verify_adapter_registered(
-                        ui, manifest, server_name, server_version
+                        ui, manifest, server_name, server_version,
+                        settle_interval=poll_interval,
                     )
                     return
 
