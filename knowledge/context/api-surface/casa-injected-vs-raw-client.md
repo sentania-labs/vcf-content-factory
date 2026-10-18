@@ -64,7 +64,42 @@ class, used both ways.
   `localhost:8443`, no `:443`, no CaSA `/casa/*` path, no node-role
   branch.
 - FIPS branch → `useClusterTruststore` (set by reflection). Non-FIPS →
-  `verify("false")`, `ignoreHostName(true)`. **This is server-side
+  `verify("false")`, `ignoreHostName(true)`.
+  Full FIPS branch detail (re-read 2026-10-18 for issue #215, `javap -p -c`
+  on `SuiteAPIClient.getClientConfigBuilder` and
+  `com.vmware.tvs.vrealize.adapter.core.configuration.Constants`):
+  - Switch: `Constants.FIPS_MODE_ENABLED =
+    Boolean.valueOf(System.getenv("IS_FIPS"))`. The BouncyCastle
+    `approved_only` JVM property is not read.
+  - FIPS builder: `verify("true")`, `ignoreHostName(true)`,
+    `allowClientToCommunicateWithOlderServers(true)`, then
+    `Client$ClientConfig$Builder.useClusterTruststore(boolean)` invoked by
+    reflection with `true`. The hostname is ignored in both modes.
+  - `SuiteAPIClient` passes no truststore path or password; the
+    `useClusterTruststore` implementation is in `ops-api-client` (not in
+    any jar the factory carries). The inputs `Constants` exposes for it:
+    `SSL_DIRECTORY_PATH = (System.getProperty("VCOPS_DATA_VCOPS") or
+    "/data/vcops")/user/conf/ssl` (not `ALIVE_BASE`, which feeds only
+    `VCOPS_BASE_USER` and the maintenance-credential path),
+    `TRUSTSTORE_PATH = <ssl dir>/tcserver.truststore`,
+    `TRUSTSTORE_PASSWORD_PATH = <ssl dir>/storePass.properties`.
+    `getTrustStorePassword()` → `getStorePassProperty("ssltruststorePassword")`:
+    loads the file with commons-configuration `PropertiesConfiguration`,
+    returns the plain key when non-null, else
+    `com.integrien.alive.common.security.Crypt.getDefaultCrypt().decrypt(<key>.encrypted)`
+    (the SDK-jar `Crypt`, which delegates to `com.vmware.vcops.security.Crypt`).
+  - Store type: `Constants` does not name one. The platform's own loader of
+    the same file, `alive_common` `CaSACertificateStoreConfig` (which also
+    feeds gemfire's `cluster-ssl-truststore`), uses `BCFKS` when `IS_FIPS`
+    is true and `JKS` otherwise. MPB's older `VropsGlobalTrustStore`
+    (mpb_adapter 9.0.1) always uses `JKS`, `java.util.Properties`, and the
+    same plain-then-`.encrypted` key order. `CaSACertificateStoreConfig`'s
+    default directory is `${STORAGE}/vcops/user/conf/ssl/` (env/property
+    overrides `vcopsTruststore`, `vcopsStorePasswordFile`), a different
+    root spelling from `Constants`; which one the node resolves to is a
+    live-only check.
+  - Framework mirror: `VcfCfAdapter.openPlatformConnection` (FIPS branch,
+    issue #215) uses the `Constants` inputs, type `BCFKS`. **This is server-side
   trust only** (a truststore to verify the server) — there is **no
   client keystore, no client cert, no node/slice identity, no
   mutual-TLS client material** anywhere in the class.

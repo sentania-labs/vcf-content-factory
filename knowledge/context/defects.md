@@ -196,9 +196,13 @@ reused. Field lines are `- **Field:** value` (parsed by
   Datastore edges live via API, no clobber; pre-install baseline on
   the same box failed every cycle with `certificate_unknown(46)`.
   Reviews: `knowledge/context/reviews/framework/bc-mirror-transport-v1.md`/`-v2.md`.
-  Residual (FIPS cluster-truststore parity) documented as TODO in
-  `VcfCfAdapter.openPlatformConnection()`. The remaining CP-resident
-  gap is a distinct defect → DEF-006.
+  Residual (FIPS cluster-truststore parity): implemented 2026-10-18 for
+  issue #215. FIPS mode is now detected by `IS_FIPS` as the vendor does,
+  and the Suite API chain is verified against the cluster truststore
+  (`tcserver.truststore`, BCFKS) with the hostname ignored; an unreadable
+  truststore or password file fails the connection, never trust-all. A
+  live FIPS-node collect is still owed before #215 closes. The remaining
+  CP-resident gap is a distinct defect → DEF-006.
 - **Affects:** synology
 - **First-seen:** build 23 devel install (2026-07-01) — latent in every
   build ≥ 20 (first live install since the transport rework; builds

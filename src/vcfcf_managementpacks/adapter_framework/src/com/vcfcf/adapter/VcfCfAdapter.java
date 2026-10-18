@@ -186,14 +186,20 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
     private final AtomicBoolean abortRequested = new AtomicBoolean(false);
 
     /**
-     * Guards the FIPS-approved-only stopgap WARN in
+     * Guards the Suite API transport mode line in
      * {@link #openPlatformConnection(String)} so it logs once per adapter
      * instance rather than once per Suite API request (token acquire, each
      * datastore page, each stitch write). Same instance-scoped once-flag
-     * shape as {@link #abortRequested}. (DEF-005 FIPS branch — NIT fix,
-     * `knowledge/context/reviews/framework/bc-mirror-transport-v1.md`.)
+     * shape as {@link #abortRequested}.
      */
-    private final AtomicBoolean fipsGapWarnLogged = new AtomicBoolean(false);
+    private final AtomicBoolean transportModeLogged = new AtomicBoolean(false);
+
+    /**
+     * Guards the FIPS cluster-truststore failure WARN in
+     * {@link #openPlatformConnection(String)}: logged once per adapter
+     * instance, while every affected call still fails (issue #215).
+     */
+    private final AtomicBoolean fipsTruststoreFailureWarnLogged = new AtomicBoolean(false);
 
     /**
      * Adapter-instance-scoped logger obtained lazily from the platform's
@@ -985,8 +991,9 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
      * does not — so this context must only be used with {@code HttpClientBuilder}, never
      * raw with {@code java.net.http.HttpClient}. Also, do <strong>not</strong> use this
      * for the Suite API transport — use {@link #openPlatformConnection(String)}
-     * instead, which mirrors the vendor {@code SuiteAPIClient} non-FIPS transport
-     * (trust-all + ignore-hostname) rather than the platform's strict TOFU
+     * instead, which mirrors the vendor {@code SuiteAPIClient} transport
+     * (trust-all + ignore-hostname, or the cluster truststore + ignore-hostname
+     * in FIPS mode) rather than the platform's strict TOFU
      * {@code CustomTrustManager}, which cannot self-heal for framework adapters
      * (see the {@link #openPlatformConnection(String)} javadoc and
      * {@code knowledge/context/defects.md} DEF-005).
@@ -1032,8 +1039,9 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
      * Open an HTTPS connection to {@code url} for the Suite API transport,
      * wired to mirror the vendor {@code aria-ops-core}
      * {@code SuiteAPIClient.getClientConfigBuilder()} transport
-     * <strong>exactly</strong> — trust-all + ignore-hostname in non-FIPS
-     * mode, the same posture every shipping Broadcom pak uses for this hop.
+     * <strong>exactly</strong>: trust-all + ignore-hostname in non-FIPS mode,
+     * chain verified against the cluster truststore + ignore-hostname in FIPS
+     * mode. That is the posture every shipping Broadcom pak uses for this hop.
      *
      * <h3>Why this mirrors BC instead of using the platform TOFU trust manager</h3>
      * <p>An earlier implementation routed this hop through the platform's
@@ -1043,72 +1051,102 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
      * asynchronous {@code NonDisruptiveCertificateHandler} errors on every
      * attempt with {@code "Adapter certificate renewal url set is empty"}
      * because framework ({@code com.vcfcf}) adapters declare no
-     * certificate-renewal URL set — so trust never persists and every cycle
+     * certificate-renewal URL set, so trust never persists and every cycle
      * PKIX-fails ({@code knowledge/context/investigations/synology-b23-devel-pkix-2026-07-01.md},
      * {@code knowledge/context/defects.md} DEF-005). {@code knowledge/lessons/suite-api-stitch-ssl-tofu-vs-java-http.md}
      * predicted exactly this failure mode and is vindicated by that live run.
      *
      * <p>The vendor ground truth (bytecode-proven,
-     * {@code knowledge/context/api-surface/casa-injected-vs-raw-client.md} §3): the
-     * {@code SuiteAPIClient} used by every shipping Broadcom pak —
-     * Oracle/PureStorage/NetApp included — sets, verbatim, non-FIPS →
-     * {@code verify("false")} + {@code ignoreHostName(true)}; FIPS →
-     * {@code useClusterTruststore}. It is server-trust only: no client
-     * keystore, no CaSA, no cert-renewal registration. This method mirrors
-     * that behavior directly rather than inventing a new transport posture.
+     * {@code knowledge/context/api-surface/casa-injected-vs-raw-client.md} §3,
+     * {@code aria-ops-core-8.0.0.jar}): {@code getClientConfigBuilder} branches
+     * on {@code Constants.FIPS_MODE_ENABLED}, which is
+     * {@code Boolean.valueOf(System.getenv("IS_FIPS"))} and nothing else.
+     * Non-FIPS sets {@code verify("false")} + {@code ignoreHostName(true)};
+     * FIPS sets {@code verify("true")} + {@code ignoreHostName(true)} and
+     * invokes {@code useClusterTruststore(true)} by reflection. It is
+     * server-trust only: no client keystore, no CaSA, no cert-renewal
+     * registration. This method mirrors that behavior directly rather than
+     * inventing a new transport posture.
      *
-     * <h3>Non-FIPS branch (implemented)</h3>
-     * <p>{@link #insecureSslContext()} (trust-all {@code X509ExtendedTrustManager}) +
-     * an all-true {@link javax.net.ssl.HostnameVerifier} — unconditionally,
-     * for both loopback (ambient) and explicit/remote (collector) Suite API
-     * endpoints, exactly matching the vendor's unconditional
+     * <h3>Mode detection</h3>
+     * <p>{@link #isFipsModeEnabled()}: the {@code IS_FIPS} environment
+     * variable, parsed with {@code Boolean.valueOf} semantics, exactly as the
+     * vendor does. The BouncyCastle {@code org.bouncycastle.fips.approved_only}
+     * JVM property is <strong>not</strong> a mode signal: the platform keys
+     * both this transport choice and the truststore format
+     * ({@code CaSACertificateStoreConfig}: BCFKS when {@code IS_FIPS}, else
+     * JKS) on {@code IS_FIPS} alone, so a second trigger could select the FIPS
+     * branch on a node whose store the platform itself treats as JKS. Its
+     * value is still printed in the once-per-instance mode line as a
+     * diagnostic. The mode line names the signal that fired.
+     *
+     * <h3>Non-FIPS branch</h3>
+     * <p>{@link #applyBcMirrorTransport}: {@link #insecureSslContext()}
+     * (trust-all {@code X509ExtendedTrustManager}) + an all-true
+     * {@link javax.net.ssl.HostnameVerifier}, unconditionally, for both
+     * loopback (ambient) and explicit/remote (collector) Suite API endpoints,
+     * exactly matching the vendor's unconditional
      * {@code verify("false")}/{@code ignoreHostName(true)}. (Earlier revisions
-     * of this method peer-gated the hostname verifier — relaxed only for a
-     * resolved-loopback peer, strict otherwise. That peer-gating was this
-     * framework's own invention, not present in the vendor client, and is
-     * removed here per the "mirror BC exactly" directive that closed
-     * DEF-005.)
+     * of this method peer-gated the hostname verifier, relaxed only for a
+     * resolved-loopback peer and strict otherwise. That peer-gating was this
+     * framework's own invention, not present in the vendor client, and was
+     * removed per the "mirror BC exactly" directive that closed DEF-005.)
      *
-     * <h3>FIPS branch — TODO, documented gap</h3>
-     * <p>The vendor's FIPS branch calls {@code useClusterTruststore(...)},
-     * gated by a reflective read of
-     * {@code com.vmware.tvs.vrealize.adapter.core.configuration.Constants
-     * .FIPS_MODE_ENABLED} — a field that lives in {@code aria-ops-core}, the
-     * dependency this framework deliberately does not pull in at compile or
-     * run time (see the "Layer 1 only" note on this class's javadoc). Without
-     * that class this framework cannot detect FIPS mode the same way the
-     * vendor does, and even if it could, it has no documented source for the
-     * cluster truststore file the vendor branch loads. Inventing a substitute
-     * detection/truststore scheme was explicitly out of scope for the DEF-005
-     * fix ("mirror the BC behavior don't invent new ways of doing things").
+     * <h3>FIPS branch (issue #215)</h3>
+     * <p>{@link #applyClusterTruststoreTransport}: an {@link javax.net.ssl.SSLContext}
+     * whose trust manager is built from the cluster truststore, plus an
+     * all-true {@link javax.net.ssl.HostnameVerifier}. So the server chain is
+     * verified and the hostname is still ignored, the vendor's
+     * {@code verify("true")} + {@code ignoreHostName(true)}. The
+     * {@code useClusterTruststore} implementation itself lives in the
+     * {@code ops-api-client} library on the collector classpath, which this
+     * framework does not carry, so the inputs are the vendor's own
+     * {@code Constants} (aria-ops-core is not a dependency; see the "Layer 1
+     * only" note on this class's javadoc, the same file reads are
+     * reimplemented here):
+     * <ul>
+     *   <li>SSL directory: system property {@code VCOPS_DATA_VCOPS} (default
+     *       {@code /data/vcops}) resolved with {@code user/conf/ssl}
+     *       ({@code Constants.SSL_DIRECTORY_PATH}, {@link #clusterSslDirectory()}).</li>
+     *   <li>Truststore: {@code tcserver.truststore} in that directory
+     *       ({@code Constants.TRUSTSTORE_PATH}), loaded as {@code BCFKS},
+     *       the type the platform's own FIPS-aware loader of the same file
+     *       ({@code alive_common CaSACertificateStoreConfig}) uses when
+     *       {@code IS_FIPS} is true.</li>
+     *   <li>Password: {@code storePass.properties} in that directory
+     *       ({@code Constants.TRUSTSTORE_PASSWORD_PATH}), key
+     *       {@code ssltruststorePassword}; when that key is absent, the
+     *       {@code ssltruststorePassword.encrypted} value decrypted with
+     *       {@code Crypt.getDefaultCrypt().decrypt(...)}
+     *       ({@code Constants.getStorePassProperty}).</li>
+     * </ul>
+     * The context is rebuilt on every call (this method runs per Suite API
+     * request), so a rotated truststore is picked up and a repaired file
+     * recovers without a collector restart.
      *
-     * <p>As a best-effort, non-invented signal, {@link #isFipsApprovedOnly()}
-     * reads the same JVM launch flag
-     * ({@code -Dorg.bouncycastle.fips.approved_only=true}) this framework's
-     * own {@code AmbientCredential} decrypt path already keys off of
-     * (9.1+; {@code knowledge/context/tier2_architecture.md} "FIPS constraint"). When
-     * that flag is set, this method logs a WARN identifying the gap and then
-     * falls through to the same non-FIPS trust-all mirror above — a
-     * documented stopgap, not a claim of FIPS parity. This is still strictly
-     * better than the strict-TOFU path DEF-005 replaces (that path has no
-     * FIPS carve-out either and PKIX-fails on every mode). Re-open DEF-005's
-     * FIPS half if/when a cluster-truststore source becomes reachable from
-     * this framework's position.
+     * <p><strong>Failure mode.</strong> If the truststore or password file
+     * cannot be read, the password cannot be resolved or decrypted, or the
+     * store cannot be loaded, this method throws an {@link java.io.IOException}
+     * naming the path, and logs one WARN per adapter instance. It never falls
+     * back to trust-all: that silent downgrade is what issue #215 removed. The
+     * Suite API call fails, which the stitch client already logs and swallows
+     * without throwing into the collect cycle.
      *
      * <p>This is the public equivalent of the package-private
-     * {@code AdapterBase.getConnection(url, getVerifier())} — which callers in other
+     * {@code AdapterBase.getConnection(url, getVerifier())}, which callers in other
      * packages cannot reach.
      *
      * <p>For target-system connections (vCenter, NAS appliances, etc.) use
-     * {@link com.vcfcf.adapter.http.HttpClientBuilder#platformSsl(VcfCfAdapter)} instead —
-     * this method is the Suite API hop only; target-system TLS is unaffected.
+     * {@link com.vcfcf.adapter.http.HttpClientBuilder#platformSsl(VcfCfAdapter)} instead.
+     * This method is the Suite API hop only; target-system TLS is unaffected.
      *
      * @param url the full HTTPS URL to open (must use the {@code https} scheme;
      *            a non-https URL is rejected with an {@link java.io.IOException})
      * @return an {@link javax.net.ssl.HttpsURLConnection} configured with the
-     *         BC-mirror trust-all + ignore-hostname transport
-     * @throws java.io.IOException if the URL scheme is not https, or if the connection
-     *         cannot be opened
+     *         vendor-mirror transport for the detected mode
+     * @throws java.io.IOException if the URL scheme is not https, if the connection
+     *         cannot be opened, or (FIPS mode) if the cluster truststore cannot be
+     *         loaded
      */
     public java.net.URLConnection openPlatformConnection(String url)
             throws java.io.IOException {
@@ -1118,45 +1156,69 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
             throw new java.io.IOException(
                     "VcfCfAdapter.openPlatformConnection: expected an https URL but got "
                     + u.getProtocol() + " for " + url
-                    + " — only the https Suite API endpoint is supported");
+                    + " (only the https Suite API endpoint is supported)");
         }
         javax.net.ssl.HttpsURLConnection https = (javax.net.ssl.HttpsURLConnection) conn;
-        if (isFipsApprovedOnly()) {
-            // TODO(DEF-005 FIPS branch): see javadoc above — no cluster-truststore
-            // source is reachable from this framework's position without adding an
-            // aria-ops-core dependency this project deliberately avoids. Falls
-            // through to the non-FIPS mirror below as a documented stopgap.
-            //
-            // This method is called on every Suite API request (token acquire, each
-            // datastore page, each stitch write) — gate the WARN to once per adapter
-            // instance so FIPS deployments don't get an identical WARN spammed on
-            // every cycle forever.
-            if (fipsGapWarnLogged.compareAndSet(false, true)) {
-                logWarn("VcfCfAdapter.openPlatformConnection: FIPS-approved-only mode detected "
-                        + "but the vendor's useClusterTruststore mirror is not implemented "
-                        + "(see TODO in source, DEF-005 FIPS branch) — falling through to the "
-                        + "non-FIPS trust-all/ignore-hostname mirror as a documented stopgap. "
-                        + "(Logged once per adapter instance.)");
-            }
+        boolean fips = isFipsModeEnabled();
+        java.nio.file.Path sslDir = clusterSslDirectory();
+        // Called per Suite API request: log the mode once per adapter instance.
+        if (transportModeLogged.compareAndSet(false, true)) {
+            logInfo(describeTransportMode(fips, sslDir,
+                    System.getProperty("org.bouncycastle.fips.approved_only")));
         }
-        applyBcMirrorTransport(https);
+        if (!fips) {
+            applyBcMirrorTransport(https);
+            return https;
+        }
+        try {
+            applyClusterTruststoreTransport(https, sslDir, FIPS_TRUSTSTORE_TYPE,
+                    VcfCfAdapter::decryptWithPlatformCrypt);
+        } catch (java.io.IOException e) {
+            if (fipsTruststoreFailureWarnLogged.compareAndSet(false, true)) {
+                logWarn("VcfCfAdapter.openPlatformConnection: IS_FIPS=true but the cluster "
+                        + "truststore could not be loaded, so the Suite API connection is "
+                        + "refused instead of falling back to trust-all (issue #215). Cause: "
+                        + e.getMessage() + " (Logged once per adapter instance; every Suite "
+                        + "API call fails with this cause until the file is readable.)");
+            }
+            throw e;
+        }
         return https;
     }
+
+    /** Vendor FIPS switch: {@code Constants.FIPS_MODE_ENABLED} reads this environment variable. */
+    static final String FIPS_ENV_VAR = "IS_FIPS";
+    /** System property naming the VCOPS data root ({@code Constants.getVcopsDataVcopsDir}). */
+    static final String VCOPS_DATA_VCOPS_PROPERTY = "VCOPS_DATA_VCOPS";
+    /** Cluster truststore file name ({@code Constants.TRUSTSTORE_PATH}). */
+    static final String CLUSTER_TRUSTSTORE_FILE = "tcserver.truststore";
+    /** Store password file name ({@code Constants.TRUSTSTORE_PASSWORD_PATH}). */
+    static final String STORE_PASS_FILE = "storePass.properties";
+    /** Truststore password key ({@code Constants.getTrustStorePassword}). */
+    static final String TRUSTSTORE_PASSWORD_KEY = "ssltruststorePassword";
+    /** Suffix of the encrypted variant of a store password key ({@code Constants.getStorePassProperty}). */
+    static final String ENCRYPTED_KEY_SUFFIX = ".encrypted";
+    /**
+     * Truststore type in FIPS mode: {@code alive_common CaSACertificateStoreConfig}
+     * loads this same {@code tcserver.truststore} as {@code BCFKS} when
+     * {@code IS_FIPS} is true (and as {@code JKS} otherwise).
+     */
+    static final String FIPS_TRUSTSTORE_TYPE = "BCFKS";
 
     /**
      * Apply the BC-mirror non-FIPS Suite API transport (trust-all +
      * ignore-hostname) to an already-opened {@link javax.net.ssl.HttpsURLConnection}.
      *
      * <p>Extracted from {@link #openPlatformConnection(String)} as a
-     * standalone static helper — it touches no instance/platform state — so
+     * standalone static helper (it touches no instance/platform state), so
      * it is directly unit-testable without instantiating a live
      * {@link AdapterBase} subclass (which requires the collector's log4j-core
      * runtime classpath, unavailable outside the appliance).
      *
      * <p>Mirrors {@code aria-ops-core SuiteAPIClient.getClientConfigBuilder()}'s
-     * non-FIPS branch exactly: {@code verify("false")} + {@code ignoreHostName(true)}
-     * — trust-all, hostname-unchecked, unconditionally (no loopback/remote
-     * peer-gating — the vendor does not gate either; see DEF-005).
+     * non-FIPS branch exactly: {@code verify("false")} + {@code ignoreHostName(true)},
+     * trust-all and hostname-unchecked, unconditionally (no loopback/remote
+     * peer-gating; the vendor does not gate either; see DEF-005).
      *
      * @param https the connection to configure
      */
@@ -1166,24 +1228,209 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
     }
 
     /**
-     * Whether the collector JVM is running with BouncyCastle FIPS
-     * approved-only mode enabled.
+     * Apply the FIPS-mode Suite API transport (chain verified against the
+     * cluster truststore + ignore-hostname) to an already-opened
+     * {@link javax.net.ssl.HttpsURLConnection}. Mirrors the vendor FIPS
+     * branch: {@code verify("true")} + {@code ignoreHostName(true)} +
+     * {@code useClusterTruststore(true)}. Static and instance-free for the
+     * same unit-testability reason as {@link #applyBcMirrorTransport}.
      *
-     * <p>Reads the same JVM launch flag
-     * ({@code -Dorg.bouncycastle.fips.approved_only}) this framework's
-     * {@code AmbientCredential} decrypt path already keys off of (9.1+) — the
-     * only FIPS signal reachable from this framework's position (bare
-     * {@link AdapterBase}, no {@code aria-ops-core} dependency; see the
-     * "Layer 1 only" note in this class's javadoc). Not a novel detection
-     * scheme: it is the pre-existing, documented FIPS constraint this
-     * codebase already relies on elsewhere
-     * ({@code knowledge/context/tier2_architecture.md} "FIPS constraint").
+     * <p>The all-true {@link javax.net.ssl.HostnameVerifier} also keeps JSSE
+     * from setting an endpoint identification algorithm on the socket
+     * ({@code HttpsURLConnection} sets one only when the default verifier is
+     * in effect), so the PKIX trust manager validates the chain and does not
+     * match the name. Loopback ({@code localhost}) therefore works against a
+     * certificate issued to the node's FQDN.
      *
-     * @return {@code true} if {@code -Dorg.bouncycastle.fips.approved_only=true}
-     *         was passed to this JVM; {@code false} otherwise (including if unset)
+     * @param https     the connection to configure
+     * @param sslDir    directory holding {@code tcserver.truststore} and
+     *                  {@code storePass.properties} (production:
+     *                  {@link #clusterSslDirectory()})
+     * @param storeType {@link java.security.KeyStore} type of the truststore
+     *                  (production: {@link #FIPS_TRUSTSTORE_TYPE})
+     * @param decryptor decrypts the {@code ssltruststorePassword.encrypted}
+     *                  value (production: platform {@code Crypt})
+     * @throws java.io.IOException naming the offending path if the truststore
+     *         cannot be loaded; the connection is left unconfigured and must
+     *         not be used
      */
-    static boolean isFipsApprovedOnly() {
-        return Boolean.getBoolean("org.bouncycastle.fips.approved_only");
+    static void applyClusterTruststoreTransport(javax.net.ssl.HttpsURLConnection https,
+            java.nio.file.Path sslDir, String storeType,
+            java.util.function.UnaryOperator<String> decryptor) throws java.io.IOException {
+        javax.net.ssl.SSLContext ctx = clusterTruststoreSslContext(sslDir, storeType, decryptor);
+        https.setSSLSocketFactory(ctx.getSocketFactory());
+        https.setHostnameVerifier((h, s) -> true);
+    }
+
+    /**
+     * Build a TLS {@link javax.net.ssl.SSLContext} that trusts exactly the
+     * certificates in {@code <sslDir>/tcserver.truststore}, opened with the
+     * password from {@code <sslDir>/storePass.properties}.
+     *
+     * @throws java.io.IOException naming the path for every failure: missing or
+     *         unreadable truststore, missing or unreadable password file, no
+     *         password key, decrypt failure, unknown store type, or a store
+     *         that does not load with the resolved password
+     */
+    static javax.net.ssl.SSLContext clusterTruststoreSslContext(java.nio.file.Path sslDir,
+            String storeType, java.util.function.UnaryOperator<String> decryptor)
+            throws java.io.IOException {
+        java.nio.file.Path trustStorePath = sslDir.resolve(CLUSTER_TRUSTSTORE_FILE);
+        java.nio.file.Path passwordPath = sslDir.resolve(STORE_PASS_FILE);
+        if (!java.nio.file.Files.isRegularFile(trustStorePath)
+                || !java.nio.file.Files.isReadable(trustStorePath)) {
+            throw new java.io.IOException("cluster truststore " + trustStorePath
+                    + " is missing or not readable");
+        }
+        char[] password = readTrustStorePassword(passwordPath, decryptor).toCharArray();
+        java.security.KeyStore trustStore;
+        try {
+            trustStore = java.security.KeyStore.getInstance(storeType);
+        } catch (java.security.KeyStoreException e) {
+            throw new java.io.IOException("keystore type " + storeType
+                    + " is not available in this JVM, cannot open cluster truststore "
+                    + trustStorePath + ": " + e.getMessage(), e);
+        }
+        try (java.io.InputStream in = java.nio.file.Files.newInputStream(trustStorePath)) {
+            trustStore.load(in, password);
+        } catch (java.io.IOException | java.security.GeneralSecurityException e) {
+            throw new java.io.IOException("could not load cluster truststore "
+                    + trustStorePath + " as " + storeType + " with the password from "
+                    + passwordPath + ": " + e, e);
+        } finally {
+            java.util.Arrays.fill(password, '\0');
+        }
+        try {
+            javax.net.ssl.TrustManagerFactory tmf = javax.net.ssl.TrustManagerFactory
+                    .getInstance(javax.net.ssl.TrustManagerFactory.getDefaultAlgorithm());
+            tmf.init(trustStore);
+            javax.net.ssl.SSLContext ctx = javax.net.ssl.SSLContext.getInstance("TLS");
+            ctx.init(null, tmf.getTrustManagers(), null);
+            return ctx;
+        } catch (java.security.GeneralSecurityException e) {
+            throw new java.io.IOException("could not build a TLS context from cluster truststore "
+                    + trustStorePath + ": " + e, e);
+        }
+    }
+
+    /**
+     * Resolve the truststore password the way the vendor
+     * {@code Constants.getStorePassProperty("ssltruststorePassword")} does:
+     * the plain {@code ssltruststorePassword} value when present, otherwise
+     * {@code decryptor} applied to {@code ssltruststorePassword.encrypted}.
+     * Read with {@link java.util.Properties} (as MPB's
+     * {@code VropsGlobalTrustStore} reads the same file). Error messages name
+     * the file and key, never the value.
+     */
+    static String readTrustStorePassword(java.nio.file.Path passwordPath,
+            java.util.function.UnaryOperator<String> decryptor) throws java.io.IOException {
+        if (!java.nio.file.Files.isRegularFile(passwordPath)
+                || !java.nio.file.Files.isReadable(passwordPath)) {
+            throw new java.io.IOException("cluster truststore password file " + passwordPath
+                    + " is missing or not readable");
+        }
+        java.util.Properties props = new java.util.Properties();
+        try (java.io.InputStream in = java.nio.file.Files.newInputStream(passwordPath)) {
+            props.load(in);
+        } catch (java.io.IOException | IllegalArgumentException e) {
+            // IllegalArgumentException: malformed unicode escape in the file.
+            throw new java.io.IOException("could not read cluster truststore password file "
+                    + passwordPath + ": " + e.getClass().getName(), e);
+        }
+        String plain = props.getProperty(TRUSTSTORE_PASSWORD_KEY);
+        if (plain != null) {
+            return plain;
+        }
+        String encryptedKey = TRUSTSTORE_PASSWORD_KEY + ENCRYPTED_KEY_SUFFIX;
+        String encrypted = props.getProperty(encryptedKey);
+        if (encrypted == null) {
+            throw new java.io.IOException("cluster truststore password file " + passwordPath
+                    + " has neither " + TRUSTSTORE_PASSWORD_KEY + " nor " + encryptedKey);
+        }
+        String decrypted;
+        try {
+            decrypted = decryptor.apply(encrypted);
+        } catch (RuntimeException | LinkageError e) {
+            // Class name only: a decrypt exception message is not trusted to be
+            // free of secret material.
+            throw new java.io.IOException("could not decrypt " + encryptedKey + " from "
+                    + passwordPath + " with the platform Crypt: " + e.getClass().getName());
+        }
+        if (decrypted == null) {
+            throw new java.io.IOException("decrypting " + encryptedKey + " from "
+                    + passwordPath + " returned no value");
+        }
+        return decrypted;
+    }
+
+    /**
+     * Decrypt a store password with the SDK's
+     * {@code com.integrien.alive.common.security.Crypt}, the same call
+     * {@code Constants.getStorePassProperty} makes (and the same class
+     * {@code AmbientCredential} already uses). Only resolvable on a collector,
+     * where the delegate {@code com.vmware.vcops.security.Crypt} is on the
+     * classpath.
+     */
+    @SuppressWarnings("deprecation")
+    private static String decryptWithPlatformCrypt(String encrypted) {
+        return com.integrien.alive.common.security.Crypt.getDefaultCrypt().decrypt(encrypted);
+    }
+
+    /**
+     * Whether the collector runs in FIPS mode, detected exactly as the vendor
+     * {@code Constants.FIPS_MODE_ENABLED} does:
+     * {@code Boolean.valueOf(System.getenv("IS_FIPS"))}.
+     */
+    static boolean isFipsModeEnabled() {
+        return isFipsModeEnabled(System.getenv(FIPS_ENV_VAR));
+    }
+
+    /** {@link #isFipsModeEnabled()} on a given {@code IS_FIPS} value ({@code Boolean.valueOf} semantics). */
+    static boolean isFipsModeEnabled(String isFipsValue) {
+        return Boolean.parseBoolean(isFipsValue);
+    }
+
+    /**
+     * The cluster SSL directory, as {@code Constants.SSL_DIRECTORY_PATH}:
+     * {@code System.getProperty("VCOPS_DATA_VCOPS")}, or {@code /data/vcops}
+     * when unset, resolved with {@code user/conf/ssl}.
+     */
+    static java.nio.file.Path clusterSslDirectory() {
+        return clusterSslDirectory(System.getProperty(VCOPS_DATA_VCOPS_PROPERTY));
+    }
+
+    /** {@link #clusterSslDirectory()} on a given {@code VCOPS_DATA_VCOPS} value. */
+    static java.nio.file.Path clusterSslDirectory(String vcopsDataVcops) {
+        java.nio.file.Path root = vcopsDataVcops == null
+                ? java.nio.file.Paths.get("/data", "vcops")
+                : java.nio.file.Paths.get(vcopsDataVcops);
+        return root.resolve("user").resolve("conf").resolve("ssl");
+    }
+
+    /**
+     * The once-per-instance transport mode line: which signal fired and what
+     * transport follows from it.
+     *
+     * @param fips        result of {@link #isFipsModeEnabled()}
+     * @param sslDir      result of {@link #clusterSslDirectory()}
+     * @param approvedOnly raw {@code org.bouncycastle.fips.approved_only}
+     *                    property value, printed as a diagnostic only
+     */
+    static String describeTransportMode(boolean fips, java.nio.file.Path sslDir,
+            String approvedOnly) {
+        String diagnostic = " Diagnostic only, not a mode signal: "
+                + "org.bouncycastle.fips.approved_only=" + approvedOnly + ".";
+        if (fips) {
+            return "VcfCfAdapter.openPlatformConnection: Suite API transport mode=FIPS "
+                    + "(signal: environment variable IS_FIPS=true, the vendor SuiteAPIClient "
+                    + "switch). Chain verified against cluster truststore "
+                    + sslDir.resolve(CLUSTER_TRUSTSTORE_FILE) + " (type " + FIPS_TRUSTSTORE_TYPE
+                    + "), hostname ignored." + diagnostic + " (Logged once per adapter instance.)";
+        }
+        return "VcfCfAdapter.openPlatformConnection: Suite API transport mode=non-FIPS "
+                + "(signal: environment variable IS_FIPS is not true). Trust-all, hostname "
+                + "ignored, as the vendor SuiteAPIClient." + diagnostic
+                + " (Logged once per adapter instance.)";
     }
 
     /**

@@ -32,8 +32,9 @@ import java.util.regex.Pattern;
  * {@code aria-ops-core SuiteAPIClient.getClientConfigBuilder()} transport
  * <strong>exactly</strong> (see
  * {@code knowledge/context/api-surface/casa-injected-vs-raw-client.md} §3): trust-all +
- * ignore-hostname in non-FIPS mode (server-trust only — no client keystore, no
- * CaSA, no cert-renewal registration), with a documented-TODO FIPS branch (see
+ * ignore-hostname in non-FIPS mode, chain verified against the cluster
+ * truststore + ignore-hostname in FIPS mode (server-trust only: no client
+ * keystore, no CaSA, no cert-renewal registration; see
  * {@link VcfCfAdapter#openPlatformConnection(String)}). This replaced an
  * earlier attempt to route the loopback hop through the platform's strict TOFU
  * {@code CustomTrustManager} (via {@code getSocketFactory()}), which PKIX-fails
@@ -68,11 +69,11 @@ import java.util.regex.Pattern;
  *       {@code automationuser.properties} ({@code automationAdmin}), then
  *       {@code maintenanceuser.properties} only if both prior sources are
  *       absent/unreadable — see {@link AmbientCredential}; endpoint defaults
- *       to {@code https://localhost/suite-api/} (resolves to loopback →
- *       all-true hostname verifier).</li>
+ *       to {@code https://localhost/suite-api/}.</li>
  *   <li><strong>Explicit</strong> — adapter-config host/username/password;
- *       endpoint is {@code https://<host>/suite-api/} (resolves to non-loopback →
- *       JDK strict hostname verification). Use on remote collectors where
+ *       endpoint is {@code https://<host>/suite-api/}. Same transport as
+ *       ambient (no loopback/remote peer-gating since DEF-005; the hostname
+ *       is ignored in both modes). Use on remote collectors where
  *       neither ambient source may be present. The explicit URL must
  *       target the primary/analytics Suite API node — pointing at {@code localhost}
  *       on a collector yields HTTP 403 (suite-api not served on collectors).</li>
@@ -380,14 +381,15 @@ public final class SuiteApiStitchClient {
             // All calls go through openPlatformConnection (unified transport).
             // isLoopbackUrl is informational only (logged for operational
             // clarity) — since DEF-005 the transport no longer peer-gates:
-            // it mirrors the vendor aria-ops-core SuiteAPIClient non-FIPS
-            // posture (trust-all + ignore-hostname) for loopback and remote
+            // it mirrors the vendor aria-ops-core SuiteAPIClient posture
+            // (trust-all + ignore-hostname, or cluster truststore +
+            // ignore-hostname when IS_FIPS=true) for loopback and remote
             // Suite API endpoints alike, exactly as every shipping Broadcom
-            // pak does. See openPlatformConnection() for the FIPS branch note.
+            // pak does. openPlatformConnection() logs the mode it selected.
             boolean loopback = SuiteApiStitchClient.isLoopbackUrl(suiteApiBase);
             logger.info("SuiteApiStitchClient: transport=openPlatformConnection"
                     + (loopback ? " loopback" : " remote")
-                    + " (BC-mirror: trust-all + ignore-hostname, non-FIPS)"
+                    + " (BC-mirror; FIPS or non-FIPS mode logged by openPlatformConnection)"
                     + " mechanism=" + mechanism
                     + " principal=" + username);
 
@@ -995,8 +997,9 @@ public final class SuiteApiStitchClient {
      *
      * <p>Opens the connection through
      * {@link VcfCfAdapter#openPlatformConnection(String)}, which mirrors the
-     * vendor {@code SuiteAPIClient} non-FIPS transport (trust-all +
-     * ignore-hostname) on the underlying {@code HttpsURLConnection}. Used for
+     * vendor {@code SuiteAPIClient} transport (trust-all + ignore-hostname, or
+     * cluster truststore + ignore-hostname in FIPS mode) on the underlying
+     * {@code HttpsURLConnection}. Used for
      * all Suite API calls — both loopback (ambient) and explicit/remote
      * (collector) endpoints; per DEF-005 the transport no longer peer-gates
      * (see {@link VcfCfAdapter#openPlatformConnection(String)}).

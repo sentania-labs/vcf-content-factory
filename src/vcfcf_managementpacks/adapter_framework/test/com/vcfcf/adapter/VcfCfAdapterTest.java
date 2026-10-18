@@ -5,7 +5,8 @@ import java.util.List;
 
 /**
  * Lightweight unit tests for {@link VcfCfAdapter#applyBcMirrorTransport}
- * (the DEF-005 BC-mirror transport fix), {@link VcfCfAdapter#isFipsApprovedOnly()},
+ * (the DEF-005 BC-mirror transport fix), the FIPS-mode cluster-truststore
+ * transport ({@link VcfCfAdapter#applyClusterTruststoreTransport}, issue #215),
  * and {@link VcfCfAdapter#insecureSslContext()} (issue #82 hostname-verification
  * fix).
  *
@@ -19,8 +20,16 @@ import java.util.List;
  *       earlier peer-gating so the transport mirrors the vendor
  *       {@code SuiteAPIClient} exactly; DEF-005: "mirror the BC behavior,
  *       don't invent new ways").</li>
- *   <li>{@link VcfCfAdapter#isFipsApprovedOnly()} reflects the
- *       {@code org.bouncycastle.fips.approved_only} system property.</li>
+ *   <li>FIPS mode (issue #215): detection is {@code IS_FIPS} with
+ *       {@code Boolean.valueOf} semantics; the cluster SSL directory is
+ *       {@code VCOPS_DATA_VCOPS}/user/conf/ssl; a real TLS handshake through
+ *       {@code applyClusterTruststoreTransport} succeeds when the server
+ *       chain is in a temp {@code tcserver.truststore} (hostname mismatch
+ *       ignored) and fails when it is not; the plain and encrypted password
+ *       keys resolve as the vendor does; and every unreadable input (missing
+ *       truststore, missing or keyless {@code storePass.properties}, decrypt
+ *       failure, wrong password, BCFKS unavailable) fails loud naming the
+ *       path, with no trust-all fallback.</li>
  *   <li>{@link VcfCfAdapter#insecureSslContext()} (issue #82): a real TLS
  *       handshake, over {@code java.net.http.HttpClient}, against a server
  *       certificate whose name does not match the address dialed. Asserts the
@@ -54,47 +63,321 @@ public class VcfCfAdapterTest {
     private static int passed = 0;
 
     public static void main(String[] args) throws Exception {
-        testIsFipsApprovedOnlyDefaultFalse();
-        testIsFipsApprovedOnlyReflectsSystemProperty();
+        testIsFipsModeEnabledMirrorsBooleanValueOf();
+        testClusterSslDirectoryMirrorsVendorConstants();
+        testDescribeTransportModeNamesSignal();
         testApplyBcMirrorTransportLoopback();
         testApplyBcMirrorTransportRemoteAlsoTrustAllIgnoreHostname();
         testInsecureSslContextAcceptsHostnameMismatchOverHttpClient();
         testValidatingContextRejectsHostnameMismatchOverHttpClient();
+        testFipsTransportTrustsClusterTruststoreIgnoresHostname();
+        testFipsTransportRejectsCertNotInClusterTruststore();
+        testFipsTransportDecryptsEncryptedPassword();
+        testFipsTransportMissingTruststoreFailsLoud();
+        testFipsTransportMissingStorePassFailsLoud();
+        testFipsTransportNoPasswordKeyFailsLoud();
+        testFipsTransportDecryptFailureFailsLoud();
+        testFipsTransportWrongPasswordFailsLoud();
+        testFipsTransportBcfksUnavailableFailsLoud();
         report();
     }
 
     // -----------------------------------------------------------------------
-    // isFipsApprovedOnly
+    // FIPS mode detection and cluster SSL directory (issue #215)
     // -----------------------------------------------------------------------
 
-    private static void testIsFipsApprovedOnlyDefaultFalse() {
-        String prior = System.clearProperty("org.bouncycastle.fips.approved_only");
+    private static void testIsFipsModeEnabledMirrorsBooleanValueOf() {
+        // Vendor: Constants.FIPS_MODE_ENABLED = Boolean.valueOf(System.getenv("IS_FIPS")).
+        assertFalse("isFipsModeEnabled(null) is false (IS_FIPS unset)",
+                VcfCfAdapter.isFipsModeEnabled((String) null));
+        assertTrue("isFipsModeEnabled(\"true\") is true",
+                VcfCfAdapter.isFipsModeEnabled("true"));
+        assertTrue("isFipsModeEnabled(\"TRUE\") is true (case-insensitive like Boolean.valueOf)",
+                VcfCfAdapter.isFipsModeEnabled("TRUE"));
+        assertFalse("isFipsModeEnabled(\"false\") is false",
+                VcfCfAdapter.isFipsModeEnabled("false"));
+        assertFalse("isFipsModeEnabled(\"1\") is false (Boolean.valueOf semantics)",
+                VcfCfAdapter.isFipsModeEnabled("1"));
+        assertTrue("isFipsModeEnabled() agrees with the real IS_FIPS environment variable",
+                VcfCfAdapter.isFipsModeEnabled()
+                        == Boolean.valueOf(System.getenv("IS_FIPS")).booleanValue());
+    }
+
+    private static void testClusterSslDirectoryMirrorsVendorConstants() throws Exception {
+        assertTrue("clusterSslDirectory(null) defaults to /data/vcops/user/conf/ssl",
+                VcfCfAdapter.clusterSslDirectory((String) null)
+                        .equals(java.nio.file.Paths.get("/data/vcops/user/conf/ssl")));
+        assertTrue("clusterSslDirectory(root) resolves root/user/conf/ssl",
+                VcfCfAdapter.clusterSslDirectory("/srv/x")
+                        .equals(java.nio.file.Paths.get("/srv/x/user/conf/ssl")));
+        String prior = System.getProperty("VCOPS_DATA_VCOPS");
+        java.nio.file.Path root = java.nio.file.Files.createTempDirectory("vcfcf-vcops-data");
         try {
-            assertFalse("isFipsApprovedOnly() is false when the property is unset",
-                    VcfCfAdapter.isFipsApprovedOnly());
+            System.setProperty("VCOPS_DATA_VCOPS", root.toString());
+            assertTrue("clusterSslDirectory() reads the VCOPS_DATA_VCOPS system property",
+                    VcfCfAdapter.clusterSslDirectory()
+                            .equals(root.resolve("user").resolve("conf").resolve("ssl")));
         } finally {
-            if (prior != null) {
-                System.setProperty("org.bouncycastle.fips.approved_only", prior);
-            }
+            restoreProperty("VCOPS_DATA_VCOPS", prior);
+            deleteRecursivelyQuietly(root);
         }
     }
 
-    private static void testIsFipsApprovedOnlyReflectsSystemProperty() {
-        String prior = System.getProperty("org.bouncycastle.fips.approved_only");
-        try {
-            System.setProperty("org.bouncycastle.fips.approved_only", "true");
-            assertTrue("isFipsApprovedOnly() is true when the property is \"true\"",
-                    VcfCfAdapter.isFipsApprovedOnly());
+    /** U+2014, built from its code point so this source file carries no em-dash. */
+    private static final String EM_DASH = String.valueOf((char) 0x2014);
 
-            System.setProperty("org.bouncycastle.fips.approved_only", "false");
-            assertFalse("isFipsApprovedOnly() is false when the property is \"false\"",
-                    VcfCfAdapter.isFipsApprovedOnly());
-        } finally {
-            if (prior == null) {
-                System.clearProperty("org.bouncycastle.fips.approved_only");
-            } else {
-                System.setProperty("org.bouncycastle.fips.approved_only", prior);
+    private static void testDescribeTransportModeNamesSignal() {
+        java.nio.file.Path dir = java.nio.file.Paths.get("/data/vcops/user/conf/ssl");
+        String fips = VcfCfAdapter.describeTransportMode(true, dir, null);
+        assertTrue("FIPS mode line names the IS_FIPS=true signal and the truststore path",
+                fips.contains("mode=FIPS") && fips.contains("IS_FIPS=true")
+                        && fips.contains("/data/vcops/user/conf/ssl/tcserver.truststore")
+                        && fips.contains("BCFKS"));
+        String nonFips = VcfCfAdapter.describeTransportMode(false, dir, "true");
+        assertTrue("non-FIPS mode line names the signal and prints approved_only as a diagnostic",
+                nonFips.contains("mode=non-FIPS") && nonFips.contains("IS_FIPS is not true")
+                        && nonFips.contains("org.bouncycastle.fips.approved_only=true"));
+        assertFalse("mode lines carry no em-dash",
+                fips.contains(EM_DASH) || nonFips.contains(EM_DASH));
+    }
+
+    // -----------------------------------------------------------------------
+    // applyClusterTruststoreTransport: FIPS branch (issue #215)
+    //
+    // Real TLS handshake over HttpsURLConnection against a 127.0.0.1 server
+    // whose cert is issued to a mismatched name. The cluster truststore and
+    // storePass.properties live under a temp VCOPS_DATA_VCOPS root, located
+    // through clusterSslDirectory() exactly as production does. Store type is
+    // PKCS12 here: the stock JDK has no BCFKS provider (production passes
+    // BCFKS; testFipsTransportBcfksUnavailableFailsLoud covers that type).
+    // -----------------------------------------------------------------------
+
+    private static final String TEST_STORE_TYPE = "PKCS12";
+    private static final String TRUSTSTORE_PASSWORD = "cluster-pass";
+
+    private static void testFipsTransportTrustsClusterTruststoreIgnoresHostname()
+            throws Exception {
+        withFipsFixture((baseUrl, serverKs, otherKs, sslDir) -> {
+            writeTruststore(sslDir, serverKs);
+            writeStorePass(sslDir, "ssltruststorePassword=" + TRUSTSTORE_PASSWORD + "\n");
+            int status = fipsRequest(baseUrl, sslDir, s -> {
+                throw new AssertionError("decryptor must not run when the plain key is present");
+            });
+            assertTrue("FIPS transport: handshake succeeds when the server chain is in the "
+                    + "cluster truststore, despite the hostname mismatch (verify=true, "
+                    + "ignoreHostName=true)", status == 200);
+        });
+    }
+
+    private static void testFipsTransportRejectsCertNotInClusterTruststore() throws Exception {
+        withFipsFixture((baseUrl, serverKs, otherKs, sslDir) -> {
+            writeTruststore(sslDir, otherKs);
+            writeStorePass(sslDir, "ssltruststorePassword=" + TRUSTSTORE_PASSWORD + "\n");
+            try {
+                fipsRequest(baseUrl, sslDir, s -> s);
+                FAILURES.add("FIPS transport: handshake against a cert NOT in the cluster "
+                        + "truststore should have failed (this would mean trust-all)");
+            } catch (javax.net.ssl.SSLHandshakeException e) {
+                assertTrue("FIPS transport: cert not in the cluster truststore fails the "
+                        + "handshake (chain is verified, not trust-all)", true);
             }
+        });
+    }
+
+    private static void testFipsTransportDecryptsEncryptedPassword() throws Exception {
+        withFipsFixture((baseUrl, serverKs, otherKs, sslDir) -> {
+            writeTruststore(sslDir, serverKs);
+            writeStorePass(sslDir, "ssltruststorePassword.encrypted=ENC("
+                    + new StringBuilder(TRUSTSTORE_PASSWORD).reverse() + ")\n");
+            int status = fipsRequest(baseUrl, sslDir, enc -> {
+                // Stand-in for Crypt.decrypt: unwrap ENC(...) and reverse.
+                String inner = enc.substring(4, enc.length() - 1);
+                return new StringBuilder(inner).reverse().toString();
+            });
+            assertTrue("FIPS transport: ssltruststorePassword.encrypted is decrypted and "
+                    + "opens the truststore when the plain key is absent", status == 200);
+        });
+    }
+
+    private static void testFipsTransportMissingTruststoreFailsLoud() throws Exception {
+        withFipsFixture((baseUrl, serverKs, otherKs, sslDir) -> {
+            writeStorePass(sslDir, "ssltruststorePassword=" + TRUSTSTORE_PASSWORD + "\n");
+            assertFipsFailure(baseUrl, sslDir, TEST_STORE_TYPE, s -> s,
+                    "missing tcserver.truststore",
+                    sslDir.resolve("tcserver.truststore").toString());
+        });
+    }
+
+    private static void testFipsTransportMissingStorePassFailsLoud() throws Exception {
+        withFipsFixture((baseUrl, serverKs, otherKs, sslDir) -> {
+            writeTruststore(sslDir, serverKs);
+            assertFipsFailure(baseUrl, sslDir, TEST_STORE_TYPE, s -> s,
+                    "missing storePass.properties",
+                    sslDir.resolve("storePass.properties").toString());
+        });
+    }
+
+    private static void testFipsTransportNoPasswordKeyFailsLoud() throws Exception {
+        withFipsFixture((baseUrl, serverKs, otherKs, sslDir) -> {
+            writeTruststore(sslDir, serverKs);
+            writeStorePass(sslDir, "sslkeystorePassword=unrelated\n");
+            assertFipsFailure(baseUrl, sslDir, TEST_STORE_TYPE, s -> s,
+                    "storePass.properties without either truststore key",
+                    "ssltruststorePassword.encrypted");
+        });
+    }
+
+    private static void testFipsTransportDecryptFailureFailsLoud() throws Exception {
+        withFipsFixture((baseUrl, serverKs, otherKs, sslDir) -> {
+            writeTruststore(sslDir, serverKs);
+            writeStorePass(sslDir, "ssltruststorePassword.encrypted=opaque\n");
+            String reason = assertFipsFailure(baseUrl, sslDir, TEST_STORE_TYPE, s -> {
+                throw new IllegalStateException("secret-material-" + s);
+            }, "decrypt failure", sslDir.resolve("storePass.properties").toString());
+            assertFalse("decrypt failure message does not echo the exception message "
+                    + "(which may carry secret material)",
+                    reason != null && reason.contains("secret-material"));
+        });
+    }
+
+    private static void testFipsTransportWrongPasswordFailsLoud() throws Exception {
+        withFipsFixture((baseUrl, serverKs, otherKs, sslDir) -> {
+            writeTruststore(sslDir, serverKs);
+            writeStorePass(sslDir, "ssltruststorePassword=wrong\n");
+            assertFipsFailure(baseUrl, sslDir, TEST_STORE_TYPE, s -> s,
+                    "wrong truststore password",
+                    sslDir.resolve("tcserver.truststore").toString());
+        });
+    }
+
+    private static void testFipsTransportBcfksUnavailableFailsLoud() throws Exception {
+        // Production passes BCFKS. Off-appliance (no BC FIPS provider) it must
+        // fail loud with the type and path named, never fall back.
+        boolean bcfksAvailable;
+        try {
+            java.security.KeyStore.getInstance("BCFKS");
+            bcfksAvailable = true;
+        } catch (java.security.KeyStoreException e) {
+            bcfksAvailable = false;
+        }
+        if (bcfksAvailable) {
+            System.out.println("  SKIP: BCFKS-unavailable test (this JVM has a BCFKS provider)");
+            return;
+        }
+        withFipsFixture((baseUrl, serverKs, otherKs, sslDir) -> {
+            writeTruststore(sslDir, serverKs);
+            writeStorePass(sslDir, "ssltruststorePassword=" + TRUSTSTORE_PASSWORD + "\n");
+            String reason = assertFipsFailure(baseUrl, sslDir,
+                    VcfCfAdapter.FIPS_TRUSTSTORE_TYPE, s -> s,
+                    "BCFKS type unavailable", sslDir.resolve("tcserver.truststore").toString());
+            assertTrue("BCFKS-unavailable failure names the store type",
+                    reason != null && reason.contains("BCFKS"));
+        });
+    }
+
+    /** Issue a GET through the FIPS transport; returns the HTTP status. */
+    private static int fipsRequest(String baseUrl, java.nio.file.Path sslDir,
+            java.util.function.UnaryOperator<String> decryptor) throws Exception {
+        javax.net.ssl.HttpsURLConnection https =
+                (javax.net.ssl.HttpsURLConnection) new java.net.URL(baseUrl).openConnection();
+        VcfCfAdapter.applyClusterTruststoreTransport(https, sslDir, TEST_STORE_TYPE, decryptor);
+        https.setConnectTimeout(10_000);
+        https.setReadTimeout(10_000);
+        try {
+            return https.getResponseCode();
+        } finally {
+            https.disconnect();
+        }
+    }
+
+    /**
+     * Assert the FIPS transport throws an IOException whose message contains
+     * {@code mustContain}, and that the connection was left on the JDK
+     * defaults (no trust-all factory or all-true verifier installed).
+     * Returns the message.
+     */
+    private static String assertFipsFailure(String baseUrl, java.nio.file.Path sslDir,
+            String storeType, java.util.function.UnaryOperator<String> decryptor,
+            String label, String mustContain) throws Exception {
+        javax.net.ssl.HttpsURLConnection https =
+                (javax.net.ssl.HttpsURLConnection) new java.net.URL(baseUrl).openConnection();
+        javax.net.ssl.SSLSocketFactory defaultFactory = https.getSSLSocketFactory();
+        javax.net.ssl.HostnameVerifier defaultVerifier = https.getHostnameVerifier();
+        try {
+            VcfCfAdapter.applyClusterTruststoreTransport(https, sslDir, storeType, decryptor);
+            FAILURES.add("FIPS transport (" + label + "): expected an IOException, got none");
+            return null;
+        } catch (java.io.IOException e) {
+            String msg = String.valueOf(e.getMessage());
+            assertTrue("FIPS transport (" + label + "): fails loud naming " + mustContain
+                    + ". Actual: " + msg, msg.contains(mustContain));
+            assertTrue("FIPS transport (" + label + "): no trust-all fallback, the "
+                    + "connection keeps the JDK default socket factory and hostname verifier",
+                    https.getSSLSocketFactory() == defaultFactory
+                            && https.getHostnameVerifier() == defaultVerifier);
+            return msg;
+        }
+    }
+
+    @FunctionalInterface
+    private interface FipsFixtureTest {
+        void run(String baseUrl, java.security.KeyStore serverKs,
+                java.security.KeyStore otherKs, java.nio.file.Path sslDir) throws Exception;
+    }
+
+    /**
+     * Server on 127.0.0.1 with a cert for {@link #MISMATCHED_CERT_CN}, a second
+     * unrelated keypair, and an empty cluster SSL directory under a temp
+     * {@code VCOPS_DATA_VCOPS} root (resolved through
+     * {@link VcfCfAdapter#clusterSslDirectory()}). SKIPs without keytool.
+     */
+    private static void withFipsFixture(FipsFixtureTest test) throws Exception {
+        java.io.File keytoolFile = keytool();
+        if (keytoolFile == null) {
+            System.out.println("  SKIP: FIPS cluster-truststore test (no keytool in java.home)");
+            return;
+        }
+        java.nio.file.Path tmpDir = java.nio.file.Files.createTempDirectory("vcfcf-fips-test");
+        String prior = System.getProperty("VCOPS_DATA_VCOPS");
+        try {
+            java.security.KeyStore serverKs = generateKeyPair(keytoolFile,
+                    tmpDir.resolve("server.p12"), MISMATCHED_CERT_CN);
+            java.security.KeyStore otherKs = generateKeyPair(keytoolFile,
+                    tmpDir.resolve("other.p12"), "unrelated.example.com");
+            java.nio.file.Path vcopsData = tmpDir.resolve("vcops");
+            System.setProperty("VCOPS_DATA_VCOPS", vcopsData.toString());
+            java.nio.file.Path sslDir = VcfCfAdapter.clusterSslDirectory();
+            java.nio.file.Files.createDirectories(sslDir);
+            withHttpsServer(serverKs, baseUrl -> test.run(baseUrl, serverKs, otherKs, sslDir));
+        } finally {
+            restoreProperty("VCOPS_DATA_VCOPS", prior);
+            deleteRecursivelyQuietly(tmpDir);
+        }
+    }
+
+    /** Write {@code ks}'s certificate as the only trusted entry of tcserver.truststore. */
+    private static void writeTruststore(java.nio.file.Path sslDir, java.security.KeyStore ks)
+            throws Exception {
+        java.security.KeyStore ts = java.security.KeyStore.getInstance(TEST_STORE_TYPE);
+        ts.load(null, null);
+        ts.setCertificateEntry("cluster-ca", ks.getCertificate("vcfcf-test"));
+        try (java.io.OutputStream out = java.nio.file.Files.newOutputStream(
+                sslDir.resolve("tcserver.truststore"))) {
+            ts.store(out, TRUSTSTORE_PASSWORD.toCharArray());
+        }
+    }
+
+    private static void writeStorePass(java.nio.file.Path sslDir, String content)
+            throws Exception {
+        java.nio.file.Files.write(sslDir.resolve("storePass.properties"),
+                content.getBytes(java.nio.charset.StandardCharsets.ISO_8859_1));
+    }
+
+    private static void restoreProperty(String key, String prior) {
+        if (prior == null) {
+            System.clearProperty(key);
+        } else {
+            System.setProperty(key, prior);
         }
     }
 
@@ -263,82 +546,101 @@ public class VcfCfAdapterTest {
      * {@code AmbientCredentialTest} uses for the unavailable-{@code Crypt} case.
      */
     private static void withMismatchedCertServer(MismatchedCertServerTest test) throws Exception {
-        String javaHome = System.getProperty("java.home");
-        java.io.File keytoolFile = new java.io.File(javaHome,
-                "bin" + java.io.File.separator + "keytool");
-        if (!keytoolFile.isFile()) {
+        java.io.File keytoolFile = keytool();
+        if (keytoolFile == null) {
             System.out.println("  SKIP: hostname-mismatch TLS handshake test (keytool not found "
-                    + "at " + keytoolFile + " (this JDK image has no keytool)");
+                    + "under " + System.getProperty("java.home") + "; this JDK image has no keytool)");
             return;
         }
 
         java.nio.file.Path tmpDir = java.nio.file.Files.createTempDirectory("vcfcf-adapter-test-ssl");
         try {
-            java.nio.file.Path keystorePath = tmpDir.resolve("mismatched.p12");
-            Process p = new ProcessBuilder(
-                    keytoolFile.getPath(),
-                    "-genkeypair",
-                    "-alias", "vcfcf-test",
-                    "-keyalg", "RSA",
-                    "-keysize", "2048",
-                    "-validity", "1",
-                    "-storetype", "PKCS12",
-                    "-keystore", keystorePath.toString(),
-                    "-storepass", KEYSTORE_PASSWORD,
-                    "-keypass", KEYSTORE_PASSWORD,
-                    "-dname", "CN=" + MISMATCHED_CERT_CN,
-                    "-ext", "SAN=dns:" + MISMATCHED_CERT_CN)
-                    .redirectErrorStream(true)
-                    .start();
-            String keytoolOutput = new String(p.getInputStream().readAllBytes(),
-                    java.nio.charset.StandardCharsets.UTF_8);
-            boolean finished = p.waitFor(KEYTOOL_TIMEOUT.toSeconds(), java.util.concurrent.TimeUnit.SECONDS);
-            if (!finished) {
-                p.destroyForcibly();
-                throw new IllegalStateException("keytool -genkeypair did not finish within "
-                        + KEYTOOL_TIMEOUT + " (process killed): " + keytoolOutput);
-            }
-            int exit = p.exitValue();
-            if (exit != 0) {
-                throw new IllegalStateException("keytool -genkeypair failed (exit " + exit
-                        + "): " + keytoolOutput);
-            }
-
-            java.security.KeyStore ks = java.security.KeyStore.getInstance("PKCS12");
-            try (java.io.InputStream in = java.nio.file.Files.newInputStream(keystorePath)) {
-                ks.load(in, KEYSTORE_PASSWORD.toCharArray());
-            }
-
-            javax.net.ssl.KeyManagerFactory kmf = javax.net.ssl.KeyManagerFactory
-                    .getInstance("SunX509");
-            kmf.init(ks, KEYSTORE_PASSWORD.toCharArray());
-            javax.net.ssl.SSLContext serverCtx = javax.net.ssl.SSLContext.getInstance("TLS");
-            serverCtx.init(kmf.getKeyManagers(), null, null);
-
-            com.sun.net.httpserver.HttpsServer server = com.sun.net.httpserver.HttpsServer.create(
-                    new java.net.InetSocketAddress("127.0.0.1", 0), 0);
-            server.setHttpsConfigurator(new com.sun.net.httpserver.HttpsConfigurator(serverCtx));
-            server.createContext("/", ex -> {
-                byte[] body = "{\"ok\":true}".getBytes(java.nio.charset.StandardCharsets.UTF_8);
-                ex.sendResponseHeaders(200, body.length);
-                try (java.io.OutputStream os = ex.getResponseBody()) {
-                    os.write(body);
-                }
-            });
-            server.start();
-            try {
-                int port = server.getAddress().getPort();
-                String baseUrl = "https://127.0.0.1:" + port + "/";
-                // ks (a PrivateKeyEntry keystore) doubles as a trust store: JSSE's
-                // TrustManagerFactory accepts the certificate chain attached to a
-                // PrivateKeyEntry as a trusted cert, same as it would a plain
-                // TrustedCertificateEntry.
-                test.run(baseUrl, ks);
-            } finally {
-                server.stop(0);
-            }
+            java.security.KeyStore ks = generateKeyPair(keytoolFile,
+                    tmpDir.resolve("mismatched.p12"), MISMATCHED_CERT_CN);
+            // ks (a PrivateKeyEntry keystore) doubles as a trust store: JSSE's
+            // TrustManagerFactory accepts the certificate chain attached to a
+            // PrivateKeyEntry as a trusted cert, same as it would a plain
+            // TrustedCertificateEntry.
+            withHttpsServer(ks, baseUrl -> test.run(baseUrl, ks));
         } finally {
             deleteRecursivelyQuietly(tmpDir);
+        }
+    }
+
+    /** The running JDK's keytool, or {@code null} when this image has none. */
+    private static java.io.File keytool() {
+        java.io.File keytoolFile = new java.io.File(System.getProperty("java.home"),
+                "bin" + java.io.File.separator + "keytool");
+        return keytoolFile.isFile() ? keytoolFile : null;
+    }
+
+    /** Generate a fresh self-signed RSA keypair for {@code cn} (alias vcfcf-test) and load it. */
+    private static java.security.KeyStore generateKeyPair(java.io.File keytoolFile,
+            java.nio.file.Path keystorePath, String cn) throws Exception {
+        Process p = new ProcessBuilder(
+                keytoolFile.getPath(),
+                "-genkeypair",
+                "-alias", "vcfcf-test",
+                "-keyalg", "RSA",
+                "-keysize", "2048",
+                "-validity", "1",
+                "-storetype", "PKCS12",
+                "-keystore", keystorePath.toString(),
+                "-storepass", KEYSTORE_PASSWORD,
+                "-keypass", KEYSTORE_PASSWORD,
+                "-dname", "CN=" + cn,
+                "-ext", "SAN=dns:" + cn)
+                .redirectErrorStream(true)
+                .start();
+        String keytoolOutput = new String(p.getInputStream().readAllBytes(),
+                java.nio.charset.StandardCharsets.UTF_8);
+        boolean finished = p.waitFor(KEYTOOL_TIMEOUT.toSeconds(), java.util.concurrent.TimeUnit.SECONDS);
+        if (!finished) {
+            p.destroyForcibly();
+            throw new IllegalStateException("keytool -genkeypair did not finish within "
+                    + KEYTOOL_TIMEOUT + " (process killed): " + keytoolOutput);
+        }
+        int exit = p.exitValue();
+        if (exit != 0) {
+            throw new IllegalStateException("keytool -genkeypair failed (exit " + exit
+                    + "): " + keytoolOutput);
+        }
+        java.security.KeyStore ks = java.security.KeyStore.getInstance("PKCS12");
+        try (java.io.InputStream in = java.nio.file.Files.newInputStream(keystorePath)) {
+            ks.load(in, KEYSTORE_PASSWORD.toCharArray());
+        }
+        return ks;
+    }
+
+    @FunctionalInterface
+    private interface BaseUrlTest {
+        void run(String baseUrl) throws Exception;
+    }
+
+    /** Serve 200 {"ok":true} on 127.0.0.1 with {@code ks}'s key, run {@code test}, stop. */
+    private static void withHttpsServer(java.security.KeyStore ks, BaseUrlTest test)
+            throws Exception {
+        javax.net.ssl.KeyManagerFactory kmf = javax.net.ssl.KeyManagerFactory
+                .getInstance("SunX509");
+        kmf.init(ks, KEYSTORE_PASSWORD.toCharArray());
+        javax.net.ssl.SSLContext serverCtx = javax.net.ssl.SSLContext.getInstance("TLS");
+        serverCtx.init(kmf.getKeyManagers(), null, null);
+
+        com.sun.net.httpserver.HttpsServer server = com.sun.net.httpserver.HttpsServer.create(
+                new java.net.InetSocketAddress("127.0.0.1", 0), 0);
+        server.setHttpsConfigurator(new com.sun.net.httpserver.HttpsConfigurator(serverCtx));
+        server.createContext("/", ex -> {
+            byte[] body = "{\"ok\":true}".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            ex.sendResponseHeaders(200, body.length);
+            try (java.io.OutputStream os = ex.getResponseBody()) {
+                os.write(body);
+            }
+        });
+        server.start();
+        try {
+            test.run("https://127.0.0.1:" + server.getAddress().getPort() + "/");
+        } finally {
+            server.stop(0);
         }
     }
 
