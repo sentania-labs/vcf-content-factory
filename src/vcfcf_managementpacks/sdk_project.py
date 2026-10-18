@@ -213,14 +213,30 @@ def _derive_entry_class(adapter_kind: str) -> str:
         vcfcf_hello_world  → com.vcfcf.adapters.vcfcf_hello_world.HelloWorldAdapter
         synology_dsm       → com.vcfcf.adapters.synology_dsm.SynologyDsmAdapter
     """
-    # Strip leading vcfcf_ prefix for the class name stem if present
+    return f"com.vcfcf.adapters.{adapter_kind}.{adapter_class_name(adapter_kind)}"
+
+
+def adapter_class_name(adapter_kind: str) -> str:
+    """Simple Java class name for an adapter kind key: <CamelCase>Adapter.
+
+    The leading ``vcfcf_`` is dropped from the stem, except when the rest
+    starts with a digit: scaffold-sdk adds ``vcfcf_`` to a name like
+    "9Lives" precisely because an identifier cannot start with a digit, so
+    the class keeps it too ("vcfcf_9lives" -> "Vcfcf9livesAdapter") rather
+    than emitting "9livesAdapter", which javac rejects.
+
+    Examples:
+        vcfcf_hello_world  -> HelloWorldAdapter
+        synology_dsm       -> SynologyDsmAdapter
+        vcfcf_9lives       -> Vcfcf9livesAdapter
+    """
     stem = adapter_kind
-    if stem.startswith("vcfcf_"):
+    if stem.startswith("vcfcf_") and not stem[len("vcfcf_"):][:1].isdigit():
         stem = stem[len("vcfcf_"):]
 
     # CamelCase: split on underscore, capitalize each part
     camel = "".join(part.capitalize() for part in stem.split("_"))
-    return f"com.vcfcf.adapters.{adapter_kind}.{camel}Adapter"
+    return f"{camel}Adapter"
 
 
 def _require(raw: dict, key: str, expected_type: type, where: str):

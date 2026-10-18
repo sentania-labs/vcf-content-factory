@@ -75,7 +75,12 @@ except ImportError:
 
 from vcfcf_supermetrics import crossref as _crossref
 
-from .sdk_project import SdkProjectDef, SdkProjectError, load_sdk_project
+from .sdk_project import (
+    SdkProjectDef,
+    SdkProjectError,
+    adapter_class_name,
+    load_sdk_project,
+)
 
 # ---------------------------------------------------------------------------
 # Paths relative to this module
@@ -3639,11 +3644,11 @@ def scaffold_sdk_project(name: str, output_base: Path) -> Path:
     if project_dir.exists():
         raise SdkBuildError(f"Project directory already exists: {project_dir}")
 
-    # Derive class name stem
-    # removeprefix, not lstrip: lstrip("vcfcf_") strips any of the characters
-    # v/c/f/_ from the left, so "cert_demo" became "ErtDemo".
-    camel = "".join(part.capitalize() for part in slug.removeprefix("vcfcf_").split("_"))
-    class_name = f"{camel}Adapter"
+    # Same derivation load_sdk_project uses for the default entry_class, so
+    # the scaffolded file matches the class the loader expects. It removes
+    # the vcfcf_ prefix exactly once (not lstrip, which ate "cert_demo" into
+    # "ErtDemo") and keeps it when the rest starts with a digit (#186).
+    class_name = adapter_class_name(slug)
     package = f"com.vcfcf.adapters.{slug}"
     package_path = package.replace(".", "/")
 

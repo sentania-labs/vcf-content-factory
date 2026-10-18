@@ -90,3 +90,42 @@ def test_scaffold_class_name_keeps_leading_letters(tmp_path, capsys, name, expec
     capsys.readouterr()
     classes = [p.stem for p in (d / "src").rglob("*Adapter.java")]
     assert classes == [expected_class]
+
+
+# Issue #186: a name starting with a digit gets the vcfcf_ prefix on its
+# adapter kind (an identifier cannot start with a digit); the class name keeps
+# that prefix instead of stripping it back to "9livesAdapter", which javac
+# rejects.
+@pytest.mark.parametrize(
+    "name, expected_kind, expected_class",
+    [
+        ("9Lives", "vcfcf_9lives", "Vcfcf9livesAdapter"),
+        ("42 Monitor", "vcfcf_42_monitor", "Vcfcf42MonitorAdapter"),
+        ("vcfcf 9", "vcfcf_9", "Vcfcf9Adapter"),
+    ],
+)
+def test_scaffold_leading_digit_yields_valid_java_class(
+    tmp_path, capsys, name, expected_kind, expected_class
+):
+    from vcfcf_managementpacks.sdk_project import load_sdk_project
+
+    d = sdk_builder.scaffold_sdk_project(name, tmp_path)
+    capsys.readouterr()
+    assert d.name == expected_kind
+    classes = [p.stem for p in (d / "src").rglob("*Adapter.java")]
+    assert classes == [expected_class]
+    assert expected_class.isidentifier() and not expected_class[0].isdigit()
+    # The loader's default entry_class must name the class scaffold wrote.
+    project = load_sdk_project(d / "adapter.yaml")
+    assert project.entry_class == f"com.vcfcf.adapters.{expected_kind}.{expected_class}"
+
+
+@pytest.mark.parametrize("name", ["Cert Demo", "vcfcf cert", "Synology", "9Lives"])
+def test_scaffold_class_matches_loader_default_entry_class(tmp_path, capsys, name):
+    from vcfcf_managementpacks.sdk_project import load_sdk_project
+
+    d = sdk_builder.scaffold_sdk_project(name, tmp_path)
+    capsys.readouterr()
+    project = load_sdk_project(d / "adapter.yaml")
+    java = next((d / "src").rglob("*Adapter.java"))
+    assert project.entry_class.rsplit(".", 1)[1] == java.stem
