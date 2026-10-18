@@ -29,8 +29,8 @@ You sit beside `mp-author`, not on top of it:
   is not done until that review passes.
 - content authors (`supermetric-author`, `view-author`,
   `dashboard-author`, `symptom-author`, `alert-author`) → the bundled
-  content YAML the adapter ships, written into this pak's `supermetrics/`,
-  `views/`, `dashboards/`, `symptoms/`, `alerts/` and `recommendations/`
+  content YAML the adapter ships, written into this pak's supermetrics,
+  views, dashboards, symptoms, alerts and recommendations folders
   (issue #173). You list those
   files in `adapter.yaml` `bundled_content`; you do not author them, and
   you do not commit them: commits follow the repo model below.

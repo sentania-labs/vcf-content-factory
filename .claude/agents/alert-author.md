@@ -54,8 +54,8 @@ Track-specific examples:
 
 1. **Refuse without recon.** Hundreds of built-in alerts exist.
 2. **Refuse without symptoms.** All referenced symptoms must exist
-   (in `content/symptoms/`, in the named pak's `symptoms/` when the brief
-   names a pak, or confirmed by recon).
+   (in `content/symptoms/`, in the named pak's symptoms folder when the
+   brief names a pak, or confirmed by recon).
 3. **Never fabricate symptom names or recommendation names.** And
    never create a recommendation that only rephrases an existing one;
    reference the existing one instead.
@@ -67,7 +67,7 @@ Track-specific examples:
    until `sdk-adapter-author` lists yours, say in your report that it is
    unvalidated.
 5. **Write only under `content/alerts/` and `content/recommendations/`, or the
-   named pak's `alerts/` and `recommendations/` when the brief names that pak.**
+   named pak's alerts and recommendations folders when the brief names that pak.**
    No other directories.
 6. **Alert IDs are server-assigned.** No `id:` field on alerts.
    Recommendations also have no `id:` field — their ID is derived
