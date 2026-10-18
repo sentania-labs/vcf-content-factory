@@ -42,8 +42,8 @@ fixture hits every placeholder path, and it misses one.
 
 Grepped `src/`, `tests/`, `scripts/`, `.github/`, `.claude/` and every
 managed-pak clone's `.github/` and `scripts/` for the old header ("Do not
-edit" variants), the old title shapes (`— Reference`, `— Documentation`,
-`Inventory Tree —`, `Overview —`, `Installing & Configuring`), the Scaffold
+edit" variants), the old title shapes (`(U+2014) Reference`, `(U+2014) Documentation`,
+`Inventory Tree (U+2014)`, `Overview (U+2014)`, `Installing & Configuring`), the Scaffold
 callout, the Cross-MP intro, and the bare placeholder. Nothing pins or parses
 any of them. The only "Do not edit" hit outside the two files is unrelated
 prose in `.claude/agents/supermetric-author.md`.
@@ -114,7 +114,7 @@ None.
 `docs/overview.md` and `docs/installing.md` are scaffold-once files. The
 generator never overwrites them, so this fix does not reach existing paks'
 copies. UniFi's committed `docs/overview.md` still opens with
-`# Overview — VCF Content Factory UniFi Controller` and has em-dashes in its
+`# Overview (U+2014) VCF Content Factory UniFi Controller` and has em-dashes in its
 hand-written prose, and `installing.md` has some too. The "one regeneration
 pass per pak" that #225 calls for will clean REFERENCE, README, the
 inventory tree and the diagrams. It will not clean these two files, which
