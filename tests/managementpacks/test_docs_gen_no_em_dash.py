@@ -9,7 +9,8 @@ blank-cell placeholders must be clean at the source.
 The fixture is built to exercise every placeholder path: a kind with no
 identifiers and no parents, an identifier with no default, a metric with no
 unit, a property (monitored column placeholder), and a cross-MP edge with no
-description.
+description. A second fixture has no type="7" adapter-instance kind, which
+is the only path to the installing.md "No adapter instance kind found" row.
 """
 from __future__ import annotations
 
@@ -73,11 +74,30 @@ cross_mp_edges:
 """
 
 
-def _make_project(tmp_path: Path) -> Path:
+_NO_INSTANCE_DESCRIBE_XML = """<?xml version="1.0" encoding="UTF-8"?>
+<AdapterKind xmlns="http://schemas.vmware.com/vcops/schema"
+             key="test_adapter" nameKey="1" version="1">
+    <ResourceKinds>
+        <ResourceKind key="TestSwitch" nameKey="4" type="1">
+            <ResourceIdentifier key="switch_id" nameKey="5" required="true" identType="1"/>
+        </ResourceKind>
+    </ResourceKinds>
+    <LicenseConfig enabled="false"/>
+</AdapterKind>
+"""
+
+_NO_INSTANCE_ROW = "| - | - | - | - | No adapter instance kind found |"
+
+
+def _make_project(
+    tmp_path: Path,
+    describe_xml: str = _DESCRIBE_XML,
+    adapter_yaml: str = _ADAPTER_YAML,
+) -> Path:
     project_dir = tmp_path / "adapter"
     project_dir.mkdir()
-    (project_dir / "adapter.yaml").write_text(_ADAPTER_YAML, encoding="utf-8")
-    (project_dir / "describe.xml").write_text(_DESCRIBE_XML, encoding="utf-8")
+    (project_dir / "adapter.yaml").write_text(adapter_yaml, encoding="utf-8")
+    (project_dir / "describe.xml").write_text(describe_xml, encoding="utf-8")
     (project_dir / "resources").mkdir()
     (project_dir / "resources" / "resources.properties").write_text(
         _PROPERTIES, encoding="utf-8"
@@ -141,3 +161,16 @@ def test_build_docs_have_no_em_dash_first_and_later_runs(tmp_path: Path) -> None
     second = _generated_files(project_dir)
     assert "REFERENCE.generated.md" in second
     _assert_no_em_dash(second)
+
+
+def test_docset_without_adapter_instance_kind_has_no_em_dash(tmp_path: Path) -> None:
+    """No type="7" kind: installing.md emits its "no adapter instance" row,
+    whose cells are placeholders. The row must be emitted and clean."""
+    adapter_yaml = _ADAPTER_YAML.split("cross_mp_edges:")[0]
+    project_dir = _make_project(
+        tmp_path, describe_xml=_NO_INSTANCE_DESCRIBE_XML, adapter_yaml=adapter_yaml
+    )
+    generate_docset(project_dir)
+    files = _generated_files(project_dir)
+    assert _NO_INSTANCE_ROW in files["docs/installing.md"].splitlines()
+    _assert_no_em_dash(files)
