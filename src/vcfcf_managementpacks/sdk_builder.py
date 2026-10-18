@@ -939,7 +939,14 @@ def _load_bundled_content(
             # alongside it; that is authored as the sibling view's UUID, which
             # the loader's raw-UUID passthrough accepts.  An unmatched bare
             # name is a typo here exactly as it is in the repo-wide corpus.
-            d.validate(_views_by_name, enforce_framework_prefix=False)
+            # Each dashboard was already validated once in the load loop
+            # above, which emitted its advisory warnings (name length #198,
+            # widget minimum version #199); silence them here so they print
+            # once per dashboard.  Errors still raise.
+            import warnings as _warnings
+            with _warnings.catch_warnings():
+                _warnings.simplefilter("ignore")
+                d.validate(_views_by_name, enforce_framework_prefix=False)
         except Exception as exc:
             src = getattr(d, "source_path", None) or d.name
             raise SdkBuildError(

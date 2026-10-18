@@ -92,6 +92,20 @@ def test_cli_validate_reports_warning_and_exits_zero(tmp_path):
     assert "53 characters" in r.stderr and "issue #198" in r.stderr
 
 
+def test_sdk_bundled_dashboard_warns_once(tmp_path):
+    """Reviewer N2: the SDK path validates each bundled dashboard twice; the
+    advisory warning must still print once."""
+    import vcfcf_managementpacks.sdk_builder as sb
+
+    dash_dir = _write_dash(tmp_path, _name(53))
+    raw = {"bundled_content": {"dashboards": [str(dash_dir.relative_to(tmp_path) / "d.yaml")]}}
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        result = sb._load_bundled_content(raw, tmp_path, tmp_path)
+    assert len(result[1]) == 1
+    assert len(_name_warnings(caught)) == 1
+
+
 def test_validate_quiet_at_limit(tmp_path):
     dash_dir = _write_dash(tmp_path, _name(50))
     with warnings.catch_warnings(record=True) as caught:
