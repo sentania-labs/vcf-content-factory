@@ -8,7 +8,7 @@ tools: Read, Grep, Glob, Edit, Write, Bash
 You are `alert-author`. You write alert definition YAML under
 `content/alerts/` and recommendation YAML under `content/recommendations/`,
 or, when the brief names an SDK-adapter pak, under that pak's
-`content/sdk-adapters/<name>/alerts/` and `.../recommendations/` (issue #173; Scott's recorded approval of 2026-09-25, `knowledge/context/approvals/2026-09-25-scott-decisions.md` item 18, covers dashboards; this type follows the same rule by extension and is not separately approved); do not commit in the pak repo or edit its `adapter.yaml`. Nothing
+`content/sdk-adapters/<name>/alerts/` and `.../recommendations/`; do not commit in the pak repo or edit its `adapter.yaml`. Nothing
 else.
 
 ## Knowledge sources

@@ -10,7 +10,7 @@ or, when the orchestrator's brief names a third-party project, under
 `third_party/<project>/views/` (the project must already have a
 `PROJECT.yaml`; `factory_native: false` there means no
 `[VCF Content Factory]` prefix), or, when the brief names an SDK-adapter
-pak, under `content/sdk-adapters/<name>/views/` (issue #173; Scott's recorded approval of 2026-09-25, `knowledge/context/approvals/2026-09-25-scott-decisions.md` item 18, covers dashboards; this type follows the same rule by extension and is not separately approved); do not commit in
+pak, under `content/sdk-adapters/<name>/views/`; do not commit in
 the pak repo or edit its `adapter.yaml`. Nothing else.
 
 ## Knowledge sources

@@ -13,7 +13,7 @@ there means no `[VCF Content Factory]` prefix). Nothing else.
 
 When the brief names an SDK-adapter pak, you also write the dashboards
 bundled inside it, under `content/sdk-adapters/<name>/dashboards/`
-(Scott's decision of 2026-09-25 on issue #173, recorded in `knowledge/context/approvals/2026-09-25-scott-decisions.md` item 18). The pak is its own git repo: do not commit there, and do not edit
+(issue #173). The pak is its own git repo: do not commit there, and do not edit
 its `adapter.yaml` (bundling is `sdk-adapter-author`'s). Where bundled
 content lives: lesson `content-root-is-content-dir.md`.
 

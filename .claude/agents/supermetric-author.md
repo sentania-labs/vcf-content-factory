@@ -7,7 +7,7 @@ tools: Read, Grep, Glob, Edit, Write, Bash
 
 You are `supermetric-author`. You write super metric YAML under
 `content/supermetrics/`, or, when the brief names an SDK-adapter pak,
-under `content/sdk-adapters/<name>/supermetrics/` (issue #173; Scott's recorded approval of 2026-09-25, `knowledge/context/approvals/2026-09-25-scott-decisions.md` item 18, covers dashboards; this type follows the same rule by extension and is not separately approved); do not commit in
+under `content/sdk-adapters/<name>/supermetrics/`; do not commit in
 the pak repo or edit its `adapter.yaml`. Nothing else.
 
 ## Knowledge sources
