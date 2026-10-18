@@ -12,6 +12,8 @@ import sys
 import textwrap
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SRC = REPO_ROOT / "src"
 if str(SRC) not in sys.path:
@@ -126,3 +128,74 @@ def test_validate_sdk_project_surfaces_the_error(tmp_path, monkeypatch):
 
     errs = validate_sdk_project(tmp_path)
     assert any("vcfcf_compliance_overrides_vcenter" in e and "SymptomSets" in e for e in errs)
+
+
+# --- build-sdk path: the release CI runs build-sdk only, never validate-sdk ---
+
+def _stub_build_prereqs(monkeypatch, tmp_path):
+    """Stub adapter.yaml loading and version stamping, and make every step
+    after the describe check raise, so a pass would be visible."""
+    import vcfcf_managementpacks.sdk_builder as sb
+
+    (tmp_path / "adapter.yaml").write_text("name: probe\n", encoding="utf-8")
+
+    class _P:
+        name = "probe"
+        version = "0.0.0"
+        build_number = 1
+        adapter_kind = "vcfcf_probe"
+
+    monkeypatch.setattr(sb, "load_sdk_project", lambda _p: _P())
+    monkeypatch.setattr(sb, "_is_release_build", lambda: True)
+    monkeypatch.setattr(sb, "_stamp_build_version", lambda *_a, **_k: None)
+
+    def _past_the_check(*_a, **_k):
+        raise RuntimeError("reached bundled-content step")
+
+    monkeypatch.setattr(sb, "_load_bundled_content", _past_the_check)
+    return sb
+
+
+def test_build_sdk_pak_fails_on_one_child_composite(tmp_path, monkeypatch):
+    sb = _stub_build_prereqs(monkeypatch, tmp_path)
+    _write(tmp_path, _alert("vcfcf_compliance_overrides_vcenter", _ONE_CHILD))
+    with pytest.raises(sb.SdkBuildError) as exc:
+        sb.build_sdk_pak(tmp_path, tmp_path / "dist")
+    msg = str(exc.value)
+    assert "vcfcf_compliance_overrides_vcenter" in msg and "SymptomSets" in msg
+    assert msg == _validate_describe_symptom_sets(tmp_path / "describe.xml")[0]
+
+
+def test_build_sdk_pak_passes_the_check_on_valid_describe(tmp_path, monkeypatch):
+    sb = _stub_build_prereqs(monkeypatch, tmp_path)
+    _write(tmp_path, _alert("good", _TWO_CHILDREN))
+    with pytest.raises(RuntimeError, match="reached bundled-content step"):
+        sb.build_sdk_pak(tmp_path, tmp_path / "dist")
+
+
+def test_buildkit_build_sdk_release_entry_fails(tmp_path, monkeypatch, capsys):
+    """The CI entry: `sdk_buildkit build-sdk --release` goes through
+    build_sdk_pak and exits 1 with the same message.
+
+    The kit's __main__.py is the _KIT_MAIN text in buildkit.py; it is exec'd
+    with its relative imports resolving inside vcfcf_managementpacks, whose
+    sdk_builder.py is the file the kit ships as its own sdk_builder.py."""
+    from vcfcf_managementpacks.buildkit import _KIT_MAIN
+
+    _stub_build_prereqs(monkeypatch, tmp_path)
+    ns = {"__name__": "vcfcf_managementpacks._kit_main_probe",
+          "__package__": "vcfcf_managementpacks"}
+    exec(compile(_KIT_MAIN, "sdk_buildkit/__main__.py", "exec"), ns)
+    _write(tmp_path, _alert("vcfcf_compliance_overrides_vcenter", _ONE_CHILD))
+    # --release writes os.environ directly; setenv first so monkeypatch
+    # records the original state and teardown restores it.
+    monkeypatch.setenv("VCFCF_RELEASE_BUILD", "0")
+    monkeypatch.delenv("VCFCF_RELEASE_BUILD")
+    monkeypatch.setattr(
+        sys, "argv",
+        ["sdk_buildkit", "build-sdk", str(tmp_path), "--release",
+         "--output", str(tmp_path / "dist")],
+    )
+    assert ns["main"]() == 1
+    err = capsys.readouterr().err
+    assert "vcfcf_compliance_overrides_vcenter" in err and "SymptomSets" in err

@@ -3288,6 +3288,15 @@ def build_sdk_pak(project_dir: Path, output_dir: Optional[Path] = None,
         )
     _stamp_build_version(project, release_build)
 
+    # Step 1a': describe.xml composite SymptomSets check (issue #203).  The
+    # release CI runs build-sdk only, never validate-sdk, so the check must
+    # live here too; Ops rejects the whole describe at install otherwise.
+    _describe_for_check = project_dir / "describe.xml"
+    if _describe_for_check.is_file():
+        _ss_errors = _validate_describe_symptom_sets(_describe_for_check)
+        if _ss_errors:
+            raise SdkBuildError("\n".join(_ss_errors))
+
     # Step 1b: parse bundled_content (optional) — must happen before compile so
     # content load errors fail fast, before the expensive Java build steps.
     import yaml as _yaml_mod
