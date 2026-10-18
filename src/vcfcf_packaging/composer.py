@@ -597,6 +597,17 @@ def _prompt_slug(
     return None
 
 
+def _singular(content_type: str) -> str:
+    """Drop one plural trailing "s" from a content-type key.
+
+    ``str.rstrip("s")`` would strip every trailing "s" (a key ending in
+    "ss" would lose both), so remove exactly one.
+    """
+    if content_type.endswith("s"):
+        return content_type[:-1]
+    return content_type
+
+
 def _auto_add_deps(
     picks: dict,
     dep_warnings: List[str],
@@ -616,7 +627,7 @@ def _auto_add_deps(
         entries = discover_components(repo_root, ct)
         for w in dep_warnings:
             # Only try types mentioned in the warning
-            if ct.rstrip("s") not in w.lower() and ct not in w.lower():
+            if _singular(ct) not in w.lower() and ct not in w.lower():
                 continue
             for m in name_re.finditer(w):
                 missing_name = m.group(1)
