@@ -108,6 +108,7 @@ _FACTORY_SOURCES = {
     "dashboard_loader.py": _CORE_ROOT / "dashboards" / "loader.py",
     "dashboard_render.py": _CORE_ROOT / "dashboards" / "render.py",
     "dashboard_yaml_utils.py": _CORE_ROOT / "dashboards" / "yaml_utils.py",
+    "dashboard_widget_versions.py": _CORE_ROOT / "dashboards" / "widget_versions.py",
     "sm_loader.py": _CORE_ROOT / "supermetrics" / "loader.py",
     "sm_crossref.py": _CORE_ROOT / "supermetrics" / "crossref.py",
     "symptoms_loader.py": _CORE_ROOT / "symptoms" / "loader.py",
@@ -255,6 +256,12 @@ _IMPORT_REWRITES: dict[str, list[tuple[str, str]]] = {
         (
             r"from \.render import _VIEW_PIN_CONTAINER",
             "from .dashboard_render import _VIEW_PIN_CONTAINER",
+        ),
+        # from .widget_versions import widget_version_problems  (inline in
+        # Dashboard.validate; issue #199 per-widget minimum Ops version)
+        (
+            r"from \.widget_versions import widget_version_problems",
+            "from .dashboard_widget_versions import widget_version_problems",
         ),
     ],
     # dashboard_render.py: rewrite .loader import (it's a relative import within

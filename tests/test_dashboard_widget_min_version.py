@@ -133,3 +133,46 @@ def test_validate_warns_on_section_without_failing(tmp_path):
 
 def test_validate_quiet_without_floored_types(tmp_path):
     assert _validate(tmp_path, [_TEXT]) == []
+
+
+# --- sdk_buildkit ships the module (the release CI builds from the kit) -------
+
+def _kit_dashboard_package(tmp_path: Path, pkg: str) -> Path:
+    """Lay out the kit's dashboard_* modules, with the kit's import rewrites,
+    as a flat package under tmp_path."""
+    from vcfcf_managementpacks.buildkit import (
+        _FACTORY_SOURCES, _IMPORT_REWRITES, _apply_rewrites,
+    )
+    root = tmp_path / pkg
+    root.mkdir()
+    (root / "__init__.py").write_text("", encoding="utf-8")
+    for dest, src in _FACTORY_SOURCES.items():
+        if not dest.startswith("dashboard_"):
+            continue
+        text = src.read_text(encoding="utf-8")
+        if dest in _IMPORT_REWRITES:
+            text = _apply_rewrites(text, _IMPORT_REWRITES[dest])
+        (root / dest).write_text(text, encoding="utf-8")
+    return root
+
+
+def test_kit_dashboard_modules_relative_imports_all_resolve(tmp_path):
+    root = _kit_dashboard_package(tmp_path, "kitprobe_imports")
+    shipped = {p.stem for p in root.glob("*.py")}
+    for f in root.glob("dashboard_*.py"):
+        text = f.read_text(encoding="utf-8")
+        for mod in re.findall(r"^\s*from \.(\w+) import", text, re.M):
+            assert mod in shipped, f"{f.name} imports .{mod}, which the kit does not ship"
+
+
+def test_kit_dashboard_loader_validates_a_section_dashboard(tmp_path, monkeypatch):
+    import importlib
+
+    _kit_dashboard_package(tmp_path, "kitprobe_runtime")
+    monkeypatch.syspath_prepend(str(tmp_path))
+    kit_loader = importlib.import_module("kitprobe_runtime.dashboard_loader")
+    dash_dir = _write(tmp_path, [_SECTION, _TEXT])
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        kit_loader.load_all(tmp_path / "views", dash_dir)
+    assert len(_issue_199(caught)) == 1
