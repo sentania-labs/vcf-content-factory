@@ -1801,6 +1801,16 @@ class Dashboard:
             "Heatmap", "PropertyList", "ResourceRelationshipAdvanced",
             "Section", "AlertVolume",
         )
+        # Issue #199: a widget type the target Ops build lacks aborts the whole
+        # dashboard import. No bundle, release or adapter field declares a
+        # target VCF Ops version yet, so this is a WARNING with no gate.
+        import warnings
+        from .widget_versions import widget_version_problems
+        for _problem in widget_version_problems(
+            (w.local_id, w.type) for w in self.widgets
+        ):
+            src = str(self.source_path) if self.source_path else self.name
+            warnings.warn(f"{src}: {_problem}", UserWarning, stacklevel=2)
         seen: set[str] = set()
         for w in self.widgets:
             if w.local_id in seen:
