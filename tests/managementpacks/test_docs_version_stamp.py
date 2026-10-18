@@ -210,8 +210,11 @@ def test_history_dev_build_heads_current_build_unreleased(tmp_path: Path) -> Non
     assert "## Unreleased (" in text
     assert "## 1.0.0.1" not in text
     assert "- second build" in text
-    # Earlier builds keep the version their adapter.yaml declared.
-    assert "## 1.0.0.0 (" in text
+    # Earlier builds are named by build number alone: no declared 1.x
+    # version anywhere in a dev build's CHANGELOG (RULE-014).
+    assert "## Build 0 (" in text
+    assert "- first build" in text
+    assert "1.0.0" not in text
 
 
 def test_history_release_build_heads_current_build_with_version(tmp_path: Path) -> None:
@@ -219,4 +222,6 @@ def test_history_release_build_heads_current_build_with_version(tmp_path: Path) 
     _generate_docs(project_dir, "1.0.0.1", release_build=True)
     text = (project_dir / "CHANGELOG.md").read_text(encoding="utf-8")
     assert "## 1.0.0.1 (" in text
+    assert "## 1.0.0.0 (" in text
     assert "Unreleased" not in text
+    assert "## Build" not in text

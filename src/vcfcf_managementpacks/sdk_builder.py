@@ -2853,9 +2853,13 @@ def _generate_changelog_md(project_dir: Path, current_version: str,
     that touched the project directory.  Falls back to date-grouped listing
     when git is not available or the history is shallow.
 
-    ``current_version`` is adapter.yaml's declared version. On a dev build
-    (``release_build`` False, the default) it never heads the entry for the
-    build being made: that entry is headed ``Unreleased`` (RULE-014).
+    Headings depend on the build line (RULE-014). On a dev build
+    (``release_build`` False, the default) no declared 1.x version appears
+    anywhere: the entry for the build being made is headed ``Unreleased`` and
+    every earlier entry ``Build <build_number>``. A release build heads every
+    entry ``<declared version>.<build_number>`` (``current_version`` being
+    adapter.yaml's declared version), and its no-history fallback is the
+    ``Initial release`` entry.
     """
     import datetime
 
@@ -2981,10 +2985,14 @@ def _generate_changelog_md(project_dir: Path, current_version: str,
     for gk in sorted_keys:
         g = groups[gk]
         heading = gk
-        if (not release_build and g["version"] == current_version
-                and g["build"] == current_build):
-            # The build being made now: a dev build is not a release.
-            heading = "Unreleased"
+        if not release_build:
+            # A dev build carries no declared 1.x version (RULE-014): the
+            # build being made now is not a release, and earlier builds are
+            # named by build number alone.
+            if g["version"] == current_version and g["build"] == current_build:
+                heading = "Unreleased"
+            else:
+                heading = f"Build {g['build']}"
         lines_out.append(f"## {heading} ({g['date']})")
         lines_out.append("")
         for subj in g["subjects"]:
