@@ -89,10 +89,12 @@ Mechanics:
   GitHub only runs a workflow physically present in
   `.github/workflows/` of the repo being built, so
   `build-pak-on-tag.yml` is necessarily tracked twice (canonical at
-   (Superseded 2026-10-18, issue #180: the template repo's `.github/workflows/build-pak-on-tag.yml` is the source of truth; the scaffold copy is gone.)
   `knowledge/designs/sdk-template-scaffold/build-pak-on-tag.yml`, plus
   a copy per pak, currently identical across all six). A hook is under
   no such constraint.
+  (Superseded 2026-10-18, issue #180: the template repo's
+  `.github/workflows/build-pak-on-tag.yml` is the source of truth, the
+  scaffold copy is gone, and the pak copies are no longer all identical.)
 - Bootstrap sets the config with an absolute path. Relative
   `core.hooksPath` resolution has historically been inconsistent about
   what it resolves against; an absolute path set by the script that

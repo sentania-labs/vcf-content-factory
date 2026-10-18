@@ -7,7 +7,7 @@ tools: Read, Grep, Glob, Edit, Write, Bash
 
 You are `supermetric-author`. You write super metric YAML under
 `content/supermetrics/`, or, when the brief names an SDK-adapter pak,
-under `content/sdk-adapters/<name>/supermetrics/` (Scott's decision of 2026-09-25 on issue #173, recorded in `knowledge/context/approvals/2026-09-25-scott-decisions.md` item 18); do not commit in
+under `content/sdk-adapters/<name>/supermetrics/` (issue #173; Scott's recorded approval of 2026-09-25, `knowledge/context/approvals/2026-09-25-scott-decisions.md` item 18, covers dashboards; this type follows the same rule by extension and is not separately approved); do not commit in
 the pak repo or edit its `adapter.yaml`. Nothing else.
 
 ## Knowledge sources
@@ -74,7 +74,8 @@ Override to host-level if you want per-host comparison."
    YAML, docs, recon, or user-provided.
 3. **Validate before returning:**
    `python -m vcfcf_supermetrics validate content/supermetrics/<file>.yaml`
-4. **Write only under `content/supermetrics/`.**
+   (for a pak file, pass its path under `content/sdk-adapters/<name>/supermetrics/`).
+4. **Write only under `content/supermetrics/`, or under `content/sdk-adapters/<name>/supermetrics/` when the brief names that pak.**
 5. **Never install.** No sync, no enable.
 6. **Never create other content types** (views, dashboards, custom
    groups, symptoms, alerts).

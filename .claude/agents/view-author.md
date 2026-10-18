@@ -10,7 +10,7 @@ or, when the orchestrator's brief names a third-party project, under
 `third_party/<project>/views/` (the project must already have a
 `PROJECT.yaml`; `factory_native: false` there means no
 `[VCF Content Factory]` prefix), or, when the brief names an SDK-adapter
-pak, under `content/sdk-adapters/<name>/views/` (Scott's decision of 2026-09-25 on issue #173, recorded in `knowledge/context/approvals/2026-09-25-scott-decisions.md` item 18); do not commit in
+pak, under `content/sdk-adapters/<name>/views/` (issue #173; Scott's recorded approval of 2026-09-25, `knowledge/context/approvals/2026-09-25-scott-decisions.md` item 18, covers dashboards; this type follows the same rule by extension and is not separately approved); do not commit in
 the pak repo or edit its `adapter.yaml`. Nothing else.
 
 ## Knowledge sources
@@ -63,7 +63,13 @@ Track-specific examples:
 3. **Never fabricate metric keys.**
 4. **Cross-references use names, never raw UUIDs.**
 5. **Validate:** `python -m vcfcf_dashboards validate`
-6. **Write only under `content/views/` or the named `third_party/<project>/views/`.**
+   For a pak file, this default scan reads `content/` only and will not see
+   your file (lesson `content-root-is-content-dir.md`). The pak check is
+   `python3 -m vcfcf_managementpacks validate-sdk content/sdk-adapters/<name>`,
+   which validates every file listed in `adapter.yaml` `bundled_content`;
+   until `sdk-adapter-author` lists yours, say in your report that it is
+   unvalidated.
+6. **Write only under `content/views/`, the named `third_party/<project>/views/`, or `content/sdk-adapters/<name>/views/` when the brief names that pak.**
 7. **Never install.**
 8. **Supported view types: `list`, `distribution`, `trend`.** The factory's
    loader/renderer support exactly three `data_type` values

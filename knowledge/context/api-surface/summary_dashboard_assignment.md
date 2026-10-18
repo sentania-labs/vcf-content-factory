@@ -14,9 +14,11 @@
 >    it is what the factory's `summary_bind.py` drives for content that is
 >    not in a pak.
 >
-> The section "A pak cannot ship the binding either" below is the original
-> 2026-08-21 conclusion and is **wrong**; it is kept so the reversal and
-> the reason the 51-pak survey produced a false negative stay on record.
+> The paragraph "A pak cannot ship the binding either" below is the
+> original 2026-08-21 conclusion and is **wrong** (corrected 2026-08-25 by
+> decompiling the installer; the UI mechanism documented here is the same
+> server code path). It is kept so the reversal and the reason the 51-pak
+> survey produced a false negative stay on record.
 
 How to bind a dashboard to an object type so it renders on that object's
 Summary tab instead of the built-in detail page. The UI calls this
@@ -26,13 +28,6 @@ Summary tab instead of the built-in detail page. The UI calls this
 Established 2026-08-21 by dissecting 51 real vendor paks offline and by
 tracing the live UI on devel (all mutations restored, verified against a
 pre-experiment snapshot of all 363 resource kinds).
-
-> **Correction 2026-08-25:** the "A pak cannot ship the binding" section
-> below is wrong. The server-side pak installer reads
-> `content/dashboards/dashboards.properties` and binds dashboards to
-> resource kinds at install time (present since at least 9.0). See
-> `summary_dashboard_pak_binding.md`. The UI mechanism documented here
-> is still accurate and is the same code path.
 
 ## Two things to know first
 

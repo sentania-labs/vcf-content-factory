@@ -12,12 +12,12 @@ is the canonical, reviewed source for everything a pak repo carries in
 
 - `.github/workflows/build-pak-on-tag.yml`: the release workflow. On a `v*`
   tag it verifies the tag against `adapter.yaml`, runs the vendored defect
-  gate (RULE-012), builds the `.pak` headlessly from the pinned `sdk-buildkit`
-  with `--release`, gates on `pak-compare`, and publishes the `.pak` as the
+  gate (RULE-012), builds the `.pak` headlessly from the `sdk-buildkit` the
+  workflow's `BUILDKIT_TAG` selects, with `--release`, gates on `pak-compare`, and publishes the `.pak` as the
   tag's GitHub Release with provenance. Hardened through reviewer, peer and
   Codex rounds in template PRs #22, #23 and #24.
-- `.github/workflows/tests.yml` and `pak-tests.yml`: the reusable JDK matrix
-  test workflow every pak PR calls.
+- `.github/workflows/pak-tests.yml`: the reusable JDK matrix test workflow;
+  `tests.yml` is the per-repo caller every pak PR runs.
 - `ci/defect_gate.py` and `tests/ci/test_defect_gate.py`: the vendored,
   fail-closed defect gate and its tests. (An earlier revision of this README
   said the gate was deliberately absent; that predates RULE-012 and is no
@@ -27,8 +27,10 @@ is the canonical, reviewed source for everything a pak repo carries in
 A copy of the workflow used to live here as `build-pak-on-tag.yml` and
 drifted from the template (no defect gate here, no tag check there). It is
 removed; do not re-add a mirror. Changing the workflow means a PR on the
-template repo, then byte-identical copies into each live pak repo (the flow
-compliance #60, synology #39 and unifi #37 used on 2026-10-16).
+template repo, then a copy into each live pak repo (the flow compliance #60,
+synology #39 and unifi #37 used on 2026-10-16). Synology and unifi carry the
+template's workflow byte for byte; compliance adds one pak-specific step
+("Check generated alert definitions are current") that a re-copy must keep.
 
 ## Contents
 
@@ -49,13 +51,13 @@ vcf-content-factory-sdk-<name>/
 ├─ profiles/  resources/  icons/  lib/
 ├─ views/      <name>-*.yaml         # bundled_content, CO-LOCATED here (NOT factory-root)
 ├─ dashboards/ <name>-*.yaml         # bundled_content, CO-LOCATED here
-└─ .github/workflows/   # build-pak-on-tag.yml, tests.yml (from the template repo)
+├─ .github/workflows/   # build-pak-on-tag.yml, tests.yml (from the template repo)
 └─ ci/                  # defect_gate.py, run_java_tests.sh (from the template repo)
 ```
 
 **Critical:** `bundled_content` paths in `adapter.yaml` resolve relative to the
 adapter directory (where `adapter.yaml` lives). A pak repo must carry its own
-view/dashboard YAML : it cannot reference the factory's root `views/` or
+view/dashboard YAML: it cannot reference the factory's root `views/` or
 `dashboards/` dirs, which do not exist in the pak repo.
 
 ## Author / release loop
@@ -67,9 +69,10 @@ view/dashboard YAML : it cannot reference the factory's root `views/` or
 2. **Commit + push** to this pak repo's `main`.
 3. **Release** = push a `v*` tag. The release rules (RULE-014, the `0.x`
    dev-preview line is never tagged; RULE-012, no release while an open
-   blocking defect names this pak) are enforced at **push** time by the
-   factory's `.githooks/pre-push` hook, not by CI. CI then builds the
-   official `.pak` and publishes it as a Release asset. This, not a dev
+   blocking defect names this pak) are enforced twice: at **push** time by
+   the factory's `.githooks/pre-push` hook, and again in CI by the vendored
+   `ci/defect_gate.py` step and the tag check in the template's workflow.
+   CI then builds the official `.pak` and publishes it as a Release asset. This, not a dev
    build and not a factory `/publish`, is the shippable artifact.
 
    **The hook only covers a clone inside a factory checkout.** It requires

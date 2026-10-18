@@ -63,16 +63,18 @@ Key facts:
 
 ### Dashboards
 
-A layout of widgets. The renderer (`src/vcfcf_core/dashboards/render.py`,
-the `"type":` literals) is the source of truth for which widget types the
-factory can author. As of 2026-10-18 it renders fourteen: `ResourceList`
-(object picker), `View` (embedded list view), `TextDisplay`, `Section`,
-`Scoreboard`, `MetricChart`, `HealthChart`, `ParetoAnalysis`, `AlertList`,
-`ProblemAlertsList`, `IntSummaryAlertVolume`, `Heatmap`, `PropertyList`,
-`ResourceRelationshipAdvanced`. Grep the renderer before reporting a widget
-as unsupported (issue #172: a stale two-type list here once blocked a plan
-that was not blocked). Per-version import limits:
-`knowledge/context/api-surface/widget_types_survey.md`.
+A layout of widgets. The loader's `_supported_types` tuple
+(`src/vcfcf_core/dashboards/loader.py`) is the source of truth for the
+`type:` values an author may write. As of 2026-10-18 there are fourteen:
+`ResourceList` (object picker), `View` (embedded list view), `TextDisplay`,
+`Section`, `Scoreboard`, `MetricChart`, `HealthChart`, `ParetoAnalysis`,
+`AlertList`, `ProblemAlertsList`, `AlertVolume` (wire name
+`IntSummaryAlertVolume`), `Heatmap`, `PropertyList`,
+`ResourceRelationshipAdvanced`. The renderer
+(`src/vcfcf_core/dashboards/render.py`) carries the wire names. Grep the
+loader before reporting a widget as unsupported (issue #172: a stale
+two-type list here once blocked a plan that was not blocked). Per-version
+import limits: `knowledge/context/api-surface/widget_types_survey.md`.
 
 Key facts:
 - UUID is caller-owned.

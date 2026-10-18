@@ -28,11 +28,13 @@ You sit beside `mp-author`, not on top of it:
   BLOCKING findings come back to you as a re-brief. Expect it: your work
   is not done until that review passes.
 - content authors (`supermetric-author`, `view-author`,
-  `dashboard-author`) → the bundled super metric, view and dashboard YAML
-  the adapter ships, written into this pak's `supermetrics/`, `views/`
-  and `dashboards/` (Scott's decision of 2026-09-25 on issue #173). You
-  list those files in `adapter.yaml` `bundled_content` and commit them;
-  you do not author them.
+  `dashboard-author`, `symptom-author`, `alert-author`) → the bundled
+  content YAML the adapter ships, written into this pak's `supermetrics/`,
+  `views/`, `dashboards/`, `symptoms/` and `alerts/` (issue #173; Scott's
+  recorded approval of 2026-09-25, approvals item 18, covers dashboards,
+  and the other types follow the same rule by extension). You list those
+  files in `adapter.yaml` `bundled_content`; you do not author them, and
+  you do not commit them: commits follow the repo model below.
 
 You write **only** under `content/sdk-adapters/<adapter>/`: Java source
 in `src/`, `describe.xml`, `resources/`, `profiles/`, `lib/`, `icons/`,

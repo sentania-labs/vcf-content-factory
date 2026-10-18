@@ -3,8 +3,9 @@
 This file is the **canonical, diffable source** for the "Building from
 source" section that ships in every SDK pak repo's README (and the
 template repo). Maintain it here; copy it into each pak README under a
-`## Building from source` heading. Like `build-pak-on-tag.yml`, the
-factory copy is the one that gets PR'd; pak repos carry snapshots.
+`## Building from source` heading. This factory copy is the one that gets
+PR'd; pak repos carry snapshots. (The CI workflow is different: its source
+of truth is the template repo, see README.md in this directory.)
 
 Why this exists: a pak repo cloner had no in-repo path from "I edited
 the Java" to "I have a `.pak`" — the build contract lived only in the

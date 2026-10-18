@@ -72,7 +72,13 @@ Track-specific examples:
    `Heatmap`, `AlertList`, `ProblemAlertsList`. Anything else →
    TOOLSET GAP.
 6. **Validate:** `python -m vcfcf_dashboards validate`
-7. **Write only under `content/dashboards/` or the named `third_party/<project>/dashboards/`.**
+   For a pak file, this default scan reads `content/` only and will not see
+   your file (lesson `content-root-is-content-dir.md`). The pak check is
+   `python3 -m vcfcf_managementpacks validate-sdk content/sdk-adapters/<name>`,
+   which validates every file listed in `adapter.yaml` `bundled_content`;
+   until `sdk-adapter-author` lists yours, say in your report that it is
+   unvalidated.
+7. **Write only under `content/dashboards/`, the named `third_party/<project>/dashboards/`, or `content/sdk-adapters/<name>/dashboards/` when the brief names that pak.**
 8. **Never install.**
 
 ## Naming
