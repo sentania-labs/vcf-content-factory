@@ -69,17 +69,19 @@ view/dashboard YAML: it cannot reference the factory's root `views/` or
 2. **Commit + push** to this pak repo's `main`.
 3. **Release** = push a `v*` tag. The release rules (RULE-014, the `0.x`
    dev-preview line is never tagged; RULE-012, no release while an open
-   blocking defect names this pak) are enforced twice: at **push** time by
-   the factory's `.githooks/pre-push` hook, and again in CI by the vendored
-   `ci/defect_gate.py` step and the tag check in the template's workflow.
-   CI then builds the official `.pak` and publishes it as a Release asset. This, not a dev
-   build and not a factory `/publish`, is the shippable artifact.
+   blocking defect names this pak) are enforced at **push** time by the
+   factory's `.githooks/pre-push` hook. CI re-checks RULE-012 only, through
+   the vendored `ci/defect_gate.py` step; its tag check confirms the tag
+   matches `adapter.yaml` and does not refuse the `0.x` line, so RULE-014
+   is hook-only. CI then builds the official `.pak` and publishes it as a
+   Release asset. This, not a dev build and not a factory `/publish`, is
+   the shippable artifact.
 
    **The hook only covers a clone inside a factory checkout.** It requires
    the pak to sit under `content/sdk-adapters/` with `core.hooksPath` set,
    which `scripts/bootstrap_managed_paks.sh` does for every repo registered
-   in `knowledge/context/managed_paks.md`. A standalone clone of a pak repo
-   is **not gated at all**, and neither is a tag created in the GitHub UI or
+   in `knowledge/context/managed_paks.md`. For RULE-014, a standalone clone
+   of a pak repo is **not gated at all**, and neither is a tag created in the GitHub UI or
    a push with `--no-verify`. Register the pak and let bootstrap clone it.
 4. The factory references the pak by **pointer** to `…/releases/latest`; it
    never rebuilds or mirrors the binary.

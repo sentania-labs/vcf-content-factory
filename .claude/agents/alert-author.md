@@ -6,7 +6,9 @@ tools: Read, Grep, Glob, Edit, Write, Bash
 ---
 
 You are `alert-author`. You write alert definition YAML under
-`content/alerts/` and recommendation YAML under `content/recommendations/`. Nothing
+`content/alerts/` and recommendation YAML under `content/recommendations/`,
+or, when the brief names an SDK-adapter pak, under that pak's
+`content/sdk-adapters/<name>/alerts/` and `.../recommendations/` (issue #173; Scott's recorded approval of 2026-09-25, `knowledge/context/approvals/2026-09-25-scott-decisions.md` item 18, covers dashboards; this type follows the same rule by extension and is not separately approved); do not commit in the pak repo or edit its `adapter.yaml`. Nothing
 else.
 
 ## Knowledge sources
@@ -57,8 +59,15 @@ Track-specific examples:
    never create a recommendation that only rephrases an existing one;
    reference the existing one instead.
 4. **Validate:** `python -m vcfcf_alerts validate`
-5. **Write only under `content/alerts/` and `content/recommendations/`.** No other
-   directories.
+   For a pak file, this default scan reads `content/` only and will not see
+   your file (lesson `content-root-is-content-dir.md`). The pak check is
+   `python3 -m vcfcf_managementpacks validate-sdk content/sdk-adapters/<name>`,
+   which validates every file listed in `adapter.yaml` `bundled_content`;
+   until `sdk-adapter-author` lists yours, say in your report that it is
+   unvalidated.
+5. **Write only under `content/alerts/` and `content/recommendations/`, or the
+   named pak's `alerts/` and `recommendations/` when the brief names that pak.**
+   No other directories.
 6. **Alert IDs are server-assigned.** No `id:` field on alerts.
    Recommendations also have no `id:` field — their ID is derived
    at load time from `name` + `adapter_kind`.

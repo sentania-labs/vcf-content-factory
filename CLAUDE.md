@@ -105,8 +105,8 @@ pinned `sonnet`. Do not re-add pins without a decision.
 | `customgroup-author` | Author | `content/customgroups/` | User needs a dynamic group. Static is out of scope. |
 | `view-author` | Author | `content/views/`, or `third_party/<project>/views/` / `content/sdk-adapters/<name>/views/` when the brief names a third-party project or an SDK-adapter pak | User wants a list view. Blocks if upstream SM/group missing. |
 | `dashboard-author` | Author | `content/dashboards/`, or `third_party/<project>/dashboards/` / `content/sdk-adapters/<name>/dashboards/` when the brief names a third-party project or an SDK-adapter pak | User wants a dashboard. Blocks if upstream views missing. |
-| `symptom-author` | Author | `content/symptoms/` | After recon confirms no existing symptom fits. |
-| `alert-author` | Author | `content/alerts/`, `content/recommendations/` | After recon, **and** required symptoms exist. |
+| `symptom-author` | Author | `content/symptoms/`, or `content/sdk-adapters/<name>/symptoms/` when the brief names an SDK-adapter pak | After recon confirms no existing symptom fits. |
+| `alert-author` | Author | `content/alerts/`, `content/recommendations/`, or the same two folders under `content/sdk-adapters/<name>/` when the brief names an SDK-adapter pak | After recon, **and** required symptoms exist. |
 | `report-author` | Author | `content/reports/` | User wants a report. Blocks if upstream views missing. |
 | `api-explorer` | Research | `knowledge/context/`; verbatim vendor artifacts may be *added* under `reference/docs/` (RULE-016) | Author returns TOOLSET GAP, install fails mysteriously, surface map gap. |
 | `tooling` | Engineering | `src/vcfcf_*/`, `tests/`, `knowledge/context/` | Renderer/loader/CLI fix or new package bootstrap. **Only** agent that edits `src/vcfcf_*/`. |
