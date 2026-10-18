@@ -135,6 +135,34 @@ def test_name_only_path_checks_version():
         _verify(_FakeUI([_entry("0.0.0.89")]), manifest=manifest)
 
 
+@pytest.mark.parametrize("shape", ["absent", "blank", "none"])
+def test_entry_without_version_is_unverified_not_a_failure(shape, capsys):
+    """Reviewer W1: no getIntegrations shape without ``version`` is recorded
+    (8.18 unchecked), so a missing field must not read as a failed apply."""
+    entry = _entry("0.0.0.90")
+    if shape == "absent":
+        del entry["version"]
+    else:
+        entry["version"] = "" if shape == "blank" else None
+    ui = _FakeUI([entry])
+    _verify(ui, timeout=30)
+    out = capsys.readouterr()
+    assert "version unverified" in out.out
+    assert "OK: Install completed and verified" not in out.out
+    assert "carries no version" in out.err
+    assert ui.calls == 1  # no settle re-read for a field that will not appear
+
+
+def test_name_only_entry_without_version_warns(capsys):
+    manifest = {"name": "Compliance", "version": "0.0.0.90"}
+    entry = _entry("0.0.0.90")
+    del entry["version"]
+    _verify(_FakeUI([entry]), manifest=manifest)
+    out = capsys.readouterr()
+    assert "name-only verification" in out.out
+    assert "carries no version" in out.err
+
+
 def test_get_integrations_failure_stays_unverified_warning(capsys):
     _verify(_FakeUI(RuntimeError("boom")))
     out = capsys.readouterr()

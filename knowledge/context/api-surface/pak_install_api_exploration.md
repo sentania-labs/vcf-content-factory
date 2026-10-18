@@ -522,8 +522,8 @@ manager's `apply_adapter` step failed ("Failed to install solution",
 describe rejected), the distributed task ended in ERROR after about
 37 s, `/suite-api/api/solutions` still reported `0.0.0.89`, and the
 `getIntegrations` entry for the adapter kind was still present and
-installed. The only field that distinguishes success from that
-failure without new endpoints is the entry's `version`.
+installed. The only field on the existing endpoints that exposed that
+failure is the entry's `version`.
 
 `vcfcf_managementpacks.installer._verify_adapter_registered()`
 therefore requires the matched `installedMPs[]` entry's `version` to
@@ -533,6 +533,15 @@ to `VERSION_SETTLE_TIMEOUT` seconds before aborting. Trailing `.0`
 components are ignored in the comparison. Reading the pak repository
 `.results` file or the distributed task status would give the failure
 reason directly; neither is wired in yet.
+
+A version match is necessary, not sufficient. In
+`../investigations/vcommunity_upgrade_path_experiment.md` §5 the
+`getIntegrations` version moved to the new pak's `1.0.0` while the new
+describe.xml was never applied (the adapter kind stayed `DOCKERIZED` with
+the original resource kinds), so "verified" means the pak shell landed,
+not that the adapter registration changed. A missing or blank `version`
+on the matched entry is reported as "version unverified", not as a
+failure: no shape without the field is recorded, and 8.18 is unchecked.
 
 ## Unsupportability caveat
 

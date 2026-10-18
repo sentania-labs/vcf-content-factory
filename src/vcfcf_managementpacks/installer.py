@@ -700,7 +700,11 @@ def _verify_adapter_registered(
       2. The matched entry's ``version`` equals the version of the pak just
          uploaded (manifest ``version``, falling back to the upload reply's
          solutionVersion).  A mismatch is re-read for up to
-         *settle_timeout* seconds, then aborts.
+         *settle_timeout* seconds, then aborts.  An entry with no (or a
+         blank) ``version`` is not a mismatch: WARN and report "version
+         unverified" (no shape without the field is recorded; 8.18 is
+         unchecked).  A version match is necessary, not sufficient: see
+         knowledge/context/api-surface/pak_install_api_exploration.md.
       3. If manifest does not declare adapter_kinds, fall back to matching by
          pak name and emit WARN instead of hard-fail; a name match whose
          version differs still aborts.
@@ -731,8 +735,18 @@ def _verify_adapter_registered(
                 return entry
         return None
 
-    def _version_matches(entry: Dict[str, Any]) -> bool:
-        return _normalize_version(entry.get("version")) == _normalize_version(expected_version)
+    def _installed_version(entry: Dict[str, Any]) -> str:
+        return str(entry.get("version") or "").strip()
+
+    def _version_mismatch(entry: Dict[str, Any]) -> bool:
+        """True only when both versions are known and differ.  An entry with
+        no (or a blank) ``version`` is unverifiable, not a mismatch: no
+        getIntegrations shape without the field is recorded (8.18 unchecked),
+        so it must not be read as a failed apply."""
+        got = _installed_version(entry)
+        if not expected_version or not got:
+            return False
+        return _normalize_version(got) != _normalize_version(expected_version)
 
     try:
         installed = ui.get_integrations()
@@ -748,7 +762,7 @@ def _verify_adapter_registered(
     matched = _find(installed)
 
     # Give the installed version a short window to catch up with the task end.
-    if matched is not None and expected_version and not _version_matches(matched):
+    if matched is not None and _version_mismatch(matched):
         deadline = time.time() + settle_timeout
         while time.time() < deadline:
             time.sleep(settle_interval)
@@ -758,7 +772,7 @@ def _verify_adapter_registered(
                 _warn(f"getIntegrations re-read failed (will retry): {e}")
                 continue
             matched = _find(installed)
-            if matched is None or _version_matches(matched):
+            if matched is None or not _version_mismatch(matched):
                 break
 
     def _abort_version_mismatch(entry: Dict[str, Any], label: str) -> None:
@@ -796,19 +810,26 @@ def _verify_adapter_registered(
                 f"Check Admin UI > Software Updates > Solutions."
             )
 
-        if not expected_version:
-            _warn(
-                "Post-install verification: neither manifest.txt nor the upload "
-                "reply carried a version; cannot confirm the installed build "
-                "is the one just uploaded."
-            )
+        if not expected_version or not _installed_version(matched):
+            if not expected_version:
+                _warn(
+                    "Post-install verification: neither manifest.txt nor the upload "
+                    "reply carried a version; cannot confirm the installed build "
+                    "is the one just uploaded."
+                )
+            else:
+                _warn(
+                    f"Post-install verification: the getIntegrations entry for "
+                    f"adapter kind '{expected_ak}' carries no version; cannot "
+                    f"confirm the installed build is {expected_version!r}."
+                )
             _info(
                 f"OK: Install completed (version unverified): {server_name} "
                 f"(adapterKind={expected_ak!r} isInstalled=true)"
             )
             return
 
-        if not _version_matches(matched):
+        if _version_mismatch(matched):
             _abort_version_mismatch(matched, f"adapter kind '{expected_ak}'")
 
         # Success
@@ -824,8 +845,14 @@ def _verify_adapter_registered(
             "Cannot verify adapterKind registration; matching by pak name only."
         )
         if matched is not None:
-            if expected_version and not _version_matches(matched):
+            if _version_mismatch(matched):
                 _abort_version_mismatch(matched, f"pak '{server_name}'")
+            if expected_version and not _installed_version(matched):
+                _warn(
+                    f"Post-install verification: the getIntegrations entry for "
+                    f"'{server_name}' carries no version; cannot confirm the "
+                    f"installed build is {expected_version!r}."
+                )
             _info(
                 f"OK: Install completed (name-only verification): "
                 f"{server_name} {server_version}"
