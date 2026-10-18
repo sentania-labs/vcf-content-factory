@@ -1759,6 +1759,11 @@ class Dashboard:
         """
         if not self.name.strip():
             raise DashboardValidationError("dashboard: name is required")
+        _name_problem = dashboard_name_length_problem(self.name)
+        if _name_problem:
+            import warnings
+            src = str(self.source_path) if self.source_path else self.name
+            warnings.warn(f"{src}: {_name_problem}", UserWarning, stacklevel=2)
         if self.summary_for is not None:
             try:
                 normalize_summary_for(self.summary_for)
@@ -1959,6 +1964,36 @@ class Dashboard:
 _UUID_RE = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
 )
+
+
+#: Longest dashboard name the VCF Operations dashboard editor will save
+#: (UI error "The maximum length for this field is 50").  The content-import
+#: API accepts longer names, so an over-length dashboard installs but no edit
+#: to it can be saved until it is renamed.  Seen on devel 2026-10-12 on the
+#: compliance Environment Overview; issue #198.  The 22-character framework
+#: prefix "[VCF Content Factory] " leaves 28 characters for the title.
+DASHBOARD_NAME_MAX_LEN = 50
+
+
+def dashboard_name_length_problem(name: str) -> Optional[str]:
+    """Return a message when *name* exceeds ``DASHBOARD_NAME_MAX_LEN``, else None.
+
+    Surfaced as a validate-time WARNING, not an error: dashboards already in
+    the repo and in shipped paks exceed the limit, and because dashboard
+    import identity is the name, renaming an installed one ships a second
+    dashboard beside the old.  Each rename is a per-pack decision (issue
+    #198), so a hard failure here would break validate and pak builds before
+    those decisions are made.
+    """
+    if len(name) <= DASHBOARD_NAME_MAX_LEN:
+        return None
+    return (
+        f'dashboard name "{name}" is {len(name)} characters; the VCF Operations '
+        f"dashboard editor caps the name at {DASHBOARD_NAME_MAX_LEN} and refuses to "
+        f"save any edit until it is shortened (the import API still accepts it). "
+        f"Shorten the name; renaming an installed dashboard ships a new one "
+        f"beside the old (issue #198)."
+    )
 
 
 def parse_summary_for(value: str) -> tuple[str, str]:
