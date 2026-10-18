@@ -171,3 +171,79 @@ whose getIntegrations entry has no `version` field, a good pak install
 reports failure. And a tagged compliance release keeps building without
 the #203 guard until someone cuts a buildkit tag that nothing in this
 batch asks for.
+
+## Round 2 (re-review of dfb5db4, f080cc2, 044743e, 5bca10a)
+
+- Diff reviewed: `git diff d81c730..HEAD` (11 commits on `c433366`)
+- Verdict: **APPROVE** (0 BLOCKING / 0 WARNING / 0 NIT open)
+
+Every round-1 finding except N3 is resolved, and I verified each fix
+myself. N3 (no HTTP timeout in `solution_action`) is in code this branch
+does not touch, so it is still a follow-up issue rather than a fix here,
+per delegation rule 9.
+
+### Checks re-run
+
+| Check | Result |
+|---|---|
+| The pair `tests/test_release_builder_phase2.py tests/test_sdk_validate_symptomsets.py`, `-m "" --override-ini="addopts="`, xdist `-n 4`, 6 runs | 44 passed in all 6 |
+| The same pair run serially, release_builder first (round 1's guaranteed failure) | 44 passed |
+| Full `tests/`, xdist at `-n 4`, `-n 3`, `-n 2`, no pak clones | 2238 passed in each run. The 12 failures are the same 12 environmental tests that fail on base `c433366` (missing pak clones), with nothing new |
+| Full `tests/`, xdist `-n 4`, pak clones linked read-only | 2256 passed, 0 failed |
+| Seven-package validate chain (clones linked) | all seven exit 0. Managementpacks validate now prints exactly 2 `issue #198` warnings, one per over-length compliance dashboard, down from 4 |
+| Pak clones in the main checkout before and after | unchanged. Links and scratch removed |
+
+### Round-1 findings
+
+- **B1, fixed.** The test now reaches `validate_sdk_project` through the
+  in-body `sb` import, and only the pure `_validate_describe_symptom_sets`
+  is still imported at module top. The test passed in every run above,
+  including the serial order that failed every time in round 1.
+- **W1, fixed.** I re-ran the round-1 scripted fake against both
+  verification paths (adapter_kinds and name-only):
+  - absent, empty or `None` version: `OK ... (version unverified)` plus a
+    WARN that the entry "carries no version", after 1 call with no
+    re-read wait;
+  - same version, or a trailing `.0`: OK;
+  - an older version (`1.0.0.89` against `1.0.0.90`): exit 1 after the
+    3 s window (4 calls, 3.0 s).
+
+  Four new tests cover this.
+- **W2, fixed.** `BUILDKIT_VERSION = "1.0.12"`, and the assembled kit
+  reports 1.0.12. The `tier2_architecture.md` changelog row states that
+  the #203 guard reaches tagged pak releases only after
+  `sdk-buildkit-v1.0.12` is tagged and `sdk-buildkit-v1` moves to it.
+  **That tag is a post-merge step for the orchestrator. Until it exists,
+  compliance tagged releases still build with 1.0.11.**
+- **N1, fixed.** `pak_install_api_exploration.md` now says a version match
+  is necessary but not sufficient. It cites
+  `vcommunity_upgrade_path_experiment.md` §5 and records the
+  missing-version case.
+- **N2, fixed.** The second `d.validate` call in `_load_bundled_content`
+  now runs with warnings ignored, and errors still raise. On the isolated
+  kit build, each warning prints once (2 lines for 2 advisories).
+- **N3.** Unchanged, as above: a follow-up issue.
+
+### #203 kit path, re-checked
+
+I re-assembled the kit with `_assemble_kit_python_only` and ran it with
+`PYTHONPATH` set to the kit only and cwd `/tmp`.
+- `sdk_buildkit build-sdk --release` on the one-child fixture exits 1 with
+  the `vcfcf_compliance_overrides_vcenter` SymptomSets message.
+- The valid fixture, which carries a Section widget and an over-length
+  name, loads the dashboard, warns once per advisory, and reaches the Java
+  step.
+- Factory `validate-sdk` and `build-sdk` on the one-child fixture both
+  exit 1 with the same message.
+
+### New code in this round
+
+- The settle loop now re-reads only on a known mismatch. If a re-read
+  comes back with no version, the loop exits to "unverified", not to
+  abort, which matches the W1 contract.
+- The name-only path aborts on a known mismatch and only warns on a
+  missing version.
+- Rendered output, keys and the import-zip path are unchanged, so there
+  is still nothing for render regression or pak-compare to check.
+- Em-dashes: none in the added lines (`d81c730..HEAD`) and none in the
+  four new commit messages.
