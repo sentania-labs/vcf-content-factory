@@ -114,6 +114,10 @@ CHECKLIST_LABELS: Dict[str, str] = {
 #   checked=yes|no|throttled         yes: update check ran
 #                                    no:  could not check (network/timeout)
 #                                    throttled: daily stamp suppressed it
+#   unknown=<name>,<name>            alignment unknown, NOT updated: no
+#                                    upstream tracking branch (detached pin
+#                                    or untracked branch) or an unrecognised
+#                                    repo state
 #
 # `-` is the empty-list sentinel for every list-valued key, matching the
 # existing `failures=-`. `checked=no` must always read as "not checked" and
@@ -1021,6 +1025,8 @@ def _has_voiceable_content(kv: Dict[str, str]) -> bool:
     """
     if _parse_list(kv.get("hooks", "")) or _parse_list(kv.get("dirty", "")):
         return True
+    if _parse_list(kv.get("unknown", "")):
+        return True
     if _parse_counts(kv.get("ahead", "")) or _parse_diverged(kv.get("diverged", "")):
         return True
     raw = (kv.get("updated", "") or "").strip()
@@ -1081,6 +1087,14 @@ def bootstrap_report_lines(
             lines.append(
                 f"I didn't update the {name} repo, because it has "
                 "uncommitted local changes."
+            )
+        # unknown= (issue #152): never rendered as current. The scripts
+        # record a clone here when they cannot tell whether it is behind.
+        for name in _parse_list(kv.get("unknown", "")):
+            lines.append(
+                f"I didn't update the {name} repo: its alignment is unknown, "
+                "not checked, usually because it has no upstream tracking "
+                "branch (a detached pin or an untracked branch)."
             )
         for name, ahead, behind in _parse_diverged(kv.get("diverged", "")):
             detail = (
