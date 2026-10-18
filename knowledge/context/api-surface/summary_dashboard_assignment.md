@@ -1,5 +1,23 @@
 # Summary dashboard assignment (object detail page)
 
+> **Read this first (2026-10-18, issue #149).** Two routes bind a
+> dashboard to an object type's Summary tab, and both exist:
+>
+> 1. **From a pak at install time**: `<pak>/content/dashboards/dashboards.properties`,
+>    read by the server-side pak installer. This is the route an SDK or
+>    MPB pak uses. Documented, with the decompilation evidence and the
+>    version boundary (9.0 and 9.2 confirmed, 8.x unknown), in
+>    `summary_dashboard_pak_binding.md`. That file is the primary record
+>    for pak work.
+> 2. **From the UI after install**: the Struts "Manage Summary Dashboards"
+>    call, no Suite API. This is what the rest of this file documents, and
+>    it is what the factory's `summary_bind.py` drives for content that is
+>    not in a pak.
+>
+> The section "A pak cannot ship the binding either" below is the original
+> 2026-08-21 conclusion and is **wrong**; it is kept so the reversal and
+> the reason the 51-pak survey produced a false negative stay on record.
+
 How to bind a dashboard to an object type so it renders on that object's
 Summary tab instead of the built-in detail page. The UI calls this
 "Manage Summary Dashboards" (Dashboards & Reports > Dashboards > Manage >

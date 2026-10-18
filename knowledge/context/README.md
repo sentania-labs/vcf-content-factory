@@ -132,8 +132,8 @@ cycles because that did not happen.
 | `internal_supermetrics_assign.md` | Internal supermetrics assign endpoint |
 | `dashboard_delete_api.md` | Dashboard delete API |
 | `uninstall_empty_collection_shapes.md` | What the UI API returns for empty report/view/dashboard collections (observed vs unresolved), for uninstaller shape guards |
-| `summary_dashboard_assignment.md` | Binding a dashboard to an object type's Summary tab via the UI Struts call (no Suite API); pak-binding negative corrected 2026-08-25 |
-| `summary_dashboard_pak_binding.md` | Pak-side Summary binding: `<pak>/content/dashboards/dashboards.properties` (`<dir>=<AdapterKind>:<ResourceKind>`), installer behavior, template-clone semantics, uninstall gap, 9.0 through 9.2; complete 9.0.2 WidgetType key list (Build 25137845) for checking widget types against 9.0.x |
+| `summary_dashboard_assignment.md` | Summary-tab binding, UI route: the Struts "Manage Summary Dashboards" call (no Suite API) for content not in a pak. Opens with a read-this-first box naming both routes; its original "a pak cannot bind" conclusion is retained as a recorded reversal, not as fact |
+| `summary_dashboard_pak_binding.md` | Summary-tab binding, pak route (primary record for pak work): `<pak>/content/dashboards/dashboards.properties` (`<dir>=<AdapterKind>:<ResourceKind>`), installer behavior, template-clone semantics, uninstall gap, 9.0 through 9.2; complete 9.0.2 WidgetType key list (Build 25137845) for checking widget types against 9.0.x |
 | `reports_api_surface.md` | Reports API surface |
 | `pak_install_api_exploration.md` | .pak install API exploration |
 | `pak_uninstall_api_exploration.md` | .pak uninstall API exploration |
