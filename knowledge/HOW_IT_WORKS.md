@@ -262,12 +262,13 @@ The decision framework is in
 [knowledge/context/tier_decision_framework.md](knowledge/context/tier_decision_framework.md).
 The default is Tier 1 unless a specific trigger forces Tier 2.
 
-Tier 2 is in production: six adapters are registered, each in its
-own repo (`synology`, `unifi`, `compliance`, and the three
-`vcommunity` paks — registry: `knowledge/context/managed_paks.md`), with
+Tier 2 is in production: three adapters are registered, each in its
+own repo (`synology`, `unifi`, `compliance`; registry:
+`knowledge/context/managed_paks.md`; the three `vcommunity` paks were
+retired 2026-10-15 and sit under the registry's Retired heading), with
 sustained cross-MP stitching proven in prod. Releasability is per
-adapter — the defect gate (RULE-012) blocks any pak with an open
-blocking defect (e.g. `vcommunity-os` under DEF-004). (Dell
+adapter: the defect gate (RULE-012) blocks any pak with an open
+blocking defect. (Dell
 PowerEdge was evaluated and abandoned — see
 `knowledge/lessons/dell-redfish-relationship-strategies.md`.)
 

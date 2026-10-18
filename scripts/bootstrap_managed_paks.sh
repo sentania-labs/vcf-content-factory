@@ -109,6 +109,15 @@ while IFS= read -r line; do
         continue
     fi
 
+    # Entries under the "## Retired paks" heading are kept for the record
+    # only: not cloned, not refreshed, not reported. Exact heading text,
+    # level 2, case-sensitive, nothing after it on the line; checked after
+    # comment skipping so a comment that mentions the heading does not stop
+    # the parse. src/vcfcf_packaging/managed_paks.py matches the same line.
+    if [[ "$line" =~ ^##\ Retired\ paks[[:space:]]*$ ]]; then
+        break
+    fi
+
     if [[ "$line" =~ \*\*Remote:\*\*[[:space:]]+(https://[^[:space:]]+) ]]; then
         current_url="${BASH_REMATCH[1]}"
     elif [[ "$line" =~ \*\*Target:\*\*[[:space:]]+\`content/sdk-adapters/([^/\`]+)/?\` ]]; then
