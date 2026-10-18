@@ -108,7 +108,9 @@ fallback_version = "0.0.0"
 # pytest's default list, so the defaults are restated first.  The two extra
 # entries contain a "/", so pytest matches them against the path's tail,
 # not a bare directory name: a future tests/**/reference fixture dir is
-# still collected.
+# still collected.  Because they match path endings, a fixture placed under
+# tests/**/content/sdk-adapters/ or tests/**/reference/references/ would
+# also be skipped.
 testpaths = ["tests"]
 norecursedirs = [
     ".*",
