@@ -51,7 +51,12 @@ Track-specific examples:
 1. **Refuse without recon.** Hundreds of built-in symptoms exist.
 2. **Never fabricate metric/property keys.**
 3. **Validate:** `python -m vcfcf_symptoms validate content/symptoms/<file>.yaml`
-   (for a pak file, pass its path under `content/sdk-adapters/<name>/symptoms/`).
+   (for a pak file, pass its path under `content/sdk-adapters/<name>/symptoms/`;
+   this validator enforces the `[VCF Content Factory]` prefix, so for a pak
+   whose names are unprefixed use
+   `python3 -m vcfcf_managementpacks validate-sdk content/sdk-adapters/<name>`
+   once the file is listed in `adapter.yaml` `bundled_content`, and say in
+   your report that it is unvalidated until then).
 4. **Write only under `content/symptoms/`, or under `content/sdk-adapters/<name>/symptoms/` when the brief names that pak.**
 5. **IDs are server-assigned.** No `id:` field in YAML.
 6. **Never install.** Never create alerts.
