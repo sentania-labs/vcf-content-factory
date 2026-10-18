@@ -177,12 +177,13 @@ pinned `sonnet`. Do not re-add pins without a decision.
    directories.
 
 9. **Framework changes go `tooling` then `framework-reviewer`, then
-   PR** (RULE-013, blanket on every `src/vcfcf_*/` diff; CHANGES
-   REQUESTED blocks the PR; re-brief and re-review until APPROVE).
-   **Every finding gets fixed before the PR opens**, warnings and
-   nits alike, in one re-brief: the external Codex round is for what
-   the internal gate missed, not for what it deferred. A follow-up
-   issue is only for a finding in code the branch does not touch.
+   PR** (RULE-013, blanket on every `src/vcfcf_*/` diff). One review
+   round. **Every finding gets fixed before the PR opens**, warnings
+   and nits alike, in one re-brief, and then the PR opens: there is no
+   second internal review of the fixes. The external Codex round is
+   the check on the fixes and on what the gate missed; looping the
+   internal reviewer is how a change never ships. A follow-up issue is
+   only for a finding in code the branch does not touch.
    Lesson: `knowledge/lessons/deferred-nit-becomes-the-codex-finding.md`.
    **Repo-wide migrations are orchestrator-owned**: a sweep spanning
    CLAUDE.md, agent prompts, `.claude/` config, scripts, and root docs
