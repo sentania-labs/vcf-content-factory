@@ -97,6 +97,34 @@ fallback_version = "0.0.0"
 #               tmp_path copy, never touching the real content/ tree).
 #               IMPORTANT: this group is only effective when using
 #               --dist=loadgroup (see addopts / CI command).
+# ---------------------------------------------------------------------------
+# Collection scope (#207)
+# ---------------------------------------------------------------------------
+# A bare `pytest` from the repo root collects only tests/.  reference/ holds
+# cloned vendor repos (the integration SDK clone ships its own tests, which
+# fail on import here) and content/sdk-adapters/ holds the gitignored pak
+# repos; neither is factory test code.  norecursedirs also covers an explicit
+# `pytest .` or `pytest content`, which bypass testpaths.  It replaces
+# pytest's default list, so the defaults are restated first.  The two extra
+# entries contain a "/", so pytest matches them against the path's tail,
+# not a bare directory name: a future tests/**/reference fixture dir is
+# still collected.
+testpaths = ["tests"]
+norecursedirs = [
+    ".*",
+    "*.egg",
+    "*.egg-info",
+    "_darcs",
+    "build",
+    "CVS",
+    "dist",
+    "node_modules",
+    "venv",
+    "{arch}",
+    "reference/references",
+    "content/sdk-adapters",
+]
+
 markers = [
     "slow: marks tests as slow (deselect with -m \"not slow\")",
     "real_corpus: xdist group for tests that read or write the real content/ corpus",
