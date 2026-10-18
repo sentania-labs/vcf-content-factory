@@ -600,29 +600,46 @@ mirror `aria-ops-core` `SuiteAPIClient.getClientConfigBuilder()` exactly
 No loopback/remote peer-gating: the vendor does not gate, so neither do we.
 
 - **Mode signal:** environment variable `IS_FIPS`, `Boolean.valueOf`
-  semantics (vendor `Constants.FIPS_MODE_ENABLED`). Nothing else decides the
-  mode. `-Dorg.bouncycastle.fips.approved_only` is printed as a diagnostic in
-  the mode line but is not a signal: the platform keys both the transport and
-  the truststore format on `IS_FIPS` alone. The mode, and the signal that
-  chose it, is logged once per adapter instance at INFO.
+  semantics (vendor `Constants.FIPS_MODE_ENABLED`, and `SSLOptions.IS_FIPS`).
+  Nothing else decides the mode. `-Dorg.bouncycastle.fips.approved_only` is
+  printed as a diagnostic in the mode line but is not a signal: no vendor
+  class on this path reads it. The mode, and the signal that chose it, is
+  logged once per adapter instance at INFO. The dispatch is the static
+  `applySuiteApiTransport`, unit-tested in both directions.
 - **Non-FIPS** (`IS_FIPS` not `true`): trust-all (`insecureSslContext()`) +
   all-true `HostnameVerifier`. Vendor: `verify("false")` + `ignoreHostName(true)`.
-- **FIPS** (`IS_FIPS=true`): chain verified against the cluster truststore +
-  all-true `HostnameVerifier`. Vendor: `verify("true")` + `ignoreHostName(true)`
-  + `useClusterTruststore(true)`. Inputs, from vendor `Constants`:
-  - directory: system property `VCOPS_DATA_VCOPS` (default `/data/vcops`) +
-    `user/conf/ssl`;
-  - truststore: `tcserver.truststore`, opened as `BCFKS` (the type
-    `alive_common` `CaSACertificateStoreConfig` uses for the same file when
-    `IS_FIPS` is true);
-  - password: `storePass.properties`, key `ssltruststorePassword`, else
-    `ssltruststorePassword.encrypted` decrypted with SDK
-    `Crypt.getDefaultCrypt().decrypt()`.
-  The context is rebuilt per call (a rotated store is picked up). Any
-  unreadable input throws an `IOException` naming the path and logs one WARN
-  per instance; there is **no** fallback to trust-all. The Suite API call
-  fails; `SuiteApiStitchClient` logs and swallows it, so collection continues
-  without stitching.
+  No cluster file is read.
+- **FIPS** (`IS_FIPS=true`): the socket factory the vendor's
+  `useClusterTruststore(true)` builds (`vcops-suiteapi-client`
+  `HttpClientFactory` → `SSLOptions.getSSLOptions(VROPS_CLUSTER)` →
+  `vROpsSSLSocketFactory`), + all-true `HostnameVerifier`. Vendor:
+  `verify("true")` + `ignoreHostName(true)`. Inputs (bytecode detail in
+  `knowledge/context/api-surface/casa-injected-vs-raw-client.md` §3):
+  - options file: `$STORAGE/vcops/user/conf/ssl/secure-communications.properties`
+    (`STORAGE` from the environment, else a system property); every key
+    read as `inter_cluster.<key>` then `default.<key>`;
+  - required keys `protocol`, `store_type`, `algorithm`,
+    `supported_protocols`, `supported_cipher_suites` (`%all%` = JRE
+    defaults; `TLS_RSA*` suites dropped in FIPS); `truststore` (and the
+    optional client `keystore`) with `%VAR%` / `$VAR` substitution;
+  - passwords `truststore_password` / `keystore_password`: `.encrypted`
+    (SDK `Crypt`) before plain; the sentinel `%truststore_password%` /
+    `%keystore_password%` redirects to `storePass.properties`
+    `ssltruststorePassword` / `sslkeystorePassword`, `.encrypted` first;
+  - context: `SSLContext(protocol)`, truststore as `store_type`,
+    `TrustManagerFactory(algorithm)`, client keystore (if set) as
+    `KeyStore.getDefaultType()` with `KeyManagerFactory(algorithm)`; every
+    socket restricted to the configured protocols and cipher suites.
+  The factory is cached per adapter instance and rebuilt when the
+  modification time or size of the options file, `storePass.properties`,
+  the truststore or the keystore changes (vendor: options once per JVM,
+  context reloaded when the truststore's `lastModified` moves). Any
+  unreadable or incomplete input throws an `IOException` naming the file
+  and key and logs one WARN per instance; there is **no** fallback to
+  trust-all. Where the vendor would carry on with an empty trust store and
+  fail every handshake, the framework fails first and says why. The Suite
+  API call fails; `SuiteApiStitchClient` logs and swallows it, so
+  collection continues without stitching.
 - **Why not the platform TOFU manager:** `CustomSSLSocketFactory` /
   `CustomTrustManager` never persist trust for framework adapters ("Adapter
   certificate renewal url set is empty") and PKIX-fail every cycle (DEF-005;
@@ -737,7 +754,7 @@ Empirical basis: `knowledge/context/investigations/suiteapi_ambient_auth_devel_2
 
 | Date | Change |
 |---|---|
-| 2026-10-18 | **FIPS Suite API transport mirrors the vendor cluster truststore (issue #215).** `openPlatformConnection` now detects FIPS mode by `IS_FIPS` (vendor `Constants.FIPS_MODE_ENABLED`) instead of `-Dorg.bouncycastle.fips.approved_only`, and in FIPS mode verifies the chain against `$VCOPS_DATA_VCOPS/user/conf/ssl/tcserver.truststore` (BCFKS, password from `storePass.properties` plain or `.encrypted` via SDK `Crypt`) with the hostname ignored, replacing the stopgap that fell through to trust-all. Unreadable truststore or password file fails the connection loud (one WARN per instance), never trust-all. Non-FIPS branch unchanged. New package-private helpers `applyClusterTruststoreTransport`, `clusterTruststoreSslContext`, `readTrustStorePassword`, `isFipsModeEnabled`, `clusterSslDirectory`, `describeTransportMode`; `isFipsApprovedOnly` removed. `VcfCfAdapterTest` covers the handshake (in-store pass, out-of-store reject) and every failure input. **Adapter adoption:** every Tier 2 pak picks this up on its next rebuild against the new framework jar. |
+| 2026-10-18 | **FIPS Suite API transport mirrors the vendor `useClusterTruststore` (issue #215).** `openPlatformConnection` detects FIPS by `IS_FIPS` only (vendor `Constants.FIPS_MODE_ENABLED`; `-Dorg.bouncycastle.fips.approved_only` is a diagnostic, not a signal) and in FIPS mode builds the socket factory the vendor `vcops-suiteapi-client` builds for `SSLOptions(VROPS_CLUSTER)`: `$STORAGE/vcops/user/conf/ssl/secure-communications.properties`, keys under `inter_cluster.` then `default.`, `store_type`/`protocol`/`algorithm` from the file, encrypted-first passwords with the `%truststore_password%` redirect to `storePass.properties` (`.encrypted` first), `%VAR%`/`$VAR` path substitution, optional client keystore, `TLS_RSA*` filtered and every socket restricted to the configured protocols and cipher suites; hostname ignored. This replaces the stopgap that fell through to trust-all. Any unreadable or incomplete input fails the connection loud (one WARN per instance, path and key named, exception class only), never trust-all. The factory is cached per instance and rebuilt when an input file's modification time or size changes. Non-FIPS branch unchanged and reads no cluster file. New package-private `applySuiteApiTransport` (the dispatch), `applyClusterTruststoreTransport`, `resolveClusterSslOptions`, `buildClusterSocketFactory`, `ClusterSocketFactoryCache`, `RestrictedSslSocketFactory`, `isFipsModeEnabled`, `clusterSslDirectory`, `describeTransportMode`; `isFipsApprovedOnly` removed. `VcfCfAdapterTest` (69 checks) covers the dispatch both ways, resolution order, sentinels, substitution, cipher filter, protocol restriction, client keystore, the cache and every failure input, with real TLS handshakes; mutation-checked (trust-all fallback, ignored flag, `approved_only` detection, plain-first passwords, nested prefixes, no cache refresh, no socket restriction, no cipher filter all fail the suite). Vendor bytecode and jar provenance: `knowledge/context/api-surface/casa-injected-vs-raw-client.md` §3. **Versioning:** `BUILDKIT_VERSION` bumped to `1.0.12`; paks build from the floating `sdk-buildkit-v1` tag, so the fix reaches a pak only after `sdk-buildkit-v1.0.12` is cut and `sdk-buildkit-v1` moves to it. **Adapter adoption:** every Tier 2 pak needs a rebuild on buildkit 1.0.12. |
 | 2026-10-02 | **Suite API relationship add + singleton id lookup.** `SuiteApiStitchClient` and the `SuiteApiStitcher` facade gain `addChild(String parentResourceId, String childResourceId)` and `addChildren(String parentResourceId, Collection<String> childResourceIds)` (both return `boolean` accepted), issuing the additive `POST /api/resources/{id}/relationships/children` with `{"uuids":[...]}`; no PUT/replace variant is exposed (PUT replaces the whole child list, last-writer-wins across adapter instances). Also `findSingletonResourceId(String adapterKind, String resourceKind)`: returns the one matching resource UUID, `null` with a WARN on zero, more than one, a partial result page (`pageInfo.totalCount` above the entries returned), or failure; kinds trimmed, non-UUID identifiers dropped. Neither throws into the collect cycle. Callers look the singleton up every cycle rather than caching its id (the add is asynchronous, so a POST to a deleted singleton may be accepted and dropped later, and a cache cleared only on `false` would hold the stale id forever); a `true` from `addChild` means "request accepted", not "linked". An absent or unusable `pageInfo.totalCount` is trusted as complete. Known limitation: no remove (`deleteRelationship`) is wrapped, so edges outlive a shrinking scope. `RelationshipBuilder` Javadoc cross-references the new call for parents shared across instances. New test `adapter_framework/test/.../SuiteApiStitchRelationshipTest.java` (scripted fake `HttpURLConnection` behind an `openPlatformConnection` override; transport group needs log4j-api at runtime, SKIPs without it). Driver: `knowledge/designs/sdk-adapters/compliance-environment-computed-metrics.md` Vision item 2. **Versioning:** `BUILDKIT_VERSION` stays `1.0.11` (not yet tagged), so this ships in 1.0.11 provided it merges before that tag; otherwise bump. **Adapter adoption:** additive API, no existing pak changes behaviour; compliance adopts it. |
 | 2026-09-25 | **Ops-native accept-certificate flow + `allowInsecure` pulldown.** `VcfCfAdapter` gains `certificateCheckUrls(ResourceConfig)` (protected, default empty, called on an unsaved config) and overrides `getConnectionURLs(AdapterConfig)` to return it, falling back to the SDK default when empty, so a pak that does not opt in behaves exactly as before (`NOT_SUPPORTED`, no dialog). An opted-in pak makes Validate Connection show VCF Operations' "Review and accept certificate" dialog for an untrusted target; accepted certs land in the instance `CustomTrustManager` that `platformSsl(this)` already uses. `getCertificateRenewalUrls()` is deliberately not overridden (renewal protocol is VCF-only; see SSL above), so DEF-005's harmless "renewal url set is empty" log line remains. `onTest` now replaces a raw `certificate_unknown(46)` / PKIX failure with a readable message (hook consulted only after a trust failure is detected). New `parseAllowInsecure(String)`, `parseAllowInsecureLegacyNotFalse(String)`, `isAllowInsecure(ResourceConfig)`, `isAllowInsecureLegacyNotFalse(ResourceConfig)`, `ALLOW_INSECURE_IDENTIFIER`. `scaffold-sdk` now emits a framework-v2 skeleton (the old one used the removed aria-ops-core API) with the `allowInsecure` pulldown and a `certificateCheckUrls` override, and derives the class name with `removeprefix` (was `lstrip`). New test `adapter_framework/test/.../CertificateReviewTest.java`. **Versioning:** `BUILDKIT_VERSION` is not bumped here; buildkit 1.0.11 (from `fix/pipeline-hardening-round`) is tagged only after both that branch and this one are merged, so this change ships in 1.0.11. **Adapter adoption:** per-pak table under SSL above. |
 | 2026-08-17 | **`insecureSslContext()` hostname-verification fix (issue #82)**: the trust-all manager in `VcfCfAdapter.insecureSslContext()` is reimplemented as `javax.net.ssl.X509ExtendedTrustManager` (no-op `Socket`/`SSLEngine` overloads added for both `checkClientTrusted`/`checkServerTrusted`) instead of the legacy `javax.net.ssl.X509TrustManager`. Root cause: JSSE silently wraps a legacy `X509TrustManager` in `sun.security.ssl.AbstractTrustManagerWrapper`, which re-applies the endpoint identity (hostname) check whenever an endpoint identification algorithm is set. `java.net.http.HttpClient` always sets one, so a user with "Allow Insecure SSL" ticked still got a hostname-mismatch failure (live report against the Synology pack). Measured: this is **not** `HttpClient`-only. It also disables hostname verification on the `HttpsURLConnection` transport, including when the caller uses the JDK's own default `HostnameVerifier` (`HttpsClient` sets an endpoint identification algorithm whenever the verifier in effect is the default one, at which point JSSE decides the outcome instead of the verifier). No non-opt-in caller reaches the changed code (every caller gates on `allowInsecure` or is the vendor-mirror Suite API hop, which already sets an all-true `HostnameVerifier` regardless). Method signature/visibility unchanged; `getPlatformSslContext()` / the TOFU path untouched. `HttpClientBuilder.allowInsecure(boolean)` javadoc corrected to say it disables both chain validation and hostname verification. `SuiteApiStitchClient` keeps `openPlatformConnection()`/`HttpsURLConnection`, not because `HttpClient` still cannot express an unconditional all-true hostname posture (it now can, after this fix), but because matching the vendor `aria-ops-core SuiteAPIClient` transport byte-for-byte remains the goal (DEF-005 "mirror BC exactly"); see the corrected class javadoc and `knowledge/lessons/suite-api-stitch-ssl-tofu-vs-java-http.md`. Regression test added (`VcfCfAdapterTest`): real TLS handshake over `HttpClient` against a hostname-mismatched cert generated fresh per run via `keytool`, asserting `insecureSslContext()` succeeds and a normal validating context fails with the specific `SSLHandshakeException`/`CertificateException` identity failure (not merely "some exception"). `vcfcf-adapter-base.jar` rebuilt. **Adapter adoption:** rebuild and re-release synology, unifi, and compliance (the three paks confirmed on the affected `HttpClient`-transport pattern); the sdk-buildkit tarball must be republished first. |

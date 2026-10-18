@@ -64,45 +64,127 @@ class, used both ways.
   `localhost:8443`, no `:443`, no CaSA `/casa/*` path, no node-role
   branch.
 - FIPS branch → `useClusterTruststore` (set by reflection). Non-FIPS →
-  `verify("false")`, `ignoreHostName(true)`.
-  Full FIPS branch detail (re-read 2026-10-18 for issue #215, `javap -p -c`
-  on `SuiteAPIClient.getClientConfigBuilder` and
-  `com.vmware.tvs.vrealize.adapter.core.configuration.Constants`):
-  - Switch: `Constants.FIPS_MODE_ENABLED =
+  `verify("false")`, `ignoreHostName(true)`. `SuiteAPIClient` itself holds
+  no client keystore or cert, but the FIPS branch can present one (see
+  "client keystore" below); that is not CaSA or node identity, it is
+  whatever `secure-communications.properties` configures for the cluster
+  category.
+
+  **FIPS branch in full** (re-read 2026-10-18 for issue #215, `javap -p -c
+  -constants`; corrected the same day after framework review, see
+  `knowledge/context/reviews/framework/2026-10-18-fips-cluster-truststore.md`):
+
+  - **Switch** (`aria-ops-core-8.0.0.jar`): `Constants.FIPS_MODE_ENABLED =
     Boolean.valueOf(System.getenv("IS_FIPS"))`. The BouncyCastle
-    `approved_only` JVM property is not read.
-  - FIPS builder: `verify("true")`, `ignoreHostName(true)`,
-    `allowClientToCommunicateWithOlderServers(true)`, then
+    `approved_only` JVM property is not read anywhere on this path.
+  - **Builder** (`SuiteAPIClient.getClientConfigBuilder`, FIPS): `useJson`,
+    `serverUrl`, `allowClientToCommunicateWithOlderServers(true)`,
+    `verify("true")`, `ignoreHostName(true)`, then
     `Client$ClientConfig$Builder.useClusterTruststore(boolean)` invoked by
-    reflection with `true`. The hostname is ignored in both modes.
-  - `SuiteAPIClient` passes no truststore path or password; the
-    `useClusterTruststore` implementation is in `ops-api-client` (not in
-    any jar the factory carries). The inputs `Constants` exposes for it:
-    `SSL_DIRECTORY_PATH = (System.getProperty("VCOPS_DATA_VCOPS") or
-    "/data/vcops")/user/conf/ssl` (not `ALIVE_BASE`, which feeds only
-    `VCOPS_BASE_USER` and the maintenance-credential path),
-    `TRUSTSTORE_PATH = <ssl dir>/tcserver.truststore`,
-    `TRUSTSTORE_PASSWORD_PATH = <ssl dir>/storePass.properties`.
-    `getTrustStorePassword()` → `getStorePassProperty("ssltruststorePassword")`:
-    loads the file with commons-configuration `PropertiesConfiguration`,
-    returns the plain key when non-null, else
-    `com.integrien.alive.common.security.Crypt.getDefaultCrypt().decrypt(<key>.encrypted)`
-    (the SDK-jar `Crypt`, which delegates to `com.vmware.vcops.security.Crypt`).
-  - Store type: `Constants` does not name one. The platform's own loader of
-    the same file, `alive_common` `CaSACertificateStoreConfig` (which also
-    feeds gemfire's `cluster-ssl-truststore`), uses `BCFKS` when `IS_FIPS`
-    is true and `JKS` otherwise. MPB's older `VropsGlobalTrustStore`
-    (mpb_adapter 9.0.1) always uses `JKS`, `java.util.Properties`, and the
-    same plain-then-`.encrypted` key order. `CaSACertificateStoreConfig`'s
-    default directory is `${STORAGE}/vcops/user/conf/ssl/` (env/property
-    overrides `vcopsTruststore`, `vcopsStorePasswordFile`), a different
-    root spelling from `Constants`; which one the node resolves to is a
-    live-only check.
-  - Framework mirror: `VcfCfAdapter.openPlatformConnection` (FIPS branch,
-    issue #215) uses the `Constants` inputs, type `BCFKS`. **This is server-side
-  trust only** (a truststore to verify the server) — there is **no
-  client keystore, no client cert, no node/slice identity, no
-  mutual-TLS client material** anywhere in the class.
+    reflection with `true`. No truststore path, type or password is passed.
+    The hostname is ignored in both modes.
+  - **Not the inputs:** `Constants.TRUSTSTORE_PATH`
+    (`$VCOPS_DATA_VCOPS/user/conf/ssl/tcserver.truststore`, default root
+    `/data/vcops`), `TRUSTSTORE_PASSWORD_PATH` and `getTrustStorePassword()`
+    are defined in aria-ops-core and read by no class in that jar. An
+    earlier revision of this section and of the framework mirrored them;
+    that was wrong.
+  - **Where `useClusterTruststore` is implemented**
+    (`vcops-suiteapi-client-2.2-all.jar`, provenance below):
+    `HttpClientFactory.createClient`, when `verify` is true and no
+    truststore path, certificate path, certificates or socket factory is
+    configured and `isUseClusterTruststore()` is set, calls
+    `SSLOptions.getSSLOptions(convertConnectionCategory(getOpsConnectionCategory()))`
+    and builds `vROpsSSL.newSSLSocketFactoryBuilder(options).build()`, a
+    `vROpsSSLSocketFactory`. The builder's default category is
+    `VROPS_CLUSTER` (`configurationKey` `inter_cluster`, parent `DEFAULT`,
+    key `default`). `certificateSecureAutoRefreshConfig` is rejected
+    together with `useClusterTruststore`, so no NDC refresh applies.
+    The hostname verifier is `getHostnameVerifier(isIgnoreHostName())`.
+  - **`SSLOptions.<clinit>`** (once per JVM, one instance per category):
+    `IS_FIPS = Boolean.parseBoolean(System.getenv("IS_FIPS"))`;
+    root `STORAGE` (`System.getenv`, else `System.getProperty`); files
+    `<STORAGE>/vcops/user/conf/ssl/secure-communications.properties` and
+    `<STORAGE>/vcops/user/conf/ssl/storePass.properties`. If `STORAGE` is
+    unset or the options file is absent it logs "Failed to find
+    secure-communications.properties file." and keeps the defaults
+    (`protocol` `TLS`, `algorithm` `PKIX`, `store_type` `JKS`, no
+    truststore), so every handshake then fails for want of trust anchors.
+  - **Key lookup** (`propertyLookupPrefixes` + `readProperty`): for
+    `VROPS_CLUSTER` the prefixes are `inter_cluster` then `default`, and a
+    key is read as `<prefix>.<key>`, first hit wins. Traced from the
+    bytecode: the stack is popped root first, the root contributes
+    `default`, and because the root has no parent the accumulated prefix
+    resets to empty before `inter_cluster` is built, so
+    `default.inter_cluster.<key>` is **never** consulted (the review
+    report's reading of a nested prefix does not match the bytecode).
+    `protocol`, `store_type`, `algorithm`, `supported_cipher_suites` and
+    `supported_protocols` are required (absent → `RuntimeException`
+    "... not found."); `keystore`, `truststore` and the passwords are
+    optional.
+  - **Lists:** `supported_cipher_suites` / `supported_protocols` equal to
+    `%all%` (case-insensitive) take the JRE defaults of
+    `SSLContext.getInstance(protocol)`; otherwise `trim()` then split on
+    `\s*,\s*`. When `IS_FIPS`, `filterRestrictedCiphers` drops every suite
+    starting `TLS_RSA`. Protocols are not filtered.
+  - **Paths:** `truststore` and `keystore` go through `replacePathEnvVars`:
+    `%NAME%` then `$NAME`, value from the environment, else a system
+    property; unresolved names stay as written.
+  - **Passwords** (`readPasswordProperty`): `<key>.encrypted` under any
+    prefix, decrypted with `com.vmware.vcops.security.Crypt.dec`
+    (= `getDefaultCrypt().decrypt`, which is what the SDK-jar
+    `com.integrien.alive.common.security.Crypt.getDefaultCrypt().decrypt`
+    delegates to), before the plain `<key>` under any prefix. A resulting
+    value of `%truststore_password%` / `%keystore_password%`
+    (case-insensitive) loads `storePass.properties` and reads
+    `ssltruststorePassword` / `sslkeystorePassword` through
+    `CryptUtils.readPasswordProperty`: **`.encrypted` first** (decrypted),
+    then the plain key, null if neither.
+  - **Context** (`vROpsSSL.createvROpsSSLContext`):
+    `SSLContext.getInstance(protocol)`; truststore
+    `KeyStore.getInstance(store_type)` loaded from `truststore` with its
+    password (or empty when `truststore` is null);
+    `TrustManagerFactory.getInstance(algorithm)`. **Client keystore:** when
+    `keystore` is set, it is loaded as `KeyStore.getDefaultType()` with
+    `keystore_password` and `KeyManagerFactory.getInstance(algorithm)`
+    supplies key managers, so the client presents that certificate.
+    Failures surface as `RuntimeException("Failed to initialize SSL
+    context")`.
+  - **Sockets** (`vROpsSSLSocketFactory.prepareSocket`): every socket's
+    enabled protocols and cipher suites are set to the socket's supported
+    set intersected with the configured lists (an empty intersection is
+    logged and applied). The factory reloads its context when the
+    truststore file's `lastModified` passes its load time; the
+    `SSLOptions` themselves are never re-read.
+  - **Store type:** comes from `store_type` in the file. The value on a
+    FIPS node is a live-only fact. (For reference only:
+    `alive_common CaSACertificateStoreConfig` loads `tcserver.truststore`
+    as `BCFKS` when `IS_FIPS`, `JKS` otherwise, from
+    `${STORAGE}/vcops/user/conf/ssl/`, and feeds gemfire's
+    `cluster-ssl-truststore`; MPB 9.0.1 `VropsGlobalTrustStore` always uses
+    `JKS`. Neither is on the Suite API path.)
+  - **Framework mirror:** `VcfCfAdapter.openPlatformConnection` FIPS branch
+    (`applySuiteApiTransport` → `applyClusterTruststoreTransport`) reproduces
+    every step above for `VROPS_CLUSTER`, fail-closed: where the vendor
+    would proceed with an empty trust store (no `STORAGE`, no options file,
+    no `truststore` key) or hit a null password, the framework throws an
+    `IOException` naming the file and key instead.
+
+  **Provenance of `vcops-suiteapi-client-2.2-all.jar`** (RULE-015
+  local-only artifact; not reproducible from this repo; findings summarized
+  here in full so the citation is not needed). Maven coordinates
+  `com.vmware.vcops:vcops-suiteapi-client:2.2` (its `pom.properties`),
+  classes dated 2025-12-30, Build-Jdk-Spec 17, sha256
+  `a387dfbb2a5b342bc67d36cea12e8fe6c489ff7d0b0e51c0187e354edc398570`.
+  Extracted from the `lib/` of the MPB adapter pak
+  `MPBAdapter-902025137890.pak` (Major-Version 9, Minor-Version 0,
+  Implementation-Version 25137890, pulled from the devel 9.0.2 instance)
+  in the separate clean-room workspace (`vcf-mp-cleanroom`, not part of
+  this repo); byte-identical copies ship in the `DiagnosticsAdapter3` and
+  `VMwareInfrastructureHealthAdapter` paks extracted there. The jar is not
+  copied into this repo and is not on the factory classpath. To re-verify
+  on another machine, take the jar from any of those paks on a 9.0.2
+  appliance and check the sha256.
 - Auth: `UserAndAuthManagementClient.acquireToken(UsernamePassword)`
   from `cred.username`/`cred.password` → `tokenAuth(token)`.
 

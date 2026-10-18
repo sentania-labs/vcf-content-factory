@@ -202,6 +202,13 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
     private final AtomicBoolean fipsTruststoreFailureWarnLogged = new AtomicBoolean(false);
 
     /**
+     * FIPS-mode Suite API socket factory, cached per adapter instance and
+     * rebuilt when its input files change (issue #215 review W1).
+     */
+    private final ClusterSocketFactoryCache clusterSocketFactoryCache =
+            new ClusterSocketFactoryCache();
+
+    /**
      * Adapter-instance-scoped logger obtained lazily from the platform's
      * {@code AdapterLoggerFactory}. Named after the concrete class; pinned
      * to INFO level so messages are not swallowed by the WARN root logger.
@@ -1037,11 +1044,10 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
 
     /**
      * Open an HTTPS connection to {@code url} for the Suite API transport,
-     * wired to mirror the vendor {@code aria-ops-core}
-     * {@code SuiteAPIClient.getClientConfigBuilder()} transport
+     * wired to mirror the vendor Suite API client transport
      * <strong>exactly</strong>: trust-all + ignore-hostname in non-FIPS mode,
-     * chain verified against the cluster truststore + ignore-hostname in FIPS
-     * mode. That is the posture every shipping Broadcom pak uses for this hop.
+     * the cluster-truststore TLS options + ignore-hostname in FIPS mode. That
+     * is the posture every shipping Broadcom pak uses for this hop.
      *
      * <h3>Why this mirrors BC instead of using the platform TOFU trust manager</h3>
      * <p>An earlier implementation routed this hop through the platform's
@@ -1056,29 +1062,30 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
      * {@code knowledge/context/defects.md} DEF-005). {@code knowledge/lessons/suite-api-stitch-ssl-tofu-vs-java-http.md}
      * predicted exactly this failure mode and is vindicated by that live run.
      *
-     * <p>The vendor ground truth (bytecode-proven,
-     * {@code knowledge/context/api-surface/casa-injected-vs-raw-client.md} §3,
-     * {@code aria-ops-core-8.0.0.jar}): {@code getClientConfigBuilder} branches
-     * on {@code Constants.FIPS_MODE_ENABLED}, which is
+     * <p>The vendor ground truth (bytecode,
+     * {@code knowledge/context/api-surface/casa-injected-vs-raw-client.md} §3):
+     * {@code aria-ops-core SuiteAPIClient.getClientConfigBuilder} branches on
+     * {@code Constants.FIPS_MODE_ENABLED}, which is
      * {@code Boolean.valueOf(System.getenv("IS_FIPS"))} and nothing else.
      * Non-FIPS sets {@code verify("false")} + {@code ignoreHostName(true)};
      * FIPS sets {@code verify("true")} + {@code ignoreHostName(true)} and
-     * invokes {@code useClusterTruststore(true)} by reflection. It is
-     * server-trust only: no client keystore, no CaSA, no cert-renewal
-     * registration. This method mirrors that behavior directly rather than
-     * inventing a new transport posture.
+     * {@code useClusterTruststore(true)}. In {@code vcops-suiteapi-client}
+     * {@code HttpClientFactory.createClient}, that flag selects
+     * {@code SSLOptions.getSSLOptions(VROPS_CLUSTER)} (the builder's default
+     * connection category) and builds a {@code vROpsSSLSocketFactory} from it.
+     * This method mirrors that behavior directly rather than inventing a new
+     * transport posture; {@link #applySuiteApiTransport} holds the dispatch.
      *
      * <h3>Mode detection</h3>
      * <p>{@link #isFipsModeEnabled()}: the {@code IS_FIPS} environment
      * variable, parsed with {@code Boolean.valueOf} semantics, exactly as the
-     * vendor does. The BouncyCastle {@code org.bouncycastle.fips.approved_only}
-     * JVM property is <strong>not</strong> a mode signal: the platform keys
-     * both this transport choice and the truststore format
-     * ({@code CaSACertificateStoreConfig}: BCFKS when {@code IS_FIPS}, else
-     * JKS) on {@code IS_FIPS} alone, so a second trigger could select the FIPS
-     * branch on a node whose store the platform itself treats as JKS. Its
-     * value is still printed in the once-per-instance mode line as a
-     * diagnostic. The mode line names the signal that fired.
+     * vendor does ({@code Constants} and {@code SSLOptions} both read it). The
+     * BouncyCastle {@code org.bouncycastle.fips.approved_only} JVM property is
+     * <strong>not</strong> a mode signal: every vendor and platform class on
+     * this path keys on {@code IS_FIPS} alone, so a second trigger would pick
+     * the FIPS branch where the vendor would not. Its value is printed in the
+     * once-per-instance mode line as a diagnostic. The mode line names the
+     * signal that fired.
      *
      * <h3>Non-FIPS branch</h3>
      * <p>{@link #applyBcMirrorTransport}: {@link #insecureSslContext()}
@@ -1091,46 +1098,30 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
      * resolved-loopback peer and strict otherwise. That peer-gating was this
      * framework's own invention, not present in the vendor client, and was
      * removed per the "mirror BC exactly" directive that closed DEF-005.)
+     * No cluster file is read on this branch.
      *
      * <h3>FIPS branch (issue #215)</h3>
-     * <p>{@link #applyClusterTruststoreTransport}: an {@link javax.net.ssl.SSLContext}
-     * whose trust manager is built from the cluster truststore, plus an
-     * all-true {@link javax.net.ssl.HostnameVerifier}. So the server chain is
-     * verified and the hostname is still ignored, the vendor's
-     * {@code verify("true")} + {@code ignoreHostName(true)}. The
-     * {@code useClusterTruststore} implementation itself lives in the
-     * {@code ops-api-client} library on the collector classpath, which this
-     * framework does not carry, so the inputs are the vendor's own
-     * {@code Constants} (aria-ops-core is not a dependency; see the "Layer 1
-     * only" note on this class's javadoc, the same file reads are
-     * reimplemented here):
-     * <ul>
-     *   <li>SSL directory: system property {@code VCOPS_DATA_VCOPS} (default
-     *       {@code /data/vcops}) resolved with {@code user/conf/ssl}
-     *       ({@code Constants.SSL_DIRECTORY_PATH}, {@link #clusterSslDirectory()}).</li>
-     *   <li>Truststore: {@code tcserver.truststore} in that directory
-     *       ({@code Constants.TRUSTSTORE_PATH}), loaded as {@code BCFKS},
-     *       the type the platform's own FIPS-aware loader of the same file
-     *       ({@code alive_common CaSACertificateStoreConfig}) uses when
-     *       {@code IS_FIPS} is true.</li>
-     *   <li>Password: {@code storePass.properties} in that directory
-     *       ({@code Constants.TRUSTSTORE_PASSWORD_PATH}), key
-     *       {@code ssltruststorePassword}; when that key is absent, the
-     *       {@code ssltruststorePassword.encrypted} value decrypted with
-     *       {@code Crypt.getDefaultCrypt().decrypt(...)}
-     *       ({@code Constants.getStorePassProperty}).</li>
-     * </ul>
-     * The context is rebuilt on every call (this method runs per Suite API
-     * request), so a rotated truststore is picked up and a repaired file
-     * recovers without a collector restart.
+     * <p>{@link #applyClusterTruststoreTransport}: the socket factory the
+     * vendor builds from {@code SSLOptions(VROPS_CLUSTER)}
+     * ({@link #resolveClusterSslOptions}, {@link #buildClusterSocketFactory}),
+     * plus an all-true {@link javax.net.ssl.HostnameVerifier}
+     * ({@code ignoreHostName(true)}). Inputs:
+     * {@code $STORAGE/vcops/user/conf/ssl/secure-communications.properties}
+     * (keys looked up under {@code inter_cluster.} then {@code default.}),
+     * with password sentinels redirected to {@code storePass.properties} in
+     * the same directory. The factory is cached per adapter instance and
+     * rebuilt when any input file's modification time or size changes
+     * ({@link ClusterSocketFactoryCache}).
      *
-     * <p><strong>Failure mode.</strong> If the truststore or password file
-     * cannot be read, the password cannot be resolved or decrypted, or the
-     * store cannot be loaded, this method throws an {@link java.io.IOException}
-     * naming the path, and logs one WARN per adapter instance. It never falls
-     * back to trust-all: that silent downgrade is what issue #215 removed. The
-     * Suite API call fails, which the stitch client already logs and swallows
-     * without throwing into the collect cycle.
+     * <p><strong>Failure mode.</strong> Any unreadable or incomplete input
+     * throws an {@link java.io.IOException} naming the path (and key), and logs
+     * one WARN per adapter instance. It never falls back to trust-all: that
+     * silent downgrade is what issue #215 removed. The Suite API call fails,
+     * which the stitch client already logs and swallows without throwing into
+     * the collect cycle. Where the vendor would carry on with an empty trust
+     * store (no {@code secure-communications.properties}, no {@code truststore}
+     * key), every handshake fails anyway; this method fails earlier and names
+     * the cause.
      *
      * <p>This is the public equivalent of the package-private
      * {@code AdapterBase.getConnection(url, getVerifier())}, which callers in other
@@ -1145,7 +1136,7 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
      * @return an {@link javax.net.ssl.HttpsURLConnection} configured with the
      *         vendor-mirror transport for the detected mode
      * @throws java.io.IOException if the URL scheme is not https, if the connection
-     *         cannot be opened, or (FIPS mode) if the cluster truststore cannot be
+     *         cannot be opened, or (FIPS mode) if the cluster TLS options cannot be
      *         loaded
      */
     public java.net.URLConnection openPlatformConnection(String url)
@@ -1160,50 +1151,84 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
         }
         javax.net.ssl.HttpsURLConnection https = (javax.net.ssl.HttpsURLConnection) conn;
         boolean fips = isFipsModeEnabled();
-        java.nio.file.Path sslDir = clusterSslDirectory();
         // Called per Suite API request: log the mode once per adapter instance.
         if (transportModeLogged.compareAndSet(false, true)) {
-            logInfo(describeTransportMode(fips, sslDir,
+            logInfo(describeTransportMode(fips, fips ? describeClusterSslDirectory() : null,
                     System.getProperty("org.bouncycastle.fips.approved_only")));
         }
+        return applySuiteApiTransport(https, fips, VcfCfAdapter::clusterSslDirectory,
+                clusterSocketFactoryCache, VcfCfAdapter::decryptWithPlatformCrypt, e -> {
+                    if (fipsTruststoreFailureWarnLogged.compareAndSet(false, true)) {
+                        logWarn("VcfCfAdapter.openPlatformConnection: IS_FIPS=true but the "
+                                + "cluster TLS options could not be loaded, so the Suite API "
+                                + "connection is refused instead of falling back to trust-all "
+                                + "(issue #215). Cause: " + e.getMessage() + " (Logged once per "
+                                + "adapter instance; every Suite API call fails with this cause "
+                                + "until the inputs are readable.)");
+                    }
+                });
+    }
+
+    /** Source of the cluster SSL directory; only consulted on the FIPS branch. */
+    @FunctionalInterface
+    interface SslDirectorySource {
+        java.nio.file.Path get() throws java.io.IOException;
+    }
+
+    /**
+     * The Suite API transport dispatch, instance-free so it is unit-testable.
+     * Non-FIPS: {@link #applyBcMirrorTransport}. FIPS:
+     * {@link #applyClusterTruststoreTransport}; on failure {@code onFipsFailure}
+     * runs and the exception propagates. There is no trust-all fallback on the
+     * FIPS branch (issue #215), and {@code sslDir} is not consulted on the
+     * non-FIPS branch.
+     *
+     * @return {@code https}, configured
+     * @throws java.io.IOException (FIPS) if the cluster TLS options cannot be
+     *         loaded; the connection is left on the JDK defaults and must not
+     *         be used
+     */
+    static javax.net.ssl.HttpsURLConnection applySuiteApiTransport(
+            javax.net.ssl.HttpsURLConnection https, boolean fips, SslDirectorySource sslDir,
+            ClusterSocketFactoryCache cache, java.util.function.UnaryOperator<String> decryptor,
+            java.util.function.Consumer<java.io.IOException> onFipsFailure)
+            throws java.io.IOException {
         if (!fips) {
             applyBcMirrorTransport(https);
             return https;
         }
         try {
-            applyClusterTruststoreTransport(https, sslDir, FIPS_TRUSTSTORE_TYPE,
-                    VcfCfAdapter::decryptWithPlatformCrypt);
+            applyClusterTruststoreTransport(https, sslDir.get(), cache, decryptor);
         } catch (java.io.IOException e) {
-            if (fipsTruststoreFailureWarnLogged.compareAndSet(false, true)) {
-                logWarn("VcfCfAdapter.openPlatformConnection: IS_FIPS=true but the cluster "
-                        + "truststore could not be loaded, so the Suite API connection is "
-                        + "refused instead of falling back to trust-all (issue #215). Cause: "
-                        + e.getMessage() + " (Logged once per adapter instance; every Suite "
-                        + "API call fails with this cause until the file is readable.)");
-            }
+            onFipsFailure.accept(e);
             throw e;
         }
         return https;
     }
 
-    /** Vendor FIPS switch: {@code Constants.FIPS_MODE_ENABLED} reads this environment variable. */
+    /** Vendor FIPS switch: {@code Constants.FIPS_MODE_ENABLED} and {@code SSLOptions.IS_FIPS} read this. */
     static final String FIPS_ENV_VAR = "IS_FIPS";
-    /** System property naming the VCOPS data root ({@code Constants.getVcopsDataVcopsDir}). */
-    static final String VCOPS_DATA_VCOPS_PROPERTY = "VCOPS_DATA_VCOPS";
-    /** Cluster truststore file name ({@code Constants.TRUSTSTORE_PATH}). */
-    static final String CLUSTER_TRUSTSTORE_FILE = "tcserver.truststore";
-    /** Store password file name ({@code Constants.TRUSTSTORE_PASSWORD_PATH}). */
+    /** Root of the cluster SSL directory ({@code SSLOptions.getStorage}: environment, then system property). */
+    static final String STORAGE_VAR = "STORAGE";
+    /** Cluster TLS options file ({@code SSLOptions.<clinit>}). */
+    static final String SECURE_COMMUNICATIONS_FILE = "secure-communications.properties";
+    /** Store password file ({@code SSLOptions.<clinit>}). */
     static final String STORE_PASS_FILE = "storePass.properties";
-    /** Truststore password key ({@code Constants.getTrustStorePassword}). */
-    static final String TRUSTSTORE_PASSWORD_KEY = "ssltruststorePassword";
-    /** Suffix of the encrypted variant of a store password key ({@code Constants.getStorePassProperty}). */
+    /** Lookup prefixes for {@code VROPS_CLUSTER}, most specific first ({@code SSLOptions.propertyLookupPrefixes}). */
+    static final List<String> CLUSTER_PROPERTY_PREFIXES =
+            Collections.unmodifiableList(java.util.Arrays.asList("inter_cluster", "default"));
+    /** {@code SSLOptions.ALL_JRE_*_KEYWORD}: use the JRE default list. */
+    static final String ALL_JRE_KEYWORD = "%all%";
+    /** {@code SSLOptions.DEFAULT_TRUSTSTORE_PASSWORD_KEYWORD}: redirect to {@code storePass.properties}. */
+    static final String TRUSTSTORE_PASSWORD_SENTINEL = "%truststore_password%";
+    /** {@code SSLOptions.DEFAULT_KEYSTORE_PASSWORD_KEYWORD}: redirect to {@code storePass.properties}. */
+    static final String KEYSTORE_PASSWORD_SENTINEL = "%keystore_password%";
+    /** {@code storePass.properties} key behind {@link #TRUSTSTORE_PASSWORD_SENTINEL}. */
+    static final String STORE_PASS_TRUSTSTORE_KEY = "ssltruststorePassword";
+    /** {@code storePass.properties} key behind {@link #KEYSTORE_PASSWORD_SENTINEL}. */
+    static final String STORE_PASS_KEYSTORE_KEY = "sslkeystorePassword";
+    /** Suffix of an encrypted property ({@code SSLOptions.readPasswordProperty}, {@code CryptUtils}). */
     static final String ENCRYPTED_KEY_SUFFIX = ".encrypted";
-    /**
-     * Truststore type in FIPS mode: {@code alive_common CaSACertificateStoreConfig}
-     * loads this same {@code tcserver.truststore} as {@code BCFKS} when
-     * {@code IS_FIPS} is true (and as {@code JKS} otherwise).
-     */
-    static final String FIPS_TRUSTSTORE_TYPE = "BCFKS";
 
     /**
      * Apply the BC-mirror non-FIPS Suite API transport (trust-all +
@@ -1228,148 +1253,515 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
     }
 
     /**
-     * Apply the FIPS-mode Suite API transport (chain verified against the
-     * cluster truststore + ignore-hostname) to an already-opened
-     * {@link javax.net.ssl.HttpsURLConnection}. Mirrors the vendor FIPS
-     * branch: {@code verify("true")} + {@code ignoreHostName(true)} +
-     * {@code useClusterTruststore(true)}. Static and instance-free for the
-     * same unit-testability reason as {@link #applyBcMirrorTransport}.
+     * Apply the FIPS-mode Suite API transport to an already-opened
+     * {@link javax.net.ssl.HttpsURLConnection}: the cached cluster socket
+     * factory plus an all-true {@link javax.net.ssl.HostnameVerifier}. Mirrors
+     * the vendor FIPS branch: {@code verify("true")} +
+     * {@code ignoreHostName(true)} + {@code useClusterTruststore(true)}.
      *
-     * <p>The all-true {@link javax.net.ssl.HostnameVerifier} also keeps JSSE
-     * from setting an endpoint identification algorithm on the socket
-     * ({@code HttpsURLConnection} sets one only when the default verifier is
-     * in effect), so the PKIX trust manager validates the chain and does not
-     * match the name. Loopback ({@code localhost}) therefore works against a
-     * certificate issued to the node's FQDN.
+     * <p>The all-true verifier also keeps JSSE from setting an endpoint
+     * identification algorithm on the socket ({@code HttpsURLConnection} sets
+     * one only when the default verifier is in effect), so the PKIX trust
+     * manager validates the chain and does not match the name. Loopback
+     * ({@code localhost}) therefore works against a certificate issued to the
+     * node's FQDN.
      *
-     * @param https     the connection to configure
-     * @param sslDir    directory holding {@code tcserver.truststore} and
-     *                  {@code storePass.properties} (production:
-     *                  {@link #clusterSslDirectory()})
-     * @param storeType {@link java.security.KeyStore} type of the truststore
-     *                  (production: {@link #FIPS_TRUSTSTORE_TYPE})
-     * @param decryptor decrypts the {@code ssltruststorePassword.encrypted}
-     *                  value (production: platform {@code Crypt})
-     * @throws java.io.IOException naming the offending path if the truststore
-     *         cannot be loaded; the connection is left unconfigured and must
-     *         not be used
+     * @throws java.io.IOException naming the offending path if the options
+     *         cannot be loaded; the connection is left unconfigured
      */
     static void applyClusterTruststoreTransport(javax.net.ssl.HttpsURLConnection https,
-            java.nio.file.Path sslDir, String storeType,
+            java.nio.file.Path sslDir, ClusterSocketFactoryCache cache,
             java.util.function.UnaryOperator<String> decryptor) throws java.io.IOException {
-        javax.net.ssl.SSLContext ctx = clusterTruststoreSslContext(sslDir, storeType, decryptor);
-        https.setSSLSocketFactory(ctx.getSocketFactory());
+        javax.net.ssl.SSLSocketFactory factory = cache.get(sslDir, true, decryptor);
+        https.setSSLSocketFactory(factory);
         https.setHostnameVerifier((h, s) -> true);
     }
 
     /**
-     * Build a TLS {@link javax.net.ssl.SSLContext} that trusts exactly the
-     * certificates in {@code <sslDir>/tcserver.truststore}, opened with the
-     * password from {@code <sslDir>/storePass.properties}.
-     *
-     * @throws java.io.IOException naming the path for every failure: missing or
-     *         unreadable truststore, missing or unreadable password file, no
-     *         password key, decrypt failure, unknown store type, or a store
-     *         that does not load with the resolved password
+     * The resolved vendor {@code SSLOptions} for the {@code VROPS_CLUSTER}
+     * category. Passwords are held only as long as the cache entry.
      */
-    static javax.net.ssl.SSLContext clusterTruststoreSslContext(java.nio.file.Path sslDir,
-            String storeType, java.util.function.UnaryOperator<String> decryptor)
-            throws java.io.IOException {
-        java.nio.file.Path trustStorePath = sslDir.resolve(CLUSTER_TRUSTSTORE_FILE);
-        java.nio.file.Path passwordPath = sslDir.resolve(STORE_PASS_FILE);
-        if (!java.nio.file.Files.isRegularFile(trustStorePath)
-                || !java.nio.file.Files.isReadable(trustStorePath)) {
-            throw new java.io.IOException("cluster truststore " + trustStorePath
-                    + " is missing or not readable");
+    static final class ClusterSslOptions {
+        final java.nio.file.Path optionsFile;
+        final java.nio.file.Path storePassFile;
+        final String protocol;
+        final String storeType;
+        final String algorithm;
+        final String truststore;
+        final String truststorePassword;
+        final String keystore;
+        final String keystorePassword;
+        final String[] supportedProtocols;
+        final String[] supportedCipherSuites;
+
+        ClusterSslOptions(java.nio.file.Path optionsFile, java.nio.file.Path storePassFile,
+                String protocol, String storeType, String algorithm, String truststore,
+                String truststorePassword, String keystore, String keystorePassword,
+                String[] supportedProtocols, String[] supportedCipherSuites) {
+            this.optionsFile = optionsFile;
+            this.storePassFile = storePassFile;
+            this.protocol = protocol;
+            this.storeType = storeType;
+            this.algorithm = algorithm;
+            this.truststore = truststore;
+            this.truststorePassword = truststorePassword;
+            this.keystore = keystore;
+            this.keystorePassword = keystorePassword;
+            this.supportedProtocols = supportedProtocols;
+            this.supportedCipherSuites = supportedCipherSuites;
         }
-        char[] password = readTrustStorePassword(passwordPath, decryptor).toCharArray();
+    }
+
+    /**
+     * Resolve {@code SSLOptions(VROPS_CLUSTER)} the way the vendor
+     * constructor does, from {@code <sslDir>/secure-communications.properties}:
+     * <ul>
+     *   <li>each key is looked up as {@code inter_cluster.<key>} then
+     *       {@code default.<key>};</li>
+     *   <li>{@code protocol}, {@code store_type}, {@code algorithm},
+     *       {@code supported_cipher_suites}, {@code supported_protocols} are
+     *       required; {@code truststore}, {@code keystore} and the passwords
+     *       are optional (this method then requires {@code truststore} and,
+     *       when a store is set, its password, since without them every
+     *       vendor handshake fails too);</li>
+     *   <li>{@code %all%} (any case) for the protocol or cipher list means the
+     *       JRE defaults of an {@code SSLContext} for {@code protocol}; any
+     *       other value is trimmed and split on commas; when {@code fips},
+     *       cipher suites starting {@code TLS_RSA} are removed;</li>
+     *   <li>{@code truststore} and {@code keystore} paths have {@code %VAR%}
+     *       then {@code $VAR} replaced from the environment, then system
+     *       properties (unresolved names stay as written);</li>
+     *   <li>a password is {@code <key>.encrypted} (any prefix, decrypted)
+     *       before {@code <key>} (any prefix); the value
+     *       {@code %truststore_password%} / {@code %keystore_password%} (any
+     *       case) redirects to {@code storePass.properties}
+     *       {@code ssltruststorePassword} / {@code sslkeystorePassword}, read
+     *       {@code .encrypted} first ({@code CryptUtils.readPasswordProperty}).</li>
+     * </ul>
+     * Error messages name file, key and the exception class, never a value.
+     *
+     * @param fips whether {@code IS_FIPS} is true ({@code SSLOptions.IS_FIPS}),
+     *             which enables the {@code TLS_RSA} cipher filter
+     */
+    static ClusterSslOptions resolveClusterSslOptions(java.nio.file.Path sslDir, boolean fips,
+            java.util.function.UnaryOperator<String> decryptor) throws java.io.IOException {
+        java.nio.file.Path optionsFile = sslDir.resolve(SECURE_COMMUNICATIONS_FILE);
+        java.nio.file.Path storePassFile = sslDir.resolve(STORE_PASS_FILE);
+        java.util.Properties props = loadProperties(optionsFile, "cluster TLS options file");
+        String protocol = requiredClusterProperty(props, optionsFile, "protocol");
+        String storeType = requiredClusterProperty(props, optionsFile, "store_type");
+        String algorithm = requiredClusterProperty(props, optionsFile, "algorithm");
+        String keystore = clusterProperty(props, "keystore");
+        String truststore = clusterProperty(props, "truststore");
+        String cipherList = requiredClusterProperty(props, optionsFile, "supported_cipher_suites");
+        String protocolList = requiredClusterProperty(props, optionsFile, "supported_protocols");
+        boolean allCiphers = cipherList.equalsIgnoreCase(ALL_JRE_KEYWORD);
+        boolean allProtocols = protocolList.equalsIgnoreCase(ALL_JRE_KEYWORD);
+        javax.net.ssl.SSLParameters jre = (allCiphers || allProtocols)
+                ? jreDefaultSslParameters(protocol, optionsFile) : null;
+        String[] ciphers = filterRestrictedCiphers(
+                allCiphers ? jre.getCipherSuites() : cipherList.trim().split("\\s*,\\s*"), fips);
+        String[] protocols = allProtocols ? jre.getProtocols()
+                : protocolList.trim().split("\\s*,\\s*");
+        if (truststore != null) {
+            truststore = replacePathEnvVars(truststore);
+        }
+        if (keystore != null) {
+            keystore = replacePathEnvVars(keystore);
+        }
+        String keystorePassword = clusterPasswordProperty(props, optionsFile, "keystore_password",
+                decryptor);
+        String truststorePassword = clusterPasswordProperty(props, optionsFile,
+                "truststore_password", decryptor);
+        boolean keystoreRedirect = keystorePassword != null
+                && keystorePassword.equalsIgnoreCase(KEYSTORE_PASSWORD_SENTINEL);
+        boolean truststoreRedirect = truststorePassword != null
+                && truststorePassword.equalsIgnoreCase(TRUSTSTORE_PASSWORD_SENTINEL);
+        if (keystoreRedirect || truststoreRedirect) {
+            java.util.Properties storePass = loadProperties(storePassFile,
+                    "cluster store password file");
+            if (keystoreRedirect) {
+                keystorePassword = storePassProperty(storePass, storePassFile,
+                        STORE_PASS_KEYSTORE_KEY, decryptor);
+            }
+            if (truststoreRedirect) {
+                truststorePassword = storePassProperty(storePass, storePassFile,
+                        STORE_PASS_TRUSTSTORE_KEY, decryptor);
+            }
+        }
+        if (truststore == null) {
+            throw new java.io.IOException("cluster TLS options file " + optionsFile
+                    + " has no truststore key under " + CLUSTER_PROPERTY_PREFIXES
+                    + " (the vendor would trust nothing)");
+        }
+        if (truststorePassword == null) {
+            throw new java.io.IOException("no truststore password resolved for truststore "
+                    + truststore + " (truststore_password[.encrypted] in " + optionsFile
+                    + (truststoreRedirect ? ", then " + STORE_PASS_TRUSTSTORE_KEY
+                            + "[.encrypted] in " + storePassFile : "") + ")");
+        }
+        if (keystore != null && keystorePassword == null) {
+            throw new java.io.IOException("no keystore password resolved for keystore "
+                    + keystore + " (from " + optionsFile + ")");
+        }
+        return new ClusterSslOptions(optionsFile, storePassFile, protocol, storeType, algorithm,
+                truststore, truststorePassword, keystore, keystorePassword, protocols, ciphers);
+    }
+
+    /**
+     * Build the socket factory the vendor {@code vROpsSSLSocketFactory} builds
+     * from these options: truststore loaded as {@code store_type}, trust
+     * managers from {@code TrustManagerFactory(algorithm)}, optional client
+     * keystore loaded as {@code KeyStore.getDefaultType()} with key managers
+     * from {@code KeyManagerFactory(algorithm)}, {@code SSLContext(protocol)},
+     * and every socket restricted to the configured protocols and cipher
+     * suites ({@link RestrictedSslSocketFactory}).
+     */
+    static javax.net.ssl.SSLSocketFactory buildClusterSocketFactory(ClusterSslOptions o)
+            throws java.io.IOException {
+        javax.net.ssl.SSLContext ctx = clusterTruststoreSslContext(o);
+        return new RestrictedSslSocketFactory(ctx.getSocketFactory(),
+                o.supportedProtocols, o.supportedCipherSuites);
+    }
+
+    /** The {@link javax.net.ssl.SSLContext} part of {@link #buildClusterSocketFactory}. */
+    static javax.net.ssl.SSLContext clusterTruststoreSslContext(ClusterSslOptions o)
+            throws java.io.IOException {
+        java.nio.file.Path trustStorePath = java.nio.file.Paths.get(o.truststore);
+        String storeType = o.storeType;
         java.security.KeyStore trustStore;
         try {
             trustStore = java.security.KeyStore.getInstance(storeType);
         } catch (java.security.KeyStoreException e) {
             throw new java.io.IOException("keystore type " + storeType
                     + " is not available in this JVM, cannot open cluster truststore "
-                    + trustStorePath + ": " + e.getMessage(), e);
+                    + trustStorePath + " (store_type from " + o.optionsFile + "): "
+                    + e.getClass().getName(), e);
         }
-        try (java.io.InputStream in = java.nio.file.Files.newInputStream(trustStorePath)) {
-            trustStore.load(in, password);
-        } catch (java.io.IOException | java.security.GeneralSecurityException e) {
-            throw new java.io.IOException("could not load cluster truststore "
-                    + trustStorePath + " as " + storeType + " with the password from "
-                    + passwordPath + ": " + e, e);
-        } finally {
-            java.util.Arrays.fill(password, '\0');
-        }
+        loadStore(trustStore, trustStorePath, o.truststorePassword, "cluster truststore",
+                storeType);
+        javax.net.ssl.KeyManager[] keyManagers = null;
         try {
-            javax.net.ssl.TrustManagerFactory tmf = javax.net.ssl.TrustManagerFactory
-                    .getInstance(javax.net.ssl.TrustManagerFactory.getDefaultAlgorithm());
+            javax.net.ssl.TrustManagerFactory tmf =
+                    javax.net.ssl.TrustManagerFactory.getInstance(o.algorithm);
             tmf.init(trustStore);
-            javax.net.ssl.SSLContext ctx = javax.net.ssl.SSLContext.getInstance("TLS");
-            ctx.init(null, tmf.getTrustManagers(), null);
+            if (o.keystore != null) {
+                java.nio.file.Path keyStorePath = java.nio.file.Paths.get(o.keystore);
+                java.security.KeyStore keyStore =
+                        java.security.KeyStore.getInstance(java.security.KeyStore.getDefaultType());
+                loadStore(keyStore, keyStorePath, o.keystorePassword, "cluster keystore",
+                        java.security.KeyStore.getDefaultType());
+                javax.net.ssl.KeyManagerFactory kmf =
+                        javax.net.ssl.KeyManagerFactory.getInstance(o.algorithm);
+                char[] keyPassword = o.keystorePassword.toCharArray();
+                try {
+                    kmf.init(keyStore, keyPassword);
+                } finally {
+                    java.util.Arrays.fill(keyPassword, '\0');
+                }
+                keyManagers = kmf.getKeyManagers();
+            }
+            javax.net.ssl.SSLContext ctx = javax.net.ssl.SSLContext.getInstance(o.protocol);
+            ctx.init(keyManagers, tmf.getTrustManagers(), null);
             return ctx;
         } catch (java.security.GeneralSecurityException e) {
-            throw new java.io.IOException("could not build a TLS context from cluster truststore "
-                    + trustStorePath + ": " + e, e);
+            throw new java.io.IOException("could not build a TLS context (protocol "
+                    + o.protocol + ", algorithm " + o.algorithm + ") from cluster truststore "
+                    + trustStorePath + " and " + o.optionsFile + ": " + e.getClass().getName(), e);
         }
     }
 
-    /**
-     * Resolve the truststore password the way the vendor
-     * {@code Constants.getStorePassProperty("ssltruststorePassword")} does:
-     * the plain {@code ssltruststorePassword} value when present, otherwise
-     * {@code decryptor} applied to {@code ssltruststorePassword.encrypted}.
-     * Read with {@link java.util.Properties} (as MPB's
-     * {@code VropsGlobalTrustStore} reads the same file). Error messages name
-     * the file and key, never the value.
-     */
-    static String readTrustStorePassword(java.nio.file.Path passwordPath,
-            java.util.function.UnaryOperator<String> decryptor) throws java.io.IOException {
-        if (!java.nio.file.Files.isRegularFile(passwordPath)
-                || !java.nio.file.Files.isReadable(passwordPath)) {
-            throw new java.io.IOException("cluster truststore password file " + passwordPath
-                    + " is missing or not readable");
+    private static void loadStore(java.security.KeyStore store, java.nio.file.Path path,
+            String password, String what, String type) throws java.io.IOException {
+        if (!java.nio.file.Files.isRegularFile(path) || !java.nio.file.Files.isReadable(path)) {
+            throw new java.io.IOException(what + " " + path + " is missing or not readable");
+        }
+        char[] chars = password.toCharArray();
+        try (java.io.InputStream in = java.nio.file.Files.newInputStream(path)) {
+            store.load(in, chars);
+        } catch (java.io.IOException | java.security.GeneralSecurityException e) {
+            throw new java.io.IOException("could not load " + what + " " + path + " as " + type
+                    + " with the resolved password: " + e.getClass().getName(), e);
+        } finally {
+            java.util.Arrays.fill(chars, '\0');
+        }
+    }
+
+    private static java.util.Properties loadProperties(java.nio.file.Path path, String what)
+            throws java.io.IOException {
+        if (!java.nio.file.Files.isRegularFile(path) || !java.nio.file.Files.isReadable(path)) {
+            throw new java.io.IOException(what + " " + path + " is missing or not readable");
         }
         java.util.Properties props = new java.util.Properties();
-        try (java.io.InputStream in = java.nio.file.Files.newInputStream(passwordPath)) {
+        try (java.io.InputStream in = java.nio.file.Files.newInputStream(path)) {
             props.load(in);
         } catch (java.io.IOException | IllegalArgumentException e) {
             // IllegalArgumentException: malformed unicode escape in the file.
-            throw new java.io.IOException("could not read cluster truststore password file "
-                    + passwordPath + ": " + e.getClass().getName(), e);
+            throw new java.io.IOException("could not read " + what + " " + path + ": "
+                    + e.getClass().getName(), e);
         }
-        String plain = props.getProperty(TRUSTSTORE_PASSWORD_KEY);
-        if (plain != null) {
-            return plain;
+        return props;
+    }
+
+    /** {@code SSLOptions.readProperty(..., optional=true)}: first prefix that has the key, else null. */
+    static String clusterProperty(java.util.Properties props, String key) {
+        for (String prefix : CLUSTER_PROPERTY_PREFIXES) {
+            String value = props.getProperty(prefix + "." + key);
+            if (value != null) {
+                return value;
+            }
         }
-        String encryptedKey = TRUSTSTORE_PASSWORD_KEY + ENCRYPTED_KEY_SUFFIX;
-        String encrypted = props.getProperty(encryptedKey);
-        if (encrypted == null) {
-            throw new java.io.IOException("cluster truststore password file " + passwordPath
-                    + " has neither " + TRUSTSTORE_PASSWORD_KEY + " nor " + encryptedKey);
+        return null;
+    }
+
+    private static String requiredClusterProperty(java.util.Properties props,
+            java.nio.file.Path file, String key) throws java.io.IOException {
+        String value = clusterProperty(props, key);
+        if (value == null) {
+            throw new java.io.IOException("cluster TLS options file " + file + " has no " + key
+                    + " under " + CLUSTER_PROPERTY_PREFIXES + " (required by the vendor)");
         }
+        return value;
+    }
+
+    /** {@code SSLOptions.readPasswordProperty}: {@code <key>.encrypted} (decrypted) first, then {@code <key>}. */
+    private static String clusterPasswordProperty(java.util.Properties props,
+            java.nio.file.Path file, String key,
+            java.util.function.UnaryOperator<String> decryptor) throws java.io.IOException {
+        String encrypted = clusterProperty(props, key + ENCRYPTED_KEY_SUFFIX);
+        if (encrypted != null) {
+            return decrypt(decryptor, encrypted, key + ENCRYPTED_KEY_SUFFIX, file);
+        }
+        return clusterProperty(props, key);
+    }
+
+    /** {@code CryptUtils.readPasswordProperty}: {@code <key>.encrypted} (decrypted) first, then {@code <key>}. */
+    private static String storePassProperty(java.util.Properties props, java.nio.file.Path file,
+            String key, java.util.function.UnaryOperator<String> decryptor)
+            throws java.io.IOException {
+        String encrypted = props.getProperty(key + ENCRYPTED_KEY_SUFFIX);
+        if (encrypted != null) {
+            return decrypt(decryptor, encrypted, key + ENCRYPTED_KEY_SUFFIX, file);
+        }
+        // Null when neither key is present, as CryptUtils returns; the caller
+        // fails only if the store that needs this password is configured.
+        return props.getProperty(key);
+    }
+
+    private static String decrypt(java.util.function.UnaryOperator<String> decryptor,
+            String encrypted, String key, java.nio.file.Path file) throws java.io.IOException {
         String decrypted;
         try {
             decrypted = decryptor.apply(encrypted);
         } catch (RuntimeException | LinkageError e) {
-            // Class name only: a decrypt exception message is not trusted to be
-            // free of secret material.
-            throw new java.io.IOException("could not decrypt " + encryptedKey + " from "
-                    + passwordPath + " with the platform Crypt: " + e.getClass().getName());
+            throw new java.io.IOException("could not decrypt " + key + " from " + file
+                    + " with the platform Crypt: " + e.getClass().getName());
         }
         if (decrypted == null) {
-            throw new java.io.IOException("decrypting " + encryptedKey + " from "
-                    + passwordPath + " returned no value");
+            throw new java.io.IOException("decrypting " + key + " from " + file
+                    + " returned no value");
         }
         return decrypted;
     }
 
+    /** {@code SSLOptions.filterRestrictedCiphers}: in FIPS mode drop suites starting {@code TLS_RSA}. */
+    static String[] filterRestrictedCiphers(String[] ciphers, boolean fips) {
+        if (!fips) {
+            return ciphers;
+        }
+        return java.util.Arrays.stream(ciphers).filter(c -> !c.startsWith("TLS_RSA"))
+                .toArray(String[]::new);
+    }
+
+    private static javax.net.ssl.SSLParameters jreDefaultSslParameters(String protocol,
+            java.nio.file.Path file) throws java.io.IOException {
+        try {
+            javax.net.ssl.SSLContext ctx = javax.net.ssl.SSLContext.getInstance(protocol);
+            ctx.init(null, null, null);
+            return ctx.getDefaultSSLParameters();
+        } catch (java.security.GeneralSecurityException e) {
+            throw new java.io.IOException("could not read JRE default protocols and cipher "
+                    + "suites for protocol " + protocol + " (from " + file + "): "
+                    + e.getClass().getName(), e);
+        }
+    }
+
+    /**
+     * {@code SSLOptions.replacePathEnvVars}: replace {@code %NAME%} then
+     * {@code $NAME} with the variable's value (environment, then system
+     * property). Matches are found on the input string; unresolved names are
+     * left as written.
+     */
+    static String replacePathEnvVars(String path) {
+        String out = replacePattern(path, java.util.regex.Pattern.compile("%(\\w+)%"));
+        return replacePattern(out, java.util.regex.Pattern.compile("\\$(\\w+)"));
+    }
+
+    private static String replacePattern(String input, java.util.regex.Pattern pattern) {
+        String out = input;
+        java.util.regex.Matcher m = pattern.matcher(input);
+        while (m.find()) {
+            String value = readEnvVarValue(m.group(1));
+            if (value != null) {
+                out = out.replace(m.group(), value);
+            }
+        }
+        return out;
+    }
+
+    /** {@code SSLOptions.readEnvVarValue}: environment variable, else system property. */
+    static String readEnvVarValue(String name) {
+        String value = System.getenv(name);
+        return value != null ? value : System.getProperty(name);
+    }
+
+    /**
+     * Socket factory that restricts every socket to the configured protocols
+     * and cipher suites, as {@code vROpsSSLSocketFactory.prepareSocket} does:
+     * enabled = supported by the socket intersected with the configured list
+     * (an empty intersection is applied as is, and the handshake fails).
+     */
+    static final class RestrictedSslSocketFactory extends javax.net.ssl.SSLSocketFactory {
+        private final javax.net.ssl.SSLSocketFactory delegate;
+        private final List<String> protocols;
+        private final List<String> cipherSuites;
+
+        RestrictedSslSocketFactory(javax.net.ssl.SSLSocketFactory delegate, String[] protocols,
+                String[] cipherSuites) {
+            this.delegate = delegate;
+            this.protocols = protocols == null ? null : java.util.Arrays.asList(protocols.clone());
+            this.cipherSuites = cipherSuites == null ? null
+                    : java.util.Arrays.asList(cipherSuites.clone());
+        }
+
+        private java.net.Socket prepare(java.net.Socket socket) {
+            javax.net.ssl.SSLSocket ssl = (javax.net.ssl.SSLSocket) socket;
+            if (protocols != null) {
+                ssl.setEnabledProtocols(intersect(ssl.getSupportedProtocols(), protocols));
+            }
+            if (cipherSuites != null) {
+                ssl.setEnabledCipherSuites(intersect(ssl.getSupportedCipherSuites(), cipherSuites));
+            }
+            return ssl;
+        }
+
+        private static String[] intersect(String[] supported, List<String> allowed) {
+            java.util.Set<String> set = new java.util.LinkedHashSet<>(java.util.Arrays.asList(supported));
+            set.retainAll(allowed);
+            return set.toArray(new String[0]);
+        }
+
+        @Override
+        public String[] getDefaultCipherSuites() {
+            return delegate.getDefaultCipherSuites();
+        }
+
+        @Override
+        public String[] getSupportedCipherSuites() {
+            return delegate.getSupportedCipherSuites();
+        }
+
+        @Override
+        public java.net.Socket createSocket(java.net.Socket s, String host, int port,
+                boolean autoClose) throws java.io.IOException {
+            return prepare(delegate.createSocket(s, host, port, autoClose));
+        }
+
+        @Override
+        public java.net.Socket createSocket(String host, int port) throws java.io.IOException {
+            return prepare(delegate.createSocket(host, port));
+        }
+
+        @Override
+        public java.net.Socket createSocket(String host, int port, java.net.InetAddress localHost,
+                int localPort) throws java.io.IOException {
+            return prepare(delegate.createSocket(host, port, localHost, localPort));
+        }
+
+        @Override
+        public java.net.Socket createSocket(java.net.InetAddress host, int port)
+                throws java.io.IOException {
+            return prepare(delegate.createSocket(host, port));
+        }
+
+        @Override
+        public java.net.Socket createSocket(java.net.InetAddress address, int port,
+                java.net.InetAddress localAddress, int localPort) throws java.io.IOException {
+            return prepare(delegate.createSocket(address, port, localAddress, localPort));
+        }
+    }
+
+    /**
+     * Per-adapter-instance cache of the FIPS socket factory. The vendor
+     * resolves {@code SSLOptions} once per JVM and rebuilds its socket factory
+     * when the truststore's modification time moves; this cache resolves once
+     * per instance and rebuilds when the modification time or size of any
+     * input changes ({@code secure-communications.properties},
+     * {@code storePass.properties}, the truststore, the keystore). Reusing one
+     * factory also lets {@code HttpsURLConnection} keep-alive reuse
+     * connections. Failures are not cached: the next call retries.
+     */
+    static final class ClusterSocketFactoryCache {
+        private java.nio.file.Path cachedDir;
+        private String inputsFingerprint;
+        private ClusterSslOptions options;
+        private String storesFingerprint;
+        private javax.net.ssl.SSLSocketFactory factory;
+        private int builds;
+
+        synchronized javax.net.ssl.SSLSocketFactory get(java.nio.file.Path sslDir, boolean fips,
+                java.util.function.UnaryOperator<String> decryptor) throws java.io.IOException {
+            String inputs = fingerprint(sslDir.resolve(SECURE_COMMUNICATIONS_FILE),
+                    sslDir.resolve(STORE_PASS_FILE));
+            if (options == null || !sslDir.equals(cachedDir) || !inputs.equals(inputsFingerprint)) {
+                options = null;
+                factory = null;
+                options = resolveClusterSslOptions(sslDir, fips, decryptor);
+                cachedDir = sslDir;
+                inputsFingerprint = inputs;
+            }
+            String stores = fingerprint(java.nio.file.Paths.get(options.truststore),
+                    options.keystore == null ? null : java.nio.file.Paths.get(options.keystore));
+            if (factory == null || !stores.equals(storesFingerprint)) {
+                factory = null;
+                factory = buildClusterSocketFactory(options);
+                storesFingerprint = stores;
+                builds++;
+            }
+            return factory;
+        }
+
+        /** Number of factory builds so far (test hook). */
+        synchronized int buildCount() {
+            return builds;
+        }
+
+        private static String fingerprint(java.nio.file.Path... paths) {
+            StringBuilder sb = new StringBuilder();
+            for (java.nio.file.Path p : paths) {
+                if (p == null) {
+                    sb.append("-|");
+                    continue;
+                }
+                try {
+                    sb.append(p).append('@')
+                            .append(java.nio.file.Files.getLastModifiedTime(p).toMillis())
+                            .append(':').append(java.nio.file.Files.size(p)).append('|');
+                } catch (java.io.IOException | RuntimeException e) {
+                    sb.append(p).append("@absent|");
+                }
+            }
+            return sb.toString();
+        }
+    }
+
     /**
      * Decrypt a store password with the SDK's
-     * {@code com.integrien.alive.common.security.Crypt}, the same call
-     * {@code Constants.getStorePassProperty} makes (and the same class
+     * {@code com.integrien.alive.common.security.Crypt}, which delegates to
+     * {@code com.vmware.vcops.security.Crypt.getDefaultCrypt().decrypt}, the
+     * same call as the vendor's {@code Crypt.dec} (and the same class
      * {@code AmbientCredential} already uses). Only resolvable on a collector,
-     * where the delegate {@code com.vmware.vcops.security.Crypt} is on the
-     * classpath.
+     * where the delegate is on the classpath.
      */
     @SuppressWarnings("deprecation")
     private static String decryptWithPlatformCrypt(String encrypted) {
@@ -1391,41 +1783,60 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
     }
 
     /**
-     * The cluster SSL directory, as {@code Constants.SSL_DIRECTORY_PATH}:
-     * {@code System.getProperty("VCOPS_DATA_VCOPS")}, or {@code /data/vcops}
-     * when unset, resolved with {@code user/conf/ssl}.
+     * The cluster SSL directory, as {@code SSLOptions.<clinit>}:
+     * {@code STORAGE} (environment, then system property) resolved with
+     * {@code vcops/user/conf/ssl}.
+     *
+     * @throws java.io.IOException if {@code STORAGE} is unset (the vendor then
+     *         finds no options file and trusts nothing)
      */
-    static java.nio.file.Path clusterSslDirectory() {
-        return clusterSslDirectory(System.getProperty(VCOPS_DATA_VCOPS_PROPERTY));
+    static java.nio.file.Path clusterSslDirectory() throws java.io.IOException {
+        return clusterSslDirectory(readEnvVarValue(STORAGE_VAR));
     }
 
-    /** {@link #clusterSslDirectory()} on a given {@code VCOPS_DATA_VCOPS} value. */
-    static java.nio.file.Path clusterSslDirectory(String vcopsDataVcops) {
-        java.nio.file.Path root = vcopsDataVcops == null
-                ? java.nio.file.Paths.get("/data", "vcops")
-                : java.nio.file.Paths.get(vcopsDataVcops);
-        return root.resolve("user").resolve("conf").resolve("ssl");
+    /** {@link #clusterSslDirectory()} on a given {@code STORAGE} value. */
+    static java.nio.file.Path clusterSslDirectory(String storage) throws java.io.IOException {
+        if (storage == null) {
+            throw new java.io.IOException("STORAGE is not set (environment or system property), "
+                    + "so the cluster TLS options file $STORAGE/vcops/user/conf/ssl/"
+                    + SECURE_COMMUNICATIONS_FILE + " cannot be located");
+        }
+        try {
+            return java.nio.file.Paths.get(storage, "vcops", "user", "conf", "ssl");
+        } catch (java.nio.file.InvalidPathException e) {
+            throw new java.io.IOException("STORAGE value is not a valid path: "
+                    + e.getClass().getName(), e);
+        }
+    }
+
+    /** The options file path for the mode line, or why it cannot be located. */
+    private static String describeClusterSslDirectory() {
+        try {
+            return clusterSslDirectory().resolve(SECURE_COMMUNICATIONS_FILE).toString();
+        } catch (java.io.IOException e) {
+            return "<unresolved: " + e.getMessage() + ">";
+        }
     }
 
     /**
      * The once-per-instance transport mode line: which signal fired and what
      * transport follows from it.
      *
-     * @param fips        result of {@link #isFipsModeEnabled()}
-     * @param sslDir      result of {@link #clusterSslDirectory()}
+     * @param fips         result of {@link #isFipsModeEnabled()}
+     * @param optionsFile  FIPS only: the {@code secure-communications.properties}
+     *                     path, or why it is unresolved; ignored when not FIPS
      * @param approvedOnly raw {@code org.bouncycastle.fips.approved_only}
-     *                    property value, printed as a diagnostic only
+     *                     property value, printed as a diagnostic only
      */
-    static String describeTransportMode(boolean fips, java.nio.file.Path sslDir,
-            String approvedOnly) {
+    static String describeTransportMode(boolean fips, String optionsFile, String approvedOnly) {
         String diagnostic = " Diagnostic only, not a mode signal: "
                 + "org.bouncycastle.fips.approved_only=" + approvedOnly + ".";
         if (fips) {
             return "VcfCfAdapter.openPlatformConnection: Suite API transport mode=FIPS "
                     + "(signal: environment variable IS_FIPS=true, the vendor SuiteAPIClient "
-                    + "switch). Chain verified against cluster truststore "
-                    + sslDir.resolve(CLUSTER_TRUSTSTORE_FILE) + " (type " + FIPS_TRUSTSTORE_TYPE
-                    + "), hostname ignored." + diagnostic + " (Logged once per adapter instance.)";
+                    + "switch). Chain verified with the cluster TLS options from " + optionsFile
+                    + " (category inter_cluster, then default), hostname ignored." + diagnostic
+                    + " (Logged once per adapter instance.)";
         }
         return "VcfCfAdapter.openPlatformConnection: Suite API transport mode=non-FIPS "
                 + "(signal: environment variable IS_FIPS is not true). Trust-all, hostname "
