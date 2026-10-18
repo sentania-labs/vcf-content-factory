@@ -42,20 +42,22 @@ def _print_fail(msg: str) -> None:
 
 
 def _get_yaml_paths_for_type(bundle: Bundle, content_type: str) -> List[str]:
-    """Return the list of absolute YAML path strings for a content type."""
-    mapping = {
-        "supermetrics": [str(p.source_path) for p in bundle.supermetrics
-                         if p.source_path],
-        "customgroups": [str(p.source_path) for p in bundle.customgroups
-                         if p.source_path],
-        "views": [str(p.source_path) for p in bundle.views
-                  if p.source_path],
-        "dashboards": [str(p.source_path) for p in bundle.dashboards
-                       if p.source_path],
-        "symptoms": [str(p) for p in bundle.symptom_paths],
-        "alerts": [str(p) for p in bundle.alert_paths],
-    }
-    return mapping.get(content_type, [])
+    """Return the list of absolute YAML path strings for a content type.
+
+    Every type reads ``source_path`` off the loaded objects on the Bundle.
+    (Symptoms and alerts once read ``bundle.symptom_paths`` /
+    ``bundle.alert_paths``, which the Bundle model never had, so every sync
+    raised AttributeError before doing anything: #196.)
+    """
+    items = {
+        "supermetrics": bundle.supermetrics,
+        "customgroups": bundle.customgroups,
+        "views": bundle.views,
+        "dashboards": bundle.dashboards,
+        "symptoms": bundle.symptoms,
+        "alerts": bundle.alerts,
+    }.get(content_type, [])
+    return [str(obj.source_path) for obj in items if obj.source_path]
 
 
 def _get_names_for_type(bundle: Bundle, content_type: str) -> List[str]:

@@ -766,13 +766,9 @@ class TestDashboardsCliImport:
 
 
 def test_bundle_sync_prints_external_prerequisites(tmp_path, monkeypatch, capsys):
-    import vcfcf_packaging.syncer as syncer
     from vcfcf_packaging.syncer import sync_bundle
     manifest = _bundle_repo(tmp_path, include_target=True, extra_navs=[{"dashboard_id": STOCK_ID}])
     monkeypatch.chdir(tmp_path)
-    # Pre-existing, unrelated: _get_yaml_paths_for_type reads
-    # bundle.symptom_paths, which Bundle does not define. Not under test.
-    monkeypatch.setattr(syncer, "_get_yaml_paths_for_type", lambda b, ct: [])
     sync_bundle(manifest.relative_to(tmp_path), handlers=[], session=object())
     err = capsys.readouterr().err
     assert "PREREQUISITE" in err and STOCK_ID in err
