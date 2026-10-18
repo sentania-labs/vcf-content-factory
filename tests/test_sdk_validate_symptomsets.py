@@ -19,9 +19,12 @@ SRC = REPO_ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
+# Only the pure checker is imported at module top.  Tests that monkeypatch
+# sdk_builder reach every function through the in-body ``sb`` import, because
+# tests/test_release_builder_phase2.py drops the module from sys.modules and a
+# module-top binding would then point at a different copy than the patches.
 from vcfcf_managementpacks.sdk_builder import (  # noqa: E402
     _validate_describe_symptom_sets,
-    validate_sdk_project,
 )
 
 _HEAD = (
@@ -126,7 +129,7 @@ def test_validate_sdk_project_surfaces_the_error(tmp_path, monkeypatch):
     )
     monkeypatch.setattr(sb.shutil, "which", lambda _n: None)
 
-    errs = validate_sdk_project(tmp_path)
+    errs = sb.validate_sdk_project(tmp_path)
     assert any("vcfcf_compliance_overrides_vcenter" in e and "SymptomSets" in e for e in errs)
 
 
