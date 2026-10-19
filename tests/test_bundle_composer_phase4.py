@@ -736,3 +736,29 @@ def _make_entries(n: int):
         )
         for i in range(n)
     ]
+
+
+# ---------------------------------------------------------------------------
+# Issue #187: plural-to-singular strips exactly one trailing "s"
+# ---------------------------------------------------------------------------
+
+class TestSingularContentType:
+    def test_drops_one_trailing_s(self):
+        from vcfcf_packaging.composer import _singular
+        assert _singular("dashboards") == "dashboard"
+        assert _singular("supermetrics") == "supermetric"
+
+    def test_double_s_keeps_one(self):
+        # rstrip("s") would have returned "cla" here.
+        from vcfcf_packaging.composer import _singular
+        assert _singular("classs") == "class"
+        assert _singular("class") == "clas"
+
+    def test_no_trailing_s_unchanged(self):
+        from vcfcf_packaging.composer import _singular
+        assert _singular("view") == "view"
+
+    def test_every_content_type_singular(self):
+        from vcfcf_packaging.composer import CONTENT_TYPES, _singular
+        for ct in CONTENT_TYPES:
+            assert _singular(ct) == ct[:-1]

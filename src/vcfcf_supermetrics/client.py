@@ -209,8 +209,10 @@ class _SMExtendedClient(VCFOpsClient):
         {adapter_kind_key, resource_kind_key} dicts for every (adapter, kind)
         scope where the SM is enabled=true.
 
-        The policy XML structure is:
-          PolicyContent/Policies/Policy/PackageSettings/SuperMetricsCatalog/
+        The policy XML structure is (one SuperMetrics block per
+        adapterKind/resourceKind pair, directly under PackageSettings; see
+        knowledge/context/investigations/policy_fragment_wire_format.md):
+          PolicyContent/Policies/Policy/PackageSettings/
             SuperMetrics adapterKind="X" resourceKind="Y"/
               SuperMetric enabled="true" id="<uuid>"/>
 

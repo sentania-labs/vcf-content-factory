@@ -136,3 +136,92 @@ def test_docset_scaffolds_carry_no_version(tmp_path: Path) -> None:
     for name in ("overview.md", "installing.md"):
         text = (docs / name).read_text(encoding="utf-8")
         assert "0.0.0.1" not in text and "1.0.0.1" not in text
+
+
+# ---------------------------------------------------------------------------
+# Issue #189: a first dev build's CHANGELOG.md makes no 1.x release claim
+# ---------------------------------------------------------------------------
+
+def test_first_dev_build_changelog_is_unreleased(tmp_path: Path) -> None:
+    """No git history (the common case for a gitignored pak clone): the
+    write-once CHANGELOG.md is headed Unreleased, with no version at all."""
+    project_dir = _make_project(tmp_path)
+    _generate_docs(project_dir, "0.0.0.1")
+    text = (project_dir / "CHANGELOG.md").read_text(encoding="utf-8")
+    assert "## Unreleased" in text
+    assert "1.0.0.1" not in text
+    assert "0.0.0.1" not in text
+    assert "Initial release" not in text
+
+
+def test_release_build_changelog_keeps_release_heading(tmp_path: Path) -> None:
+    project_dir = _make_project(tmp_path)
+    _generate_docs(project_dir, "1.0.0.1", release_build=True)
+    text = (project_dir / "CHANGELOG.md").read_text(encoding="utf-8")
+    assert "## 1.0.0.1" in text
+    assert "Initial release" in text
+    assert "Unreleased" not in text
+
+
+def test_dev_build_default_is_not_release(tmp_path: Path) -> None:
+    """release_build defaults to False: the safe direction under RULE-014."""
+    from vcfcf_managementpacks.sdk_builder import _generate_changelog_md
+
+    project_dir = _make_project(tmp_path)
+    assert "## Unreleased" in _generate_changelog_md(project_dir, "1.0.0", 1)
+
+
+def _git(cwd: Path, *args: str) -> None:
+    import subprocess
+
+    subprocess.run(
+        ["git", "-c", "user.name=t", "-c", "user.email=t@example.invalid",
+         "-c", "commit.gpgsign=false", *args],
+        cwd=str(cwd), check=True, capture_output=True, text=True,
+    )
+
+
+def _project_with_history(tmp_path: Path) -> Path:
+    """A project at <repo>/content/sdk-adapters/adapter with two builds of
+    committed history, matching the parent.parent.parent repo-root lookup."""
+    import shutil
+
+    if not shutil.which("git"):
+        pytest.skip("git not on PATH")
+    repo = tmp_path / "repo"
+    sdk = repo / "content" / "sdk-adapters"
+    sdk.mkdir(parents=True)
+    project_dir = _make_project(sdk)
+    _git(repo, "init", "-q")
+    yaml_path = project_dir / "adapter.yaml"
+    yaml_path.write_text(_ADAPTER_YAML.replace("build_number: 1", "build_number: 0"),
+                         encoding="utf-8")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "first build")
+    yaml_path.write_text(_ADAPTER_YAML, encoding="utf-8")
+    _git(repo, "commit", "-q", "-am", "second build")
+    return project_dir
+
+
+def test_history_dev_build_heads_current_build_unreleased(tmp_path: Path) -> None:
+    project_dir = _project_with_history(tmp_path)
+    _generate_docs(project_dir, "0.0.0.1")
+    text = (project_dir / "CHANGELOG.md").read_text(encoding="utf-8")
+    assert "## Unreleased (" in text
+    assert "## 1.0.0.1" not in text
+    assert "- second build" in text
+    # Earlier builds are named by build number alone: no declared 1.x
+    # version anywhere in a dev build's CHANGELOG (RULE-014).
+    assert "## Build 0 (" in text
+    assert "- first build" in text
+    assert "1.0.0" not in text
+
+
+def test_history_release_build_heads_current_build_with_version(tmp_path: Path) -> None:
+    project_dir = _project_with_history(tmp_path)
+    _generate_docs(project_dir, "1.0.0.1", release_build=True)
+    text = (project_dir / "CHANGELOG.md").read_text(encoding="utf-8")
+    assert "## 1.0.0.1 (" in text
+    assert "## 1.0.0.0 (" in text
+    assert "Unreleased" not in text
+    assert "## Build" not in text

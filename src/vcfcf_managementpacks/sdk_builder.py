@@ -75,7 +75,12 @@ except ImportError:
 
 from vcfcf_supermetrics import crossref as _crossref
 
-from .sdk_project import SdkProjectDef, SdkProjectError, load_sdk_project
+from .sdk_project import (
+    SdkProjectDef,
+    SdkProjectError,
+    adapter_class_name,
+    load_sdk_project,
+)
 
 # ---------------------------------------------------------------------------
 # Paths relative to this module
@@ -2818,13 +2823,43 @@ def _generate_reference_md(
     return "\n".join(lines)
 
 
+def _changelog_first_entry(current_version: str, current_build: int,
+                           release_build: bool) -> str:
+    """CHANGELOG body used when there is no git history to group.
+
+    Only a release build may head it with the 1.x release line. A dev build
+    (RULE-014: hand-built paks are the 0.x line) heads it ``Unreleased`` and
+    makes no release claim, since this file is written once and kept (#189).
+    """
+    if release_build:
+        return (
+            "# Changelog\n\n"
+            f"## {current_version}.{current_build}\n\n"
+            "- Initial release.\n"
+        )
+    return (
+        "# Changelog\n\n"
+        "## Unreleased\n\n"
+        "- Initial development build; not yet released.\n"
+    )
+
+
 def _generate_changelog_md(project_dir: Path, current_version: str,
-                            current_build: int) -> str:
+                            current_build: int, *,
+                            release_build: bool = False) -> str:
     """Generate CHANGELOG.md from git history of the adapter project directory.
 
     Groups commits by build number by reading the adapter.yaml at each commit
     that touched the project directory.  Falls back to date-grouped listing
     when git is not available or the history is shallow.
+
+    Headings depend on the build line (RULE-014). On a dev build
+    (``release_build`` False, the default) no declared 1.x version appears
+    anywhere: the entry for the build being made is headed ``Unreleased`` and
+    every earlier entry ``Build <build_number>``. A release build heads every
+    entry ``<declared version>.<build_number>`` (``current_version`` being
+    adapter.yaml's declared version), and its no-history fallback is the
+    ``Initial release`` entry.
     """
     import datetime
 
@@ -2845,17 +2880,11 @@ def _generate_changelog_md(project_dir: Path, current_version: str,
         )
         if result.returncode != 0 or not result.stdout.strip():
             # No git history for this directory
-            return (
-                "# Changelog\n\n"
-                f"## {current_version}.{current_build}\n\n"
-                "- Initial release.\n"
+            return _changelog_first_entry(
+                current_version, current_build, release_build
             )
     except Exception:
-        return (
-            "# Changelog\n\n"
-            f"## {current_version}.{current_build}\n\n"
-            "- Initial release.\n"
-        )
+        return _changelog_first_entry(current_version, current_build, release_build)
 
     commits = []
     for line in result.stdout.strip().splitlines():
@@ -2872,11 +2901,7 @@ def _generate_changelog_md(project_dir: Path, current_version: str,
         commits.append({"sha": sha, "date": date_label, "subject": subject})
 
     if not commits:
-        return (
-            "# Changelog\n\n"
-            f"## {current_version}.{current_build}\n\n"
-            "- Initial release.\n"
-        )
+        return _changelog_first_entry(current_version, current_build, release_build)
 
     # Read adapter.yaml build_number at each commit to detect build transitions.
     # We read it only when the adapter.yaml changed (to keep git calls minimal).
@@ -2959,7 +2984,16 @@ def _generate_changelog_md(project_dir: Path, current_version: str,
     lines_out: List[str] = ["# Changelog", ""]
     for gk in sorted_keys:
         g = groups[gk]
-        lines_out.append(f"## {gk} ({g['date']})")
+        heading = gk
+        if not release_build:
+            # A dev build carries no declared 1.x version (RULE-014): the
+            # build being made now is not a release, and earlier builds are
+            # named by build number alone.
+            if g["version"] == current_version and g["build"] == current_build:
+                heading = "Unreleased"
+            else:
+                heading = f"Build {g['build']}"
+        lines_out.append(f"## {heading} ({g['date']})")
         lines_out.append("")
         for subj in g["subjects"]:
             lines_out.append(f"- {subj}")
@@ -3037,7 +3071,8 @@ def _generate_readme_md(
     return "\n".join(lines)
 
 
-def _generate_docs(project_dir: Path, version_string: str) -> None:
+def _generate_docs(project_dir: Path, version_string: str, *,
+                   release_build: bool = False) -> None:
     """Generate REFERENCE.md, CHANGELOG.md, and (if absent) README.md.
 
     Only writes if absent (non-destructive — preserves hand-authored content):
@@ -3057,6 +3092,9 @@ def _generate_docs(project_dir: Path, version_string: str) -> None:
     Args:
         project_dir:     adapter project directory (contains adapter.yaml, describe.xml)
         version_string:  full version+build string for the subtitle (e.g. "1.0.0.13")
+        release_build:   True only on the CI release opt-in. False (the
+                         default) keeps CHANGELOG.md free of a 1.x release
+                         heading for the build being made (RULE-014).
     """
     project_dir = Path(project_dir)
     describe_xml = project_dir / "describe.xml"
@@ -3145,7 +3183,8 @@ def _generate_docs(project_dir: Path, version_string: str) -> None:
     # to CHANGELOG.generated.md when the primary file already exists.
     try:
         cl_content = _generate_changelog_md(
-            project_dir, current_version, current_build
+            project_dir, current_version, current_build,
+            release_build=release_build,
         )
         cl_path = project_dir / "CHANGELOG.md"
         if cl_path.is_file():
@@ -3335,7 +3374,7 @@ def build_sdk_pak(project_dir: Path, output_dir: Optional[Path] = None,
         # Step 8b: generate documentation files into the project directory.
         # Runs after successful compilation so only a clean build produces docs.
         version_string = f"{project.version}.{project.build_number}"
-        _generate_docs(project_dir, version_string)
+        _generate_docs(project_dir, version_string, release_build=release_build)
 
         # Step 9: assemble adapters.zip
         print("  assembling adapters.zip ...", file=sys.stderr)
@@ -3639,11 +3678,11 @@ def scaffold_sdk_project(name: str, output_base: Path) -> Path:
     if project_dir.exists():
         raise SdkBuildError(f"Project directory already exists: {project_dir}")
 
-    # Derive class name stem
-    # removeprefix, not lstrip: lstrip("vcfcf_") strips any of the characters
-    # v/c/f/_ from the left, so "cert_demo" became "ErtDemo".
-    camel = "".join(part.capitalize() for part in slug.removeprefix("vcfcf_").split("_"))
-    class_name = f"{camel}Adapter"
+    # Same derivation load_sdk_project uses for the default entry_class, so
+    # the scaffolded file matches the class the loader expects. It removes
+    # the vcfcf_ prefix exactly once (not lstrip, which ate "cert_demo" into
+    # "ErtDemo") and keeps it when the rest starts with a digit (#186).
+    class_name = adapter_class_name(slug)
     package = f"com.vcfcf.adapters.{slug}"
     package_path = package.replace(".", "/")
 

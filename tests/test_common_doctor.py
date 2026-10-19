@@ -1717,3 +1717,50 @@ def test_report_lines_accept_an_injected_now(tmp_path):
     much_later = _dt(2026, 9, 9, 0, 0, 0, tzinfo=timezone.utc)
     later_lines = bootstrap_report_lines(record, now=much_later)
     assert later_lines and "did not record a run this session" in later_lines[0]
+
+
+# ---------------------------------------------------------------------------
+# Issue #152: unknown= (clones with no upstream tracking) is voiced
+# ---------------------------------------------------------------------------
+
+def test_unknown_key_reports_alignment_not_checked(tmp_path):
+    root = make_configured_root(tmp_path)
+    write_status(
+        root,
+        status_line("bootstrap_references", cloned=0, updated=0, failed=0,
+                    failures="-", checked="yes", unknown="vendor-sdk"),
+        status_line("bootstrap_managed_paks", cloned=0, updated=0, failed=0,
+                    failures="-", checked="yes", hooks="-",
+                    unknown="netapp,synology"),
+    )
+    text = "\n".join(collect(root, fake_git()))
+    for name in ("vendor-sdk", "netapp", "synology"):
+        assert f"I didn't update the {name} repo: its alignment is unknown, not checked" in text
+    assert "no upstream tracking" in text
+    assert "all green" not in text, "an unchecked clone must never read as green"
+
+
+def test_unknown_key_empty_sentinel_is_silent(tmp_path):
+    root = make_configured_root(tmp_path)
+    write_status(
+        root,
+        status_line("bootstrap_references", cloned=0, updated=0, failed=0,
+                    failures="-", checked="yes", unknown="-"),
+        status_line("bootstrap_managed_paks", cloned=0, updated=0, failed=0,
+                    failures="-", checked="yes", unknown="-"),
+    )
+    assert bootstrap_report_lines(read_bootstrap_status(root)[0]) == []
+
+
+def test_stale_record_with_only_unknown_gets_the_past_tense_line(tmp_path):
+    """unknown= alone is voiceable, so a stale record carrying it is not
+    silently dropped, and it is not replayed in the present tense."""
+    root = make_configured_root(tmp_path)
+    (root / ".bootstrap-status").write_text(
+        f"{ts(hours_ago=6)} bootstrap_references cloned=0 updated=0 failed=0 "
+        "failures=- checked=yes unknown=vendor-sdk\n"
+        f"{ts()} bootstrap_managed_paks cloned=0 updated=0 failed=0 failures=- checked=yes\n"
+    )
+    text = "\n".join(collect(root, fake_git()))
+    assert "alignment is unknown" not in text
+    assert "did not record a run this session" in text
