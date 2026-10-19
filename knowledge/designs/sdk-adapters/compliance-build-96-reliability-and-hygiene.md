@@ -4,7 +4,7 @@
 - **Slug:** compliance-build-96-reliability-and-hygiene
 - **Adapter repo:** `content/sdk-adapters/compliance/` (branch from `origin/main`)
 - **Date:** 2026-10-16
-- **Status:** merged to compliance main (982557d, PR #57, 2026-10-16), not tagged; devel_9_1 proof PASS (investigations/2026-10-16-compliance-96-devel-9-1-proof.md: 0 of 547 score keys differ from build 95, incomplete 0, wrong-password cycles end in 4 to 6 s with the alert firing and clearing; retired-key cancel not exercised, nothing retired on devel)
+- **Status:** merged to compliance main (982557d, PR #57, 2026-10-16), not tagged; devel_9_1 proof PASS (knowledge/context/investigations/2026-10-16-compliance-96-devel-9-1-proof.md: 0 of 547 score keys differ from build 95, incomplete 0, wrong-password cycles end in 4 to 6 s with the alert firing and clearing; retired-key cancel not exercised, nothing retired on devel)
 
 ## Initial prompt (Scott, verbatim, 2026-10-16)
 
@@ -18,7 +18,7 @@ and, on #52 and its neighbours:
 
 ## What the morning's evidence settled
 
-- #52 is not reproduced (investigations/2026-10-16-compliance-52-30-31-recon.md):
+- #52 is not reproduced (knowledge/context/investigations/2026-10-16-compliance-52-30-31-recon.md):
   3 of 3 clusters on 31 queries, unmatched and incomplete flat at 0 for
   43.5 hours. The blank wld01 and wld02 rows are non-vSAN clusters with no
   applicable control. The code trace found one latent hole: a 200 with an

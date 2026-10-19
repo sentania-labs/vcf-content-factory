@@ -550,3 +550,9 @@ N1-r4, N2-r4 and N3-r4 are closed. The per-kind cleanup touches only objects tha
 ### If shipped as-is (round 5)
 
 Same as round 4. Normal cycles match build 95, retired-control alerts clear, and a vCenter that overruns finishes its pass over the following cycles. The cleanup now runs right after each kind and never acts on an object later in the walk than the current position.
+
+## After round 5 (recorded 2026-10-19)
+
+One commit landed on PR #57 after the round 5 approval at `0c61f66` and
+merged with it (merge `982557d`): `a6165cb` "fix(adapter): build 96, Codex
+P2s on PR #57: issues #16 and #42". No round in this record covers it.

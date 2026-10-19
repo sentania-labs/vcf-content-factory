@@ -95,3 +95,5 @@ at both times. Clusters: only 1 of 3 has a score (the two wld clusters have no s
   logged out cleanly, verified by a login/logout probe at 14:04. Working dashboard route on 9.1.1 after login
   and /ui/index.action: /vcf-operations/ui/operate/dashboards/dashboards;tabId=<dashboard id>.
 - No policy, log level or global setting changed.
+
+Source commit for the installed pak: not recorded at proof time. Its sha256 (4c8b4631...) differs from the pak the build 96 review record names (d3d97068...), so the installed build includes the commit that merged after review round 5 (see the review record's closing note).

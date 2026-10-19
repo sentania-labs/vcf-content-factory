@@ -42,7 +42,7 @@ log). No build 32 regression found. Two findings for the author (load scale, REA
 | 6 | PASS (partial coverage) | Source: admin UI Support Logs backend (read-only), UNIFIED_CLOUD_PROXY, adapters/SynologyAdapter/SynologyAdapter_1505.log (whole file, 1806 lines, 10-15 12:52 PM to 10-16 3:33 PM) and collector.log lines containing "ynology" (249 lines, to 3:39:51 PM). Zero hits for `principal=`, `token=`, `_sid`, `passwd`, `password=`, `account=`, `username`, `automationAdmin` in either. Build 32 window: one WARN, the known FIPS openPlatformConnection notice (3:28:19 PM, once per configure; build 31 logs it too); no other WARN or ERROR except the install race ERROR above. Build 31 baseline in the same file: 252 WARN on 10-15 (a login-failure episode with the cached-failure back-off lines, "Synology login failed: error code N (no such account or incorrect password)"), 1 WARN on 10-16 (FIPS). "SYNO.API.Info read: every API at its desired version" once per client (3:28:12 PM instance, 3:39:49 PM Test Connection). The Suite API INFO line is "Datastore cross-link: ambient Suite API path (localhost / maintenance user)", identical to build 31's, so the account is on the ambient path and the explicit-path username line is NOT EXERCISED. NFS-off path: NOT EXERCISED, NFS is on (`enable_nfs` true, 16 exports collecting, no "dropped until NFS" line); turning NFS off is a NAS config change outside the approval. Datastore paging: NOT EXERCISED in effect, 12 datastores in one page ("12 datastores loaded, 2 LUN matches, 3 NFS matches" every cycle, as build 31); no paging line at INFO. |
 | 7 | PASS (count), NOT CHECKED (name) | DSM `SYNO.Core.CurrentConnection list` (read-only, via the loader helpers) at 3:47 PM: exactly one HTTP/HTTPS session from 172.27.10.11 (the Cloud Proxy), user claude, first login 3:28:15 PM (the build 32 login). DSM shows `descr` "DiskStation Manager" for every session, never the session name, so the name cannot be read there. The adapter log carries it: `session=VCFContentFactory-1505` (instance 1505; build 31 logged `session=VCFContentFactory` three times). Test Connection used `VCFContentFactory-test-4c4958ac` and is absent from DSM's list afterwards (logged out). Other entries are not the Cloud Proxy: 172.27.10.15 (claude, since 10-15 2:30 PM, not identified), 172.27.8.53 (bkdr), SMB and NFS clients, and my own probe. |
 | 8 | PASS | `POST /api/adapters/testConnection` (same identifiers and credential id, group a15053eb-...) 3:39:47 PM: 201 with an `adapter-certificates` entry (the NAS certificate, CN=int.sentania.net 2026), same shape as the compliance record. The test ran on the Cloud Proxy: collector.log 3:39:51 PM "Test OK: connected to storage.int.sentania.net (model=DS1520+)". |
-| 9 | PASS (rendered) | chrome-devtools-axi on 1600x1000. Screenshots (scratchpad, not committed): p32/nas-summary.png and p32/nas-metrics.png, both viewed 3:36 PM. Inventory object tree: Synology World, Diskstation (DS1520+ 20B0RYRXRF3KF, health green, Normal 1), 16 NFS exports, 1 pool, 2 LUNs, 1 volume, 1 SSD cache, 7 disks; Summary / Metrics / Logs / Alerts / Topology tabs render. The metric chart itself was not captured: the shared axi bridge was taken over by another session mid-pass (see side effects). |
+| 9 | PASS (rendered) | chrome-devtools-axi on 1600x1000. Screenshots (scratchpad, not committed): p32/nas-summary.png and p32/nas-metrics.png, both viewed 3:36 PM. Inventory object tree: Synology World, Diskstation (DS1520+, health green, Normal 1), 16 NFS exports, 1 pool, 2 LUNs, 1 volume, 1 SSD cache, 7 disks; Summary / Metrics / Logs / Alerts / Topology tabs render. The metric chart itself was not captured: the shared axi bridge was taken over by another session mid-pass (see side effects). |
 
 ## Findings for the author
 
@@ -68,15 +68,16 @@ log). No build 32 regression found. Two findings for the author (load scale, REA
   rotate it at your discretion. Everything after used a path that never prints credentials (password
   redacted from tool output, injected from the loader). Nothing was written to a file or the repo.
 - Admin UI sessions: my first browser session was taken over by another user of the shared default
-  axi bridge (it ended up on a chatgpt.com page); I logged my session out through a separate tab and a
+  axi bridge; I logged my session out through a separate tab and a
   login/logout probe succeeded at about 3:38 PM. A second isolated session (CHROME_DEVTOOLS_AXI_SESSION=syn32)
   logged in at about 3:45 PM and was logged out by a fetch to `mainAction=logout` and the browser stopped, yet
   admin UI logins answered `concurrentSessionDetected` from about 3:46 PM through at least 3:48 PM. That may be
-  my session not ending or someone else's login; I cannot tell which. No forced login used. Probe again after
-  about 4:05 PM.
-- DSM: five short logins named `proof32-probe` from 172.16.3.13 (read-only reads), each logged out.
+  my session not ending or someone else's login; I cannot tell which. No forced login used.
+- DSM: five short logins named `proof32-probe` from the workstation (read-only reads), each logged out.
 - Ops writes: the install, one `monitoringstate/start`, and one Test Connection POST. No credential, policy,
   log level, or global setting changed; nothing deleted. Support Logs access was read-only.
 - Not exercised, need a decision to prove: NFS off (turn NFS off on the NAS), datastore paging (>1000
   datastores), Suite API explicit path (an account with vrops_* fields), `memory_cached` / swap keys (policy
   change), remain_life on a NAS with failing wear, LUN latency scale (read DSM's Resource Monitor).
+
+Source commit for the installed pak: not recorded at proof time. Its sha256 (787a40eb...) differs from the pak the build 32 review record names (ef6b065c...), so the installed build includes the commits that merged after review round 2 (see the review record's closing note).

@@ -1293,9 +1293,13 @@ reused. Field lines are `- **Field:** value` (parsed by
 - **Closing-evidence:** 2026-10-16, build 96. `Build96StitcherTest.elevenPages` walks a
   105,000-row fake Suite API (11 page reads, every row indexed, last-page row
   matches); the empty-page-short-of-total case is held back with one read
-  and no retry loop. Devel_9_1 proof on build 96 (investigations/
-  2026-10-16-compliance-96-devel-9-1-proof.md) shows incomplete 0 and the
-  not-collected alert firing and clearing on a failed cycle.
+  and no retry loop. Devel_9_1 proof on build 96
+  (knowledge/context/investigations/2026-10-16-compliance-96-devel-9-1-proof.md)
+  shows Rollup|incomplete 1.0 and the not-collected alert ACTIVE on a vCenter
+  login failure, then 0.0 and CANCELED one cycle after the credential was
+  restored. That exercises the vCenter login path, not the Suite API
+  resource-list path this defect names, so the close rests on the
+  105,000-row test.
 
 ### DEF-024
 

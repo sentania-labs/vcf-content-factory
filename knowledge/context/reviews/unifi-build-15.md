@@ -504,3 +504,15 @@ A device stuck in "inform error" keeps charting frozen, healthy-looking
 metrics until someone notices it reads 0 on `Status|state`. On an Ops
 instance with no ESXi hosts, the log may carry one misleading stitch WARN
 every cycle.
+
+## After round 3 (recorded 2026-10-19)
+
+Five commits landed on PR #36 after the round 3 approval at `1876783` and
+merged with it (merge `6c3c66d`): `d5eb97c` (rewrap the Permissions
+Required paragraph, R3-N1), `7b4dddb` "metrics publish only in informing
+device states", `9ad71ea` "pin that the host list check reads
+pageInfo.totalCount", `60957a6` "discovery skips devices pending adoption,
+so Device Count ...", `1d38315` "pin that isDiscovered passes the adopted
+flag (Codex P2 on #36)". By their subjects `7b4dddb` answers W-R3-1 and
+`9ad71ea` is in the W-R3-2 area, but no round in this record re-reviewed
+them, so W-R3-1 and W-R3-2 stand as open here.

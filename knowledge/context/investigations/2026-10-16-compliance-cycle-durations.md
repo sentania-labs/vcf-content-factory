@@ -20,7 +20,7 @@ see below). Prod runs a 60 minute interval, not 5 minutes, so its 95% budget wou
    cycle_seconds or CycleStats key. `Summary|last_scan_timestamp` is a property (latest value
    only, no history) on ComplianceWorld. Cycle duration is only in the adapter log ("collection
    complete" line, ComplianceAdapter.java line 1143, and the build 86 `finally` timing), which
-   has no no-SSH read path (see 2026-10-16-compliance-52-30-31-recon.md section c). Not read.
+   has no API read path; the only no-SSH route is the admin UI Support Logs browser (see 2026-10-16-compliance-52-30-31-recon.md section c). Not read.
 2. USED, primary: the platform's own per-adapter-instance metric
    `Instance Attributes|elapsed_collect_time` (milliseconds) on each `vcfcf_compliance` adapter
    instance resource. It is not a pak key; VCF Operations writes it for every adapter instance.

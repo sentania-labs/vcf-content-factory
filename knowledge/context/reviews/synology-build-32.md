@@ -341,3 +341,11 @@ values, and DSM sessions no longer collide. NFS-off exports are
 visibly ERROR with the reason. The only remaining account-name logging
 is the framework's own INFO lines, which the docs now state openly and
 which factory #227 tracks.
+
+## After round 2 (recorded 2026-10-19)
+
+Three commits landed on PR #40 after the round 2 approval at `951e84e` and
+merged with it (merge `9c58c4a`): `a8ccb52` "round 2 nits: dedupe count,
+dropped-edge wording, wiring", `8d22f51` "peer review: any bond name,
+totalCount drift, present-only ...", `cbe96a2` "docs: 9.1 menu paths
+verified live". No round in this record covers them.

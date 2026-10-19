@@ -17,7 +17,7 @@ line was NOT observed). Item 8 FAIL as written (README menu path is wrong for
 
 ## Install
 
-- Pak: /home/scott/claude/vcf-content-factory/dist/vcfcf_sdk_unifi_controller.0.0.0.15.pak,
+- Pak: dist/vcfcf_sdk_unifi_controller.0.0.0.15.pak,
   sha256 797f74c40fbac60d2502a97d0ecf515708251e1eb2eba0da04eec65a38bc92cf
   (matches the merged head 6c3c66d per the brief; unifi checkout at 6c3c66d,
   clean). No rebuild needed.
@@ -166,3 +166,5 @@ backend and UI bundle evidence; no rendered page was viewed.
    dropping from describe or documenting it.
 6. Lesson addition candidate: the Support Logs UI session leaks on a failed
    probe; log in once per script and always log out.
+
+The installed pak's sha256 (797f74c4...) differs from the pak the build 15 review record names (0a4341c5...), so the installed build includes the commits that merged after review round 3 (see the review record's closing note).

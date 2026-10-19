@@ -163,3 +163,12 @@ Unchanged: no defect in `knowledge/context/defects.md` names `template`. The rou
 ### If shipped as-is (round 2)
 
 Operators get certificate validation on by default, correct DOWN/ERROR states, no zero or empty-string sentinels and bounded HTTP reads. One edge remains: a password typed into the Host field by mistake would still appear in the log and in Test Connection.
+
+## After round 2 (recorded 2026-10-19)
+
+Eight commits landed on PR #21 after the round 2 approval at `a7ac07c` and
+merged with it (merge `df34aea`): `83f1e48`, `80385df`, `17ce0c3`,
+`125b034`, `83eb342` (never echo a rejected port), `28a32bc`, `347a5c3`,
+`39a0552` (Test Connection validates ids like the collection cycle). They
+came out of the template's own peer-review rounds, which this record does
+not contain. No round here covers them.
