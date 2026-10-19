@@ -1,19 +1,19 @@
-"""docs_gen.py — SDK adapter docset generator.
+"""docs_gen.py: SDK adapter docset generator.
 
 Generates a docs/ directory inside a Tier 2 SDK adapter project.
 
 Two classes of output:
 
 REGENERATE every run (derived from describe.xml / adapter.yaml):
-  docs/inventory-tree.md          — indented traversal tree + per-kind table
-  docs/inventory-tree.excalidraw  — Excalidraw JSON diagram (editable source)
-  docs/inventory-tree.svg         — SVG render of the same diagram (headless,
+  docs/inventory-tree.md          - indented traversal tree + per-kind table
+  docs/inventory-tree.excalidraw  - Excalidraw JSON diagram (editable source)
+  docs/inventory-tree.svg         - SVG render of the same diagram (headless,
                                     pure Python, deterministic, no new deps)
-  docs/README.md                  — index linking all docset sections
+  docs/README.md                  - index linking all docset sections
 
 SCAFFOLD if missing (hand-curated thereafter):
-  docs/overview.md                — what's in the pack (scaffold only)
-  docs/installing.md              — prereqs + config fields table (scaffold only)
+  docs/overview.md                - what's in the pack (scaffold only)
+  docs/installing.md              - prereqs + config fields table (scaffold only)
 
 Usage:
     from vcfcf_managementpacks.docs_gen import generate_docset
@@ -126,7 +126,7 @@ def _parse_traversal_paths(spec_kind_elem, ns: str) -> List[TraversalEdge]:
       ak::rk1||ak::rk2::child||ak::rk3::child||...
 
     Each consecutive pair rk(i) → rk(i+1) produces an edge (if not already seen).
-    The adapter-instance root is skipped — it appears in describe.xml as type=7.
+    The adapter-instance root is skipped; it appears in describe.xml as type=7.
     """
     edges: List[TraversalEdge] = []
     seen: set = set()
@@ -158,10 +158,10 @@ def parse_describe_xml(project_dir: Path) -> Tuple[List[KindInfo], str, List[Tra
     """Parse describe.xml and return (kinds, traversal_name, edges, config_fields).
 
     Returns:
-        kinds           — all ResourceKinds in describe.xml order
-        traversal_name  — TraversalSpecKind name (or "")
-        edges           — ordered unique parent→child edges from traversal spec
-        config_fields   — ResourceIdentifiers of the adapter-instance kind (type=7)
+        kinds           - all ResourceKinds in describe.xml order
+        traversal_name  - TraversalSpecKind name (or "")
+        edges           - ordered unique parent→child edges from traversal spec
+        config_fields   - ResourceIdentifiers of the adapter-instance kind (type=7)
     """
     describe_xml = project_dir / "describe.xml"
     if not describe_xml.is_file():
@@ -266,7 +266,7 @@ def build_doc_model(
     kind_map = {k.key: k for k in kinds}
 
     # Same validation as validate-sdk (SdkProjectError is a ValueError subclass,
-    # caught by generate_docset's except (ValueError, RuntimeError) below) —
+    # caught by generate_docset's except (ValueError, RuntimeError) below):
     # docs-gen refuses to silently drop a malformed stanza.
     cross_mp_edges = _parse_cross_mp_edges(raw, str(adapter_yaml))
 
@@ -445,7 +445,7 @@ def _render_cross_mp_edges_md(model: AdapterDocModel, heading_level: str = "##")
         child_cell = _format_cross_mp_endpoint(
             edge.child, child_is_foreign, edge.foreign_adapter_kind
         )
-        desc_cell = _escape_md_table_cell(edge.description) if edge.description else "—"
+        desc_cell = _escape_md_table_cell(edge.description) if edge.description else "-"
         rows.append(f"| {parent_cell} | {child_cell} | {desc_cell} |")
 
     table_md = "\n".join(rows)
@@ -454,7 +454,7 @@ def _render_cross_mp_edges_md(model: AdapterDocModel, heading_level: str = "##")
         f"{heading_level} Cross-MP Relationships",
         "",
         "These edges are created at collection time via the Suite API and "
-        "never appear in `describe.xml` — they are declared explicitly in "
+        "never appear in `describe.xml`. They are declared explicitly in "
         "`adapter.yaml` (`cross_mp_edges`) so this generated docset doesn't "
         "silently omit them. *Italic* endpoints belong to a foreign "
         "management pack; `code` endpoints are owned by this adapter.",
@@ -493,8 +493,8 @@ def generate_inventory_tree_md(model: AdapterDocModel) -> str:
             marker = " *" if ident.is_unique else ""
             id_parts.append(f"`{ident.key}`{marker}")
 
-        id_cell = ", ".join(id_parts) if id_parts else "—"
-        parent_cell = ", ".join(parent_labels) if parent_labels else "—"
+        id_cell = ", ".join(id_parts) if id_parts else "-"
+        parent_cell = ", ".join(parent_labels) if parent_labels else "-"
 
         table_rows.append(
             f"| `{kind.key}` | {kind.label} | {id_cell} | {parent_cell} |"
@@ -505,9 +505,9 @@ def generate_inventory_tree_md(model: AdapterDocModel) -> str:
     traversal_header = f"**Traversal Spec:** {model.traversal_name}" if model.traversal_name else ""
 
     parts = [
-        f"# Inventory Tree — {model.adapter_name}",
+        f"# Inventory Tree: {model.adapter_name}",
         "",
-        f"> Generated from `describe.xml` v{model.adapter_version}. Do not edit — regenerated on every build.",
+        f"> Generated from `describe.xml` v{model.adapter_version}. Do not edit: regenerated on every build.",
         "",
     ]
     if traversal_header:
@@ -863,7 +863,7 @@ def generate_svg(model: AdapterDocModel) -> str:
     """Generate a headless SVG render of the inventory tree diagram.
 
     Pure Python, no external dependencies. Same layout model as the Excalidraw
-    generator — deterministic, stable across runs.
+    generator: deterministic, stable across runs.
     """
     positions = _layout_nodes(model)
     roots = set(_tree_roots(model))
@@ -969,9 +969,9 @@ def generate_overview_md(model: AdapterDocModel) -> str:
         for k in non_instance_kinds
     )
 
-    return f"""# Overview — {model.adapter_name}
+    return f"""# Overview: {model.adapter_name}
 
-> **Scaffold** — edit this file to describe your pack. It is generated once and
+> **Scaffold:** edit this file to describe your pack. It is generated once and
 > not overwritten on subsequent builds.
 
 ## What's in the Pack
@@ -1006,16 +1006,16 @@ def generate_installing_md(model: AdapterDocModel) -> str:
         for ident in adapter_instance.identifiers:
             req = "Yes" if ident.required else "No"
             config_table_rows.append(
-                f"| {ident.label} | `{ident.key}` | {req} | — | |"
+                f"| {ident.label} | `{ident.key}` | {req} | - | |"
             )
     else:
-        config_table_rows.append("| — | — | — | — | No adapter instance kind found |")
+        config_table_rows.append("| - | - | - | - | No adapter instance kind found |")
 
     config_table = "\n".join(config_table_rows)
 
-    return f"""# Installing & Configuring — {model.adapter_name}
+    return f"""# Installing & Configuring: {model.adapter_name}
 
-> **Scaffold** — edit this file with actual prerequisites and steps. It is generated
+> **Scaffold:** edit this file with actual prerequisites and steps. It is generated
 > once and not overwritten on subsequent builds.
 
 ## Prerequisites
@@ -1073,7 +1073,7 @@ def generate_readme_md(model: AdapterDocModel) -> str:
         )
         cross_mp_section = "\n" + _render_cross_mp_edges_md(model)
 
-    return f"""# {model.adapter_name} — Documentation
+    return f"""# {model.adapter_name} Documentation
 
 > Generated index. The SVG diagram and per-kind table are regenerated on every
 > build; prose sections (overview, installing) are hand-curated.
@@ -1197,7 +1197,7 @@ def generate_docset(
         _log("  scaffolded docs/overview.md")
     else:
         results["docs/overview.md"] = "skipped (exists)"
-        _log("  docs/overview.md exists — skipping (scaffold only)")
+        _log("  docs/overview.md exists, skipping (scaffold only)")
 
     installing_path = docs_dir / "installing.md"
     if not installing_path.is_file():
@@ -1207,6 +1207,6 @@ def generate_docset(
         _log("  scaffolded docs/installing.md")
     else:
         results["docs/installing.md"] = "skipped (exists)"
-        _log("  docs/installing.md exists — skipping (scaffold only)")
+        _log("  docs/installing.md exists, skipping (scaffold only)")
 
     return results

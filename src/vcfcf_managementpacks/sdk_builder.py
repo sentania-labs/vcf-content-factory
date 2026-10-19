@@ -2698,7 +2698,7 @@ def _generate_reference_md(
     lines: List[str] = []
 
     # Title and subtitle
-    lines.append(f"# {project_name} — Reference")
+    lines.append(f"# {project_name} Reference")
     lines.append("")
     if version_string:
         lines.append(
@@ -2746,7 +2746,7 @@ def _generate_reference_md(
         lines.append("|---|---|---|---|")
         for ri in ai["identifiers"]:
             label = p(ri["name_key"], ri["key"])
-            default = ri["default"] if ri["default"] else "—"
+            default = ri["default"] if ri["default"] else "-"
             required = "Yes" if ri["required"] else "No"
             lines.append(f"| {label} | `{ri['key']}` | {default} | {required} |")
         lines.append("")
@@ -2785,9 +2785,9 @@ def _generate_reference_md(
             for attr in grp["attributes"]:
                 attr_label = p(attr["name_key"], attr["key"])
                 attr_type = "property" if attr["is_property"] else "metric"
-                unit = attr["unit"] if attr["unit"] else "—"
+                unit = attr["unit"] if attr["unit"] else "-"
                 monitored = "yes" if attr["default_monitored"] else (
-                    "no" if not attr["is_property"] else "—"
+                    "no" if not attr["is_property"] else "-"
                 )
                 lines.append(
                     f"| `{attr['key']}` | {attr_label} | {attr_type} "
@@ -3009,7 +3009,7 @@ def _generate_readme_md(
         lines.append("|---|---|---|")
         for ri in ai["identifiers"]:
             label = p(ri["name_key"], ri["key"])
-            default = ri["default"] if ri["default"] else "—"
+            default = ri["default"] if ri["default"] else "-"
             lines.append(f"| {label} | | {default} |")
         lines.append("")
 
