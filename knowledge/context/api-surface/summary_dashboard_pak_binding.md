@@ -232,6 +232,15 @@ IntSummaryAlertVolume, Heatmap, PropertyList,
 ResourceRelationshipAdvanced), `Section` is the only one absent from
 9.0.2. A dashboard targeting 9.0.x must not carry a Section widget.
 
+The per-type floors live in
+`src/vcfcf_core/dashboards/widget_versions.py`
+(`WIDGET_TYPE_MIN_OPS_VERSION`: Section 9.1.1, the lowest build proven to
+import it, with 9.1.0 unchecked; every other renderer type has no known
+floor). `Dashboard.validate()` warns on every validate and SDK pak build
+when a dashboard uses a floored type. It is a warning with no gate because
+no bundle manifest, release manifest, or `adapter.yaml` field declares a
+target VCF Ops version yet (issue #199).
+
 ## Uninstall behavior
 
 `removeContent` deletes the tracked dashboard ids (`deleteDashboardTabs`

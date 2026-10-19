@@ -939,7 +939,14 @@ def _load_bundled_content(
             # alongside it; that is authored as the sibling view's UUID, which
             # the loader's raw-UUID passthrough accepts.  An unmatched bare
             # name is a typo here exactly as it is in the repo-wide corpus.
-            d.validate(_views_by_name, enforce_framework_prefix=False)
+            # Each dashboard was already validated once in the load loop
+            # above, which emitted its advisory warnings (name length #198,
+            # widget minimum version #199); silence them here so they print
+            # once per dashboard.  Errors still raise.
+            import warnings as _warnings
+            with _warnings.catch_warnings():
+                _warnings.simplefilter("ignore")
+                d.validate(_views_by_name, enforce_framework_prefix=False)
         except Exception as exc:
             src = getattr(d, "source_path", None) or d.name
             raise SdkBuildError(
@@ -3288,6 +3295,15 @@ def build_sdk_pak(project_dir: Path, output_dir: Optional[Path] = None,
         )
     _stamp_build_version(project, release_build)
 
+    # Step 1a': describe.xml composite SymptomSets check (issue #203).  The
+    # release CI runs build-sdk only, never validate-sdk, so the check must
+    # live here too; Ops rejects the whole describe at install otherwise.
+    _describe_for_check = project_dir / "describe.xml"
+    if _describe_for_check.is_file():
+        _ss_errors = _validate_describe_symptom_sets(_describe_for_check)
+        if _ss_errors:
+            raise SdkBuildError("\n".join(_ss_errors))
+
     # Step 1b: parse bundled_content (optional) — must happen before compile so
     # content load errors fail fast, before the expensive Java build steps.
     import yaml as _yaml_mod
@@ -3565,6 +3581,62 @@ def _validate_localization_key_contract(views: list, sm_scope: Optional[List[Pat
     return errors
 
 
+def _xml_local_name(tag) -> str:
+    """Return *tag* without its ``{namespace}`` prefix (describe.xml is namespaced)."""
+    if not isinstance(tag, str):
+        return ""
+    return tag.rsplit("}", 1)[-1]
+
+
+def _validate_describe_symptom_sets(describe_xml: Path) -> List[str]:
+    """Reject any composite ``<SymptomSets>`` with fewer than two children.
+
+    VCF Operations rejects the whole describe at pak install with
+    ``IllegalArgumentException: A composite symptom set should contain at
+    least two Symptom Sets/Composite Symptom Sets``; the pak manager reports
+    "Failed to install solution" and the controller rolls back to the prior
+    build.  Compliance build 90 shipped ``<SymptomSets operator="or">``
+    wrapping one ``<SymptomSet>`` and was rejected for exactly this (factory
+    issue #203, lesson ``knowledge/lessons/pak-content-bundling.md``).  A
+    single set must sit bare under ``<State>``, which is what the Tier 1
+    alert renderer already emits.
+
+    Children counted are ``<SymptomSet>`` and nested ``<SymptomSets>``;
+    every ``<SymptomSets>`` at any depth is checked.  Each error names the
+    owning AlertDefinition id (or ``<outside AlertDefinition>``).
+    """
+    errors: List[str] = []
+    try:
+        root = ET.parse(describe_xml).getroot()
+    except (ET.ParseError, OSError) as exc:
+        return [f"describe.xml could not be parsed for the SymptomSets check: {exc}"]
+
+    def _walk(elem, alert_id: Optional[str]) -> None:
+        name = _xml_local_name(elem.tag)
+        if name == "AlertDefinition":
+            alert_id = elem.get("id") or elem.get("key") or "<AlertDefinition without id>"
+        if name == "SymptomSets":
+            children = [
+                c for c in elem
+                if _xml_local_name(c.tag) in ("SymptomSet", "SymptomSets")
+            ]
+            if len(children) < 2:
+                owner = alert_id or "<outside AlertDefinition>"
+                op = elem.get("operator", "")
+                errors.append(
+                    f"describe.xml: AlertDefinition '{owner}' has a composite "
+                    f"<SymptomSets operator=\"{op}\"> with {len(children)} "
+                    f"child symptom set(s); VCF Operations requires at least "
+                    f"two and rejects the whole describe at install. Put a "
+                    f"single <SymptomSet> bare under <State> instead (issue #203)."
+                )
+        for child in elem:
+            _walk(child, alert_id)
+
+    _walk(root, None)
+    return errors
+
+
 def validate_sdk_project(project_dir: Path) -> List[str]:
     """Validate a Tier 2 adapter project without building.
 
@@ -3588,6 +3660,8 @@ def validate_sdk_project(project_dir: Path) -> List[str]:
     describe_xml = project_dir / "describe.xml"
     if not describe_xml.is_file():
         errors.append(f"describe.xml not found in {project_dir}")
+    else:
+        errors.extend(_validate_describe_symptom_sets(describe_xml))
 
     src_dir = project_dir / "src"
     if not src_dir.is_dir():

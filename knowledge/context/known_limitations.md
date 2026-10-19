@@ -366,6 +366,23 @@ Authority:
 §"Per-row filtering: IT EXISTS" (15-variant matrix, devel 9.1).
 Mechanism discovered by the user, 2026-07-27.
 
+## 16. Dashboard names over 50 characters cannot be edited in the UI
+
+The VCF Ops dashboard editor caps the Name field at 50 characters
+("The maximum length for this field is 50"). The content-import API
+and pak install accept longer names, so the dashboard installs, but
+the editor refuses to save any edit until the name is shortened. Seen
+on devel 2026-10-12 on the compliance Environment Overview (issue
+#198). The `[VCF Content Factory] ` prefix is 22 characters, leaving
+28 for the title.
+
+`vcfcf_core.dashboards.loader.DASHBOARD_NAME_MAX_LEN` holds the limit;
+`Dashboard.validate()` emits a WARNING (not an error) on every
+validate and SDK pak build, because existing repo and pak dashboards
+exceed it and dashboard identity is the name: a rename on an installed
+pack ships a new dashboard beside the old, so each rename is a
+per-pack decision. Flip it to an error once those renames land.
+
 ## Summary dashboards: no Suite API, no pak binding, UI layer only
 
 VCF Ops can show a chosen dashboard on an object's Summary tab per object
