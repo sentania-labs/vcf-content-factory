@@ -93,8 +93,8 @@ mandate lines, not reflexively.)
 
 Agent prompts under `.claude/agents/` are authoritative for each
 agent's behavior; if this table ever conflicts with a prompt, the
-prompt wins. Model tiers: the ten agents with no `model:` line
-(the four reviewers, `tooling`, `sdk-adapter-author`, `python-mp-author`,
+prompt wins. Model tiers: the nine agents with no `model:` line
+(the three reviewers, `tooling`, `sdk-adapter-author`, `python-mp-author`,
 `mp-designer`, both API explorers) deliberately inherit the session model; the rest are
 pinned `sonnet`. Do not re-add pins without a decision.
 

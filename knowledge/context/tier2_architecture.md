@@ -521,9 +521,23 @@ framework no longer compiles against any TVS or Suite-API artifact.
 ## Pak signing roadmap
 
 **Current (Phase 2):** paks ship unsigned via the VCF Content Factory
-bundle pipeline. The appliance accepts unsigned paks without admin
-override (confirmed empirically — 42 unsigned installs in the devel
-corpus, see `cleanroom-spec/spec/16-platform-install-and-signing.md`).
+bundle pipeline. The appliance installs unsigned paks **only when the
+cluster-wide "Allow unsigned PAK installation" toggle is on** (Admin UI
+`/admin`, Administrator Settings, Security Settings; CaSA marker file
+`/storage/db/casa/unsigned_pak_allowed`). With the toggle off, every
+upload fails with `unsigned_pak_installation.not.allowed`, whatever
+`ignoreSignatureChecking` says.
+
+> **Correction, 2026-10-14.** This section used to say the appliance
+> accepts unsigned paks without admin override, citing 42 unsigned installs
+> in the devel corpus (`cleanroom-spec/spec/16-platform-install-and-signing.md`).
+> That was a lab artifact. devel had the toggle switched on by hand on
+> 2026-04-17 (CaSA audit log), and prod also has it on. A fresh 9.1.1
+> install (devel_9_1) came up with it off and refused every factory pak.
+> The default is off on 9.0.x and 9.1.x. Third-party paks cannot be
+> "trusted signed": the platform only trusts VMware/Broadcom signatures, so
+> a self-signed pak still needs the toggle. Evidence:
+> `knowledge/context/investigations/2026-10-14-unsigned-pak-policy-9-1-1.md`.
 
 **Future — self-signed:** generate a VCF Content Factory keypair, sign
 paks with it, include `signature.mf` + `signature.cert`. The appliance
@@ -754,3 +768,16 @@ source references a class that 9.1.1 dropped. The buildkit still compiles
 against the 9.0.2 jar; a two-jar compile matrix is factory issue #211.
 Devel's one outlier is the `VrAdapter` pack's bundled copy (0f2f3a8c5722, a
 smaller build). The `2.2` and `1.0` in file names are names, not versions.
+
+### API delta for the classes we use (read 2026-10-13)
+
+Class files: every class in the 9.0.2 jar is major version 61 (Java 17);
+every class in the 9.1.1 jar is major 69 (Java 25), so the 9.1.1 collector
+runs Java 25 and compiling against the 9.1.1 jar needs JDK 25. Our adapters
+target Java 11 bytecode and run on both.
+
+Public API (`javap -public`, JDK 25) of the 22 SDK classes our framework and
+the compliance, unifi, synology and vcommunity adapters import: 21 identical.
+The one difference is additive: `adapter3.describe.AdapterDescribe` gains
+`getDictionaryDir()`, `getLiExtractedFields()` and `setLiExtractedFields(...)`
+in 9.1.1. Nothing we call was removed or changed signature.

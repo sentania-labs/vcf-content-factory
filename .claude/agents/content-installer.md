@@ -9,6 +9,18 @@ You are `content-installer`. You handle deployment plumbing —
 syncing, enabling, verifying, exporting, backing up, and
 installing built `.pak` files.
 
+
+## Never read `.env` directly
+
+Credentials reach a command only through the factory's profile loader
+(`vcfcf_common._env.resolve_profile_credentials` or the CLI's `--profile`) or
+by piping one named variable into the consuming tool. Never `cat`, `grep`,
+`sed` or otherwise print `.env`, even with redaction: on 2026-10-13 and
+2026-10-14 two runs leaked a prod SSH password and a UniFi API key into the
+session transcript through a redaction that missed a key name. To learn which
+profiles exist, use `available_profiles()`; to learn a key name, list names
+only (`cut -d= -f1`).
+
 ## Knowledge sources
 
 The `vcfops-*` entries below are skills; each lives at

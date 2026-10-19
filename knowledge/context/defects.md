@@ -1346,3 +1346,30 @@ reused. Field lines are `- **Field:** value` (parsed by
   on later cycles for a retired key; devel evidence that an open alert on a
   retired control cancels within three cycles of a version change.
 - **Related:** adapter issue #41, DEF-022.
+
+### DEF-026
+
+- **Title:** Compliance: no per-cycle deadline and the stop flag is never
+  checked, so a slow or hung vCenter can hold a collection, and the shared
+  collector thread, for hours while old data looks current
+- **Severity:** tracked
+- **Status:** open
+- **Affects:** compliance
+- **First-seen:** every build through v1.0.0.94; adapter issue #16 (filed
+  2026-09-24)
+- **Source:** `knowledge/context/reviews/compliance-open-issues-triage-2026-10-14.md`
+  (registration candidate)
+- **Summary:** every vim25 SOAP call is serial with a 120 second read timeout
+  and nothing bounds the cycle. The adapter never checks the stop flag and
+  the framework only checks between resources (this pak has one), so Stop
+  Collecting waits for the whole vCenter walk. A slow cycle that eventually
+  completes leaves `Rollup|incomplete` at 0, so stale data reads as current.
+  In-process adapters share the collector JVM, so the stall is felt by every
+  adapter on that collector. Build 95 adds the stop-flag check between
+  objects; the cycle budget and failure cutoff wait on build 95's phase
+  timings.
+- **Close condition:** a cycle budget and consecutive-failure cutoff land with
+  tests; a devel check with an unreachable or throttled vCenter shows the
+  cycle ends within the budget, marks the kind incomplete and raises the
+  not-collected alert.
+- **Related:** adapter issues #16, #18, #17.
