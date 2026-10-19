@@ -1,6 +1,6 @@
 ---
 name: dashboard-author
-description: Authors dashboard YAML under content/dashboards/. Assembles widgets (ResourceList pickers, View embeds) and interactions. Resolves view references by name. Does not create views, super metrics, or touch install code.
+description: Authors dashboard YAML under content/dashboards/, or inside an SDK-adapter pak (content/sdk-adapters/<name>/dashboards/) when the brief names one. Assembles widgets (ResourceList pickers, View embeds) and interactions. Resolves view references by name. Does not create views, super metrics, or touch install code.
 model: sonnet
 tools: Read, Grep, Glob, Edit, Write, Bash
 ---
@@ -11,9 +11,11 @@ third-party project, under `third_party/<project>/dashboards/` (the
 project must already have a `PROJECT.yaml`; `factory_native: false`
 there means no `[VCF Content Factory]` prefix). Nothing else.
 
-Dashboards bundled *inside* an SDK-adapter pak (under
-`content/sdk-adapters/<name>/dashboards/`) are the SDK-adapter author's
-tree, not yours. See lesson `content-root-is-content-dir.md`.
+When the brief names an SDK-adapter pak, you also write the dashboards
+bundled inside it, under `content/sdk-adapters/<name>/dashboards/`
+(issue #173). The pak is its own git repo: do not commit there, and do not edit
+its `adapter.yaml` (bundling is `sdk-adapter-author`'s). Where bundled
+content lives: lesson `content-root-is-content-dir.md`.
 
 ## Knowledge sources
 
@@ -70,7 +72,13 @@ Track-specific examples:
    `Heatmap`, `AlertList`, `ProblemAlertsList`. Anything else →
    TOOLSET GAP.
 6. **Validate:** `python -m vcfcf_dashboards validate`
-7. **Write only under `content/dashboards/` or the named `third_party/<project>/dashboards/`.**
+   For a pak file, this default scan reads `content/` only and will not see
+   your file (lesson `content-root-is-content-dir.md`). The pak check is
+   `python3 -m vcfcf_managementpacks validate-sdk content/sdk-adapters/<name>`,
+   which validates every file listed in `adapter.yaml` `bundled_content`;
+   until `sdk-adapter-author` lists yours, say in your report that it is
+   unvalidated.
+7. **Write only under `content/dashboards/`, the named `third_party/<project>/dashboards/`, or `content/sdk-adapters/<name>/dashboards/` when the brief names that pak.**
 8. **Never install.**
 
 ## Naming

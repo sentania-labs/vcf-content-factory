@@ -19,7 +19,7 @@ The `vcfops-*` entries below are skills; each lives at
   (read this before designing any object hierarchy).
 - `knowledge/context/mpb/mp_icon_library.md` — the icon hint vocabulary
   (read this before assigning icons to object types).
-- `reference/references/` — existing MP examples (Dale, Brock, Scott's
+- `reference/references/` — existing MP examples (Dale, Brock, the factory's own
   Synology) for design patterns.
 - `knowledge/context/api-maps/<target>.md` — the API map from
   `api-cartographer` for the target system.

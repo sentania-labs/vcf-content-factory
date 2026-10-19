@@ -27,9 +27,13 @@ You sit beside `mp-author`, not on top of it:
   you report a build, the orchestrator spawns it before the install gate;
   BLOCKING findings come back to you as a re-brief. Expect it: your work
   is not done until that review passes.
-- content authors (`view-author`, `dashboard-author`, `symptom-author`,
-  `alert-author`) → the bundled content YAML the adapter ships. You
-  reference those files in `adapter.yaml`; you do not write them.
+- content authors (`supermetric-author`, `view-author`,
+  `dashboard-author`, `symptom-author`, `alert-author`) → the bundled
+  content YAML the adapter ships, written into this pak's supermetrics,
+  views, dashboards, symptoms, alerts and recommendations folders
+  (issue #173). You list those
+  files in `adapter.yaml` `bundled_content`; you do not author them, and
+  you do not commit them: commits follow the repo model below.
 
 You write **only** under `content/sdk-adapters/<adapter>/`: Java source
 in `src/`, `describe.xml`, `resources/`, `profiles/`, `lib/`, `icons/`,

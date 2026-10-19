@@ -101,12 +101,12 @@ pinned `sonnet`. Do not re-add pins without a decision.
 | Agent | Posture | Writes to | Spawn when |
 |---|---|---|---|
 | `ops-recon` | Read-only against live Ops | `knowledge/context/investigations/recon_log.md` on request | **Before every authoring task.** Does this exist? Is it enabled? Does a built-in cover it? |
-| `supermetric-author` | Author | `content/supermetrics/` | After recon. One SM per invocation. |
+| `supermetric-author` | Author | `content/supermetrics/`, or `content/sdk-adapters/<name>/supermetrics/` when the brief names an SDK-adapter pak | After recon. One SM per invocation. |
 | `customgroup-author` | Author | `content/customgroups/` | User needs a dynamic group. Static is out of scope. |
-| `view-author` | Author | `content/views/`, or `third_party/<project>/views/` when the brief names a third-party project | User wants a list view. Blocks if upstream SM/group missing. |
-| `dashboard-author` | Author | `content/dashboards/`, or `third_party/<project>/dashboards/` when the brief names a third-party project | User wants a dashboard. Blocks if upstream views missing. |
-| `symptom-author` | Author | `content/symptoms/` | After recon confirms no existing symptom fits. |
-| `alert-author` | Author | `content/alerts/`, `content/recommendations/` | After recon, **and** required symptoms exist. |
+| `view-author` | Author | `content/views/`, or `third_party/<project>/views/` / `content/sdk-adapters/<name>/views/` when the brief names a third-party project or an SDK-adapter pak | User wants a list view. Blocks if upstream SM/group missing. |
+| `dashboard-author` | Author | `content/dashboards/`, or `third_party/<project>/dashboards/` / `content/sdk-adapters/<name>/dashboards/` when the brief names a third-party project or an SDK-adapter pak | User wants a dashboard. Blocks if upstream views missing. |
+| `symptom-author` | Author | `content/symptoms/`, or `content/sdk-adapters/<name>/symptoms/` when the brief names an SDK-adapter pak | After recon confirms no existing symptom fits. |
+| `alert-author` | Author | `content/alerts/`, `content/recommendations/`, or the same two folders under `content/sdk-adapters/<name>/` when the brief names an SDK-adapter pak | After recon, **and** required symptoms exist. |
 | `report-author` | Author | `content/reports/` | User wants a report. Blocks if upstream views missing. |
 | `api-explorer` | Research | `knowledge/context/`; verbatim vendor artifacts may be *added* under `reference/docs/` (RULE-016) | Author returns TOOLSET GAP, install fails mysteriously, surface map gap. |
 | `tooling` | Engineering | `src/vcfcf_*/`, `tests/`, `knowledge/context/` | Renderer/loader/CLI fix or new package bootstrap. **Only** agent that edits `src/vcfcf_*/`. |
@@ -177,12 +177,13 @@ pinned `sonnet`. Do not re-add pins without a decision.
    directories.
 
 9. **Framework changes go `tooling` then `framework-reviewer`, then
-   PR** (RULE-013, blanket on every `src/vcfcf_*/` diff; CHANGES
-   REQUESTED blocks the PR; re-brief and re-review until APPROVE).
-   **Every finding gets fixed before the PR opens**, warnings and
-   nits alike, in one re-brief: the external Codex round is for what
-   the internal gate missed, not for what it deferred. A follow-up
-   issue is only for a finding in code the branch does not touch.
+   PR** (RULE-013, blanket on every `src/vcfcf_*/` diff). One review
+   round. **Every finding gets fixed before the PR opens**, warnings
+   and nits alike, in one re-brief, and then the PR opens: there is no
+   second internal review of the fixes. The external Codex round is
+   the check on the fixes and on what the gate missed; looping the
+   internal reviewer is how a change never ships. A follow-up issue is
+   only for a finding in code the branch does not touch.
    Lesson: `knowledge/lessons/deferred-nit-becomes-the-codex-finding.md`.
    **Repo-wide migrations are orchestrator-owned**: a sweep spanning
    CLAUDE.md, agent prompts, `.claude/` config, scripts, and root docs

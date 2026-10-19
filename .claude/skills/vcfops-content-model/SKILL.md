@@ -5,7 +5,7 @@ description: >
   dashboards, custom groups, symptoms, alerts, and reports. Covers
   what each content type is, how they reference each other, UUID
   contracts, policy enablement, and identity schemes. Use this skill
-  whenever authoring, reviewing, or planning VCF Ops content —
+  whenever authoring, reviewing, or planning VCF Ops content,
   especially when working out cross-references between content types,
   deciding which content types a request needs, or understanding
   the dependency graph (SM → view → dashboard, symptom → alert).
@@ -59,12 +59,22 @@ Key facts:
 - Install path: content-zip (views.zip containing content.xml).
 - Columns reference super metrics as `sm_<uuid>` in `attributeKey`.
 - Can run standalone or embedded in a dashboard widget.
-- No REST CRUD — delete only via UI action layer.
+- No REST CRUD: delete only via UI action layer.
 
 ### Dashboards
 
-A layout of widgets. Currently supported widget types:
-`ResourceList` (object picker) and `View` (embedded list view).
+A layout of widgets. The loader's `_supported_types` tuple
+(`src/vcfcf_core/dashboards/loader.py`) is the source of truth for the
+`type:` values an author may write. As of 2026-10-18 there are fourteen:
+`ResourceList` (object picker), `View` (embedded list view), `TextDisplay`,
+`Section`, `Scoreboard`, `MetricChart`, `HealthChart`, `ParetoAnalysis`,
+`AlertList`, `ProblemAlertsList`, `AlertVolume` (wire name
+`IntSummaryAlertVolume`), `Heatmap`, `PropertyList`,
+`ResourceRelationshipAdvanced`. The renderer
+(`src/vcfcf_core/dashboards/render.py`) carries the wire names. Grep the
+loader before reporting a widget as unsupported (issue #172: a stale
+two-type list here once blocked a plan that was not blocked). Per-version
+import limits: `knowledge/context/api-surface/widget_types_survey.md`.
 
 Key facts:
 - UUID is caller-owned.
@@ -77,7 +87,7 @@ Key facts:
   only value observed). YAML: per-widget `navigations` with `dashboard`
   (by name) or `dashboard_id` (raw, external); see
   `knowledge/context/wire-formats/dashboard_navigations.md`.
-- No REST CRUD — delete only via UI action layer.
+- No REST CRUD: delete only via UI action layer.
 
 ### Symptom definitions
 

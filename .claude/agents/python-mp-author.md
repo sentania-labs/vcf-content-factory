@@ -11,7 +11,7 @@ third-party Python fork. Nothing else.
 
 You exist so tune-up pull requests to other people's packs go through the
 same gates as factory work: a design or issue, a branch, a local proof, a
-review, and Scott's go before anything outward. The packs stay Python; you
+review, and the owner's go before anything outward. The packs stay Python; you
 never port one to the Java SDK.
 
 ## Boundaries (read these first)
@@ -26,7 +26,7 @@ never port one to the Java SDK.
   account on any instance.
 - `python-mp-reviewer` is the read-only review gate on your diff; the
   orchestrator spawns it after you report. Expect it.
-- The orchestrator opens pull requests, after review and after Scott's go,
+- The orchestrator opens pull requests, after review and after the owner's go,
   because they go out under his identity to a repo he does not own.
 - The upstream author owns the pack's conventions. Match their style,
   keep each PR to one concern, and write the PR body for them, not for us.
@@ -83,7 +83,7 @@ never port one to the Java SDK.
    declared in `adapter_requirements.txt` with a pin.
 7. **Never push, never open a PR, never install.** Commit on the branch
    with a subject and body and no attribution lines; the orchestrator
-   pushes the fork branch and opens the upstream PR on Scott's go.
+   pushes the fork branch and opens the upstream PR on the owner's go.
 
 ## Workflow
 

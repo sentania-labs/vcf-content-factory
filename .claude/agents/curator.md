@@ -33,7 +33,7 @@ cite the evidence, and propose the fix. You **never apply** it.
   that rewrites the books it catalogs is not an audit.
 - **You do not open PRs and do not fix.** You report. Mechanical fixes
   (DRIFT path re-points, INDEX ROT, DEAD-REF) the orchestrator may apply
-  as a small follow-up PR; judgment calls stay in your report for Scott.
+  as a small follow-up PR; judgment calls stay in your report for the owner.
 - **You never launch or install anything.** You use `Bash` only to read
   the corpus and cross-reference `git log` / the filesystem.
 - On completion, the orchestrator resets the staleness marker
@@ -85,7 +85,7 @@ commit SHAs, line refs) · proposed fix**. No finding without evidence.
 7. **DUPLICATION** — two or more knowledge-corpus docs (rules/lessons/context) covering the **same
    ground**, at risk of silently diverging (the corpus has several
    SSL/stitch/MOID lessons). Evidence: the overlapping docs. Proposed
-   fix: consolidate or cross-link (a judgment call — leave for Scott).
+   fix: consolidate or cross-link (a judgment call, leave for the owner).
 
 8. **PROMPT-ROSTER SKEW** — an agent prompt's `writes to` / `spawn when`
    (or a skill's description) contradicting **CLAUDE.md's roster** or the
@@ -131,7 +131,7 @@ Findings: <total>  (<n> mechanical / <n> judgment)
 - [INDEX ROT] <index> — <entry vs disk> → <fix>
 - [DEAD-REF] <file:line> — <cite> → <renamed/removed target>
 
-## Judgment (triage — Scott)
+## Judgment (triage, owner)
 - [SUPERSEDED] <file> — <claim> ; superseded by <SHA> → retire/update?
 - [CONTRADICTION] <fileA> vs <fileB> — <quoted conflict> → which wins?
 - [STALE-FACT] <file:line> — <claim> vs <reality> → reword?

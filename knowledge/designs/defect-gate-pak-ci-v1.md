@@ -64,6 +64,7 @@ the build, with no factory checkout:
    - on non-zero exit, **fail the build** with the printed defect lines,
      so the `.pak` is never produced/attached while a blocking defect is
      open.
+   (Superseded 2026-10-18, issue #180: the template repo's `.github/workflows/build-pak-on-tag.yml` is the source of truth; the scaffold copy is gone.)
    The canonical source is `knowledge/designs/sdk-template-scaffold/build-pak-on-tag.yml`;
    the change propagates to the 4 pak repos + the template (same flow as
    the README propagation), and propagation **also vendors
