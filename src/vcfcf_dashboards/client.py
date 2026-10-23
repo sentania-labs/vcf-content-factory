@@ -65,14 +65,18 @@ def discover_marker_filename(client: VCFOpsClient, timeout_s: int = 120) -> str:
     The importer rejects bundles whose marker filename does not match
     the server's own value (verified by probing: 6844548499441080431L.v1
     imports fine, 6844548499441080432L.v1 returns INVALID_FILE_FORMAT).
-    Every export from the same cluster uses the same marker, it's a
-    stable per-instance fingerprint, so we discover it by triggering a
-    tiny SUPER_METRICS export, downloading the resulting zip, and
-    reading the one entry that ends in ``L.v1``.
 
-    There is no dedicated "cluster fingerprint" endpoint (checked
-    /api/versions, /api/deployment/*, /api/cluster*) so a throwaway
-    export is the cheapest reliable source.
+    The filename is not a per-instance fingerprint. It was
+    byte-identical (6844548499441080431L.v1) in five exports from four
+    instances on 8.18.7, 9.0.2 and 9.1.1; only the file's content (the
+    owner user uuid) varies (issue #166). It is not proven constant on
+    every build, so it is still read from the target as insurance, by
+    triggering a tiny SUPER_METRICS export, downloading the resulting
+    zip, and reading the one entry that ends in ``L.v1``.
+
+    There is no dedicated endpoint for it (checked /api/versions,
+    /api/deployment/*, /api/cluster*) so a throwaway export is the
+    cheapest reliable source.
 
     startTime is snapshotted before the POST so the completion poll
     can distinguish the new export from a prior already-FINISHED one.
