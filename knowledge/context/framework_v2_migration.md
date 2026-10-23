@@ -635,7 +635,9 @@ delete it and replace all call sites with
 | Break the double-checked-lock cache | Extra `getLogger` calls per collect cycle |
 
 `componentLogger` eliminates all three: same factory, same level
-discipline, called at configure time (after any reload).
+discipline, called at configure time (after any reload). Since buildkit
+1.0.13 it raises a logger to INFO only when INFO is not already enabled, so a
+DEBUG level an operator sets survives repeat lookups (issue #224).
 
 **Hot-reload classloader behavior — per-adapter log file appender
 (proven, synology build 16, devel 9.0.2, 2026-06-10):**

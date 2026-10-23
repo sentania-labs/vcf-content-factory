@@ -210,8 +210,9 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
 
     /**
      * Adapter-instance-scoped logger obtained lazily from the platform's
-     * {@code AdapterLoggerFactory}. Named after the concrete class; pinned
-     * to INFO level so messages are not swallowed by the WARN root logger.
+     * {@code AdapterLoggerFactory}. Named after the concrete class; raised
+     * to INFO when created below INFO (a DEBUG level set by the operator is
+     * kept; issue #224).
      */
     private volatile com.integrien.alive.common.adapter3.Logger adapterLogger;
 
@@ -2377,8 +2378,9 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
     /**
      * Return the adapter-specific logger, lazily created on first call.
      *
-     * <p>Named after the concrete class; pinned to INFO level so messages
-     * are not swallowed by the WARN root logger.
+     * <p>Named after the concrete class; raised to INFO at creation when
+     * INFO is not already enabled (see {@link #raiseToInfo}), so a DEBUG
+     * level set by the operator is kept (issue #224).
      *
      * <h4>Visibility rule (bytecode-determined)</h4>
      * <p>The platform file appender that writes to
@@ -2417,10 +2419,10 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
      * tail {@code collector.log} while triggering a reload (save
      * {@code logging.properties} on the appliance) and observe whether the
      * INFO lines reappear after ~30 s — if they do, the race is confirmed.
-     * The {@link #componentLogger(Class)} method is not susceptible to this
-     * race because it calls {@code setLevel} <em>every time it is invoked by
-     * the adapter</em>, which is at configure time (after any reload that
-     * would have occurred during a previous cycle).
+     * {@link #componentLogger(Class)} re-applies the INFO floor each time it
+     * is invoked (normally at configure time, after any reload that occurred
+     * during a previous cycle), but only when INFO is not already enabled, so
+     * it never lowers a DEBUG level (issue #224).
      *
      * <p><strong>Do not shadow this method in adapter subclasses.</strong>
      * Use {@link #componentLogger(Class)} to obtain leveled loggers for
@@ -2433,8 +2435,7 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
                 l = adapterLogger;
                 if (l == null) {
                     l = getAdapterLoggerFactory().getLogger(getClass());
-                    l.setLevel(
-                        com.integrien.alive.common.adapter3.Logger.CustomLevel.INFO);
+                    raiseToInfo(l);
                     adapterLogger = l;
                 }
             }
@@ -2465,12 +2466,16 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
      * <p>The returned handle is obtained from the same
      * {@link com.integrien.alive.common.adapter3.AdapterLoggerFactoryImpl} as
      * the base's own logger. The factory names the logger config
-     * {@code "(instanceId) com.example.HelperClass"} — the same pattern as
-     * the adapter's own {@code "(instanceId) com.example.MyAdapter"} — and
+     * {@code "(instanceId) com.example.HelperClass"} (the same pattern as
+     * the adapter's own {@code "(instanceId) com.example.MyAdapter"}) and
      * wires it to the same rolling file appender
-     * ({@code <adapterName>_<instanceId>.log}). The {@code setLevel(INFO)}
-     * call overrides the {@code logging.properties} floor so INFO messages
-     * are not silently filtered by the WARN root threshold.
+     * ({@code <adapterName>_<instanceId>.log}).
+     *
+     * <h4>Level (issue #224)</h4>
+     * <p>The logger is raised to INFO only when INFO is not already enabled;
+     * a DEBUG or TRACE level set by the operator or the pak's
+     * {@code logging.properties} is kept, however often the logger is looked
+     * up. Fetching once in {@code configureAdapter()} is still the pattern.
      *
      * <h4>Migration note</h4>
      * <p>Any adapter that was shadowing {@code adapterLogger()} (i.e.,
@@ -2492,10 +2497,25 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
      */
     protected com.integrien.alive.common.adapter3.Logger componentLogger(
             Class<?> component) {
+        java.util.Objects.requireNonNull(component, "componentLogger: component class");
         com.integrien.alive.common.adapter3.Logger l =
                 getAdapterLoggerFactory().getLogger(component);
-        l.setLevel(com.integrien.alive.common.adapter3.Logger.CustomLevel.INFO);
+        raiseToInfo(l);
         return l;
+    }
+
+    /**
+     * Lift {@code l} to INFO only when INFO is not already enabled (issue
+     * #224). A level an operator or the pak's {@code logging.properties} set
+     * at INFO or below (DEBUG, TRACE) is left alone, so a repeat lookup can
+     * no longer discard DEBUG. A level above INFO (the collector's WARN root)
+     * is still raised, which keeps INFO messages from being dropped at the
+     * logger.
+     */
+    static void raiseToInfo(com.integrien.alive.common.adapter3.Logger l) {
+        if (!l.isInfoEnabled()) {
+            l.setLevel(com.integrien.alive.common.adapter3.Logger.CustomLevel.INFO);
+        }
     }
 
     /** Log at INFO level to the adapter-specific log file. */

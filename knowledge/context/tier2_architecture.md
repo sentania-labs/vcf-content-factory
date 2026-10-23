@@ -354,6 +354,14 @@ shadow the base's private `adapterLogger()`. See §15 in
 `knowledge/context/framework_v2_migration.md` for the full rule and migration
 steps.
 
+**Level (issue #224, buildkit 1.0.13):** `componentLogger` and the adapter's
+own logger raise a logger to INFO only when INFO is not already enabled. A
+DEBUG or TRACE level that the operator or the pak's `conf/logging.properties`
+set is kept however often the logger is looked up. Before 1.0.13 every
+lookup called `setLevel(INFO)`, so a per-call lookup (UniFi build 14's
+failure hook) silently discarded DEBUG. Fetching once in `configureAdapter()`
+is still the pattern.
+
 **Per-adapter log file appender — classloader behavior on hot-reload
 (proven empirically, synology build 16, devel 9.0.2, 2026-06-10):**
 
