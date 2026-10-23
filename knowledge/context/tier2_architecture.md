@@ -781,6 +781,7 @@ Empirical basis: `knowledge/context/investigations/suiteapi_ambient_auth_devel_2
 | devel 9.0.2.0 build 25137845 | `common/lib/vrops-adapters-sdk.jar` and 20+ copies under packs, controller and tomcat | 2d53a91fc2b9 | 1,002,682 bytes; manifest carries no version; Apache Maven 3.3.9, JDK 17.0.16 |
 | factory `adapter_runtime/vrops-adapters-sdk-2.2.jar` | the buildkit's compile target | 2d53a91fc2b9 | byte-identical to devel's |
 | prod 9.1.1 (both nodes) | `common/lib/vrops-adapters-sdk.jar` and 31 copies, one named `vrops-adapters-sdk-9.1.1.0.jar` | 9e905f1a5164 | 1,001,089 bytes; Maven JAR Plugin 3.5.0, Java-Version 25; 512 entries vs 518 |
+| 9.1.1.0100 build 25795063 (devel_9_1's build), from the appliance OVA, read 2026-10-23 | `common/lib/vrops-adapters-sdk.jar` (and the identical `-1.0.jar`) in `vmware-vcops-9.0.0.0-25794169` RPM; stored at `reference/docs/vendor-jars/vrops-adapters-sdk-9.1.1.0100.jar` | 79f7b1234090 | 1,001,091 bytes; not the prod 9.1.1.0 bytes (the 0100 patch rebuilt it); Maven JAR Plugin 3.5.0, Java-Version 25, class major 69; 512 entries, same 6 added / 12 removed vs 2.2 as prod |
 | all three | `aria-ops-core-8.0.0.jar` | 8743cc28a010 | only inside the Synology MPB adapter's own lib; absent from `common/lib` |
 
 Class delta between the two SDK jars: only in 9.1.1, `LIExtractedFieldDescribe`,
