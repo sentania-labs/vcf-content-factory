@@ -362,6 +362,34 @@ lookup called `setLevel(INFO)`, so a per-call lookup (UniFi build 14's
 failure hook) silently discarded DEBUG. Fetching once in `configureAdapter()`
 is still the pattern.
 
+**What reaches the per-instance log (bytecode, SDK 2.2; issue #228):** the
+SDK's `AdapterLoggerFactoryImpl` names each logger `(<instanceId>) <name>` and
+attaches the instance file appender (`<adapter>_<id>.log`) at the level of the
+entry governing the *bare* `<name>`: an entry from the adapter's
+`<ADAPTER_HOME>/<adapter jar name>/conf/logging.properties` (vendor paks ship
+`<package> = INFO` there, for example `com.vmware.adapter3.nsxt=INFO`), else
+the collector root (WARN). `Logger.setLevel` changes only the logger's own
+level, never that appender filter. So a framework helper named after its own
+class (`com.vcfcf.adapter.stitch.SuiteApiStitcher`) sat outside the pak's
+package entry and its INFO never reached the instance log, while the pak's
+own classes did. Field evidence that fits only this: on the devel_9_1 Cloud
+Proxy, Synology build 32's `SynologyApiClient` INFO line
+(`com.vcfcf.adapters.synology`) is in `SynologyAdapter_1505.log` while the
+`SuiteApiStitchClient` configure lines from the same configure call are in
+neither that log nor `collector.log`; UniFi build 15 the same
+(`knowledge/context/investigations/2026-10-16-unifi-15-devel-9-1-proof.md`).
+Since buildkit 1.0.13 `componentLogger(cls)` keeps `cls`'s name when it is in
+the adapter's package (or a subpackage) and otherwise names the logger as a
+child of the adapter class, `<adapter class>.<simple name>` (for example
+`com.vcfcf.adapters.unifi.UniFiAdapter.SuiteApiStitcher`), so framework helper
+lines follow exactly the adapter's own level. Reproduced locally against the
+real SDK factory and log4j-core (`ComponentLoggerTest`); a live Cloud Proxy
+check is still owed. Where the Cloud Proxy's package-scoped entry comes from
+(our paks ship no `logging.properties`) is not established; the platform's
+per-adapter log-level setting is the likely writer. A pak that wants INFO
+visible by default could ship `conf/logging.properties` with
+`<its package> = INFO` like vendor paks; the builder does not do that today.
+
 **Per-adapter log file appender — classloader behavior on hot-reload
 (proven empirically, synology build 16, devel 9.0.2, 2026-06-10):**
 

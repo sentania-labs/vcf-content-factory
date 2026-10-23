@@ -2393,18 +2393,23 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
      * is logged there, so this is acceptable.
      *
      * <p>When an appender is present the factory creates a per-logger
-     * {@code LoggerConfig} whose name is {@code "(instanceId) className"}.
-     * That logger config is wired to the instance file appender with an
-     * effective level of {@code max(sdkLoggerConfig.levelForAdapterLog,
-     * rootLevel)} — where {@code levelForAdapterLog} is the level written by
-     * {@code logging.properties} (typically {@code INFO} or {@code WARN}).
-     * The {@link com.integrien.alive.common.adapter3.Logger#setLevel} call
-     * translates the {@code CustomLevel} to a Log4j level and invokes
-     * {@code Configurator.setLevel(loggerName, level)} — which patches the
-     * live {@code LoggerConfig} in the running Log4j context, overriding the
-     * {@code logging.properties} floor. <strong>Without the {@code setLevel}
-     * call, a WARN root threshold silently drops INFO messages even when the
-     * adapter appender is correctly attached.</strong>
+     * {@code LoggerConfig} whose name is {@code "(instanceId) className"}
+     * (corrected 2026-10-23 from bytecode, issue #228). It looks up the
+     * config that governs the <em>bare</em> {@code className}: an entry the
+     * adapter's {@code <ADAPTER_HOME>/<adapter jar>/conf/logging.properties}
+     * created (an {@code AdapterLoggerConfig}; vendor paks ship
+     * {@code <package>=INFO}) or else the collector's own config (root WARN).
+     * The instance file appender is attached at that entry's
+     * {@code levelForAdapterLog} (else the plain level), and the collector's
+     * appenders at the plain level. The new logger's own level is the more
+     * verbose of the two. The
+     * {@link com.integrien.alive.common.adapter3.Logger#setLevel} call
+     * ({@code Configurator.setLevel}) changes only that logger level, never
+     * the appender filters: it lets a message past the logger's level gate,
+     * but a line below the instance appender's level still never reaches the
+     * instance log. So what reaches the instance log is decided by the entry
+     * covering the bare class name, which is why {@link #componentLogger}
+     * names framework classes under the adapter class.
      *
      * <p>The root logger threshold (typically WARN in the 9.1 collector JVM)
      * is irrelevant once a per-instance logger config is registered — Log4j
@@ -2466,10 +2471,13 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
      * <p>The returned handle is obtained from the same
      * {@link com.integrien.alive.common.adapter3.AdapterLoggerFactoryImpl} as
      * the base's own logger. The factory names the logger config
-     * {@code "(instanceId) com.example.HelperClass"} (the same pattern as
-     * the adapter's own {@code "(instanceId) com.example.MyAdapter"}) and
-     * wires it to the same rolling file appender
-     * ({@code <adapterName>_<instanceId>.log}).
+     * {@code "(instanceId) <name>"} and wires it to the same rolling file
+     * appender ({@code <adapterName>_<instanceId>.log}), filtered at the
+     * level the adapter's logging configuration gives {@code <name>}.
+     * {@code <name>} is the component's class name when the class is in the
+     * adapter's package, otherwise a child of the adapter class (see
+     * {@link #componentLoggerName(Class, Class)}; issue #228: framework
+     * helper lines never reached the instance log on a Cloud Proxy).
      *
      * <h4>Level (issue #224)</h4>
      * <p>The logger is raised to INFO only when INFO is not already enabled;
@@ -2498,10 +2506,49 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
     protected com.integrien.alive.common.adapter3.Logger componentLogger(
             Class<?> component) {
         java.util.Objects.requireNonNull(component, "componentLogger: component class");
-        com.integrien.alive.common.adapter3.Logger l =
-                getAdapterLoggerFactory().getLogger(component);
+        com.integrien.alive.common.adapter3.Logger l = getAdapterLoggerFactory()
+                .getLogger(componentLoggerName(getClass(), component));
         raiseToInfo(l);
         return l;
+    }
+
+    /**
+     * Logger name {@link #componentLogger(Class)} asks the SDK factory for
+     * (issue #228). A class in the adapter's own package, or a subpackage of
+     * it, keeps its own name. Any other class (the framework's own helpers
+     * such as {@code SuiteApiStitcher}, a JDK or vendor class) is named as a
+     * child of the adapter class: {@code <adapter class>.<simple name>}, for
+     * example {@code com.vcfcf.adapters.unifi.UniFiAdapter.SuiteApiStitcher}.
+     *
+     * <p>Why: the SDK gives each logger its instance-log appender at the
+     * level the adapter's {@code conf/logging.properties} (or the platform's
+     * per-adapter setting) assigns to the bare name, and that entry is keyed
+     * by the pak's package. A framework class name
+     * ({@code com.vcfcf.adapter.stitch...}) sits outside it, falls back to
+     * the collector root level (WARN), and its INFO never reaches the
+     * instance log. As a child of the adapter class it inherits exactly the
+     * adapter's own level. Visible to tests.
+     */
+    static String componentLoggerName(Class<?> adapterClass, Class<?> component) {
+        return componentLoggerName(adapterClass.getName(), packageOf(adapterClass),
+                packageOf(component), component.getName());
+    }
+
+    /** {@link #componentLoggerName(Class, Class)} on names. Visible to tests. */
+    static String componentLoggerName(String adapterClassName, String adapterPackage,
+            String componentPackage, String componentClassName) {
+        boolean inPak = componentPackage.equals(adapterPackage)
+                || (!adapterPackage.isEmpty()
+                        && componentPackage.startsWith(adapterPackage + "."));
+        if (inPak) return componentClassName;
+        String simple = componentClassName.substring(componentClassName.lastIndexOf('.') + 1);
+        return adapterClassName + "." + simple;
+    }
+
+    private static String packageOf(Class<?> c) {
+        String n = c.getName();
+        int dot = n.lastIndexOf('.');
+        return dot < 0 ? "" : n.substring(0, dot);
     }
 
     /**

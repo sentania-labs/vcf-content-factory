@@ -1,6 +1,8 @@
 package com.vcfcf.adapter;
 
 import com.integrien.alive.common.adapter3.Logger;
+import com.vcfcf.adapter.stitch.SuiteApiStitchClient;
+import com.vcfcf.adapter.stitch.SuiteApiStitcher;
 import com.vcfcf.testpak.debug.DebugPakAdapter;
 import com.vcfcf.testpak.info.InfoPakAdapter;
 
@@ -21,7 +23,7 @@ import java.util.stream.Stream;
 /**
  * {@link VcfCfAdapter#componentLogger(Class)} against the real SDK logger
  * factory ({@code AdapterLoggerFactoryImpl}) and log4j-core, writing a real
- * per-instance adapter log file (issue #224).
+ * per-instance adapter log file (issues #224 and #228).
  *
  * <p>The SDK, read in bytecode: the factory names each logger
  * {@code "(<instanceId>) <name>"} and gives it the instance file appender at
@@ -29,9 +31,17 @@ import java.util.stream.Stream;
  * the adapter jar name under {@code ADAPTER_HOME}; vendor paks ship
  * {@code <package>=INFO}) assigns to the bare {@code <name>}, else the
  * collector root level. {@code Logger.setLevel} changes only the logger's own
- * level, never that appender filter. #224: {@code setLevel(INFO)} on every
- * lookup lowered a DEBUG level the operator set, so DEBUG lines were dropped.
- * The fix only raises a level that is below INFO.
+ * level, never that appender filter. So:
+ * <ul>
+ *   <li>#228: a framework helper logger named after its own class
+ *       ({@code com.vcfcf.adapter.stitch.SuiteApiStitcher}) falls outside the
+ *       pak's package entry and its INFO never reaches the instance log,
+ *       while the pak's own classes do. The fix names it under the adapter
+ *       class.</li>
+ *   <li>#224: {@code setLevel(INFO)} on every lookup lowered a DEBUG level
+ *       the operator set, so DEBUG lines were dropped. The fix only raises a
+ *       level that is below INFO.</li>
+ * </ul>
  *
  * <p>Runs in its own JVM: it points log4j at a test configuration (root WARN
  * with a rolling file appender, as on a collector) before log4j initializes.
@@ -56,12 +66,36 @@ public class ComponentLoggerTest {
         tmp = Files.createTempDirectory("vcfcf-complog-");
         try {
             setUpLog4j();
+            testFrameworkHelperReachesInstanceLog();
             testOperatorDebugLevelSurvivesLookups();
             testInfoFloorWithoutPakEntry();
+            testLoggerNaming();
         } finally {
             deleteTree(tmp);
         }
         report();
+    }
+
+    // -----------------------------------------------------------------------
+    // #228
+    // -----------------------------------------------------------------------
+
+    private static void testFrameworkHelperReachesInstanceLog() throws Exception {
+        InfoPakAdapter a = adapter(InfoPakAdapter.class, "InfoPak", 41);
+        a.info("T228-adapter-info");
+        a.component(InfoPakAdapter.Helper.class).info("T228-pak-helper-info");
+        a.component(SuiteApiStitcher.class).info("T228-framework-helper-info");
+        SuiteApiStitchClient.builder().adapter(a)
+                .explicitCredentials("localhost", "svc-user", "svc-pass")
+                .logger(a.component(SuiteApiStitcher.class))
+                .build();
+        String log = instanceLog("InfoPak", 41);
+        assertTrue("adapter INFO reaches the instance log", log.contains("T228-adapter-info"));
+        assertTrue("pak helper INFO reaches the instance log", log.contains("T228-pak-helper-info"));
+        assertTrue("framework helper INFO reaches the instance log (#228)",
+                log.contains("T228-framework-helper-info"));
+        assertTrue("SuiteApiStitchClient configure line reaches the instance log (#228)",
+                log.contains("credential mechanism=explicit"));
     }
 
     // -----------------------------------------------------------------------
@@ -77,12 +111,15 @@ public class ComponentLoggerTest {
         second.debug("T224-debug-second-lookup");
         first.debug("T224-debug-old-handle");
         a.component(DebugPakAdapter.class).debug("T224-adapter-class-debug");
+        a.component(SuiteApiStitcher.class).debug("T224-framework-debug");
         String log = instanceLog("DebugPak", 43);
         assertTrue("DEBUG on the first lookup (#224)", log.contains("T224-debug-first-lookup"));
         assertTrue("DEBUG after a second lookup (#224)", log.contains("T224-debug-second-lookup"));
         assertTrue("an earlier handle still logs DEBUG (#224)", log.contains("T224-debug-old-handle"));
         assertTrue("adapter-class DEBUG after logInfo created the adapter logger",
                 log.contains("T224-adapter-class-debug"));
+        assertTrue("framework helper inherits the pak's DEBUG (#228 naming)",
+                log.contains("T224-framework-debug"));
     }
 
     /** Without any pak entry the floor still lifts the logger to INFO. */
@@ -91,6 +128,33 @@ public class ComponentLoggerTest {
         Logger l = a.component(InfoPakAdapter.Helper.class);
         assertTrue("INFO enabled on the logger with root at WARN", l.isInfoEnabled());
         assertFalse("DEBUG not enabled with root at WARN", l.isDebugEnabled());
+    }
+
+    // -----------------------------------------------------------------------
+    // Naming rule
+    // -----------------------------------------------------------------------
+
+    private static void testLoggerNaming() {
+        assertEquals("pak class keeps its own name",
+                "com.vcfcf.testpak.info.InfoPakAdapter$Helper",
+                VcfCfAdapter.componentLoggerName(InfoPakAdapter.class, InfoPakAdapter.Helper.class));
+        assertEquals("adapter class keeps its own name",
+                "com.vcfcf.testpak.info.InfoPakAdapter",
+                VcfCfAdapter.componentLoggerName(InfoPakAdapter.class, InfoPakAdapter.class));
+        assertEquals("framework class is named under the adapter class",
+                "com.vcfcf.testpak.info.InfoPakAdapter.SuiteApiStitcher",
+                VcfCfAdapter.componentLoggerName(InfoPakAdapter.class, SuiteApiStitcher.class));
+        assertEquals("a JDK class is named under the adapter class too",
+                "com.vcfcf.testpak.info.InfoPakAdapter.String",
+                VcfCfAdapter.componentLoggerName(InfoPakAdapter.class, String.class));
+        assertEquals("a pak subpackage keeps its own name",
+                "com.vcfcf.testpak.info.sub.X",
+                VcfCfAdapter.componentLoggerName("com.vcfcf.testpak.info.InfoPakAdapter",
+                        "com.vcfcf.testpak.info", "com.vcfcf.testpak.info.sub", "com.vcfcf.testpak.info.sub.X"));
+        assertEquals("a sibling package with a shared prefix is outside",
+                "com.vcfcf.testpak.info.InfoPakAdapter.Y",
+                VcfCfAdapter.componentLoggerName("com.vcfcf.testpak.info.InfoPakAdapter",
+                        "com.vcfcf.testpak.info", "com.vcfcf.testpak.infox", "com.vcfcf.testpak.infox.Y"));
     }
 
     // -----------------------------------------------------------------------
