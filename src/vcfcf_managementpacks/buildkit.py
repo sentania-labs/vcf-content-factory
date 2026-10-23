@@ -28,6 +28,7 @@ Kit contents (assembled under a temp dir, then tarballed):
     reference_paks/            : one reference .pak for pak-compare
     LICENSE
     VERSION
+    SOURCE_COMMIT              : factory commit the kit was cut from (issue #214)
 
 Path relocation in the kit's sdk_builder.py:
   _HERE                    = Path(__file__).parent
@@ -863,6 +864,14 @@ def assemble_buildkit(
         (kit_dir / "VERSION").write_text(f"{version}\n", encoding="utf-8")
         _log(f"  wrote VERSION ({version})")
 
+        # 7b. SOURCE_COMMIT: the factory commit this kit was cut from. The
+        # kit's sdk_builder stamps it into vcfcf-adapter-base.jar's manifest
+        # (issue #214); it cannot ask git, which inside a pak repo would
+        # answer with the pak's commit.
+        source_commit = _factory_source_commit()
+        (kit_dir / "SOURCE_COMMIT").write_text(f"{source_commit}\n", encoding="utf-8")
+        _log(f"  wrote SOURCE_COMMIT ({source_commit})")
+
         # -----------------------------------------------------------------
         # 8. Pack into tarball
         # -----------------------------------------------------------------
@@ -885,6 +894,34 @@ def assemble_buildkit(
     size_kb = tarball_path.stat().st_size // 1024
     _log(f"Done: {tarball_path}  ({size_kb:,} KB)")
     return tarball_path
+
+
+def _factory_source_commit() -> str:
+    """``git rev-parse HEAD`` of the factory checkout, ``-dirty`` when the
+    framework source has uncommitted changes, ``unknown`` without git."""
+    import subprocess
+
+    git = shutil.which("git")
+    if git is None:
+        return "unknown"
+    try:
+        head = subprocess.run(
+            [git, "-C", str(_REPO_ROOT), "rev-parse", "HEAD"],
+            capture_output=True, text=True, timeout=30,
+        )
+        if head.returncode != 0 or not head.stdout.strip():
+            return "unknown"
+        commit = head.stdout.strip()
+        dirty = subprocess.run(
+            [git, "-C", str(_REPO_ROOT), "status", "--porcelain", "--",
+             str(_HERE / "adapter_framework" / "src")],
+            capture_output=True, text=True, timeout=30,
+        )
+        if dirty.returncode == 0 and dirty.stdout.strip():
+            commit += "-dirty"
+        return commit
+    except (OSError, subprocess.SubprocessError):
+        return "unknown"
 
 
 def _sha256_file(path: Path) -> str:

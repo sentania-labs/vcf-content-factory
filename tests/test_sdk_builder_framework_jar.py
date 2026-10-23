@@ -189,3 +189,76 @@ def test_jar_absent_src_absent_raises(tmp_path, monkeypatch):
 
     with pytest.raises(sdk_builder.SdkBuildError):
         sdk_builder._ensure_framework_jar()
+
+
+# ---------------------------------------------------------------------------
+# Framework version stamp in the jar manifest (issue #214)
+# ---------------------------------------------------------------------------
+
+
+def _manifest_attrs(jar: Path) -> dict:
+    with zipfile.ZipFile(jar) as zf:
+        raw = zf.read("META-INF/MANIFEST.MF").decode("utf-8")
+    attrs = {}
+    for line in raw.replace("\r\n", "\n").replace("\n ", "").splitlines():
+        if ": " in line:
+            k, v = line.split(": ", 1)
+            attrs[k] = v
+    return attrs
+
+
+def test_built_jar_manifest_carries_factory_version_and_commit(patched_dirs, monkeypatch):
+    """Factory mode: version from buildkit.py's BUILDKIT_VERSION, commit from git."""
+    from vcfcf_managementpacks.buildkit import BUILDKIT_VERSION
+
+    runtime_dir, src_dir = patched_dirs
+    _write_marker_source(src_dir, "v1")
+    monkeypatch.setattr(sdk_builder, "_framework_source_commit", lambda: "abc123def")
+    sdk_builder._ensure_framework_jar()
+
+    jar = runtime_dir / "vcfcf-adapter-base.jar"
+    attrs = _manifest_attrs(jar)
+    assert attrs["Implementation-Title"] == "vcfcf-adapter-base"
+    assert attrs["Implementation-Version"] == BUILDKIT_VERSION
+    assert attrs["X-Vcfcf-Source-Commit"] == "abc123def"
+    assert _jar_contains(jar, "v1")  # classes still packaged
+    assert sdk_builder._framework_jar_label(jar) == (
+        f"vcfcf-adapter-base {BUILDKIT_VERSION} (source abc123def)"
+    )
+
+
+def test_kit_mode_stamps_kit_version_and_commit_without_git(tmp_path, monkeypatch):
+    """Kit mode (VERSION file beside sdk_builder): never asks git, which in a
+    pak repo would answer with the pak's commit."""
+    kit = tmp_path / "kit"
+    kit.mkdir()
+    (kit / "VERSION").write_text("9.9.9\n", encoding="utf-8")
+    (kit / "SOURCE_COMMIT").write_text("feedface\n", encoding="utf-8")
+    monkeypatch.setattr(sdk_builder, "_HERE", kit)
+
+    real_which = shutil.which
+    monkeypatch.setattr(
+        sdk_builder.shutil, "which",
+        lambda name, *a, **k: None if name == "git" else real_which(name, *a, **k),
+    )
+    assert sdk_builder._framework_version() == "9.9.9"
+    assert sdk_builder._framework_source_commit() == "feedface"
+
+    (kit / "SOURCE_COMMIT").unlink()
+    assert sdk_builder._framework_source_commit() == "unknown"
+
+
+def test_factory_version_read_from_buildkit_constant():
+    from vcfcf_managementpacks.buildkit import BUILDKIT_VERSION
+
+    assert sdk_builder._framework_version() == BUILDKIT_VERSION
+
+
+def test_label_for_a_jar_built_before_the_stamp(tmp_path):
+    jar = tmp_path / "vcfcf-adapter-base.jar"
+    with zipfile.ZipFile(jar, "w") as zf:
+        zf.writestr("META-INF/MANIFEST.MF", "Manifest-Version: 1.0\nCreated-By: 17\n")
+    assert "unversioned" in sdk_builder._framework_jar_label(jar)
+    bad = tmp_path / "not-a-jar.jar"
+    bad.write_bytes(b"nope")
+    assert "no readable manifest" in sdk_builder._framework_jar_label(bad)

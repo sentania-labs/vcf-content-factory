@@ -116,6 +116,106 @@ def _find_stale_framework_sources(output_jar: Path, sources: List[Path]) -> List
     return [s for s in sources if s.stat().st_mtime > jar_mtime]
 
 
+# Manifest attributes stamped into vcfcf-adapter-base.jar (issue #214), read
+# back by VcfCfAdapter at configure and printed by build-sdk.
+_FRAMEWORK_TITLE = "vcfcf-adapter-base"
+_FRAMEWORK_COMMIT_ATTR = "X-Vcfcf-Source-Commit"
+
+
+def _framework_version() -> str:
+    """The framework version to stamp: the buildkit version.
+
+    In the sdk-buildkit the kit's VERSION file (written by assemble_buildkit);
+    in the factory the BUILDKIT_VERSION constant, read as text from
+    buildkit.py beside this module (not imported: the kit ships no
+    buildkit.py). "unknown" when neither is readable.
+    """
+    kit_version = _HERE / "VERSION"
+    if kit_version.is_file():
+        v = kit_version.read_text(encoding="utf-8").strip()
+        return v or "unknown"
+    bk = _HERE / "buildkit.py"
+    if bk.is_file():
+        m = re.search(r'^BUILDKIT_VERSION\s*=\s*"([^"]+)"',
+                      bk.read_text(encoding="utf-8"), re.MULTILINE)
+        if m:
+            return m.group(1)
+    return "unknown"
+
+
+def _framework_source_commit() -> str:
+    """The factory commit the framework source came from.
+
+    In the sdk-buildkit the kit's SOURCE_COMMIT file (written by
+    assemble_buildkit from the factory checkout it was cut from); never git
+    here, because the kit runs inside a pak repo whose HEAD is the pak's
+    commit, not the framework's. In the factory, ``git rev-parse HEAD`` with
+    ``-dirty`` appended when the framework source has uncommitted changes.
+    "unknown" when neither is available.
+    """
+    if (_HERE / "VERSION").is_file():
+        sc = _HERE / "SOURCE_COMMIT"
+        if sc.is_file():
+            v = sc.read_text(encoding="utf-8").strip()
+            return v or "unknown"
+        return "unknown"
+    git = shutil.which("git")
+    if git is None:
+        return "unknown"
+    try:
+        head = subprocess.run(
+            [git, "-C", str(_REPO_ROOT), "rev-parse", "HEAD"],
+            capture_output=True, text=True, timeout=30,
+        )
+        if head.returncode != 0 or not head.stdout.strip():
+            return "unknown"
+        commit = head.stdout.strip()
+        dirty = subprocess.run(
+            [git, "-C", str(_REPO_ROOT), "status", "--porcelain", "--",
+             str(_ADAPTER_FRAMEWORK_SRC_DIR)],
+            capture_output=True, text=True, timeout=30,
+        )
+        if dirty.returncode == 0 and dirty.stdout.strip():
+            commit += "-dirty"
+        return commit
+    except (OSError, subprocess.SubprocessError):
+        return "unknown"
+
+
+def _framework_manifest_text() -> str:
+    """Manifest lines for ``jar cfm`` (the tool adds Manifest-Version)."""
+    return (
+        f"Implementation-Title: {_FRAMEWORK_TITLE}\n"
+        f"Implementation-Version: {_framework_version()}\n"
+        "Implementation-Vendor: VCF Content Factory\n"
+        f"{_FRAMEWORK_COMMIT_ATTR}: {_framework_source_commit()}\n"
+    )
+
+
+def _framework_jar_label(jar: Path) -> str:
+    """``vcfcf-adapter-base <version> (source <commit>)`` from a built jar.
+
+    Reads the jar's manifest; a jar built before issue #214 carries none of
+    the attributes and is reported as such.
+    """
+    try:
+        with zipfile.ZipFile(jar) as zf:
+            raw = zf.read("META-INF/MANIFEST.MF").decode("utf-8", "replace")
+    except (OSError, KeyError, zipfile.BadZipFile):
+        return f"{jar.name} (no readable manifest)"
+    attrs = {}
+    for line in raw.replace("\r\n", "\n").replace("\n ", "").splitlines():
+        if ": " in line:
+            k, v = line.split(": ", 1)
+            attrs[k.strip()] = v.strip()
+    version = attrs.get("Implementation-Version")
+    if version is None:
+        return f"{jar.name} (unversioned: built before the framework manifest stamp)"
+    title = attrs.get("Implementation-Title", _FRAMEWORK_TITLE)
+    commit = attrs.get(_FRAMEWORK_COMMIT_ATTR, "unknown")
+    return f"{title} {version} (source {commit})"
+
+
 def _ensure_framework_jar() -> None:
     """Compile the framework source into vcfcf-adapter-base.jar if needed.
 
@@ -242,9 +342,13 @@ def _ensure_framework_jar() -> None:
                 "clean-room wall violation — report as a TOOLSET GAP."
             )
 
-        # Package the compiled classes into vcfcf-adapter-base.jar
+        # Package the compiled classes into vcfcf-adapter-base.jar, with the
+        # framework version and source commit in the manifest (issue #214).
         _ADAPTER_RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
-        cmd_jar = [jar_tool, "cf", str(output_jar), "-C", str(build_dir), "."]
+        manifest = Path(tmpdir) / "MANIFEST.txt"
+        manifest.write_text(_framework_manifest_text(), encoding="utf-8")
+        cmd_jar = [jar_tool, "cfm", str(output_jar), str(manifest),
+                   "-C", str(build_dir), "."]
         result_jar = subprocess.run(cmd_jar, capture_output=True, text=True)
         if result_jar.returncode != 0:
             raise SdkBuildError(
@@ -253,7 +357,8 @@ def _ensure_framework_jar() -> None:
 
     sz = output_jar.stat().st_size
     print(
-        f"  framework: built {output_jar.name} ({sz // 1024} KB)",
+        f"  framework: built {output_jar.name} ({sz // 1024} KB), "
+        f"{_framework_jar_label(output_jar)}",
         file=sys.stderr,
     )
 
@@ -3352,6 +3457,11 @@ def build_sdk_pak(project_dir: Path, output_dir: Optional[Path] = None,
     # Step 2b: ensure vcfcf-adapter-base.jar exists (compile from source if
     # running from the sdk-buildkit tarball where no pre-built jar ships)
     _ensure_framework_jar()
+    print(
+        "  framework: "
+        + _framework_jar_label(_ADAPTER_RUNTIME_DIR / "vcfcf-adapter-base.jar"),
+        file=sys.stderr,
+    )
 
     # Step 3: build classpath
     classpath = _build_classpath(project_dir)

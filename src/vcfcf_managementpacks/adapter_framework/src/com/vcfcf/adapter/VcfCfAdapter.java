@@ -202,6 +202,12 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
     private final AtomicBoolean fipsTruststoreFailureWarnLogged = new AtomicBoolean(false);
 
     /**
+     * Guards the framework version line in {@link #onConfigure}: logged once
+     * per adapter instance (issue #214).
+     */
+    private final AtomicBoolean frameworkVersionLogged = new AtomicBoolean(false);
+
+    /**
      * FIPS-mode Suite API socket factory, cached per adapter instance and
      * rebuilt when its input files change (issue #215 review W1).
      */
@@ -611,6 +617,63 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
     }
 
     /**
+     * {@code "vcfcf-adapter-base <version> (source <commit>)"} from the
+     * manifest of the jar this class was loaded from (issue #214), or a label
+     * saying the version is unknown (classes not loaded from a jar, or a jar
+     * built before the manifest stamp). Never throws. Reads this pak's own
+     * copy through the class's code source, never the class loader's first
+     * {@code META-INF/MANIFEST.MF}, which could belong to another jar.
+     */
+    static String frameworkBuildLabel() {
+        return describeFrameworkBuild(frameworkManifest());
+    }
+
+    /** The framework jar's manifest, or {@code null}. Never throws. */
+    static java.util.jar.Manifest frameworkManifest() {
+        try {
+            java.security.CodeSource cs =
+                    VcfCfAdapter.class.getProtectionDomain().getCodeSource();
+            if (cs == null || cs.getLocation() == null) return null;
+            java.nio.file.Path jar = java.nio.file.Paths.get(cs.getLocation().toURI());
+            if (!java.nio.file.Files.isRegularFile(jar)) return null;
+            try (java.util.jar.JarFile jf = new java.util.jar.JarFile(jar.toFile(), false)) {
+                return jf.getManifest();
+            }
+        } catch (Exception | LinkageError e) {
+            return null;
+        }
+    }
+
+    /**
+     * Label for a framework manifest; see {@link #frameworkBuildLabel()}.
+     * Attribute values are stripped of control characters and capped.
+     * Visible to tests.
+     */
+    static String describeFrameworkBuild(java.util.jar.Manifest mf) {
+        java.util.jar.Attributes a = mf == null ? null : mf.getMainAttributes();
+        String version = a == null ? null : a.getValue("Implementation-Version");
+        if (version == null || version.trim().isEmpty()) {
+            return "vcfcf-adapter-base (version unknown: no Implementation-Version in"
+                    + " the jar manifest)";
+        }
+        String title = a.getValue("Implementation-Title");
+        String commit = a.getValue("X-Vcfcf-Source-Commit");
+        return manifestValue(title, "vcfcf-adapter-base") + " " + manifestValue(version, "?")
+                + " (source " + manifestValue(commit, "unknown") + ")";
+    }
+
+    private static String manifestValue(String v, String fallback) {
+        if (v == null || v.trim().isEmpty()) return fallback;
+        StringBuilder sb = new StringBuilder();
+        String t = v.trim();
+        for (int i = 0; i < t.length() && sb.length() < 64; i++) {
+            char c = t.charAt(i);
+            sb.append(Character.isISOControl(c) ? '?' : c);
+        }
+        return sb.toString();
+    }
+
+    /**
      * {@inheritDoc}
      *
      * <p>Delegates to {@link #configureAdapter(ResourceStatus, ResourceConfig)}.
@@ -621,6 +684,12 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
     public final void onConfigure(ResourceStatus resourceStatus,
             ResourceConfig resourceConfig) {
         abortRequested.set(false);
+        if (frameworkVersionLogged.compareAndSet(false, true)) {
+            // Issue #214: which framework this pak carries. Each pak bundles
+            // its own vcfcf-adapter-base.jar, so paks on one collector can run
+            // different framework versions side by side.
+            logInfo("VcfCfAdapter: framework " + frameworkBuildLabel());
+        }
         config = null;
         ManagedHttpClient old = this.httpClient;
         this.httpClient = null;

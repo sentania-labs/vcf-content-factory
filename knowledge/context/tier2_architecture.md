@@ -456,6 +456,26 @@ v2 builds with SDK jar only. If you see `cannot find symbol` for
 `com.vmware.tvs.*`, that is a clean-room wall violation — do not add
 `aria-ops-core` back; report it as a TOOLSET GAP.
 
+**Which framework a pak carries (issue #214, buildkit 1.0.13).** Each pak
+bundles its own `vcfcf-adapter-base.jar` in `<adapter>/lib/`, loaded by that
+adapter's own class loader, so paks built on different buildkits run side by
+side on one collector. Both build paths (`build-framework.sh` and
+`sdk_builder._ensure_framework_jar()`, the one the buildkit uses in pak CI)
+stamp the jar manifest: `Implementation-Title: vcfcf-adapter-base`,
+`Implementation-Version: <buildkit version>`, `Implementation-Vendor`, and
+`X-Vcfcf-Source-Commit: <factory commit>` (`-dirty` when the framework source
+had uncommitted changes, `unknown` without git). In the factory the version is
+`BUILDKIT_VERSION` and the commit comes from git; in the kit both come from
+the kit's `VERSION` and `SOURCE_COMMIT` files, never from git, which inside a
+pak repo would name the pak's commit. `build-sdk` prints the stamp
+(`framework: vcfcf-adapter-base 1.0.13 (source <sha>)`), and each adapter
+instance logs it once at its first configure (`VcfCfAdapter: framework
+vcfcf-adapter-base 1.0.13 (source <sha>)`). A jar built before the stamp is
+reported as unversioned. Side-by-side versions are safe only while the
+framework changes no JVM-wide state; `tests/test_adapter_framework_no_jvm_wide_state.py`
+greps the framework source for those setters. Not done: pak-compare does not
+report a framework version change between two paks.
+
 ### SSL — CHANGED in v2
 
 v1: `HttpClientBuilder.allowInsecure(true)` was the only option, calling
