@@ -162,8 +162,8 @@ reused. Field lines are `- **Field:** value` (parsed by
 ### DEF-004
 
 - **Title:** vcommunity-os: in-guest collection (services / event logs / CSV OS-info) returns empty — primary surface non-functional on devel
-- **Severity:** tracked
-- **Severity-note:** 2026-10-23, downgraded from blocking: the vcommunity paks were retired and deregistered on Scott's words 2026-10-15 (`c433366`, PR #220), the bootstrap no longer clones them and the gate no longer knows the pak name, so a blocking entry gated nothing. Not fixed: the root cause was never diagnosed. Stays open as the record; re-raise to blocking if the pak is ever picked up again.
+- **Severity:** blocking
+- **Severity-note:** 2026-10-23, kept blocking on purpose. The vcommunity paks were retired on Scott's words 2026-10-15 and deregistered in `c433366` (PR #220, merged 2026-10-18), so the factory no longer clones or builds this pak. The `vcommunity-os` repo is not archived, though, and its `build-pak-on-tag.yml` still downloads this registry and gates on it: this entry is what refuses a `v*` tag of a pak whose primary collection surface returns nothing. The root cause was never diagnosed. Downgrade only if the repo is archived or the pak is picked up and fixed.
 - **Status:** open
 - **Affects:** vcommunity-os
 - **First-seen:** build 11 / split fork (2026-06-23)
@@ -1008,8 +1008,10 @@ reused. Field lines are `- **Field:** value` (parsed by
 - **Status:** closed
 - **Closing-evidence:** `fddc873` (PR #86, 2026-08-20): `cli.py`
   `_build_release_to_dist()` branches on `art.is_sdk_pointer` and prints
-  the pointer instead of copying a zip, with a test. Found still open by
-  the 2026-10-22 curation report; closed 2026-10-23.
+  the pointer instead of copying a zip. No test covers that CLI path and
+  `bundles/releases/` holds no SDK-pointer manifest to run it against, so
+  the evidence is the code and the commit. Found still open by the
+  2026-10-22 curation report; closed 2026-10-23.
 - **Affects:** factory:packaging-cli
 - **First-seen:** 2026-07-27, full stale-zip rebuild pass (synology /
   unifi / vcommunity-vsphere managementpack release manifests).
@@ -1162,7 +1164,7 @@ reused. Field lines are `- **Field:** value` (parsed by
 - **Severity:** tracked
 - **Severity-note:** 2026-09-25, downgraded from blocking: fix merged on the pak's main (`2ebc967`, PR #19, view referenced by UUID at `VM Details.yaml:606`) but not yet released; Scott, verbatim: "Yes unblock it, i'm not really interested in progressing the vcommunity stuff, it was mostly an exercise, so can we jsut silence it until I pick it up" (`knowledge/context/approvals/2026-09-25-scott-decisions.md` item 14).
 - **Status:** closed
-- **Closing-evidence:** fix merged on the pak's main (`2ebc967`, #19); no release followed and none will: the vcommunity paks were retired and deregistered 2026-10-15 (`c433366`, PR #220). The last tag, v1.0.0.12, still carries the defect; the gate no longer evaluates the pak. Closed 2026-10-23 on the retirement, not on a shipped fix.
+- **Closing-evidence:** fix merged on the pak's main (`2ebc967`, #19); no release followed and none will: the vcommunity paks were retired on Scott's words 2026-10-15 and deregistered in `c433366` (PR #220, merged 2026-10-18). The last tag, v1.0.0.12, still carries the defect. The repo's tag workflow still gates on this registry, but this entry was already `tracked` and gated nothing. Closed 2026-10-23 on the retirement, not on a shipped fix.
 - **Affects:** vcommunity-vsphere
 - **First-seen:** vcommunity-vsphere tag v1.0.0.12 (the os/vsphere split,
   per that repo's CHANGELOG line ~764); detected 2026-08-29.
@@ -1193,7 +1195,7 @@ reused. Field lines are `- **Field:** value` (parsed by
 - **Severity:** tracked
 - **Severity-note:** 2026-09-25, downgraded from blocking: fix merged on the pak's main (`66daf9e`, PR #21, all four columns quoted) but not yet released; Scott, verbatim: "Yes unblock it, i'm not really interested in progressing the vcommunity stuff, it was mostly an exercise, so can we jsut silence it until I pick it up" (`knowledge/context/approvals/2026-09-25-scott-decisions.md` item 14).
 - **Status:** closed
-- **Closing-evidence:** fix merged on the pak's main (`66daf9e`, PR #21); no release followed and none will: the vcommunity paks were retired and deregistered 2026-10-15 (`c433366`, PR #220). The last tag, v1.0.0.12, still carries the defect; the gate no longer evaluates the pak. Closed 2026-10-23 on the retirement, not on a shipped fix.
+- **Closing-evidence:** fix merged on the pak's main (`66daf9e`, PR #21); no release followed and none will: the vcommunity paks were retired on Scott's words 2026-10-15 and deregistered in `c433366` (PR #220, merged 2026-10-18). The last tag, v1.0.0.12, still carries the defect. The repo's tag workflow still gates on this registry, but this entry was already `tracked` and gated nothing. Closed 2026-10-23 on the retirement, not on a shipped fix.
 - **Affects:** vcommunity-vsphere
 - **First-seen:** the build that ported the vendor Distributed Switch
   report (that repo's CHANGELOG line ~348 records the intent as the quoted

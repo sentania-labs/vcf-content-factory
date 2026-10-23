@@ -1,8 +1,12 @@
 # Owner approval: issue list and curation cleanup, 2026-10-23
 
-Scott's go for the outward-facing GitHub changes in this round, recorded
-before execution per the owner rule that such actions need his words
-preserved as an artifact.
+Scott's go for the outward-facing GitHub changes in this round. Timing,
+stated plainly: this file was written to disk at 9:45 AM on 2026-10-23,
+the nine issue closures ran at 9:46 to 9:47 AM, the tracker edit at
+9:47 AM, and the first commit carrying this file landed at 9:50 AM. The
+words were on disk before execution but not yet committed; the owner rule
+asks for a durable artifact first, so the next round commits before it
+acts.
 
 ## Verbatim
 

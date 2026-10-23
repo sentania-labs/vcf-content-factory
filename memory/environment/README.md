@@ -4,7 +4,7 @@ User-specific lab environment details. Not committed to the main repo branch
 (add to .gitignore if this contains sensitive hostnames or credentials).
 
 Create files here for:
-- Instance URLs and profiles (devel, prod, qa)
+- Instance URLs and profiles (prod, devel, and one per extra instance such as devel_9_1)
 - Lab naming conventions
 - User-specific preferences
 

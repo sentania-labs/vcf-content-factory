@@ -830,14 +830,12 @@ after merge. Nothing publishes until the maintainer pushes a tag.
 
 ## Open questions
 
-1. **Login reuse.** Answered 2026-10-13: yes, the first fork runs (both
-   forks, "Proof run" sections below) pushed with the stored credentials and
-   no argv form. Original question: does `docker login ghcr.io` with no flags
+1. **Login reuse.** Answered 2026-10-13: yes, the stored docker login is
+   reused with nothing on argv ("As built for cluster-perf-risk" below). Original question: does `docker login ghcr.io` with no flags
    and no TTY succeed from the credentials `docker/login-action` stored?
-2. **New-package visibility.** Partly answered: the devel_9_1 Cloud Proxy
-   pulled both digests on 2026-10-14, but the proof record does not say
-   whether that proxy had a registry credential, so the initial visibility
-   of a freshly pushed package is still unverified. Original question:
+2. **New-package visibility.** Answered 2026-10-13: public. Both packages
+   were created public by the workflow's own first push (the cluster-perf-risk
+   and vsanhostmetrics proof runs below). Original question:
    whether a GHCR package first pushed from a public repo's workflow starts
    public or private was not verified. The
    workflow handles both (it stops before tagging and tells the maintainer),
