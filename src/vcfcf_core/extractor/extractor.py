@@ -213,8 +213,10 @@ def dashboards_from_export_zip(outer_zip: bytes) -> list[dict]:
 
 
 # Underscore names kept as aliases for one release (issue #165): the migrator
-# imported these before the public names existed. Same objects, so a
-# monkeypatch or identity check on either name sees the other.
+# imported these before the public names existed. They are the same objects
+# (an identity check holds), but they are separate module attributes: a
+# monkeypatch rebinding one name does not rebind the other. Callers in this
+# module and the factory use the public names, so patch those.
 _content_xml_from_export_zip = content_xml_from_export_zip
 _supermetrics_from_export_zip = supermetrics_from_export_zip
 _dashboards_from_export_zip = dashboards_from_export_zip
@@ -236,7 +238,7 @@ def _parse_view_xml(xml_bytes: bytes, target_uuid: str) -> Optional[dict]:
     """
     import xml.etree.ElementTree as ET
 
-    xml_content = _content_xml_from_export_zip(xml_bytes)
+    xml_content = content_xml_from_export_zip(xml_bytes)
     if xml_content is None:
         _warn("could not extract content.xml from views export zip")
         return None

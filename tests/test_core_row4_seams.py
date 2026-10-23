@@ -278,12 +278,14 @@ class TestExportZipReaders:
         import vcfcf_extractor.extractor as fac
         import vcfcf_core.extractor.extractor as core
 
-        assert fac._dashboards_from_export_zip is core._dashboards_from_export_zip
-        assert fac._supermetrics_from_export_zip is core._supermetrics_from_export_zip
+        assert fac.dashboards_from_export_zip is core.dashboards_from_export_zip
+        assert fac.supermetrics_from_export_zip is core.supermetrics_from_export_zip
+        # The underscore aliases still resolve through the wrapper (#165).
+        assert fac._dashboards_from_export_zip is core.dashboards_from_export_zip
         src = inspect.getsource(fac._export_dashboard_json)
-        assert "_dashboards_from_export_zip(outer_zip)" in src and "zipfile" not in src
+        assert "dashboards_from_export_zip(outer_zip)" in src and "zipfile" not in src
         src = inspect.getsource(fac._export_supermetrics_full)
-        assert "_supermetrics_from_export_zip(outer_zip)" in src and "zipfile" not in src
+        assert "supermetrics_from_export_zip(outer_zip)" in src and "zipfile" not in src
 
         class _Client:
             pass
