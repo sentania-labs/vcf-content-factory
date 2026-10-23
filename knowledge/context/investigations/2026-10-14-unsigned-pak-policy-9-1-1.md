@@ -199,3 +199,24 @@ installer's error handling, not treated as a lab quirk.
 - Map the raw `unsigned_pak_installation.not.allowed` error to the same
   message, since the appliance UI bundle does not translate it.
 - Do not auto-enable the toggle. It is a cluster-wide security control.
+
+## Implemented (issue #216)
+
+`src/vcfcf_managementpacks/installer.py` now does the first two items,
+read-only:
+
+- After login and before `prepareFileUpload`, an unsigned pak (no
+  `signature.mf` + `signature.cert` at the outer zip root, see
+  `knowledge/context/mpb/mpb_pak_signing_chain.md`) triggers a
+  `getIntegrations` read of `isUnsignedPakInstallationAllowed`. `false`
+  (bool or string) stops the install with the Admin UI steps. `true`
+  proceeds. A missing key or a 404 on the read (8.18.7 has no such switch,
+  no such key, and 404s the CaSA `allow_unsigned_pak` routes; see
+  `2026-10-15-devel-8-18-recon.md` section 3) means no gate and proceeds
+  quietly. Any other failed read warns and proceeds, so 8.x is never
+  wrongly refused. Only a present key reading false stops the upload.
+- A raw `unsigned_pak_installation.not.allowed` upload error is returned
+  with the same explanation appended.
+- `ignoreSignatureChecking=true` is still sent on every upload, unchanged.
+  On 8.18 that skips the UI's NotSigned confirmation; the installer prints a
+  line saying signature checking is bypassed instead.
