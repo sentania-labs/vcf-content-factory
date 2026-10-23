@@ -166,3 +166,65 @@ jobs:
         run: |
           git fetch --no-tags --quiet origin "${{ github.event.pull_request.base.ref }}" || true
           bash scripts/immutability_guard.sh --range "origin/${{ github.event.pull_request.base.ref }}...HEAD"
+
+  sdk-compat:
+    # Second SDK compile target (issue #211). The framework ships compiled
+    # against the 9.0.2 jar (vrops-adapters-sdk-2.2.jar); this job proves the
+    # same source also compiles against each newer platform's jar, so a class
+    # a newer Ops build dropped fails CI instead of failing on a collector.
+    #
+    # One leg per extra target. The 9.0.2 leg is absent on purpose: the 2.2
+    # jar lives only in the private vcf-content-factory-sdk-runtime repo and
+    # this repo holds no key for it (the test job above compiles nothing
+    # against a real SDK jar either). Adding it means an SDK_RUNTIME_SSH_KEY
+    # secret here plus a leg that clones that repo, as the pak repos do.
+    #
+    # The 9.1.1.0100 jar's class files are Java 25 (major 69); JDK 17 javac
+    # rejects them ("class file has wrong version 69.0"), hence JDK 25 here.
+    # VCFCF_SDK_COMPAT_REQUIRED=1 turns a missing jar or JDK into a failure
+    # instead of the local-build warning.
+    #
+    # GitHub-hosted: needs neither the lab nor a Docker daemon, and this repo
+    # is public, so hosted minutes are free (github-ci skill, rule 4).
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - sdk: "9.1.1.0100"
+            jdk: "25"
+            jar: reference/docs/vendor-jars/vrops-adapters-sdk-9.1.1.0100.jar
+            sha256: 79f7b12340906359e04f3619dd87c7e67a9493b3fa5d86bdffe9242da67f46f7
+    name: sdk-compat (${{ matrix.sdk }})
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - name: Verify the SDK jar is the recorded build
+        # Hash recorded in reference/docs/vendor-jars/PROVENANCE.md and
+        # src/vcfcf_managementpacks/adapter_runtime/PROVENANCE.md.
+        env:
+          JAR: ${{ matrix.jar }}
+          SHA256: ${{ matrix.sha256 }}
+        run: echo "${SHA256}  ${JAR}" | sha256sum -c -
+
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.jdk }}
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+
+      - name: Install PyYAML (the vcfcf_managementpacks import needs it)
+        run: python3 -m pip install pyyaml
+
+      - name: Compile the framework against the ${{ matrix.sdk }} SDK jar
+        env:
+          VCFCF_SDK_COMPAT_JAR: ${{ matrix.jar }}
+          VCFCF_SDK_COMPAT_REQUIRED: "1"
+        run: bash src/vcfcf_managementpacks/adapter_framework/build-framework.sh --compat-only
