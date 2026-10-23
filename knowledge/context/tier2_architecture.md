@@ -304,6 +304,29 @@ The orchestrator calls `setResourceStatus()` automatically based on
 whether `collect()` succeeds or throws. For custom status semantics,
 override `VcfCfCollector.mapCollectException(Exception)`.
 
+**Adapter instance status (issue #223, buildkit 1.0.13).** SDK 2.2 bytecode
+(`AdapterBase.setResourceStatus` / `isValidStatusForResource`): ERROR and DOWN
+are accepted only on the adapter instance resource, the account row in
+Integrations > Accounts. A child resource accepts only NONE, DATA_RECEIVING
+and NO_DATA_RECEIVING; anything else is refused (`setResourceStatus` returns
+false and the SDK logs a WARN). The SDK's own helpers for a failed instance
+are `setAdapterError(LocalizedMsg)` and `setAdapterDown(...)`. So the
+framework now sets the adapter instance at the end of a completed cycle: ERROR
+(or DOWN when every failure mapped to DOWN) when every resource the cycle
+collected failed with ERROR or DOWN, and ERROR when there was nothing to
+collect and the discovery step (`rediscover` or `discoverOnCollect`) failed,
+with a one-line reason naming the first failure. A partial failure, a
+NO_DATA_RECEIVING mapping, or a cycle cut short by a stop or interrupt sets
+nothing, and the next cycle starts from the SDK default again. Before this a
+cached login failure left the account showing "Collecting" (UniFi build 14
+devel_9_1 proof). Not yet seen on a live account row: what the UI shows for an
+instance in ERROR is unproven.
+
+Consequence for paks (not changed here): `mapCollectException` returning
+ERROR or DOWN for a child resource never reached the platform; the framework's
+`setStatusSafe` checks the adapter-instance list (`isAdapterAllowedStatus`),
+not the child list (`isResourceAllowedStatus`). Recorded for a follow-up issue.
+
 ### Relationship API changed — v2
 
 v1: `resource.addChild()` / `resource.addParent()` (aria-ops-core Resource).

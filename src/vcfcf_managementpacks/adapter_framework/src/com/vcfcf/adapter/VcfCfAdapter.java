@@ -722,12 +722,24 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
      *
      * <p>Cooperative cancellation: loops check {@link #isAbortRequested()}
      * and honor {@link InterruptedException} (§9).
+     *
+     * <p><strong>Adapter instance status (issue #223).</strong> The SDK
+     * accepts ERROR and DOWN only on the adapter instance resource (the
+     * account row in Integrations > Accounts); child resources take only
+     * data-receiving states. So when a whole cycle fails, the framework sets
+     * the adapter instance itself: if every resource the cycle collected
+     * failed with ERROR or DOWN (DOWN only when every one mapped to DOWN), or
+     * there was no resource to collect and the discovery step failed, the
+     * adapter instance gets that status with a one-line reason (for example
+     * a cached login failure). A cycle cut short by a stop or an interrupt
+     * sets nothing. Before this, the account kept showing "Collecting".
      */
     @Override
     @SuppressWarnings("unchecked")
     public final void onCollect(ResourceConfig adapterInstance,
             Collection<ResourceConfig> resources) {
         abortRequested.set(false);
+        Exception discoveryFailure = null;
 
         VcfCfCollector<C> collector = getCollector();
         if (collector == null) {
@@ -749,6 +761,7 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
             } catch (Exception e) {
                 logWarn("onCollect: rediscovery failed (non-fatal): "
                         + e.getMessage(), e);
+                discoveryFailure = e;
                 // Not fatal — continue with existing resource set.
             }
         }
@@ -772,6 +785,7 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
             } catch (Exception e) {
                 logWarn("onCollect: collect-path discovery (discoverOnCollect) "
                         + "failed (non-fatal): " + e.getMessage(), e);
+                if (discoveryFailure == null) discoveryFailure = e;
                 // Not fatal — continue with existing resource set.
             }
         }
@@ -780,13 +794,16 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
 
         // §1 step 2: per-resource gather.
         MetricDataCache cache = this.metricCache;
+        CycleOutcome outcome = new CycleOutcome();
 
         for (ResourceConfig rc : resources) {
             if (isAbortRequested() || Thread.currentThread().isInterrupted()) {
                 Thread.currentThread().interrupt();
+                outcome.cut = true;
                 break;
             }
 
+            outcome.attempted++;
             try {
                 List<MetricData> samples = new ArrayList<>();
                 collector.collect(config, httpClient, rc, samples, this);
@@ -830,15 +847,24 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
                 logWarn("onCollect: interrupted collecting " + rcLabel(rc)
                         + " — aborting cycle");
                 setStatusSafe(rc, ResourceStatusEnum.RESOURCE_STATUS_ERROR);
+                outcome.cut = true;
                 break;
             } catch (Exception e) {
                 String msg = e.getMessage() != null ? e.getMessage()
                         : e.getClass().getSimpleName();
                 logWarn("onCollect: error collecting " + rcLabel(rc) + ": " + msg, e);
                 ResourceStatusEnum status = collector.mapCollectException(e);
-                setStatusSafe(rc,
-                        status != null ? status : ResourceStatusEnum.RESOURCE_STATUS_ERROR);
+                ResourceStatusEnum effective =
+                        status != null ? status : ResourceStatusEnum.RESOURCE_STATUS_ERROR;
+                setStatusSafe(rc, effective);
+                outcome.recordFailure(effective, e);
             }
+        }
+
+        // Issue #223: a cycle in which nothing could be collected shows on
+        // the adapter instance (the account row), not only on its objects.
+        if (!outcome.cut && !isAbortRequested()) {
+            reportAdapterInstanceFailure(adapterInstance, outcome, discoveryFailure);
         }
 
         // §8: flush deduplicated data into the CollectResult at end of cycle.
@@ -2588,6 +2614,84 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
     // -----------------------------------------------------------------------
     // Internal helpers
     // -----------------------------------------------------------------------
+
+    /** What one {@link #onCollect} cycle saw, for the adapter instance status. */
+    static final class CycleOutcome {
+        int attempted;
+        int failed;
+        boolean everyFailureDown = true;
+        boolean cut;
+        Exception firstFailure;
+
+        /**
+         * Count a resource failure that left it ERROR or DOWN. Other mapped
+         * statuses (for example NO_DATA_RECEIVING) are not a failure of the
+         * instance.
+         */
+        void recordFailure(ResourceStatusEnum effective, Exception e) {
+            if (effective != ResourceStatusEnum.RESOURCE_STATUS_ERROR
+                    && effective != ResourceStatusEnum.RESOURCE_STATUS_DOWN) {
+                return;
+            }
+            failed++;
+            if (effective != ResourceStatusEnum.RESOURCE_STATUS_DOWN) everyFailureDown = false;
+            if (firstFailure == null) firstFailure = e;
+        }
+    }
+
+    /**
+     * The adapter instance status a completed cycle calls for, or
+     * {@code null} for none (issue #223): ERROR or DOWN when every collected
+     * resource failed (DOWN only if all mapped to DOWN), ERROR when there was
+     * nothing to collect and discovery failed. Visible to tests.
+     */
+    static ResourceStatusEnum adapterInstanceStatus(CycleOutcome o, Exception discoveryFailure) {
+        if (o.attempted > 0 && o.failed == o.attempted) {
+            return o.everyFailureDown ? ResourceStatusEnum.RESOURCE_STATUS_DOWN
+                    : ResourceStatusEnum.RESOURCE_STATUS_ERROR;
+        }
+        if (o.attempted == 0 && discoveryFailure != null) {
+            return ResourceStatusEnum.RESOURCE_STATUS_ERROR;
+        }
+        return null;
+    }
+
+    /**
+     * One-line reason shown on the adapter instance: what failed and the
+     * first failure's class and message (sanitized, capped). Visible to tests.
+     */
+    static String adapterInstanceFailureMessage(CycleOutcome o, Exception discoveryFailure) {
+        Exception cause = o.attempted > 0 ? o.firstFailure : discoveryFailure;
+        String what = o.attempted > 0
+                ? "Collection failed for all " + o.attempted + " resource(s)"
+                : "Resource discovery failed and there was nothing to collect";
+        if (cause == null) return what;
+        String m = cause.getMessage();
+        StringBuilder sb = new StringBuilder(what).append(": ")
+                .append(cause.getClass().getSimpleName()).append(": ");
+        String text = m == null ? "(no message)" : m;
+        int max = 300;
+        for (int i = 0; i < text.length() && i < max; i++) {
+            char c = text.charAt(i);
+            sb.append(Character.isISOControl(c) ? ' ' : c);
+        }
+        if (text.length() > max) sb.append("...");
+        return sb.toString();
+    }
+
+    private void reportAdapterInstanceFailure(ResourceConfig adapterInstance,
+            CycleOutcome outcome, Exception discoveryFailure) {
+        ResourceStatusEnum status = adapterInstanceStatus(outcome, discoveryFailure);
+        if (status == null || adapterInstance == null) return;
+        String msg = adapterInstanceFailureMessage(outcome, discoveryFailure);
+        try {
+            setResourceStatus(adapterInstance, status, msg);
+        } catch (RuntimeException e) {
+            logWarn("onCollect: could not set the adapter instance status: " + e);
+            return;
+        }
+        logWarn("onCollect: adapter instance set to " + status.name() + ": " + msg);
+    }
 
     /**
      * Set per-resource status, validating with
