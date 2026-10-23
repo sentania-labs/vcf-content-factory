@@ -52,6 +52,21 @@ _COMPAT_ENV = (
 )
 
 
+def _isolate_compat_env(monkeypatch):
+    """Unset the compat env vars AND register their restore.
+
+    monkeypatch.delenv(name, raising=False) on a variable that is not set
+    records nothing, so a value the code under test then writes into
+    os.environ (the CLI flag helpers do exactly that) outlives the test and
+    leaks into every later test on the same xdist worker. That is how
+    VCFCF_SDK_COMPAT_REQUIRED=1 reached test_cli_phase4's validate run in CI
+    on PR #251. setenv first makes monkeypatch remember the original state.
+    """
+    for name in _COMPAT_ENV:
+        monkeypatch.setenv(name, "")
+        monkeypatch.delenv(name)
+
+
 @pytest.fixture()
 def runtime(tmp_path, monkeypatch):
     """A stand-in adapter_runtime/ and framework src dir; compat env cleared."""
@@ -60,8 +75,7 @@ def runtime(tmp_path, monkeypatch):
     fw_src = tmp_path / "adapter_framework" / "src"
     monkeypatch.setattr(sdk_builder, "_ADAPTER_RUNTIME_DIR", runtime_dir)
     monkeypatch.setattr(sdk_builder, "_ADAPTER_FRAMEWORK_SRC_DIR", fw_src)
-    for name in _COMPAT_ENV:
-        monkeypatch.delenv(name, raising=False)
+    _isolate_compat_env(monkeypatch)
     return runtime_dir
 
 
@@ -381,8 +395,7 @@ def test_adapter_inputs_keep_framework_jar_without_source(runtime, tmp_path, mon
 def test_factory_cli_flags_reach_the_env(monkeypatch):
     from vcfcf_managementpacks import cli
 
-    for name in _COMPAT_ENV:
-        monkeypatch.delenv(name, raising=False)
+    _isolate_compat_env(monkeypatch)
     args = argparse.Namespace(
         sdk_jar=None, sdk_compat_jar="/x/compat.jar", require_sdk_compat=True,
     )
@@ -395,8 +408,7 @@ def test_factory_cli_flags_reach_the_env(monkeypatch):
 def test_kit_main_parses_the_flags_and_sets_the_env(cmd, monkeypatch):
     from vcfcf_managementpacks.buildkit import _KIT_MAIN
 
-    for name in _COMPAT_ENV:
-        monkeypatch.delenv(name, raising=False)
+    _isolate_compat_env(monkeypatch)
     namespace = {"__name__": "kit_main_under_test"}
     exec(compile(_KIT_MAIN, "sdk_buildkit/__main__.py", "exec"), namespace)
     args = namespace["_build_parser"]().parse_args(
@@ -418,8 +430,7 @@ def test_kit_main_parses_the_flags_and_sets_the_env(cmd, monkeypatch):
 def scaffolded(tmp_path, monkeypatch, capsys):
     """A scaffolded adapter project with the primary compile stubbed out and
     _sdk_compat_check replaced by a recorder that fails like a real miss."""
-    for name in _COMPAT_ENV:
-        monkeypatch.delenv(name, raising=False)
+    _isolate_compat_env(monkeypatch)
     project = sdk_builder.scaffold_sdk_project("Compat Wiring", tmp_path)
     capsys.readouterr()
     calls = []
@@ -533,3 +544,34 @@ def test_build_framework_import_failure_is_could_not_run(tmp_path):
     assert r.returncode == 3, r.stdout + r.stderr
     assert "cannot import" in r.stderr
     assert "COMPAT PASS COULD NOT RUN" in r.stderr
+
+
+@needs_javac
+def test_validate_with_an_empty_adapter_runtime_skips_like_main(
+    runtime, tmp_path, monkeypatch, capsys,
+):
+    """The public CI runner has no SDK jar at all (the 2.2 jar is private).
+    `python3 -m vcfcf_managementpacks validate` must skip the compile checks
+    with the existing notice and pass, exactly as on main: the one-SDK-jar
+    rule fires only for two or more jars, never for none, and no compat box
+    or error appears when the pass is not required."""
+    from vcfcf_managementpacks import cli
+
+    assert not list(runtime.glob("*.jar"))
+    monkeypatch.chdir(tmp_path)
+    sdk_builder.scaffold_sdk_project("Empty Runtime", tmp_path / "content" / "sdk-adapters")
+    capsys.readouterr()
+    assert cli._validate_tier2_projects() == (1, 0)
+    err = capsys.readouterr().err
+    assert "skipping compile check" in err
+    assert "SDK COMPAT CHECK SKIPPED" not in err
+    assert "exactly one primary SDK jar" not in err
+
+
+def test_cli_flag_helpers_do_not_leak_env_past_a_test():
+    """Guard for the PR #251 CI failure: whatever test ran before this one on
+    this worker, no compat variable it set may still be in the environment.
+    (Only meaningful when an env-writing test ran first on the worker; the
+    real guarantee is _isolate_compat_env.)"""
+    leaked = [n for n in _COMPAT_ENV if n != "VCFCF_SDK_JAR" and os.environ.get(n)]
+    assert not leaked, leaked

@@ -4111,16 +4111,19 @@ def validate_sdk_project(project_dir: Path) -> List[str]:
             file=sys.stderr,
         )
     if not javac or not _sdk_jar_present:
-        # The compat pass rides on the primary check; say it did not run
-        # (boxed notice), or fail when it is required.
-        try:
-            _compat_skip(
-                "framework + adapter source",
-                "the primary compile check was skipped (javac or the primary "
-                "SDK jar is missing)",
-            )
-        except SdkBuildError as exc:
-            errors.append(str(exc))
+        # The compat pass rides on the primary check. Required: that is an
+        # error. Otherwise, with javac missing, print the skip box; with no
+        # SDK jar (the public CI runner's normal state) keep main's single
+        # "skipping compile check" notice above and add nothing.
+        if _compat_required() or not javac:
+            try:
+                _compat_skip(
+                    "framework + adapter source",
+                    "the primary compile check was skipped (javac or the "
+                    "primary SDK jar is missing)",
+                )
+            except SdkBuildError as exc:
+                errors.append(str(exc))
 
     return errors
 
