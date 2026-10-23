@@ -1210,6 +1210,11 @@ public final class SuiteApiStitchClient {
                 String errorBody = readErrorBody(conn);
                 Integer apiErrorCode = parseApiErrorCode(errorBody);
                 String excerpt = errorBodyExcerpt(errorBody);
+                // Exact shape " apiErrorCode <n>" (space separated) is a
+                // contract: compliance's OverridesStore.isAbsent matches the
+                // message with its own 1501 regex, so changing the separator
+                // would flip its missing-overrides-file handling on a rebuild.
+                // Pinned by SuiteApiStitchClientTransportTest.
                 String code = apiErrorCode == null ? "" : " apiErrorCode " + apiErrorCode;
                 if (status == 401) {
                     throw new Suite401Exception(

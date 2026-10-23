@@ -897,31 +897,11 @@ def assemble_buildkit(
 
 
 def _factory_source_commit() -> str:
-    """``git rev-parse HEAD`` of the factory checkout, ``-dirty`` when the
-    framework source has uncommitted changes, ``unknown`` without git."""
-    import subprocess
+    """Factory commit for the kit's SOURCE_COMMIT: the same helper the jar
+    stamp uses (sdk_builder._git_source_commit), over the framework source."""
+    from .sdk_builder import _git_source_commit
 
-    git = shutil.which("git")
-    if git is None:
-        return "unknown"
-    try:
-        head = subprocess.run(
-            [git, "-C", str(_REPO_ROOT), "rev-parse", "HEAD"],
-            capture_output=True, text=True, timeout=30,
-        )
-        if head.returncode != 0 or not head.stdout.strip():
-            return "unknown"
-        commit = head.stdout.strip()
-        dirty = subprocess.run(
-            [git, "-C", str(_REPO_ROOT), "status", "--porcelain", "--",
-             str(_HERE / "adapter_framework" / "src")],
-            capture_output=True, text=True, timeout=30,
-        )
-        if dirty.returncode == 0 and dirty.stdout.strip():
-            commit += "-dirty"
-        return commit
-    except (OSError, subprocess.SubprocessError):
-        return "unknown"
+    return _git_source_commit(_REPO_ROOT, _HERE / "adapter_framework" / "src")
 
 
 def _sha256_file(path: Path) -> str:

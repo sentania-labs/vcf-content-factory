@@ -41,6 +41,8 @@ public class AdapterInstanceStatusTest {
 
     public static void main(String[] args) throws Exception {
         testPureRules();
+        testRedactCredentials();
+        testFailureMessageIsRedacted();
         if (!LogCapture.available()) {
             skip("onCollect tests: log4j not on the runtime classpath"
                     + " (add a jar carrying it, e.g. adapter_runtime/lib/*)");
@@ -55,6 +57,7 @@ public class AdapterInstanceStatusTest {
             testNothingToCollectNoFailure();
             testStopMidCycleSetsNothing();
             testAllSucceedSetsNothing();
+            testWrappedInterruptOnLastResourceSetsNothing();
         }
         report();
     }
@@ -82,6 +85,43 @@ public class AdapterInstanceStatusTest {
                 new IOException("line1\nline2"));
         assertFalse("message is one line",
                 VcfCfAdapter.adapterInstanceFailureMessage(lines, null).contains("\n"));
+    }
+
+    /** Review W1: credential-looking fragments never reach the account row. */
+    private static void testRedactCredentials() {
+        String[][] cases = {
+            {"Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.abc.def failed", "eyJhbGci"},
+            {"header Basic dXNlcjpwYXNzd29yZA== rejected", "dXNlcjpw"},
+            {"OpsToken 7f3e9a1b-1111-2222-3333-444455556666 expired", "7f3e9a1b"},
+            {"login failed: password=Hunter2! user=admin", "Hunter2"},
+            {"login failed: passwd: s3cr3t", "s3cr3t"},
+            {"body {\"username\":\"a\",\"password\":\"p@ss word\"}", "p@ss word"},
+            {"GET https://admin:Sup3rS3cret@nas.example:5001/webapi refused", "Sup3rS3cret"},
+            {"DSM answered _sid=AbCdEf123 code 119", "AbCdEf123"},
+            {"api_key='k-123456' invalid", "k-123456"},
+            {"session token: tok_998877 rejected", "tok_998877"},
+        };
+        for (String[] c : cases) {
+            String r = VcfCfAdapter.redactCredentials(c[0]);
+            assertFalse("redacted: " + r, r.contains(c[1]));
+            assertTrue("marker present: " + r, r.contains("<redacted>"));
+        }
+        String plain = "Login failed (cached): HTTP 403 from unifi.example:443";
+        assertEquals("no false redaction", plain, VcfCfAdapter.redactCredentials(plain));
+        assertEquals("null passes", null, VcfCfAdapter.redactCredentials(null));
+    }
+
+    private static void testFailureMessageIsRedacted() {
+        VcfCfAdapter.CycleOutcome o = new VcfCfAdapter.CycleOutcome();
+        o.attempted = 1;
+        o.recordFailure(ResourceStatusEnum.RESOURCE_STATUS_ERROR,
+                new IOException("login refused for https://u:pw1234@host/x password=pw1234"));
+        String msg = VcfCfAdapter.adapterInstanceFailureMessage(o, null);
+        assertFalse("account-row reason carries no password: " + msg, msg.contains("pw1234"));
+        VcfCfAdapter.CycleOutcome d = new VcfCfAdapter.CycleOutcome();
+        String dm = VcfCfAdapter.adapterInstanceFailureMessage(d,
+                new IOException("Bearer abcdefghijkl rejected"));
+        assertFalse("discovery reason redacted too: " + dm, dm.contains("abcdefghijkl"));
     }
 
     // -----------------------------------------------------------------------
@@ -162,6 +202,22 @@ public class AdapterInstanceStatusTest {
         Thread.interrupted();
     }
 
+    /**
+     * Review N1: an interrupt the collector wraps in a runtime exception on
+     * the last resource, with no stop requested, must not set ERROR.
+     */
+    private static void testWrappedInterruptOnLastResourceSetsNothing() throws Exception {
+        TestAdapter a = adapter();
+        a.collector.failing.addAll(Arrays.asList(1, 2));
+        a.collector.wrapInterruptOn = 2;
+        try {
+            a.onCollect(a.instance, resources(1, 2));
+            assertFalse("wrapped interrupt: instance untouched", a.statuses.containsKey(a.instance));
+        } finally {
+            Thread.interrupted();
+        }
+    }
+
     private static void testAllSucceedSetsNothing() throws Exception {
         TestAdapter a = adapter();
         a.onCollect(a.instance, resources(1, 2));
@@ -179,12 +235,18 @@ public class AdapterInstanceStatusTest {
         final Set<Integer> downIds = new HashSet<>();
         ResourceStatusEnum mapTo;
         boolean stopAfterFirst;
+        Integer wrapInterruptOn;
         TestAdapter owner;
 
         @Override
         public void collect(Object config, ManagedHttpClient httpClient, ResourceConfig rc,
                 List<MetricData> out, AdapterBase adapter) throws Exception {
             if (stopAfterFirst) owner.onStopCollection();
+            if (wrapInterruptOn != null && wrapInterruptOn.equals(rc.getResourceId())) {
+                Thread.currentThread().interrupt();
+                throw new RuntimeException("read aborted",
+                        new java.io.InterruptedIOException("interrupted"));
+            }
             if (failing.contains(rc.getResourceId())) {
                 throw new IOException(downIds.contains(rc.getResourceId())
                         ? "unreachable" : "Login failed (cached)");

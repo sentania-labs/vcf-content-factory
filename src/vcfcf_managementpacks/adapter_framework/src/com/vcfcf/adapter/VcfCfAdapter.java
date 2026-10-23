@@ -932,7 +932,10 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
 
         // Issue #223: a cycle in which nothing could be collected shows on
         // the adapter instance (the account row), not only on its objects.
-        if (!outcome.cut && !isAbortRequested()) {
+        // An interrupt the collector wrapped (no InterruptedException, no
+        // stop) still means the cycle was cut short: set nothing.
+        if (!outcome.cut && !isAbortRequested()
+                && !Thread.currentThread().isInterrupted()) {
             reportAdapterInstanceFailure(adapterInstance, outcome, discoveryFailure);
         }
 
@@ -2727,7 +2730,12 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
 
     /**
      * One-line reason shown on the adapter instance: what failed and the
-     * first failure's class and message (sanitized, capped). Visible to tests.
+     * first failure's class and message (credential-looking fragments
+     * redacted by {@link #redactCredentials}, control characters replaced,
+     * capped). The account row is readable by any user with Integrations
+     * access, so paks must still throw credential-free messages from
+     * {@code collect()}; the redaction is a best-effort backstop. Visible to
+     * tests.
      */
     static String adapterInstanceFailureMessage(CycleOutcome o, Exception discoveryFailure) {
         Exception cause = o.attempted > 0 ? o.firstFailure : discoveryFailure;
@@ -2738,7 +2746,7 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
         String m = cause.getMessage();
         StringBuilder sb = new StringBuilder(what).append(": ")
                 .append(cause.getClass().getSimpleName()).append(": ");
-        String text = m == null ? "(no message)" : m;
+        String text = m == null ? "(no message)" : redactCredentials(m);
         int max = 300;
         for (int i = 0; i < text.length() && i < max; i++) {
             char c = text.charAt(i);
@@ -2746,6 +2754,39 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
         }
         if (text.length() > max) sb.append("...");
         return sb.toString();
+    }
+
+    /** Bearer, Basic and OpsToken authorization values. */
+    private static final java.util.regex.Pattern AUTH_SCHEME_VALUE = java.util.regex.Pattern.compile(
+            "(?i)\\b(bearer|basic|opstoken)(\\s+)[A-Za-z0-9._~+/=:-]{4,}");
+
+    /**
+     * {@code key=value}, {@code key: value} and JSON {@code "key":"value"}
+     * pairs whose key names a secret.
+     */
+    private static final java.util.regex.Pattern SECRET_PAIR = java.util.regex.Pattern.compile(
+            "(?i)([\"']?\\b(?:password|passwd|pwd|passphrase|secret|client_secret|token|"
+            + "access_token|refresh_token|api[_-]?key|apikey|session[_-]?id|sessionid|_?sid)"
+            + "\\b[\"']?\\s*[:=]\\s*)(\"[^\"]*\"|'[^']*'|[^\\s&,;\"'}\\]]+)");
+
+    /** {@code scheme://user:password@host} userinfo. */
+    private static final java.util.regex.Pattern URL_USERINFO = java.util.regex.Pattern.compile(
+            "(?i)(\\b[a-z][a-z0-9+.-]*://)[^/\\s@:]+:[^/\\s@]+@");
+
+    /**
+     * Best-effort removal of credential-looking fragments from text bound for
+     * the account row (review W1, issue #223): Bearer / Basic / OpsToken
+     * values, {@code password=}-style pairs (also {@code token}, {@code sid},
+     * {@code api_key} and similar, in {@code =}, {@code :} and JSON forms),
+     * and {@code user:password@} in URLs. Each becomes {@code <redacted>}.
+     * Not a guarantee: a pak must not put secrets in exception messages.
+     * Visible to tests.
+     */
+    static String redactCredentials(String text) {
+        if (text == null || text.isEmpty()) return text;
+        String t = AUTH_SCHEME_VALUE.matcher(text).replaceAll("$1$2<redacted>");
+        t = SECRET_PAIR.matcher(t).replaceAll("$1<redacted>");
+        return URL_USERINFO.matcher(t).replaceAll("$1<redacted>@");
     }
 
     private void reportAdapterInstanceFailure(ResourceConfig adapterInstance,

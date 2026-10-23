@@ -224,8 +224,14 @@ public class SuiteApiStitchClientTransportTest {
             assertEquals("status", 400, e.getStatusCode());
             assertEquals("apiErrorCode", 1501, e.getApiErrorCode());
             assertTrue("body excerpt carries the server text", e.getBodyExcerpt().contains("No such file"));
-            assertTrue("message keeps the status and adds the code",
-                    e.getMessage().endsWith("HTTP 400 apiErrorCode 1501"));
+            // Exact shape pinned on purpose: compliance's OverridesStore.isAbsent
+            // matches this message with its own 1501 regex, so a separator change
+            // (for example "apiErrorCode=1501") would flip its missing-overrides-file
+            // handling on a rebuild (framework review N4, 2026-10-23).
+            assertEquals("exact message shape",
+                    "Suite API GET " + BASE + "/api/configurations/files?path=SolutionConfig/x.xml"
+                            + " HTTP 400 apiErrorCode 1501",
+                    e.getMessage());
             assertFalse("message does not carry the body", e.getMessage().contains("No such file"));
         }
     }

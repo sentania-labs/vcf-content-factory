@@ -159,20 +159,27 @@ def _framework_source_commit() -> str:
             v = sc.read_text(encoding="utf-8").strip()
             return v or "unknown"
         return "unknown"
+    return _git_source_commit(_REPO_ROOT, _ADAPTER_FRAMEWORK_SRC_DIR)
+
+
+def _git_source_commit(repo_root: Path, source_dir: Path) -> str:
+    """``git rev-parse HEAD`` of ``repo_root``, ``-dirty`` appended when
+    ``source_dir`` has uncommitted changes, ``unknown`` without git or on any
+    git failure. Shared by the jar stamp and buildkit's SOURCE_COMMIT."""
     git = shutil.which("git")
     if git is None:
         return "unknown"
     try:
         head = subprocess.run(
-            [git, "-C", str(_REPO_ROOT), "rev-parse", "HEAD"],
+            [git, "-C", str(repo_root), "rev-parse", "HEAD"],
             capture_output=True, text=True, timeout=30,
         )
         if head.returncode != 0 or not head.stdout.strip():
             return "unknown"
         commit = head.stdout.strip()
         dirty = subprocess.run(
-            [git, "-C", str(_REPO_ROOT), "status", "--porcelain", "--",
-             str(_ADAPTER_FRAMEWORK_SRC_DIR)],
+            [git, "-C", str(repo_root), "status", "--porcelain", "--",
+             str(source_dir)],
             capture_output=True, text=True, timeout=30,
         )
         if dirty.returncode == 0 and dirty.stdout.strip():

@@ -315,8 +315,14 @@ framework now sets the adapter instance at the end of a completed cycle: ERROR
 (or DOWN when every failure mapped to DOWN) when every resource the cycle
 collected failed with ERROR or DOWN, and ERROR when there was nothing to
 collect and the discovery step (`rediscover` or `discoverOnCollect`) failed,
-with a one-line reason naming the first failure. A partial failure, a
-NO_DATA_RECEIVING mapping, or a cycle cut short by a stop or interrupt sets
+with a one-line reason naming the first failure. That reason, the first
+failing resource's exception class and message, is shown on the account row
+to any user with Integrations access, so `collect()` must throw messages free
+of credentials, session ids and tokens; the framework redacts Bearer / Basic /
+OpsToken values, `password=`-style pairs and `user:password@` URL userinfo as a
+best-effort backstop only (review W1). A partial failure, a
+NO_DATA_RECEIVING mapping, or a cycle cut short by a stop or interrupt (also
+an interrupt the collector wrapped, seen through the thread's interrupt flag) sets
 nothing, and the next cycle starts from the SDK default again. Before this a
 cached login failure left the account showing "Collecting" (UniFi build 14
 devel_9_1 proof). Not yet seen on a live account row: what the UI shows for an
