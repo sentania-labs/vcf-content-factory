@@ -3,6 +3,12 @@
 Investigated 2026-10-13 by `api-explorer`, read-only (source, docs, anonymous
 registry probes, `gh api` reads). Nothing was pushed, tagged, or created.
 
+> **Status 2026-10-14.** Built and proven end to end: both forks' CI publish
+> an attested image and pak, and the devel_9_1 Cloud Proxy pulled the pinned
+> digest and collected (see "Platform proof, devel_9_1" at the end). The
+> body below is the investigation as written on 2026-10-13; where it says
+> something was not yet observed, the later sections hold the proof.
+
 Scope: the two forks registered in `knowledge/context/managed_paks.md`,
 `content/sdk-adapters/vsanhostmetrics/` (upstream `nickfirefoot/vsanhostmetrics`)
 and `content/sdk-adapters/cluster-perf-risk/` (upstream
@@ -14,8 +20,9 @@ works for the maintainer with no secrets.
 
 1. **The pak does not contain the image.** It carries a pointer
    (`REGISTRY`, `REPOSITORY`, `DIGEST`) in `adapter.zip!<AdapterKind>.conf`, and
-   the Cloud Proxy pulls that digest **anonymously** at run time (per the SDK
-   docs; not yet observed in the lab, which has no Cloud Proxy). So the image
+   the Cloud Proxy pulls that digest **anonymously** at run time (anonymous per the
+   SDK docs; the pull itself was observed on the devel_9_1 Cloud Proxy
+   2026-10-14, see the platform proof at the end). So the image
    must be in a public registry, and the attestation has to be on the exact
    digest the pak names.
 2. **The image can be built with plain `docker build`, the pak cannot.**
@@ -823,11 +830,16 @@ after merge. Nothing publishes until the maintainer pushes a tag.
 
 ## Open questions
 
-1. **Login reuse.** Does `docker login ghcr.io` with no flags and no TTY
-   succeed from the credentials `docker/login-action` stored? Expected yes;
-   settled by the first fork run. Fallback is the argv form.
-2. **New-package visibility.** Whether a GHCR package first pushed from a
-   public repo's workflow starts public or private was not verified. The
+1. **Login reuse.** Answered 2026-10-13: yes, the first fork runs (both
+   forks, "Proof run" sections below) pushed with the stored credentials and
+   no argv form. Original question: does `docker login ghcr.io` with no flags
+   and no TTY succeed from the credentials `docker/login-action` stored?
+2. **New-package visibility.** Partly answered: the devel_9_1 Cloud Proxy
+   pulled both digests on 2026-10-14, but the proof record does not say
+   whether that proxy had a registry credential, so the initial visibility
+   of a freshly pushed package is still unverified. Original question:
+   whether a GHCR package first pushed from a public repo's workflow starts
+   public or private was not verified. The
    workflow handles both (it stops before tagging and tells the maintainer),
    but the fork run will tell us which one-time step to document.
 3. **Actions access on nickfirefoot's existing package.** Whether a

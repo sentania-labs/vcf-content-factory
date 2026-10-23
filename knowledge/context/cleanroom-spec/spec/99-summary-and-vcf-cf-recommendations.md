@@ -1,5 +1,15 @@
 # Summary and VCF-CF Recommendations
 
+> **Correction, 2026-10-23.** This file's claim that the appliance accepts
+> unsigned paks by default was a lab artifact: the devel appliance it was
+> observed on had the "Allow Unsigned PAK Installation" toggle switched on
+> by hand on 2026-04-17. A fresh 9.1.1 install comes up with the toggle off
+> and refuses every unsigned pak, and the platform trusts only
+> VMware/Broadcom signatures, so a self-signed pak still needs the toggle.
+> The unsigned-install statements below are left as written for the record.
+> Evidence: `knowledge/context/investigations/2026-10-14-unsigned-pak-policy-9-1-1.md`;
+> the corrected statement is in `knowledge/context/tier2_architecture.md`.
+
 **Date**: 2026-05-15
 **Status**: Final summary of the cleanroom investigation. Synthesis across all 39 KEEP-C paks (7 deep-analyzed, 32 bulk-surveyed) + 12 ELIMINATE-B paks + SDK + MPB runtime.
 
