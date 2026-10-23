@@ -8,42 +8,29 @@ ID', 'DISA STIG ID', and 'PCI DSS 4.0.1 ID' were inserted at positions
 1, 2, 3, shifting Component to position 4 and renaming it
 'Component\\nName'. 'Implementation\\nPriority' (note newline) sits at
 position 10 instead of 6. Header lookup is by name, so position
-churn is invisible to this script — but downstream loaders that did
+churn is invisible to this script, but downstream loaders that did
 positional indexing (the old BenchmarkLoader.java) broke silently on
 9.x. That bug is why this normalizer + a header-aware loader exist.
+
+A thin wrapper (#169): the classifier chain and every scoring fix-up live
+in _compliance_normalize.normalize_scg_source, keyed by control_id, and are
+shared with every other SCG version. This file supplies only the SCG 9.x
+column names, source token and parameter_kind classifier. They are module
+attributes read at call time, so a driver for a sibling version (the
+compliance repo's SCG 9.1 driver) can set them before calling normalize().
 """
 
 from __future__ import annotations
 
-import csv
 import sys
-from collections import Counter
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from _compliance_normalize import (
-    ADAPTER_KIND,
-    build_control_id,
-    build_read_recipe,
-    classify_control_override,
-    classify_esxcli_reclass,
     classify_parameter_kind,
-    classify_security_policy_param,
-    classify_service_state_reclass,
-    classify_source_id_vim_reclass,
-    classify_vim_reclass,
-    classify_vsan_cluster_expected,
-    classify_vsan_cluster_param,
-    clean_expected_value,
-    clean_priority,
-    collapse_remediation,
-    derive_resource_kind,
-    infer_value_type,
     log,
-    map_component,
-    map_setting_location,
-    write_canonical,
+    normalize_scg_source,
 )
 
 SOURCE_TOKEN = "SCG-9.0"
@@ -76,245 +63,25 @@ REQUIRED_COLUMNS = [
 
 
 def normalize(input_path: str, output_path: str) -> int:
-    with open(input_path, encoding="utf-8-sig", newline="") as f:
-        reader = csv.DictReader(f)
-        if reader.fieldnames is None:
-            log(f"ERROR: {input_path} has no header row")
-            return 2
-        missing = [c for c in REQUIRED_COLUMNS if c not in reader.fieldnames]
-        if missing:
-            log(f"ERROR: {input_path} missing required columns: "
-                f"{[m.replace(chr(10), '\\n') for m in missing]}")
-            return 2
-
-        in_count = 0
-        skipped: Counter = Counter()
-        by_kind: Counter = Counter()
-        unmapped_components: Counter = Counter()
-        out_rows = []
-
-        for src in reader:
-            in_count += 1
-            source_id = (src.get(COL_SCG_ID) or "").strip()
-            if not source_id:
-                skipped["empty_scg_id"] += 1
-                continue
-
-            component = (src.get(COL_COMPONENT) or "").strip()
-            mapped = map_component(component)
-            if mapped is None:
-                unmapped_components[component] += 1
-                skipped["unmapped_component"] += 1
-                continue
-            fallback_resource_kind, fallback_prefix = mapped
-
-            control_id = build_control_id(fallback_prefix, source_id)
-            if not control_id or "." not in control_id:
-                skipped["empty_slug"] += 1
-                continue
-            resource_kind = derive_resource_kind(
-                source_id, fallback_resource_kind)
-
-            # Setting Location refinement: when the source-ID prefix
-            # didn't disambiguate to a sub-product (resource_kind ==
-            # Component fallback), let the Setting Location column
-            # narrow the resource_kind further. This catches network
-            # / port-group / virtual-switch controls that the
-            # Component column mis-tags as ESX.
-            setting_location = (src.get(COL_SETTING_LOCATION) or "").strip()
-            sl_override = map_setting_location(setting_location)
-            if sl_override and resource_kind == fallback_resource_kind:
-                resource_kind, sl_prefix = sl_override
-                # Force the control_id prefix to match the new
-                # resource_kind. build_control_id would keep an
-                # already-recognized source-ID prefix (e.g. `esx`)
-                # even when Setting Location moved us off HostSystem,
-                # leaving the prefix and resource_kind disagreeing.
-                # The schema says they must agree.
-                _, slug = control_id.split(".", 1)
-                control_id = f"{sl_prefix}.{slug}"
-
-            parameter = (src.get(COL_PARAMETER) or "").strip()
-            if parameter == "N/A":
-                parameter = ""
-
-            assessment = (src.get(COL_ASSESSMENT) or "").strip()
-            parameter_kind = classify_parameter_kind(parameter, assessment)
-
-            # Phase 3 / Batch 3b — DVS + DVPG security policy override.
-            # When the row is a DVS or DVPG control AND the assessment
-            # command matches a Get-SecurityPolicy / Get-VDSecurityPolicy
-            # pattern, override parameter_kind to vim_property and set
-            # parameter to the canonical securityPolicy.<field> dot-path
-            # the Java evaluator dispatches on. See
-            # _compliance_normalize.classify_security_policy_param.
-            title_for_secpol = (src.get(COL_TITLE) or "").strip()
-            if resource_kind in (
-                "DistributedVirtualSwitch",
-                "DistributedVirtualPortgroup",
-            ):
-                secpol = classify_security_policy_param(
-                    assessment, source_id, title_for_secpol)
-                if secpol is not None:
-                    parameter = secpol
-                    parameter_kind = "vim_property"
-
-            # Phase 3 — vSAN cluster-config override. When the row is a
-            # ClusterComputeResource control and matches one of the
-            # vSAN controls reachable through the bundled vim25.jar,
-            # promote it from manual_audit to vim_property and set the
-            # canonical parameter to the vsanConfig.<field> key the
-            # Java VSphereClient returns. Rows that DON'T match (the
-            # other 12 SCG vSAN controls that need the vSAN Management
-            # SDK) stay manual_audit and are skipped by the evaluator.
-            vsan_expected_override = None
-            if resource_kind == "ClusterComputeResource":
-                vsan_param = classify_vsan_cluster_param(
-                    source_id, title_for_secpol)
-                if vsan_param is not None:
-                    parameter = vsan_param
-                    parameter_kind = "vim_property"
-                    vsan_expected_override = (
-                        classify_vsan_cluster_expected(source_id))
-
-            # Coverage expansion (build 35) — existing-style vim_property
-            # reclassification keyed by canonical control_id. See
-            # normalize_scg_v8.py for the rationale; same mechanism.
-            reclass_recipe = ""
-            reclass_expected = None
-            reclass_caveat = None
-            reclass = classify_vim_reclass(control_id)
-            if reclass is not None:
-                rc_param, rc_recipe, rc_expected, rc_caveat = reclass
-                parameter = rc_param
-                parameter_kind = "vim_property"
-                reclass_recipe = rc_recipe
-                reclass_expected = rc_expected
-                reclass_caveat = rc_caveat
-
-            # esxcli sprint (build 36) — esxcli recipe reclassification
-            # keyed by canonical control_id. Promotes the row to
-            # parameter_kind=esxcli (evaluable iff read_recipe set, like
-            # vim_property) with an esxcli:<ns.command>:<Field> recipe the
-            # EsxcliSoapClient reads over the existing vCenter session.
-            # Build 36: syslog persistence. Build 37 (section C): SSH
-            # daemon hardening, account shell access, key-persistence,
-            # syslog log-filter, TLS profile (see
-            # _ESXCLI_RECLASS_BY_CONTROL_ID). Applied after the vim
-            # reclass; the two control_id sets do not overlap.
-            esxcli_reclass = classify_esxcli_reclass(control_id)
-            if esxcli_reclass is not None:
-                ec_param, ec_recipe, ec_expected, ec_caveat = esxcli_reclass
-                parameter = ec_param
-                parameter_kind = "esxcli"
-                reclass_recipe = ec_recipe
-                reclass_expected = ec_expected
-                reclass_caveat = ec_caveat
-
-            # service_state sprint (build 38) — vim_property reclassification
-            # for ESX service running-state controls keyed by control_id.
-            # Promotes powercli_only / manual_audit rows to vim_property with
-            # a service_state:<key>:running recipe.
-            svc_reclass = classify_service_state_reclass(control_id)
-            if svc_reclass is not None:
-                sv_param, sv_recipe, sv_expected = svc_reclass
-                parameter = sv_param
-                parameter_kind = "vim_property"
-                reclass_recipe = sv_recipe
-                reclass_expected = sv_expected
-                reclass_caveat = None
-
-            # source_id vim_property reclassification (build 40) — for rows
-            # whose control_id is shared with another row that should NOT be
-            # reclassified (dvpg.network-vgt vc-row vs ESX-row). Keyed by
-            # source_id so only the distributed-switch row is promoted.
-            sid_reclass = classify_source_id_vim_reclass(source_id)
-            if sid_reclass is not None:
-                si_param, si_recipe, si_expected, si_caveat = sid_reclass
-                parameter = si_param
-                parameter_kind = "vim_property"
-                reclass_recipe = si_recipe
-                reclass_expected = si_expected
-                reclass_caveat = si_caveat
-
-            # Generic control override (build 39/40/41) — advanced_setting,
-            # vami_api, and vim_property list/device recipe reclassifications
-            # keyed by control_id. Applied last; wins over all prior
-            # classifiers for its control_ids.
-            ctrl_override = classify_control_override(control_id)
-            if ctrl_override is not None:
-                co_param, co_kind, co_expected, co_recipe = ctrl_override
-                parameter = co_param
-                parameter_kind = co_kind
-                reclass_expected = co_expected
-                reclass_recipe = co_recipe or ""
-                reclass_caveat = None
-
-            by_kind[parameter_kind] += 1
-
-            # clean_expected_value() collapses multi-line cells (e.g.
-            # vm.efi-boot-types: 'allow:hd\nonce the guest OS is
-            # installed') to the first non-empty line — the baseline
-            # value, without the SCG documentation continuation that
-            # would otherwise break the Java evaluator's equality
-            # compare.
-            expected = clean_expected_value(src.get(COL_EXPECTED) or "")
-            if vsan_expected_override is not None:
-                # Override the SCG-vocabulary expected_value with the
-                # canonical JS-boolean form the Java evaluator already
-                # understands. See classify_vsan_cluster_expected for
-                # the per-control polarity rationale.
-                expected = vsan_expected_override
-            if reclass_expected is not None:
-                expected = reclass_expected
-            value_type = infer_value_type(expected)
-
-            priority_raw = src.get(COL_PRIORITY) or ""
-            priority = clean_priority(priority_raw)
-            if not priority_raw.strip():
-                log(f"WARN: missing priority for {source_id}, defaulting to P2")
-
-            title = (src.get(COL_TITLE) or "").strip()
-            description = (src.get(COL_DESCRIPTION) or "").strip()
-            if reclass_caveat:
-                description = description + reclass_caveat
-            remediation = collapse_remediation(src.get(COL_REMEDIATION) or "")
-
-            out_rows.append({
-                "control_id": control_id,
-                "priority": priority,
-                "resource_kind": resource_kind,
-                "adapter_kind": ADAPTER_KIND,
-                "parameter": parameter,
-                "parameter_kind": parameter_kind,
-                "value_type": value_type,
-                "expected_value": expected,
-                "title": title,
-                "description": description,
-                "source_ref": f"{SOURCE_TOKEN}:{source_id}",
-                "remediation_text": remediation,
-                "read_recipe": (
-                    reclass_recipe
-                    if reclass_recipe
-                    else build_read_recipe(parameter, parameter_kind)
-                ),
-            })
-
-        written = write_canonical(output_path, out_rows)
-
-        log(f"[normalize_scg_v9] in={in_count}  out={written}  "
-            f"skipped={sum(skipped.values())}")
-        if skipped:
-            for k, v in sorted(skipped.items()):
-                log(f"  skipped {k}: {v}")
-        if unmapped_components:
-            log("  unmapped Component values (skipped):")
-            for k, v in sorted(unmapped_components.items()):
-                log(f"    {v:5d}  {k!r}")
-        log("  by parameter_kind:")
-        for k, v in sorted(by_kind.items()):
-            log(f"    {v:5d}  {k}")
-        return 0
+    return normalize_scg_source(
+        input_path, output_path,
+        columns={
+            "scg_id": COL_SCG_ID,
+            "component": COL_COMPONENT,
+            "priority": COL_PRIORITY,
+            "title": COL_TITLE,
+            "description": COL_DESCRIPTION,
+            "parameter": COL_PARAMETER,
+            "expected": COL_EXPECTED,
+            "assessment": COL_ASSESSMENT,
+            "remediation": COL_REMEDIATION,
+            "setting_location": COL_SETTING_LOCATION,
+        },
+        required_columns=REQUIRED_COLUMNS,
+        source_token=SOURCE_TOKEN,
+        label="normalize_scg_v9",
+        classify_kind=classify_parameter_kind,
+    )
 
 
 def main(argv: list) -> int:
