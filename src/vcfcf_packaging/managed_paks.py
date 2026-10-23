@@ -12,6 +12,13 @@ load_registry(registry_path) -> List[ManagedPak]
     Parse the registry file and return the live (non-comment) entries that
     carry an ``adapter_kind:`` line; entries without one are skipped.
 
+registered_pak_names(registry_path) -> frozenset[str]
+    Every pak name the registry has ever registered: each non-comment
+    entry's ``Target:`` directory name, in every section, the third-party
+    Python forks (no ``adapter_kind:`` line) and the retired entries
+    included.  For callers that must RECOGNISE a pak name rather than act
+    on a live pak (the defect gate, #219).
+
 lookup_by_adapter_name(name, registry_path) -> ManagedPak | None
     Look up an entry by the adapter directory name (``content/sdk-adapters/<name>``).
 
@@ -170,6 +177,46 @@ def load_registry(registry_path: "str | Path | None" = None) -> List[ManagedPak]
             continue
 
     return entries
+
+
+def registered_pak_names(registry_path: "str | Path | None" = None) -> frozenset:
+    """Return every pak name the registry registers, live, forked or retired.
+
+    Unlike :func:`load_registry`, this does NOT stop at ``## Retired paks``
+    and does NOT require an ``adapter_kind:`` line: it collects the
+    ``Target:`` directory name of every entry outside an HTML comment
+    block, which is the one field every entry in every section carries
+    (the bootstrap script keys on it too).  It answers "is this string a
+    pak name?", which the defect gate needs for every pak a defect could
+    name, including a Python fork (no ``adapter_kind:``) and a retired pak
+    whose open defects still refuse its release (#219).  It never answers
+    "should this pak be cloned, built or published"; use
+    :func:`load_registry` for that.
+
+    Raises:
+        FileNotFoundError: if the registry file does not exist.
+    """
+    if registry_path is None:
+        registry_path = _DEFAULT_REGISTRY_PATH
+    registry_path = Path(registry_path)
+    if not registry_path.exists():
+        raise FileNotFoundError(f"managed_paks registry not found: {registry_path}")
+
+    names = set()
+    in_comment = False
+    for line in registry_path.read_text(encoding="utf-8").splitlines():
+        # Same comment tracking as load_registry: the entry template lives
+        # in a comment block and must never register its placeholder name.
+        if "<!--" in line:
+            in_comment = True
+        if in_comment:
+            if "-->" in line:
+                in_comment = False
+            continue
+        m = _TARGET_RE.search(line)
+        if m:
+            names.add(m.group(1))
+    return frozenset(names)
 
 
 def lookup_by_adapter_name(

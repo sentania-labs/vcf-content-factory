@@ -192,7 +192,7 @@ def test_known_pak_names_survives_unreadable_managed_paks(monkeypatch):
     def _boom(*_a, **_k):
         raise OSError("synthetic")
 
-    monkeypatch.setattr(mp, "load_registry", _boom)
+    monkeypatch.setattr(mp, "registered_pak_names", _boom)
     reset_warning_state()
     assert defects._known_pak_names() == frozenset()
     assert defects._known_pak_names() == frozenset()
@@ -206,7 +206,7 @@ def test_known_pak_names_failure_warns_once(monkeypatch, capsys):
     def _boom(*_a, **_k):
         raise OSError("synthetic")
 
-    monkeypatch.setattr(mp, "load_registry", _boom)
+    monkeypatch.setattr(mp, "registered_pak_names", _boom)
     reset_warning_state()
     defects._known_pak_names()
     defects._known_pak_names()
@@ -309,3 +309,47 @@ def test_shipped_registry_has_no_parse_errors():
     """Regression guard: DEF-013/014/018/019 carried multi-token Affects."""
     registry = parse_registry(REGISTRY_PATH)
     assert registry.errors == [], [str(e) for e in registry.errors]
+
+
+# ---------------------------------------------------------------------------
+# #219: the known-name set covers every registered pak, every section
+# ---------------------------------------------------------------------------
+
+#: Read from the live knowledge/context/managed_paks.md, one group per
+#: section: factory SDK paks, the third-party Python forks (no adapter_kind:
+#: line), and the retired vcommunity family.  Names, never counts, so
+#: registering a new pak cannot turn this red; retiring or renaming one of
+#: these is a registry edit that should come with a look at this list.
+_REGISTERED_NAMES = {
+    "compliance", "unifi", "synology",
+    "vsanhostmetrics", "cluster-perf-risk",
+    "vcommunity", "vcommunity-vsphere", "vcommunity-os",
+}
+
+
+def test_known_pak_names_covers_every_registry_section(monkeypatch):
+    monkeypatch.undo()  # drop the autouse stub so the real lookup runs
+    reset_warning_state()
+    known = defects._known_pak_names()
+    missing = _REGISTERED_NAMES - known
+    assert not missing, f"registered paks unknown to the defect gate: {sorted(missing)}"
+    # The entry template inside the HTML comment is never a pak.
+    assert "<name>" not in known
+
+
+@pytest.mark.parametrize("pak", ["vsanhostmetrics", "cluster-perf-risk", "vcommunity-os"])
+def test_multi_token_affects_naming_a_fork_or_retired_pak_fails_closed(
+    tmp_path, monkeypatch, pak,
+):
+    """The #219 hole: a fork's first token was unknown, so the entry was
+    unscoped and only a gate run for exactly that name saw it."""
+    monkeypatch.undo()
+    reset_warning_state()
+    reg = _write(tmp_path, _entry(f"{pak} (the container image)"))
+    registry = parse_registry(reg)
+    assert [e.affects for e in registry.errors] == [pak], (
+        "the malformed entry must be attributed to the pak it names"
+    )
+    assert [e.affects for e in gate_pak(pak, reg)] == [pak]
+    assert [e.affects for e in gate_all(reg)] == [pak]
+    assert gate_pak("unifi", reg) == []

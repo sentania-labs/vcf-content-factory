@@ -507,16 +507,20 @@ def parse_registry(
 
 
 def _known_pak_names() -> frozenset:
-    """Managed-pak names from ``knowledge/context/managed_paks.md``.
+    """Every pak name registered in ``knowledge/context/managed_paks.md``.
 
     Consulted only to attribute a MALFORMED multi-token ``Affects:`` to its
-    first token.  Best effort: an unreadable managed-paks registry yields an
-    empty set, which only means such an entry stays unattributed (reported,
-    blocks nothing) rather than failing closed for a pak.
+    first token.  Covers every section of the registry: the factory SDK
+    paks, the third-party Python forks (which carry no ``adapter_kind:``
+    line) and the retired paks, because a defect may name any of them and
+    an unrecognised first token fails open for every pak but the one being
+    gated (#219).  Best effort: an unreadable managed-paks registry yields
+    an empty set, which only means such an entry stays unattributed
+    (reported, blocks nothing) rather than failing closed for a pak.
     """
     try:
-        from .managed_paks import load_registry as _load_managed_paks
-        return frozenset(p.name for p in _load_managed_paks())
+        from .managed_paks import registered_pak_names
+        return registered_pak_names()
     except Exception as exc:
         # Expected when this file runs as a standalone script (a pak repo's
         # vendored ci/defect_gate.py): there is no package to import from.
