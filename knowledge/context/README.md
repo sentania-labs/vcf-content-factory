@@ -179,6 +179,7 @@ Session-specific research logs, diff analyses, and exploration notes. Read when
 debugging a specific issue; not required reading.
 
 - `policy_fragment_wire_format.md`: policy super metric enablement wire format and pak policies-directory (`<pak>/content/policies/`) fragment support (also listed under `wire-formats/`).
+- `2026-10-23-devel-materialization-check-run.md`: live devel 9.0.2 run of the post-import dashboard materialization check (OK/ABSENT on the factory content, STALLED exit 1 on a throwaway bound to the uninstalled vcommunity adapter kind), with verbatim lines, exit codes, and the departures from the brief.
 - `2026-10-12-compliance-pak-summary-binding.md`: compliance build 88 World Summary did not bind on devel 9.0.2 because the pak importer crashes on an unknown widget type (`Section`, missing from that build), and the crash aborts the whole dashboard before `dashboards.properties` is read.
 - `2026-10-13-account-dialog-advanced-settings-and-cert-accept.md`: how the Add Account dialog places Advanced Settings and where the certificate-accept hook fires on 9.0.2 (read-only, feeds the build 93 auto-only cert-accept design).
 - `2026-10-13-compliance-summary-clone-config-loss.md`: build 89 World Summary tab clone had no widget config because the SUMMARY template clone is taken before the importer finishes parking and resolving widget config, and nothing finishes it for templates.
