@@ -194,6 +194,26 @@ columns:
 - Thresholds are static literals, not symptom-driven
 - Color method defaults to "no color" when no bounds set
 
+### Default sort
+
+A view opens sorted by the one column that sets `sort: asc` or
+`sort: desc` (list views only). The product stores this on the view
+column (`sortCriteria`), not on the dashboard widget, so every dashboard
+embedding the view opens in that order; two dashboards wanting different
+orders need two views. Widget keys `sort_by_column` / `sort_by_dir` are
+rejected (HealthChart keeps its own `sort_by_dir`). The loader rejects
+`sort:` on more than one column (which one wins is unverified), on
+time_segment and instanced_group columns, and on a view that has a
+time_segment column (that column is always sorted). Issue #175, wire
+format in `wire-formats/dashboard_sort_color_default_summary_rows.md`.
+
+```yaml
+columns:
+  - attribute: "VCF-CF Compliance|score"
+    display_name: Score
+    sort: asc            # worst first
+```
+
 ### Unit handling
 
 `unit` on a column does actual conversion (KB → GB, MHz → GHz),
@@ -379,7 +399,7 @@ a backstop, but do not rely on it: author 1-based coordinates.
 | Bucket interval / rollup period | Not exposed | Server uses ~5-min buckets |
 | Group-by / pivot rows | Not supported | Use Distribution view for grouping |
 | Dynamic / symptom coloring | Not supported | Use HealthChart widget |
-| Initial sort order in YAML | Not configurable | User sets in UI |
+| Initial sort order per dashboard | Not supported (sort lives on the view) | `sort:` on one view column; a second view for a different order |
 | Force chart type (bar vs line) | UI-persisted only | Default is line/area |
 | Per-instance breakdown rows | Partial | Requires uniform instance layout |
 

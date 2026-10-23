@@ -32,6 +32,7 @@ from .loader import (
     HeatmapConfig, HeatmapTab, HeatmapColorThreshold,
     PropertyListConfig, ResourceRelationshipAdvancedConfig,
     _UUID_RE as _VIEW_UUID_RE,
+    _COLUMN_SORT_CRITERIA,
 )
 
 
@@ -805,6 +806,12 @@ def _xml_attribute_item(
             f'<List><Item value="{escape(transform)}"/></List>'
             f'</Property>'
         )
+    # Default sort (issue #175): after transformations, before isProperty,
+    # the vendor position. true = ascending, false = descending; absent =
+    # no sort. Wire format: knowledge/context/wire-formats/
+    # dashboard_sort_color_default_summary_rows.md §#175.
+    if getattr(col, "sort", None) is not None:
+        props.append(_xml_property("sortCriteria", _COLUMN_SORT_CRITERIA[col.sort]))
     props.append(_xml_property("isProperty", "true" if col.is_property else "false"))
     # Color bound Properties, emitted between isProperty and displayName
     # in order: yellow, orange, red, ascendingRange.

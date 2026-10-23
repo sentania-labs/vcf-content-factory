@@ -254,6 +254,19 @@ class ViewColumn:
     # Single-subject views ignore it (they always bind to their one kind).
     # Evidence: knowledge/context/api-surface/view_multi_subject_column_binding.md.
     subject: Optional["ViewSubject"] = None
+    # Default sort (YAML `sort: asc | desc`, issue #175). The product keeps
+    # a view's opening sort on the column, not on the dashboard widget:
+    # `<Property name="sortCriteria" value="true|false"/>` (true ascending,
+    # false descending), so every widget embedding the view opens sorted
+    # this way. At most one column per view, list views only, not on
+    # time_segment or instanced_group columns (see ViewDef.validate).
+    # Wire format: knowledge/context/wire-formats/
+    # dashboard_sort_color_default_summary_rows.md §#175.
+    sort: Optional[str] = None
+
+
+# YAML `sort:` value -> sortCriteria wire value.
+_COLUMN_SORT_CRITERIA: dict[str, str] = {"asc": "true", "desc": "false"}
 
 
 @dataclass
@@ -672,6 +685,7 @@ class ViewDef:
                     "is present in this view. Add the 'Instance Name' driver "
                     "column first."
                 )
+        self._validate_column_sort()
         # SubjectType metric filter, OR of AND-groups.
         if self.subject_filter is not None:
             if not self.subject_filter:
@@ -854,6 +868,7 @@ class ViewDef:
                 ("red_bound", c.red_bound),
                 ("ascending_range", c.ascending_range),
                 ("instanced_group", c.instanced_group),
+                ("sort", c.sort),
             ) if val not in (None, "")
         ]
         if c.is_property or c.is_string_attribute:
@@ -862,6 +877,46 @@ class ViewDef:
             raise DashboardValidationError(
                 f"{name_ctx}: time_segment columns carry no metric fields; "
                 f"remove {', '.join(stray)}"
+            )
+
+    def _validate_column_sort(self) -> None:
+        """Column ``sort:`` (issue #175): value, view type, column kind and
+        the one-sorted-column limit. The product accepts several sorted
+        columns, but which one wins is unverified, so the factory allows
+        one. Wire format: knowledge/context/wire-formats/
+        dashboard_sort_color_default_summary_rows.md §#175."""
+        sorted_cols = [c for c in self.columns if c.sort is not None]
+        if not sorted_cols:
+            return
+        for c in sorted_cols:
+            name_ctx = f"view {self.name!r} column {c.display_name!r}"
+            if c.sort not in _COLUMN_SORT_CRITERIA:
+                raise DashboardValidationError(
+                    f"{name_ctx}: sort must be 'asc' or 'desc', got {c.sort!r}"
+                )
+            if c.instanced_group is not None:
+                raise DashboardValidationError(
+                    f"{name_ctx}: sort is not supported on instanced_group columns; "
+                    "no vendor export carries sortCriteria on one, so the factory "
+                    "will not guess the shape. Sort on an ordinary column."
+                )
+        if self.data_type != "list":
+            raise DashboardValidationError(
+                f"view {self.name}: column sort is only supported on data_type: list "
+                f"views (got {self.data_type!r}); the vendor evidence is list views only."
+            )
+        if len(sorted_cols) > 1:
+            raise DashboardValidationError(
+                f"view {self.name}: sort is set on {len(sorted_cols)} columns "
+                f"({', '.join(repr(c.display_name) for c in sorted_cols)}); set it on "
+                "one column. Which column wins when several are sorted is unverified."
+            )
+        if any(c.time_segment is not None for c in self.columns):
+            raise DashboardValidationError(
+                f"view {self.name}: sort cannot be set on column "
+                f"{sorted_cols[0].display_name!r}: the view has a time_segment "
+                "column, which always carries sortCriteria=false (vendor shape), so "
+                "this would make two sorted columns and which one wins is unverified."
             )
 
     def _validate_column(self, c: "ViewColumn") -> None:  # noqa: F821
@@ -2600,6 +2655,14 @@ def load_view(
                 )
             col_subject = ViewSubject(adapter_kind=cs_ak, resource_kind=cs_rk)
 
+        sort_raw = c.get("sort")
+        if sort_raw is not None and not isinstance(sort_raw, str):
+            raise DashboardValidationError(
+                f"view column {c.get('display_name')!r}: sort must be 'asc' or "
+                f"'desc'; got {type(sort_raw).__name__} {sort_raw!r}"
+            )
+        col_sort = sort_raw.strip().lower() if sort_raw is not None else None
+
         return ViewColumn(
             attribute=attribute,
             display_name=str(c["display_name"]).strip(),
@@ -2619,6 +2682,7 @@ def load_view(
             instanced_group=instanced_group,
             time_segment=time_segment,
             subject=col_subject,
+            sort=col_sort,
         )
 
     cols = [_load_column(c) for c in (data.get("columns") or [])]
@@ -2900,6 +2964,24 @@ def load_dashboard(
                 name=pin_name,
             )
         widget_type = str(w["type"]).strip()
+
+        # Widget-level sort keys (issue #175). Only HealthChart has a sort
+        # on the wire (sortByDir); a View widget carries none, its opening
+        # sort lives on the view column. These keys were parsed nowhere and
+        # silently dropped, so reject them instead.
+        stray_sort = [
+            k for k in ("sort_by_column", "sort_by_dir")
+            if k in w and not (k == "sort_by_dir" and widget_type == "HealthChart")
+        ]
+        if stray_sort:
+            raise DashboardValidationError(
+                f"widget {w.get('id', '?')!r}: {', '.join(stray_sort)} is not supported "
+                f"on {widget_type} widgets and would be silently dropped. A View "
+                f"widget opens in its view's default sort: set `sort: asc` or "
+                f"`sort: desc` on one column of the view YAML instead (see "
+                f"knowledge/context/wire-formats/"
+                f"dashboard_sort_color_default_summary_rows.md §#175)."
+            )
 
         select_first_row_raw = w.get("select_first_row", True)
         if not isinstance(select_first_row_raw, bool):
