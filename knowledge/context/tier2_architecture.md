@@ -84,6 +84,23 @@ owns three classes of file under an adapter's `docs/`:
 
 Any other file under `docs/` is the adapter's own and is never touched.
 
+### Bundled content naming (`content_naming`)
+
+`adapter.yaml` may declare `content_naming`, the naming contract for every
+name under `bundled_content` (views, dashboards, super metrics, symptoms,
+alerts, reports, recommendations) (#229):
+
+| Value | Meaning |
+|---|---|
+| `factory_prefixed` (default) | Every name starts with `[VCF Content Factory] ` (RULE-006). |
+| `unprefixed` | No name carries `[VCF Content Factory]`. For a pak that keeps its upstream names (the vCommunity paks). |
+
+Content authors read the field to choose the name form. `validate-sdk` and
+`build-sdk` enforce it: a declared contract fails on any mismatch; an
+undeclared one applies the default as a single warning, so a pak that
+predates the field keeps building until it declares. Any other value is an
+`adapter.yaml` schema error.
+
 ## Build approach: Python + `javac`, no Maven
 
 - The only external dependency Tier 2 adds is a **JDK on PATH**
