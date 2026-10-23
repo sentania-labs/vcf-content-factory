@@ -111,7 +111,9 @@ import java.util.regex.Pattern;
  * {@link #discard()} — errors during release are swallowed and logged (the
  * platform's token TTL is the safety net). This matches the
  * {@code RestClientProxy} ({@code SuiteAPIClient}) behavioral contract:
- * per-instance caching, single 401 retry, close-time release.
+ * per-instance caching, single 401 retry, close-time release. A closed
+ * client ({@link #close()} / {@link #discard()}) refuses every later call and
+ * never acquires a new token (issue #217).
  *
  * <h3>Logging</h3>
  * <p>Credential values are never logged, and neither is the principal (the
@@ -198,6 +200,17 @@ public final class SuiteApiStitchClient {
     private final Object tokenLock = new Object();
 
     /**
+     * Set by {@link #close()} (issue #217). Once set, no new token is ever
+     * acquired: every call fails fast with {@link ClientClosedException}.
+     * Written under {@link #tokenLock}; volatile for the lock-free fast path.
+     */
+    private volatile boolean closed = false;
+
+    /** Guards the one WARN logged for calls refused after close. */
+    private final java.util.concurrent.atomic.AtomicBoolean closedRefusalWarned =
+            new java.util.concurrent.atomic.AtomicBoolean(false);
+
+    /**
      * Operation and exception class pairs whose unexpected failure has
      * already been logged with its stack trace by this client (issue #192):
      * a repeat logs one line and keeps the trace at DEBUG. Per instance, never
@@ -231,6 +244,21 @@ public final class SuiteApiStitchClient {
 
     /** Longest error body excerpt kept on a {@link SuiteApiHttpException}. */
     public static final int ERROR_BODY_EXCERPT_MAX = 512;
+
+    /**
+     * Thrown by every call on a closed client (issue #217). An
+     * {@link IOException}, so {@link #get} callers that already catch
+     * {@code IOException} treat it like an outage.
+     */
+    private static final class ClientClosedException extends IOException {
+        private static final long serialVersionUID = 1L;
+
+        ClientClosedException() {
+            super("SuiteApiStitchClient is closed (discarded); a closed client never"
+                    + " acquires a new token. Use the client built by the current"
+                    + " configuration.");
+        }
+    }
 
     // -----------------------------------------------------------------------
     // Constructor (private — use Builder)
@@ -823,6 +851,16 @@ public final class SuiteApiStitchClient {
      */
     private void logFailure(String operation, String context, Exception e) {
         String line = context + ": " + failureSummary(e);
+        if (e instanceof ClientClosedException) {
+            // A cycle still running on a client its adapter has replaced:
+            // say so once per client, then quietly refuse (issue #217).
+            if (closedRefusalWarned.compareAndSet(false, true)) {
+                logger.warn(line);
+            } else if (logger.isDebugEnabled()) {
+                logger.debug(line);
+            }
+            return;
+        }
         if (!isExpectedFailure(e)
                 && tracedFailures.add(operation + ":" + e.getClass().getName())) {
             logger.warn(line, e);
@@ -957,21 +995,47 @@ public final class SuiteApiStitchClient {
     }
 
     /**
-     * Release the cached bearer token and underlying HTTP resources.
+     * Close the client: mark it closed and release the cached bearer token
+     * (issue #217).
      *
-     * <p>Call from the adapter's {@code onDiscard()} method, alongside
-     * releasing the {@link com.vcfcf.adapter.http.ManagedHttpClient}.
-     * Token release failure is swallowed and logged at WARN — the platform's
-     * token TTL is the safety net (per spec §3 cancellation contract).
+     * <p>After this returns, no call on this client acquires a token again.
+     * {@link #get} throws an {@link IOException} saying the client is closed;
+     * {@link #pushProperties}, {@link #pushStats}, {@link #addChildren} and
+     * {@link #findSingletonResourceId} send nothing and log one WARN for the
+     * first refused call (DEBUG after that). This matters when an adapter
+     * swaps clients on reconfigure while a cycle is still running on the old
+     * one: before, that cycle logged in again and left a token behind.
+     *
+     * <p>Call from the adapter's {@code onDiscard()} method (or when replacing
+     * the client), alongside releasing the
+     * {@link com.vcfcf.adapter.http.ManagedHttpClient}. Idempotent. Token
+     * release failure is swallowed and logged at WARN; the platform's token
+     * TTL is the safety net (per spec §3 cancellation contract). A request
+     * already in flight with the old token is not interrupted; it fails or
+     * completes on its own.
      */
-    public void discard() {
+    public void close() {
         String tok;
         synchronized (tokenLock) {
+            this.closed = true;
             tok = this.cachedToken;
             this.cachedToken = null;
         }
         releaseToken(tok); // null-safe, swallows all exceptions
         // URLConnection connections are per-request; nothing else to close here.
+    }
+
+    /**
+     * Same as {@link #close()}: kept for existing callers. Marks the client
+     * closed, so it is no longer reusable after this call (issue #217).
+     */
+    public void discard() {
+        close();
+    }
+
+    /** True once {@link #close()} or {@link #discard()} has run. */
+    public boolean isClosed() {
+        return closed;
     }
 
     // -----------------------------------------------------------------------
@@ -983,9 +1047,11 @@ public final class SuiteApiStitchClient {
      * Thread-safe: double-checked with {@link #tokenLock}.
      */
     private String ensureToken() throws IOException, InterruptedException {
+        if (closed) throw new ClientClosedException();
         String tok = this.cachedToken;
         if (tok != null) return tok;
         synchronized (tokenLock) {
+            if (closed) throw new ClientClosedException();
             tok = this.cachedToken;
             if (tok == null) {
                 tok = acquireToken();
@@ -1002,6 +1068,7 @@ public final class SuiteApiStitchClient {
      */
     private String reAcquireToken(String oldToken) throws IOException, InterruptedException {
         synchronized (tokenLock) {
+            if (closed) throw new ClientClosedException();
             if (oldToken != null && oldToken.equals(this.cachedToken)) {
                 this.cachedToken = null;
             }

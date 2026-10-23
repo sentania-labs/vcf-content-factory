@@ -33,7 +33,8 @@ import java.util.Map;
  * unexpected failure class shows its trace once (issue #192). A non-2xx
  * answer reaches {@code get} callers as a {@link SuiteApiHttpException} with
  * the status, {@code apiErrorCode} and a body excerpt, and the GET
- * {@code Accept} header is settable (issue #201).
+ * {@code Accept} header is settable (issue #201). A closed client refuses
+ * every call without acquiring a new token (issue #217).
  * Capturing text needs log4j-api and log4j-core at runtime; without them the
  * whole suite is SKIPPED with a message (same convention as
  * {@code SuiteApiStitchRelationshipTest}).
@@ -82,6 +83,11 @@ public class SuiteApiStitchClientTransportTest {
         run("Accept with a control character is refused before sending", SuiteApiStitchClientTransportTest::testAcceptControlCharRefused);
         run("facade get(path, accept) delegates", SuiteApiStitchClientTransportTest::testFacadeGetWithAccept);
         run("parseApiErrorCode edge cases", SuiteApiStitchClientTransportTest::testParseApiErrorCode);
+        run("close releases the token once and is idempotent", SuiteApiStitchClientTransportTest::testCloseReleasesOnce);
+        run("closed client: get fails fast, no new token", SuiteApiStitchClientTransportTest::testClosedGetFailsFast);
+        run("closed client: swallowing calls send nothing, one WARN", SuiteApiStitchClientTransportTest::testClosedSwallowingCallsQuiet);
+        run("discard closes too; facade close and isClosed", SuiteApiStitchClientTransportTest::testDiscardAndFacadeClose);
+        run("close before first use releases nothing", SuiteApiStitchClientTransportTest::testCloseBeforeUse);
         report();
     }
 
@@ -322,6 +328,87 @@ public class SuiteApiStitchClientTransportTest {
         assertEquals("empty", null, SuiteApiStitchClient.parseApiErrorCode(""));
         assertEquals("null", null, SuiteApiStitchClient.parseApiErrorCode(null));
         assertEquals("absent", null, SuiteApiStitchClient.parseApiErrorCode("{\"message\":\"m\"}"));
+    }
+
+    // -----------------------------------------------------------------------
+    // Issue #217: a closed client never acquires a token again
+    // -----------------------------------------------------------------------
+
+    private static void testCloseReleasesOnce() throws Exception {
+        Harness h = new Harness(okTokenThen(200, "{}"));
+        h.client.get("/api/a");
+        assertEquals("one token acquired", 1, h.countUrl(TOKEN_URL));
+        h.client.close();
+        assertEquals("close releases the token", 1, h.countUrl(RELEASE_URL));
+        assertTrue("release names the cached token",
+                h.lastTo(RELEASE_URL).body.contains("tok-1"));
+        h.client.close();
+        assertEquals("a second close releases nothing more", 1, h.countUrl(RELEASE_URL));
+        assertTrue("isClosed", h.client.isClosed());
+    }
+
+    private static void testClosedGetFailsFast() throws Exception {
+        Harness h = new Harness(okTokenThen(200, "{}"));
+        h.client.get("/api/a");
+        h.client.close();
+        int before = h.requests.size();
+        try {
+            h.client.get("/api/a");
+            fail("get on a closed client must throw");
+        } catch (IOException e) {
+            assertTrue("the message says the client is closed", e.getMessage().contains("closed"));
+        }
+        try {
+            h.client.get("/api/a", "*/*");
+            fail("get(path, accept) on a closed client must throw");
+        } catch (IOException e) {
+            assertTrue("same refusal with Accept", e.getMessage().contains("closed"));
+        }
+        assertEquals("nothing sent after close", before, h.requests.size());
+        assertEquals("still one token acquired", 1, h.countUrl(TOKEN_URL));
+    }
+
+    private static void testClosedSwallowingCallsQuiet() throws Exception {
+        Harness h = new Harness(okTokenThen(200, "{}"));
+        h.client.close();
+        h.log.clear();
+        int before = h.requests.size();
+        h.client.pushStats(RES, one("k", 1.0), 1L);
+        h.client.pushProperties(RES, oneS("p", "v"), 1L);
+        assertFalse("addChild refused", h.client.addChild(RES, "c87c8e39-7cf8-4394-bbf8-04ccd8601efc"));
+        assertEquals("lookup refused", null, h.client.findSingletonResourceId("K", "W"));
+        assertEquals("nothing sent after close", before, h.requests.size());
+        assertEquals("one WARN for the first refused call only", 1, h.log.count("WARN"));
+        assertTrue("the WARN says closed", h.log.contains("closed"));
+        assertEquals("no stack trace", 0, h.log.thrown().size());
+    }
+
+    private static void testDiscardAndFacadeClose() throws Exception {
+        Harness h = new Harness(okTokenThen(200, "{}"));
+        h.client.discard();
+        assertTrue("discard closes the client", h.client.isClosed());
+
+        FakeAdapter a = allocate(FakeAdapter.class);
+        a.requests = new ArrayList<>();
+        a.responder = okTokenThen(200, "{}");
+        SuiteApiStitcher st = SuiteApiStitcher.createExplicit(a, LogCapture.create().logger(),
+                "localhost", USER, "p");
+        st.get("/api/a");
+        assertFalse("facade open before close", st.isClosed());
+        st.close();
+        assertTrue("facade closed", st.isClosed());
+        try {
+            st.get("/api/a");
+            fail("facade get after close must throw");
+        } catch (IOException e) {
+            assertTrue("facade refusal says closed", e.getMessage().contains("closed"));
+        }
+    }
+
+    private static void testCloseBeforeUse() throws Exception {
+        Harness h = new Harness(okTokenThen(200, "{}"));
+        h.client.close();
+        assertEquals("no request at all", 0, h.requests.size());
     }
 
     @SuppressWarnings("unchecked")

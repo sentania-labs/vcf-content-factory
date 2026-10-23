@@ -103,7 +103,7 @@ All components compile against `vrops-adapters-sdk-2.2.jar` only.
 | `DescribeBuilder` | `com.vcfcf.adapter.describe` | describe.xml XML generator. No SDK dependency. |
 | `SimpleJson` | `com.vcfcf.adapter.json` | Zero-dep recursive-descent JSON parser. |
 | `AmbientCredential` | `com.vcfcf.adapter.stitch` | Reads `/usr/lib/vmware-vcops/user/conf/maintenanceuser.properties`; decrypts via SDK `Crypt.getDefaultCrypt().decrypt()` — the only FIPS-safe path under `-Dorg.bouncycastle.fips.approved_only=true` (9.1+). Path resolution order: (1) system property `vcfcf.suiteapi.credential.path` if set; (2) hard-wired default `/usr/lib/vmware-vcops/user/conf/maintenanceuser.properties`. **`CommonConstants.VCOPS` is NOT used** — it is a product display-name string (`"VCF Ops"`), not a filesystem path. See `knowledge/lessons/sdk-constants-are-display-names.md`. Never hand-roll the cipher. |
-| `SuiteApiStitchClient` | `com.vcfcf.adapter.stitch` | Framework REST transport for Suite API stitching. Token cached per instance; re-acquired on 401; released on `discard()`. Credential resolution: explicit adapter-config fields > ambient `maintenanceuser.properties` > fail with actionable message. **Unified transport:** ALL calls go through `VcfCfAdapter.openPlatformConnection` (`HttpsURLConnection` mirroring the vendor `SuiteAPIClient`: trust-all + ignore-hostname, or cluster truststore + ignore-hostname when `IS_FIPS=true`; see "SSL / hostname verification" below). No `java.net.http.HttpClient` path. source-11 baseline. |
+| `SuiteApiStitchClient` | `com.vcfcf.adapter.stitch` | Framework REST transport for Suite API stitching. Token cached per instance; re-acquired on 401; released on `close()` / `discard()`, after which the client refuses every call. Credential resolution: explicit adapter-config fields > ambient `maintenanceuser.properties` > fail with actionable message. **Unified transport:** ALL calls go through `VcfCfAdapter.openPlatformConnection` (`HttpsURLConnection` mirroring the vendor `SuiteAPIClient`: trust-all + ignore-hostname, or cluster truststore + ignore-hostname when `IS_FIPS=true`; see "SSL / hostname verification" below). No `java.net.http.HttpClient` path. source-11 baseline. |
 | `SuiteApiStitcher` | `com.vcfcf.adapter.stitch` | Thin facade adapter authors hold as a field. Factory methods: `SuiteApiStitcher.create(adapter, logger)` (ambient) and `SuiteApiStitcher.createExplicit(adapter, logger, host, user, pass)` (remote-collector fallback). No transport code required in the adapter. Surface: `pushProperties`, `pushStats`, `addChild` / `addChildren` (additive Suite API relationship POST, never PUT), `findSingletonResourceId`, `get` (and `get(path, accept)`), `discard`. A non-2xx GET throws `SuiteApiHttpException` (status, `apiErrorCode`, body excerpt). |
 
 ## Pak format — hard-won lessons (2026-05-19)
@@ -610,6 +610,17 @@ is re-acquired and the failed request is retried exactly once (per
 released in `discard()` — failures are logged WARN and swallowed (the platform's
 token TTL is the safety net, per §3). Release is always attempted even on the
 cancellation path.
+
+**Closed state (issue #217):** `close()` (and `discard()`, now the same call)
+also marks the client closed. A closed client never acquires a token again:
+`get` throws an `IOException` saying the client is closed, and `pushStats`,
+`pushProperties`, `addChild` / `addChildren` and `findSingletonResourceId`
+send nothing and log one WARN for the first refused call (DEBUG after that).
+`isClosed()` reports it; the `SuiteApiStitcher` facade has `close()` and
+`isClosed()` too. Before buildkit 1.0.13, a cycle still running on a client
+its adapter had replaced on reconfigure logged in again and left a token
+behind. Every shipped pak already retires a stitcher after discarding it, so
+none changes behaviour beyond losing that stray login.
 
 **SSL / hostname verification: vendor-mirror transport (DEF-005, issue #215):**
 

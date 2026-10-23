@@ -295,9 +295,11 @@ public final class SuiteApiStitcher {
     }
 
     /**
-     * Release underlying HTTP resources.
+     * Release the cached token and close the stitcher: every later call is
+     * refused without acquiring a new token (issue #217).
      *
-     * <p>Call from the adapter's {@link VcfCfAdapter#onDiscard()} method:
+     * <p>Call from the adapter's {@link VcfCfAdapter#onDiscard()} method, and
+     * on the old stitcher when a reconfigure replaces it:
      * <pre>{@code
      * {@literal @}Override
      * public void onDiscard() {
@@ -308,5 +310,21 @@ public final class SuiteApiStitcher {
      */
     public void discard() {
         client.discard();
+    }
+
+    /**
+     * Close the underlying client (issue #217): release its token and refuse
+     * every later call without acquiring a new one. Same as
+     * {@link #discard()}; idempotent.
+     *
+     * @see SuiteApiStitchClient#close()
+     */
+    public void close() {
+        client.close();
+    }
+
+    /** True once the underlying client has been closed or discarded. */
+    public boolean isClosed() {
+        return client.isClosed();
     }
 }
