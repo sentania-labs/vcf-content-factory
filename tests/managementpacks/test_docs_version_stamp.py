@@ -225,3 +225,56 @@ def test_history_release_build_heads_current_build_with_version(tmp_path: Path) 
     assert "## 1.0.0.0 (" in text
     assert "Unreleased" not in text
     assert "## Build" not in text
+
+
+# ---------------------------------------------------------------------------
+# Issue #233: the history source is the pak's own repo, not the factory's
+# ---------------------------------------------------------------------------
+
+def test_history_comes_from_pak_repo_not_factory_checkout(tmp_path: Path) -> None:
+    """A pak cloned gitignored into a factory checkout is its own repo. The
+    CHANGELOG lists the pak's commits and none of the factory's."""
+    import shutil
+
+    if not shutil.which("git"):
+        pytest.skip("git not on PATH")
+    factory = tmp_path / "factory"
+    sdk = factory / "content" / "sdk-adapters"
+    sdk.mkdir(parents=True)
+    (factory / ".gitignore").write_text("content/sdk-adapters/\n", encoding="utf-8")
+    (factory / "README.md").write_text("factory\n", encoding="utf-8")
+    _git(factory, "init", "-q")
+    _git(factory, "add", "-A")
+    _git(factory, "commit", "-q", "-m", "factory commit")
+
+    project_dir = _make_project(sdk)
+    _git(project_dir, "init", "-q")
+    yaml_path = project_dir / "adapter.yaml"
+    yaml_path.write_text(_ADAPTER_YAML.replace("build_number: 1", "build_number: 0"),
+                         encoding="utf-8")
+    _git(project_dir, "add", "-A")
+    _git(project_dir, "commit", "-q", "-m", "pak first build")
+    yaml_path.write_text(_ADAPTER_YAML, encoding="utf-8")
+    _git(project_dir, "commit", "-q", "-am", "pak second build")
+
+    _generate_docs(project_dir, "0.0.0.1")
+    text = (project_dir / "CHANGELOG.md").read_text(encoding="utf-8")
+    assert "- pak second build" in text
+    assert "- pak first build" in text
+    assert "## Build 0 (" in text
+    assert "factory commit" not in text
+    assert "Initial development build" not in text
+
+
+def test_history_ignores_unrelated_commits_in_pak_repo(tmp_path: Path) -> None:
+    """When the project sits in a subdirectory of its repo, only commits that
+    touched that subdirectory are listed."""
+    project_dir = _project_with_history(tmp_path)
+    repo = project_dir.parent.parent.parent
+    (repo / "other.txt").write_text("x\n", encoding="utf-8")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "unrelated commit")
+    _generate_docs(project_dir, "0.0.0.1")
+    text = (project_dir / "CHANGELOG.md").read_text(encoding="utf-8")
+    assert "- second build" in text
+    assert "unrelated commit" not in text
