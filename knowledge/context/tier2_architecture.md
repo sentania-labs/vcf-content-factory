@@ -575,6 +575,12 @@ Added in the same session as v2, under `com.vcfcf.adapter.stitch`:
 2. Ambient — read `maintenanceuser.properties` via `AmbientCredential.load()` (path resolution: system property `vcfcf.suiteapi.credential.path` → hard-wired default `/usr/lib/vmware-vcops/user/conf/maintenanceuser.properties`), decrypt via SDK `Crypt`. Targets `https://localhost/suite-api/`. **Do not derive path from `CommonConstants.VCOPS`** — that field is the display name `"VCF Ops"`, not a filesystem path (live bug: build 43, 2026-06-10; see `knowledge/lessons/sdk-constants-are-display-names.md`).
 3. Neither resolves — `IllegalStateException` with actionable message.
 
+**What the client logs (issue #227):** the credential mechanism
+(`explicit` or `ambient`), the ambient source label and the endpoint, never
+the principal (the Suite API account name) and never a credential value. The
+401 and no-token exception messages carry the mechanism only. Paks no longer
+need a `principal=` redaction rule for framework output.
+
 **FIPS constraint (hard rule):** The 9.1 collector JVM runs
 `-Dorg.bouncycastle.fips.approved_only=true`. Never hand-roll the cipher.
 Always use `Crypt.getDefaultCrypt().decrypt(encryptedPassword)` from

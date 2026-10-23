@@ -114,8 +114,10 @@ import java.util.regex.Pattern;
  * per-instance caching, single 401 retry, close-time release.
  *
  * <h3>Logging</h3>
- * <p>Credential values are never logged. Only the mechanism chosen
- * ({@code explicit} or {@code ambient}) and the principal name are logged.
+ * <p>Credential values are never logged, and neither is the principal (the
+ * Suite API account name; issue #227): log lines and exception messages name
+ * only the mechanism chosen ({@code explicit} or {@code ambient}), the
+ * credential source and the endpoint.
  *
  * <h3>Usage</h3>
  * <pre>{@code
@@ -284,8 +286,9 @@ public final class SuiteApiStitchClient {
         }
 
         /**
-         * Logger for operational messages. Never logs credential values —
-         * only the principal name and mechanism are logged.
+         * Logger for operational messages. Never logs credential values or
+         * the principal (account name): only the mechanism, the credential
+         * source and the endpoint are logged.
          *
          * @param logger the adapter-specific logger
          */
@@ -332,7 +335,6 @@ public final class SuiteApiStitchClient {
                         : DEFAULT_SUITE_API_BASE;
                 mechanism = "explicit";
                 logger.info("SuiteApiStitchClient: credential mechanism=explicit"
-                        + " principal=" + username
                         + " endpoint=" + suiteApiBase);
 
             } else {
@@ -359,7 +361,6 @@ public final class SuiteApiStitchClient {
                 mechanism = "ambient";
                 logger.info("SuiteApiStitchClient: credential mechanism=ambient"
                         + " file=" + cred.getSourceLabel()
-                        + " principal=" + username
                         + " endpoint=" + suiteApiBase);
 
                 // WARNING-1 breadcrumb (ambient-credential-v3-instance-first
@@ -390,8 +391,7 @@ public final class SuiteApiStitchClient {
             logger.info("SuiteApiStitchClient: transport=openPlatformConnection"
                     + (loopback ? " loopback" : " remote")
                     + " (BC-mirror; FIPS or non-FIPS mode logged by openPlatformConnection)"
-                    + " mechanism=" + mechanism
-                    + " principal=" + username);
+                    + " mechanism=" + mechanism);
 
             return new SuiteApiStitchClient(
                     adapter,
@@ -937,8 +937,7 @@ public final class SuiteApiStitchClient {
         if (token == null || token.isEmpty()) {
             throw new IOException(
                     "Suite API token/acquire: no 'token' field in response"
-                    + " mechanism=" + mechanism
-                    + " principal=" + resolvedUsername);
+                    + " mechanism=" + mechanism);
         }
         return token;
     }
@@ -1046,9 +1045,8 @@ public final class SuiteApiStitchClient {
             if (status == 401) {
                 throw new Suite401Exception(
                         "Suite API " + method + " " + fullUrl
-                        + " returned 401 — token expired or credential invalid"
-                        + " mechanism=" + mechanism
-                        + " principal=" + resolvedUsername);
+                        + " returned 401 (token expired or credential invalid)"
+                        + " mechanism=" + mechanism);
             }
             if (status < 200 || status >= 300) {
                 throw new IOException(
