@@ -1925,7 +1925,11 @@ def _write_outer_pak(
             zf.writestr("content/supermetrics/", "")
             # Build name→uuid lookup from the full bundled SM list so that every
             # @supermetric:"<name>" token in any formula can be resolved.
-            _sm_name_to_uuid: Dict[str, str] = {sm.name: sm.id for sm in supermetrics}
+            # Two bundled SMs sharing a display name (different ids) are a
+            # build error naming both files, not last-wins (#158 review W3).
+            _sm_name_to_uuid = _crossref.sm_name_to_uuid_map(
+                supermetrics, error_cls=SdkBuildError
+            )
             _sm_seen_names: set[str] = set()
             for sm in supermetrics:
                 resolved_formula = _resolve_sm_formula(

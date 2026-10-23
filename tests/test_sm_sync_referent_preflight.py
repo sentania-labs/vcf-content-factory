@@ -95,6 +95,15 @@ def test_referent_on_target_passes_then_imports(monkeypatch, capsys):
     assert walked == [True]
 
 
+def test_duplicate_names_in_batch_stop_before_import(monkeypatch, capsys):
+    client = _FakeClient()
+    defs = [_sm(UUID_A, NAME_A), _sm(UUID_B, NAME_A)]
+    rc, walked, out = _run(monkeypatch, defs, client, capsys)
+    assert rc == 1
+    assert client.events == []
+    assert "INVALID" in out.err and NAME_A in out.err
+
+
 def test_check_sm_referents_is_read_only():
     """Only find_by_name is called: no policy export, no enable."""
 

@@ -156,9 +156,20 @@ def _check_sm_referents_before_import(
     except ImportError as e:
         print(f"WARN  dep walker unavailable: {e}", file=sys.stderr)
         return 0
-    walk = check_sm_referents(
-        client, defs, sm_name_map={d.name: d.id for d in defs}
+    from vcfcf_core.supermetrics.crossref import (
+        SuperMetricCrossRefError,
+        sm_name_to_uuid_map,
     )
+
+    # Two SMs in the batch sharing a display name make every reference to
+    # that name ambiguous: stop before importing (#158 review W3).
+    try:
+        name_map = sm_name_to_uuid_map(defs)
+    except SuperMetricCrossRefError as e:
+        print(f"INVALID: {e}", file=sys.stderr)
+        print("sync aborted before import; nothing was imported", file=sys.stderr)
+        return 1
+    walk = check_sm_referents(client, defs, sm_name_map=name_map)
     for level, msg in walk.messages:
         if level == "ERROR":
             print(f"DEP-{level}  {msg}", file=sys.stderr)
