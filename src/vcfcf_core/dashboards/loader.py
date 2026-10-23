@@ -258,11 +258,52 @@ class ViewColumn:
 
 @dataclass
 class SummaryRow:
-    """A footer summary row on a list view (e.g. totals)."""
+    """One summary (totals) row on a list view: one ``summaryInfos`` Item.
+
+    YAML ``summary:`` takes any of three forms (issue #168):
+
+    - ``true``: one row, label ``Summary``, ``SUM`` over every column.
+    - one mapping: one row, unchanged from the original contract::
+
+          summary:
+            display_name: Total
+            aggregation: SUM
+            columns: [1, 2]
+
+    - a list of mappings: one row per entry, rendered in authored order,
+      each with its own label, aggregation and columns::
+
+          summary:
+            - display_name: Average
+              aggregation: AVG
+              columns: [1]
+            - display_name: Worst
+              aggregation: MAX
+              columns: [1, 2]
+
+    Per entry: ``display_name`` (default ``Summary``), ``aggregation``
+    (default ``SUM``; one of ``SUM``, ``AVG``, ``MIN``, ``MAX``,
+    ``COUNT``) and ``columns`` (0-based column indexes; omitted means every
+    column). ``SUM``/``AVG``/``MIN``/``MAX`` are seen in vendor exports;
+    ``COUNT`` is accepted as before but no export carries it.
+
+    On a ``presentation: list`` view each entry is an extra row under the
+    data; on ``presentation: summary`` each entry becomes a column. Wire
+    format: knowledge/context/wire-formats/
+    dashboard_sort_color_default_summary_rows.md §#168.
+    """
     display_name: str = "Summary"
     aggregation: str = "SUM"  # SUM, AVG, MIN, MAX, COUNT
     # Column indexes to aggregate. None = all columns.
     column_indexes: List[int] | None = None
+
+
+# Summary-row aggregations the loader accepts. SUM/AVG/MIN/MAX are in
+# vendor exports (reference corpus and devel, 2026-10-23); COUNT was
+# accepted before #168 and is kept, though no export has shown it.
+_VALID_SUMMARY_AGGREGATIONS: frozenset[str] = frozenset(
+    {"SUM", "AVG", "MIN", "MAX", "COUNT"}
+)
 
 
 # Valid data_type values and their allowed presentation types.
@@ -474,7 +515,9 @@ class ViewDef:
     # filter; vendor multi-subject views leave shared columns unbound.
     # Wire format: knowledge/context/wire-formats/view_column_wire_format.md.
     subjects: List[ViewSubject] = field(default_factory=list)
-    summary: SummaryRow | None = None
+    # Summary (totals) rows in render order; empty = none. YAML accepts
+    # true, one mapping, or a list of mappings (see SummaryRow).
+    summary: List[SummaryRow] = field(default_factory=list)
     # "list" (default), "distribution", or "trend"
     data_type: str = "list"
     # Presentation type; default depends on data_type
@@ -653,6 +696,29 @@ class ViewDef:
                 f"view {self.name}: presentation {self.presentation!r} is not "
                 f"valid for data_type {self.data_type!r}; allowed: {sorted(allowed)}"
             )
+        for i, row in enumerate(self.summary):
+            where = f"view {self.name}: summary row {i} ({row.display_name!r})"
+            if row.aggregation not in _VALID_SUMMARY_AGGREGATIONS:
+                raise DashboardValidationError(
+                    f"{where}: aggregation {row.aggregation!r} must be one of "
+                    f"{sorted(_VALID_SUMMARY_AGGREGATIONS)}"
+                )
+            if row.column_indexes is not None:
+                idx = row.column_indexes
+                if (
+                    not isinstance(idx, list)
+                    or not idx
+                    or not all(
+                        isinstance(n, int) and not isinstance(n, bool)
+                        and 0 <= n < len(self.columns)
+                        for n in idx
+                    )
+                ):
+                    raise DashboardValidationError(
+                        f"{where}: columns must be a non-empty list of 0-based "
+                        f"column indexes below {len(self.columns)} (or omitted for "
+                        f"every column); got {idx!r}"
+                    )
         # Distribution-view "no data" footgun (DEF-012): a
         # property-looking attribute rendered with a fixed numeric histogram
         # (buckets not dynamic) instead of a DISCRETE bucket set silently
@@ -2320,6 +2386,43 @@ def _provenance(path: Path, provenance_of: Optional[ProvenanceFn]) -> str:
     return provenance_of(path) if provenance_of is not None else ""
 
 
+def _summary_row_from_mapping(raw: dict) -> SummaryRow:
+    return SummaryRow(
+        display_name=str(raw.get("display_name", "Summary")).strip(),
+        aggregation=str(raw.get("aggregation", "SUM")).strip().upper(),
+        column_indexes=raw.get("columns"),
+    )
+
+
+def _load_summary_rows(path: Path, raw) -> List[SummaryRow]:
+    """Parse YAML ``summary:`` (``true``, one mapping, or a list of
+    mappings) into summary rows in authored order. See SummaryRow."""
+    if raw is None or raw is False:
+        return []
+    if raw is True:
+        return [SummaryRow()]
+    if isinstance(raw, dict):
+        return [_summary_row_from_mapping(raw)]
+    if isinstance(raw, list):
+        if not raw:
+            raise DashboardValidationError(
+                f"{path}: summary must not be an empty list; omit it for no summary row"
+            )
+        rows = []
+        for i, entry in enumerate(raw):
+            if not isinstance(entry, dict):
+                raise DashboardValidationError(
+                    f"{path}: summary[{i}] must be a mapping with display_name, "
+                    f"aggregation and columns; got {type(entry).__name__} {entry!r}"
+                )
+            rows.append(_summary_row_from_mapping(entry))
+        return rows
+    raise DashboardValidationError(
+        f"{path}: summary must be true, a mapping, or a list of mappings; "
+        f"got {type(raw).__name__} {raw!r}"
+    )
+
+
 def load_view(
     path: Path,
     enforce_framework_prefix: bool = True,
@@ -2634,17 +2737,7 @@ def load_view(
             # Flat list -> single AND group.
             subject_filter = [[_load_filter_condition(c) for c in sf_raw]]
 
-    summary_raw = data.get("summary")
-    summary = None
-    if summary_raw is True:
-        summary = SummaryRow()
-    elif isinstance(summary_raw, dict):
-        col_idx = summary_raw.get("columns")
-        summary = SummaryRow(
-            display_name=str(summary_raw.get("display_name", "Summary")).strip(),
-            aggregation=str(summary_raw.get("aggregation", "SUM")).strip().upper(),
-            column_indexes=col_idx,
-        )
+    summary = _load_summary_rows(path, data.get("summary"))
 
     # data_type and presentation, defaults depend on each other
     data_type = str(data.get("data_type", "list") or "list").strip().lower()

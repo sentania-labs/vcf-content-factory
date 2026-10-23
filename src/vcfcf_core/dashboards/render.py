@@ -864,20 +864,27 @@ def _xml_attribute_item(
 
 
 def _render_summary_infos(view: ViewDef) -> str:
-    """Render the summaryInfos XML block for a view's summary/totals row."""
+    """Render the summaryInfos XML block: one ``<Item>`` per summary row,
+    in authored order, inside a single ``summaryInfos`` List (issue #168;
+    vendor shape in knowledge/context/wire-formats/
+    dashboard_sort_color_default_summary_rows.md). A one-row view renders
+    byte-identical to the pre-#168 single-row output."""
     if not view.summary:
         return ""
-    indexes = view.summary.column_indexes
-    if indexes is None:
-        indexes = list(range(len(view.columns)))
-    idx_items = "".join(f'<Item value="{i}"/>' for i in indexes)
-    return (
-        '<Property name="summaryInfos"><List><Item><Value>'
-        f'{_xml_property("displayName", view.summary.display_name)}'
-        f'{_xml_property("aggregation", view.summary.aggregation)}'
-        f'<Property name="attributeIndexes"><List>{idx_items}</List></Property>'
-        '</Value></Item></List></Property>'
-    )
+    items = []
+    for row in view.summary:
+        indexes = row.column_indexes
+        if indexes is None:
+            indexes = list(range(len(view.columns)))
+        idx_items = "".join(f'<Item value="{i}"/>' for i in indexes)
+        items.append(
+            '<Item><Value>'
+            f'{_xml_property("displayName", row.display_name)}'
+            f'{_xml_property("aggregation", row.aggregation)}'
+            f'<Property name="attributeIndexes"><List>{idx_items}</List></Property>'
+            '</Value></Item>'
+        )
+    return '<Property name="summaryInfos"><List>' + "".join(items) + '</List></Property>'
 
 
 def _bool_str(v: bool) -> str:
