@@ -69,3 +69,14 @@ that is the intended gate.
   jar on JDK 25+, and `--require-sdk-compat` (or
   `VCFCF_SDK_COMPAT_REQUIRED=1`) to fail instead of warn when that check
   cannot run; the pak itself is still compiled against the 2.2 jar.
+- The default is a skip: with no 9.1.1.0100 jar, or no JDK 25+ (looked for
+  on PATH, `JAVA_HOME`, `JAVA_HOME_<N>_X64`, or set
+  `VCFCF_SDK_COMPAT_JAVAC=/path/to/javac`), a plain `build-sdk` prints a
+  warning box and checks nothing against 9.1.1. A `--release` build under
+  GitHub Actions also emits a `::warning::` annotation.
+- The primary compile takes exactly one SDK jar: a second
+  `vrops-adapters-sdk*.jar` beside it in `adapter_runtime/` now stops the
+  build.
+
+Version note: PR #246 and PR #248 also claim 1.0.13; whichever merges later
+takes the next number and moves its heading here.

@@ -179,8 +179,9 @@ jobs:
     # SDK_RUNTIME_SSH_KEY deploy key, the same way the pak repos'
     # build-pak-on-tag.yml does, and checks the jar's sha256 against
     # src/vcfcf_managementpacks/adapter_runtime/PROVENANCE.md before use.
-    # Without the secret (fork PRs never receive it; this repo until the key
-    # is added) the job skips with a visible notice and passes. With the
+    # Without the secret (fork PRs never receive it; this repo until issue
+    # #250 uploads the 9.1.1.0100 jar to that repo and adds the key) the job
+    # skips with a visible notice and passes, checking nothing. With the
     # secret, a jar missing from that repo or a hash mismatch fails.
     #
     # One leg per extra target. No 9.0.2 leg yet: nothing in factory CI
@@ -268,14 +269,19 @@ jobs:
             echo "::error::${JAR_NAME} is not in sentania-labs/vcf-content-factory-sdk-runtime. Add it there (provenance: src/vcfcf_managementpacks/adapter_runtime/PROVENANCE.md)."
             exit 1
           fi
-          # The provenance table row naming this jar carries its full sha256.
-          EXPECTED="$(grep -F "\`${JAR_NAME}\`" src/vcfcf_managementpacks/adapter_runtime/PROVENANCE.md \
-            | grep -oE '[0-9a-f]{64}' | head -n 1 || true)"
-          if [ -z "$EXPECTED" ]; then
-            echo "::error::No sha256 for ${JAR_NAME} in src/vcfcf_managementpacks/adapter_runtime/PROVENANCE.md."
+          # The provenance TABLE ROW naming this jar (a line starting with "|"
+          # that carries the name in backticks) holds its full sha256. Exactly
+          # one distinct hash must match, so a later prose line or a second
+          # row cannot change which hash gates the jar.
+          PROV=src/vcfcf_managementpacks/adapter_runtime/PROVENANCE.md
+          HASHES="$(grep -E '^\|' "$PROV" | grep -F "\`${JAR_NAME}\`" \
+            | grep -oE '\b[0-9a-f]{64}\b' | sort -u || true)"
+          COUNT="$(printf '%s' "$HASHES" | grep -c . || true)"
+          if [ "$COUNT" -ne 1 ]; then
+            echo "::error::Expected exactly one sha256 for ${JAR_NAME} in the ${PROV} table, found ${COUNT}."
             exit 1
           fi
-          echo "${EXPECTED}  ${JAR}" | sha256sum -c -
+          echo "${HASHES}  ${JAR}" | sha256sum -c -
 
       - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
         if: steps.key.outputs.present == 'true'
@@ -288,9 +294,13 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install PyYAML (the vcfcf_managementpacks import needs it)
+      - name: Install the compat pass's Python dependencies (hash-pinned)
+        # PyYAML and requests are on vcfcf_managementpacks.sdk_builder's
+        # import chain; the file pins them and requests' dependencies.
         if: steps.key.outputs.present == 'true'
-        run: python3 -m pip install pyyaml
+        run: |
+          python3 -m pip install --disable-pip-version-check \
+            --require-hashes --only-binary :all: -r .github/ci/sdk-compat-requirements.txt
 
       - name: Compile the framework against the ${{ matrix.sdk }} SDK jar
         if: steps.key.outputs.present == 'true'
