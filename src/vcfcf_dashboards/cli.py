@@ -536,9 +536,20 @@ def cmd_sync(args) -> int:
             )
 
     # --- Phase-2 materialization: a FINISHED import only covers phase 1 (#167) ---
+    # Skipped when this import changed no dashboard (all skipped): what is on
+    # the instance is not what this run imported, so a pre-existing stuck
+    # dashboard must not fail this sync. The bundle-sync handler does the same.
     mat_rc = 0
-    if not getattr(args, "skip_materialization_check", False):
-        mat_rc = _report_materialization(client, dashboards)
+    if getattr(args, "skip_materialization_check", False):
+        pass
+    elif "DASHBOARDS" in flagged:
+        if dashboards:
+            print("MATERIALIZATION SKIPPED: the import changed no dashboards")
+    else:
+        mat_rc = _report_materialization(
+            client, dashboards,
+            recheck_wait_s=getattr(args, "materialization_wait", None),
+        )
 
     # --- Dependency walker: check SM enablement + OOTB metric collection state ---
     dep_rc = _run_dep_walker(
@@ -552,14 +563,23 @@ def cmd_sync(args) -> int:
     return dep_rc or mat_rc
 
 
-def _report_materialization(client, dashboards: list) -> int:
-    """Report, by exception, imported dashboards that have not finished building.
+def _report_materialization(client, dashboards: list, recheck_wait_s=None) -> int:
+    """Report whether the imported dashboards finished building (#167).
 
-    Complete: silent. Still settling (every adapter kind it waits on is
-    installed): a NOTE, not a failure. Waiting on an adapter kind the target
-    lacks: a WARNING naming the kinds, and rc 1, because it will never
-    complete on its own. In the import but not on the instance afterwards: a
-    WARNING. A failed check is a WARNING, never a failure.
+    Every line starts ``MATERIALIZATION <STATE>:`` so a run is easy to grep:
+
+    - ``MATERIALIZATION OK:`` (stdout) count of dashboards that finished.
+    - ``MATERIALIZATION WAIT:`` (stdout) some are still building; one
+      re-check follows after the stated wait.
+    - ``MATERIALIZATION INCOMPLETE:`` (stderr, WARNING) still building after
+      the re-check with every pending adapter installed; names the pending
+      adapter kinds and resources. Not a failure: it may still finish.
+    - ``MATERIALIZATION STALLED:`` (stderr, WARNING, rc 1) waiting on an
+      adapter kind the target lacks; never completes on its own.
+    - ``MATERIALIZATION ABSENT:`` (stderr, WARNING) in the import, not on
+      the instance afterwards.
+    - ``MATERIALIZATION UNCHECKED:`` (stderr, WARNING) the check itself
+      failed. Never a failure.
     """
     from vcfcf_core.dashboards.materialization import (
         ABSENT,
@@ -570,27 +590,36 @@ def _report_materialization(client, dashboards: list) -> int:
 
     if not dashboards:
         return 0
+
+    def _on_wait(count: int, seconds: int) -> None:
+        print(
+            f"MATERIALIZATION WAIT: {count} dashboard(s) still building; "
+            f"re-checking once in {seconds} s",
+            flush=True,
+        )
+
     try:
-        statuses = check_dashboard_materialization(client, dashboards)
+        statuses = check_dashboard_materialization(
+            client, dashboards, recheck_wait_s=recheck_wait_s, on_wait=_on_wait,
+        )
     except Exception as e:  # noqa: BLE001  advisory check; a transport error is a WARNING
         print(
-            f"WARNING: could not check whether the imported dashboards finished "
-            f"building: {e}",
+            f"WARNING: MATERIALIZATION UNCHECKED: could not check whether the "
+            f"imported dashboards finished building: {e}",
             file=sys.stderr,
         )
         return 0
     rc = 0
+    done = sum(1 for st in statuses if st.state == COMPLETE)
+    if done:
+        print(f"MATERIALIZATION OK: {done} of {len(statuses)} dashboard(s) finished building")
     for st in statuses:
         if st.state == COMPLETE:
             continue
-        msg = describe_status(st)
+        label = st.state.upper()
+        print(f"WARNING: MATERIALIZATION {label}: {describe_status(st)}", file=sys.stderr)
         if st.state == STALLED:
-            print(f"WARNING: {msg}", file=sys.stderr)
             rc = 1
-        elif st.state == ABSENT:
-            print(f"WARNING: {msg}", file=sys.stderr)
-        else:
-            print(f"NOTE: {msg}")
     return rc
 
 
@@ -964,6 +993,17 @@ def build_parser() -> argparse.ArgumentParser:
             "Skip the post-import check that each dashboard finished building "
             "(one DASHBOARDS export plus an adapter-kind read). Default: check, "
             "and fail when a dashboard waits on an adapter that is not installed."
+        ),
+    )
+    ps.add_argument(
+        "--materialization-wait",
+        type=int,
+        default=None,
+        metavar="SECONDS",
+        help=(
+            "Seconds to wait before the one re-check of dashboards still "
+            "building after the import (default 180, or "
+            "VCFCF_MATERIALIZATION_WAIT_S; capped at 900; 0 reports them at once)."
         ),
     )
     ps.add_argument(

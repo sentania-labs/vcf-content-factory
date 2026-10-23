@@ -25,9 +25,18 @@ from typing import Iterable, List, Mapping, Optional
 
 #: Phase 2 done: nothing to say.
 COMPLETE = "complete"
-#: Phase 2 pending and every adapter kind it waits on is installed: normal
-#: right after an import, completes on its own (minutes, or on first open).
+#: Intermediate, first read only: phase 2 pending and every adapter kind it
+#: waits on is installed. Often still running right after an import, but
+#: NOT reliably transient: the 8.18.7 corpus export
+#: (``scott-8.18.7-2026-09-14.zip``) has a dashboard incomplete for 19 days
+#: with all four of its adapter kinds installed. Callers re-check and turn
+#: whatever is still settling into :data:`INCOMPLETE` via
+#: :func:`finalize_statuses`; it is never reported as fine.
 SETTLING = "settling"
+#: Final: still incomplete after the re-check (or with no re-check), every
+#: pending adapter kind installed or unknown. Reported, naming the pending
+#: adapter kinds and the ``entryKeys.resource`` names.
+INCOMPLETE = "incomplete"
 #: Phase 2 pending on at least one adapter kind the target does not have:
 #: it will never complete until that adapter is installed.
 STALLED = "stalled"
@@ -42,6 +51,31 @@ class MaterializationStatus:
     state: str
     pending_adapter_kinds: List[str] = field(default_factory=list)
     missing_adapter_kinds: List[str] = field(default_factory=list)
+    #: ``entryKeys.resource[].name``: specific resources phase 2 must find.
+    pending_resources: List[str] = field(default_factory=list)
+    #: Seconds between the first read and the read this status came from.
+    checked_after_s: int = 0
+    #: False when the target's adapter kinds could not be read, so "every
+    #: pending adapter kind is installed" is unknown rather than true.
+    adapter_kinds_known: bool = True
+
+
+def pending_resource_names(dashboard: Mapping) -> List[str]:
+    """Names in a dashboard's ``entryKeys.resource`` list (order kept, unique).
+
+    These are specific resources (e.g. "License Usage", "NSX World") the
+    dashboard binds to; phase 2 must resolve each on the target.
+    """
+    entry_keys = dashboard.get("entryKeys")
+    if not isinstance(entry_keys, Mapping):
+        return []
+    names: List[str] = []
+    for item in entry_keys.get("resource") or []:
+        if isinstance(item, Mapping):
+            n = str(item.get("name") or "").strip()
+            if n and n not in names:
+                names.append(n)
+    return names
 
 
 def pending_adapter_kinds(dashboard: Mapping) -> List[str]:
@@ -113,12 +147,40 @@ def classify_dashboards(
             state=STALLED if missing else SETTLING,
             pending_adapter_kinds=pending,
             missing_adapter_kinds=missing,
+            pending_resources=pending_resource_names(d),
+            adapter_kinds_known=installed is not None,
         ))
     return out
 
 
+def finalize_statuses(
+    statuses: Iterable[MaterializationStatus], checked_after_s: int
+) -> List[MaterializationStatus]:
+    """Turn every remaining SETTLING into INCOMPLETE, stamping the wait.
+
+    Call this on the last read (after the re-check, or on the only read when
+    no re-check runs). A dashboard is never reported as fine merely because
+    every adapter it waits on is installed.
+    """
+    out: List[MaterializationStatus] = []
+    for st in statuses:
+        st.checked_after_s = int(checked_after_s)
+        if st.state == SETTLING:
+            st.state = INCOMPLETE
+        out.append(st)
+    return out
+
+
+def _quoted(names: Iterable[str]) -> str:
+    return ", ".join(f"'{n}'" for n in names)
+
+
 def describe_status(status: MaterializationStatus) -> str:
     """One operator-facing sentence for a non-complete status ("" if complete)."""
+    resources = (
+        f" It also binds the resources {_quoted(status.pending_resources)}."
+        if status.pending_resources else ""
+    )
     if status.state == STALLED:
         kinds = ", ".join(status.missing_adapter_kinds)
         verb = "is" if len(status.missing_adapter_kinds) == 1 else "are"
@@ -127,13 +189,29 @@ def describe_status(status: MaterializationStatus) -> str:
             f"building: it is waiting on {kinds}, which {verb} not installed "
             f"on this instance. Its widgets that use those resource kinds "
             f"stay empty until the adapter is installed; re-importing does "
-            f"not help."
+            f"not help.{resources}"
         )
-    if status.state == SETTLING:
+    if status.state in (INCOMPLETE, SETTLING):
+        kinds = ", ".join(status.pending_adapter_kinds) or "(none named)"
+        res = (
+            f" and the resources {_quoted(status.pending_resources)}"
+            if status.pending_resources else ""
+        )
+        installed = (
+            "Every adapter kind is installed, so it may still finish"
+            if status.adapter_kinds_known else
+            "The installed adapter kinds could not be read, so a missing "
+            "adapter is not ruled out; it may still finish"
+        )
         return (
-            f"dashboard '{status.name}' is still finishing its import (normal "
-            f"for some minutes after an import; opening it once in the UI "
-            f"speeds it up)."
+            f"dashboard '{status.name}' had not finished building "
+            f"{status.checked_after_s} s after the import. It waits on the "
+            f"adapter kinds {kinds}{res}. {installed} (the background pass "
+            f"can take about 20 minutes; opening it once in the UI is "
+            f"faster), but it does not always: a factory dashboard stayed "
+            f"incomplete for 19 days with every adapter installed. If it is "
+            f"still incomplete later, check that the named resources exist "
+            f"on this instance."
         )
     if status.state == ABSENT:
         return (

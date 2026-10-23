@@ -237,7 +237,7 @@ were never installed on devel.
 
 | Case | Route |
 |---|---|
-| Deferred, references resolvable | **Do nothing.** It completes on its own. Opening it once in the UI is the fastest observed trigger (~3 min per `ui_deep_links.md`) versus up to hours for the background pass. |
+| Deferred, references resolvable | **Do nothing.** It completes on its own in every devel case observed, though not always (see "Implemented (issue #167)" below for an 8.18.7 dashboard incomplete 19 days with every adapter installed). Opening it once in the UI is the fastest observed trigger (~3 min per `ui_deep_links.md`) versus up to hours for the background pass. |
 | Stalled, adapter kind absent | **Install the missing adapter or management pack.** Nothing else fixes it. Delete-and-reimport re-enters the identical stall, which is why the DEF-014 "remediation" appeared to reproduce the symptom. |
 
 There is **no callable API that forces phase 2**. DEF-014 Round 2 tried
@@ -296,19 +296,42 @@ dashboard is incomplete, one `GET /api/adapterkinds` (response
 `{"adapter-kind": [{"key": ...}]}`). Classifier:
 `src/vcfcf_core/dashboards/materialization.py`. `entryKeys.resourceKind[]`
 and `entryKeys.resource[]` each carry `adapterKindKey` (confirmed against the
-devel 2026-09-14 export in the migrator corpus). Outcomes:
+devel 2026-09-14 export in the migrator corpus).
+
+**Incomplete with every adapter installed does not always finish.** The
+8.18.7 corpus export (`content/migrator/corpus/scott-8.18.7-2026-09-14.zip`)
+has `[VCF Content Factory] VCF License Consumption Overview` still
+`importComplete: false` 19 days after its last write (2026-08-26 4:10 PM),
+pending `CASAdapter`, `NSXTAdapter`, `VMWARE`, `VMWARE_INFRA_HEALTH`, all four
+installed on that instance per `2026-08-26-vcf-license-consumption-recon-818.md`.
+Its `entryKeys.resource` names `License Usage`, `NSX World` and
+`Automation World`. A missing named resource is a plausible cause, not
+proven (it would need a live read). So the Q5 row "It completes on its own"
+holds for the observed devel cases, not in general.
+
+So the check re-reads once. If the first export finds a dashboard
+incomplete with every pending adapter kind installed, it waits and exports
+once more. The wait is 180 s by default (the ~3 min open-triggered cadence
+in `ui_deep_links.md`; the ~20 min background pass is too long to hold a
+sync), set by `--materialization-wait SECONDS` or
+`VCFCF_MATERIALIZATION_WAIT_S`, capped at 900 s; 0 skips the re-check. The
+check does not run when the import changed no dashboard (all skipped), in
+either path.
+
+Every CLI line starts `MATERIALIZATION <STATE>:`.
 
 | State | Rule | CLI | Bundle sync item |
 |---|---|---|---|
-| complete | `entryKeys` null and `importComplete` not false | silent | ok |
-| settling | incomplete, every pending adapter kind installed (or kinds unreadable) | NOTE | ok |
-| stalled | incomplete, a pending adapter kind not installed | WARNING naming the kinds, rc 1 | failed |
-| absent | in the import, not in the export | WARNING | warn |
+| complete | `entryKeys` null and `importComplete` not false | `MATERIALIZATION OK:` count | ok |
+| (wait) | some incomplete with every pending kind installed after the first read | `MATERIALIZATION WAIT:` | `WAIT` line |
+| incomplete | still incomplete after the re-check, every pending kind installed (or kinds unreadable) | WARNING `MATERIALIZATION INCOMPLETE:` naming pending kinds and resources | warn |
+| stalled | incomplete, a pending adapter kind not installed | WARNING `MATERIALIZATION STALLED:`, rc 1 | failed |
+| absent | in the import, not in the export | WARNING `MATERIALIZATION ABSENT:` | warn |
+| unchecked | the check itself failed | WARNING `MATERIALIZATION UNCHECKED:` | warn |
 
-No polling: a missing adapter kind is decidable at once, and the settling
-case completes on its own. `--skip-materialization-check` turns it off. The
-shipped `install.py` and the pak installer do not run this check.
-Not yet exercised against a live instance (fixtures only).
+`--skip-materialization-check` turns it off. The shipped `install.py` and
+the pak installer do not run this check (follow-up issue). Not yet
+exercised against a live instance (fixtures only).
 
 ## Method log (reproducible, read-only)
 

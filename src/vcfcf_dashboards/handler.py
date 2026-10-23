@@ -75,8 +75,17 @@ def _materialization_by_id(session, dashboards) -> dict:
     ``{"__error__": message}`` when the check itself failed, so every
     dashboard says it is unverified instead of a bare ok.
     """
+    def _on_wait(count: int, seconds: int) -> None:
+        print(
+            f"  WAIT  MATERIALIZATION WAIT: {count} dashboard(s) still building; "
+            f"re-checking once in {seconds} s",
+            flush=True,
+        )
+
     try:
-        statuses = check_dashboard_materialization(session, dashboards)
+        statuses = check_dashboard_materialization(
+            session, dashboards, on_wait=_on_wait
+        )
     except Exception as exc:  # noqa: BLE001  advisory check; never fail the import over it
         return {"__error__": str(exc)}
     return {st.id: st for st in statuses}
@@ -86,22 +95,22 @@ def _materialization_item(d, status) -> ItemResult:
     """ItemResult for one dashboard from its phase-2 status.
 
     Waiting on an adapter kind the target lacks is a failure (it never
-    completes on its own); absent from the instance is a warn; settling and
-    complete are ok.
+    completes on its own). Still building after the re-check, or absent
+    from the instance, is a warn with the reason, so bundle sync counts it
+    in its "need attention" trailer. Only complete is a bare ok.
     """
     from vcfcf_core.dashboards.materialization import (
-        ABSENT,
+        COMPLETE,
         STALLED,
         describe_status,
     )
 
-    if status is None:
+    if status is None or status.state == COMPLETE:
         return ItemResult(name=d.name, status="ok")
+    message = f"MATERIALIZATION {status.state.upper()}: {describe_status(status)}"
     if status.state == STALLED:
-        return ItemResult(name=d.name, status="failed", message=describe_status(status))
-    if status.state == ABSENT:
-        return ItemResult(name=d.name, status="warn", message=describe_status(status))
-    return ItemResult(name=d.name, status="ok")
+        return ItemResult(name=d.name, status="failed", message=message)
+    return ItemResult(name=d.name, status="warn", message=message)
 
 
 class ViewsHandler(ContentHandler):
@@ -341,7 +350,7 @@ class DashboardsHandler(ContentHandler):
                 result.items.append(ItemResult(
                     name=d.name, status="warn",
                     message=(
-                        "imported, but could not check whether it finished "
+                        "MATERIALIZATION UNCHECKED: imported, but could not check whether it finished "
                         f"building: {materialization['__error__']}"
                     ),
                 ))

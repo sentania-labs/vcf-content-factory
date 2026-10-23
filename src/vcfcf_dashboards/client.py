@@ -174,39 +174,113 @@ def list_adapter_kind_keys(client: VCFOpsClient) -> set:
     }
 
 
-def check_dashboard_materialization(client: VCFOpsClient, dashboards: list) -> list:
+#: Seconds to wait before the one re-check of dashboards still building
+#: after the first read (issue #167). Phase 2 is observed at ~3 minutes after
+#: a dashboard is first opened and up to ~20 minutes for the background pass
+#: (knowledge/context/api-surface/ui_deep_links.md), so 180 s matches the
+#: faster cadence without holding a sync for the slow one. Only paid when the
+#: first read finds a dashboard still building.
+MATERIALIZATION_RECHECK_DEFAULT_S = 180
+#: Upper bound on the re-check wait, whatever is asked for, so a sync cannot
+#: hang on it.
+MATERIALIZATION_RECHECK_MAX_S = 900
+#: Environment override for the wait (seconds), for the bundle-sync path,
+#: which has no CLI flag of its own. A CLI flag wins over it.
+MATERIALIZATION_RECHECK_ENV = "VCFCF_MATERIALIZATION_WAIT_S"
+
+
+def materialization_recheck_wait(requested=None) -> int:
+    """Re-check wait in seconds: ``requested``, else the env override, else
+    the default; clamped to 0..MATERIALIZATION_RECHECK_MAX_S. 0 disables the
+    re-check (anything still building is then reported at once)."""
+    import os
+
+    value = requested
+    if value is None:
+        raw = os.environ.get(MATERIALIZATION_RECHECK_ENV, "").strip()
+        if raw:
+            try:
+                value = int(raw)
+            except ValueError:
+                value = None
+    if value is None:
+        value = MATERIALIZATION_RECHECK_DEFAULT_S
+    return max(0, min(int(value), MATERIALIZATION_RECHECK_MAX_S))
+
+
+def check_dashboard_materialization(
+    client: VCFOpsClient,
+    dashboards: list,
+    recheck_wait_s=None,
+    on_wait=None,
+    _sleep=time.sleep,
+) -> list:
     """Phase-2 state of each just-imported dashboard (issue #167).
 
     One DASHBOARDS export (read-only: it creates no content) gives each
     dashboard's ``importComplete`` / ``entryKeys``; when any is incomplete,
     one GET /api/adapterkinds names which pending adapter kinds the target
-    lacks. ``dashboards`` is anything with ``.id`` and ``.name``. Returns
+    lacks (STALLED). If any is incomplete with every pending adapter kind
+    installed, it waits ``recheck_wait_s`` (see
+    :func:`materialization_recheck_wait`), calling ``on_wait(count,
+    seconds)`` first, and exports once more. Whatever is still building
+    after that is INCOMPLETE: never reported as fine, because a dashboard
+    can stay half-built for weeks with every adapter installed.
+
+    ``dashboards`` is anything with ``.id`` and ``.name``. Returns
     :class:`vcfcf_core.dashboards.materialization.MaterializationStatus`
-    per dashboard. Raises VCFOpsError when the export fails; an adapter-kind
-    read failure degrades to "settling" rather than guessing "stalled".
-    See knowledge/context/api-surface/dashboard_import_two_phase_materialization.md.
+    per dashboard, never in the SETTLING state. Raises VCFOpsError when the
+    first export fails; a failed re-check export or adapter-kind read
+    degrades (the first read stands, or "not ruled out") rather than
+    guessing. See
+    knowledge/context/api-surface/dashboard_import_two_phase_materialization.md.
     """
-    from vcfcf_core.dashboards.materialization import classify_dashboards, is_incomplete
+    from vcfcf_core.dashboards.materialization import (
+        SETTLING,
+        classify_dashboards,
+        finalize_statuses,
+        is_incomplete,
+    )
     from vcfcf_core.extractor import dashboards_from_export_zip
 
     wanted = {d.id: d.name for d in dashboards if getattr(d, "id", None)}
     if not wanted:
         return []
-    blob = export_content_zip(
-        client, ["DASHBOARDS"], timeout_s=180, label="dashboard materialization export"
-    )
-    try:
-        exported = dashboards_from_export_zip(blob)
-    except ValueError as e:
-        raise VCFOpsError(str(e)) from e
     ids = {str(i).lower() for i in wanted}
-    installed = None
-    if any(is_incomplete(d) for d in exported if str(d.get("id") or "").lower() in ids):
+    installed_cache: dict = {}
+
+    def _read() -> list:
+        blob = export_content_zip(
+            client, ["DASHBOARDS"], timeout_s=180,
+            label="dashboard materialization export",
+        )
         try:
-            installed = list_adapter_kind_keys(client)
-        except VCFOpsError:
-            installed = None
-    return classify_dashboards(exported, wanted, installed)
+            exported = dashboards_from_export_zip(blob)
+        except ValueError as e:
+            raise VCFOpsError(str(e)) from e
+        if "kinds" not in installed_cache and any(
+            is_incomplete(d) for d in exported if str(d.get("id") or "").lower() in ids
+        ):
+            try:
+                installed_cache["kinds"] = list_adapter_kind_keys(client)
+            except VCFOpsError:
+                installed_cache["kinds"] = None
+        return classify_dashboards(exported, wanted, installed_cache.get("kinds"))
+
+    statuses = _read()
+    wait = materialization_recheck_wait(recheck_wait_s)
+    settling = [s for s in statuses if s.state == SETTLING]
+    if not settling or wait <= 0:
+        return finalize_statuses(statuses, 0)
+    if on_wait is not None:
+        on_wait(len(settling), wait)
+    _sleep(wait)
+    try:
+        statuses = _read()
+    except VCFOpsError:
+        # The re-check is best effort: report from the first read.
+        return finalize_statuses(statuses, 0)
+    return finalize_statuses(statuses, wait)
 
 
 def import_content_zip(client: VCFOpsClient, zip_bytes: bytes, timeout_s: int = 180) -> dict:
