@@ -75,9 +75,12 @@ observations across the 15 captured gauge widgets:
   `colorMethod: 0` the entry must carry **all three** numeric bounds. A
   partial set (only `redBound`, or yellow and orange without red) makes
   the server answer `value: "?"` / `state: Unknown` although the value
-  exists. Thresholds are ascending and inclusive: `>= yellowBound`
+  exists. Ascending thresholds are inclusive: `>= yellowBound`
   Warning, `>= orangeBound` Immediate, `>= redBound` Critical; "red at
   >= 1" is `(1, 1, 1)`, which is what the vendor's flag metrics use.
+  Descending thresholds (`yellow >= orange >= red`) mean lower is worse
+  (issue #176, `dashboard_sort_color_default_summary_rows.md`); the
+  loader rejects a mixed-order triple.
   The loader rejects a partial set on `color_method: 0`; none at all is
   an uncolored tile. `colorMethod: 3` (15 entries) is the same three
   bounds read as a percent of `maxValue`; that is a reading note for
