@@ -16,7 +16,7 @@ from __future__ import annotations
 import csv
 import re
 import sys
-from typing import Dict, Iterable, List, Optional
+from typing import Callable, Dict, Iterable, List, Optional
 
 CANONICAL_HEADER: List[str] = [
     "control_id",
@@ -705,15 +705,15 @@ _VIM_RECLASS_BY_CONTROL_ID: Dict[str, tuple] = {
         "config.flags.enableLogging",
         "true",
     ),
-    # PARTIAL: scalar config.version returns "vmx-NN". The evaluator does
-    # exact string equality, so this scores compliant ONLY when the VM is
-    # at exactly the SCG baseline version string ("vmx-19"), not "19 or
-    # newer". Recorded as exact-match coverage in UNAUDITED_CONTROLS.md.
+    # scalar config.version returns "vmx-NN". The baseline is scored as a
+    # floor: _EXPECTED_REWRITE_BY_CONTROL_ID turns a bare "vmx-N" into
+    # "vmx-N or newer", the form the adapter compares as a minimum
+    # (ControlEvaluator.VMX_MINIMUM, adapter build 57; #170).
     "vm.virtual-hardware": (
         "config.version",
         "scalar",
         "config.version",
-        None,     # compares to SCG baseline ("vmx-19" / "vmx-21") verbatim
+        None,     # SCG baseline, rewritten to the minimum form below
     ),
 }
 
@@ -729,14 +729,49 @@ _VIM_RECLASS_DESCRIPTION_CAVEAT: Dict[str, str] = {
         "pass means the security-policy override is correctly disabled, "
         "not that the whole control is satisfied. See UNAUDITED_CONTROLS.md.]"
     ),
+    # Text identical to the compliance repo's VMX_MINIMUM_CAVEAT
+    # (scripts/normalize_scg_v91.py), so every SCG version carries the
+    # same caveat for this control (#170).
     "vm.virtual-hardware": (
-        " [PARTIAL COVERAGE: this adapter reads config.version (e.g. "
-        "\"vmx-21\") and compares it for exact equality to the SCG "
-        "baseline string. It does NOT evaluate \"version N or newer\"; a "
-        "VM at a higher-than-baseline hardware version will read as "
-        "non-compliant. See UNAUDITED_CONTROLS.md.]"
+        " [COVERAGE: this adapter reads config.version (e.g. \"vmx-21\") and "
+        "scores the VM compliant when its hardware version is at or above the "
+        "baseline minimum (the \"or newer\" / \"or higher\" floor), "
+        "non-compliant below it. See UNAUDITED_CONTROLS.md.]"
     ),
 }
+
+
+# Expected-value rewrites keyed by control_id. Applied by
+# normalize_scg_source AFTER every classifier override, to the final
+# expected_value, so one rule covers every SCG version whatever spelling
+# that version's baseline uses.
+_VMX_BARE_RE = re.compile(r"^\s*vmx-(\d+)\s*$", re.IGNORECASE)
+
+
+def vmx_minimum(expected: str) -> str:
+    """``vmx-N`` -> ``vmx-N or newer``; anything else unchanged.
+
+    ``vmx-N or newer`` / ``vmx-N or higher`` is the form the adapter scores
+    as a minimum hardware version (CANONICAL_SCHEMA.md, build 57). SCG 7.0
+    and 9.1 already phrase the baseline that way; SCG 8.0 and 9.0 write a
+    bare ``vmx-N`` while their titles say "version N or newer", so a VM on
+    newer hardware than the baseline failed an exact match (#170).
+    """
+    m = _VMX_BARE_RE.match(expected or "")
+    if not m:
+        return expected
+    return f"vmx-{m.group(1)} or newer"
+
+
+_EXPECTED_REWRITE_BY_CONTROL_ID: Dict[str, Callable[[str], str]] = {
+    "vm.virtual-hardware": vmx_minimum,
+}
+
+
+def rewrite_expected(control_id: str, expected: str) -> str:
+    """Apply the control_id-keyed expected-value rewrite, if any."""
+    fn = _EXPECTED_REWRITE_BY_CONTROL_ID.get(control_id)
+    return fn(expected) if fn is not None else expected
 
 
 # esxcli sprint (build 36) — esxcli recipe reclassifications keyed by
@@ -1800,6 +1835,7 @@ def normalize_scg_source(input_path: str, output_path: str, *,
                 expected = vsan_expected_override
             if reclass_expected is not None:
                 expected = reclass_expected
+            expected = rewrite_expected(control_id, expected)
             value_type = infer_value_type(expected)
 
             priority_raw = src.get(col["priority"]) or ""

@@ -225,3 +225,54 @@ def test_driver_patch_targets_still_exist():
     for key in ("vds.network-restrict-discovery-protocol", "vm.virtual-hardware"):
         assert key in base._VIM_RECLASS_BY_CONTROL_ID
     assert "vm.virtual-hardware" in base._VIM_RECLASS_DESCRIPTION_CAVEAT
+
+
+# --- vm.virtual-hardware scored as a minimum (#170) --------------------------
+
+# The adapter's ControlEvaluator.VMX_MINIMUM, verbatim from the compliance
+# repo (Java regex, same syntax in Python's re).
+_VMX_MINIMUM = r"(?i)^vmx-(\d+)\s+or\s+(?:higher|newer)$"
+
+
+@pytest.mark.parametrize("raw,want", [
+    ("vmx-21", "vmx-21 or newer"),      # SCG 8.0 baseline
+    ("vmx-19", "vmx-19 or newer"),      # SCG 9.0 baseline
+    (" VMX-19 ", "vmx-19 or newer"),
+    ("vmx-13 or newer", "vmx-13 or newer"),     # SCG 7.0, unchanged
+    ("vmx-17 or higher", "vmx-17 or higher"),   # SCG 9.1, unchanged
+    ("Site-Specific", "Site-Specific"),
+    ("", ""),
+])
+def test_vmx_minimum(raw, want):
+    assert base.vmx_minimum(raw) == want
+
+
+def test_rewrite_expected_only_touches_its_control():
+    assert base.rewrite_expected("vm.virtual-hardware", "vmx-21") == "vmx-21 or newer"
+    assert base.rewrite_expected("vm.other", "vmx-21") == "vmx-21"
+
+
+@pytest.mark.parametrize("layout,version,mod,sid,baseline", [
+    ("v8", "8", v8, "guest-8.virtual-hardware", "vmx-21"),
+    ("v9", "9", v9, "vm-9.virtual-hardware", "vmx-19"),
+])
+def test_virtual_hardware_row_emits_minimum_form(tmp_path, layout, version,
+                                                 mod, sid, baseline):
+    import re
+    src, out = tmp_path / "s.csv", tmp_path / "o.csv"
+    _write_source(src, layout, version)
+    with open(src, encoding="utf-8", newline="") as f:
+        rows = list(csv.reader(f))
+    comp = _V8_COMPONENT["ESX"] if layout == "v8" else _V9_COMPONENT["ESX"]
+    rows.append([sid, comp, "P0", "Hardware", "Discussion.", "N/A", baseline,
+                 "VM Compatibility", "(Get-VM | Get-View).Config.Version", "Set-VM"])
+    with open(src, "w", encoding="utf-8", newline="") as f:
+        csv.writer(f).writerows(rows)
+    assert mod.normalize(str(src), str(out)) == 0
+    r = _rows(out)[sid]
+    assert r["control_id"] == "vm.virtual-hardware"
+    assert r["read_recipe"] == "scalar:config.version"
+    assert r["expected_value"] == f"{baseline} or newer"
+    assert re.match(_VMX_MINIMUM, r["expected_value"])
+    assert "at or above the baseline minimum" in r["description"]
+    assert "exact equality" not in r["description"]
