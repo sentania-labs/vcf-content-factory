@@ -77,6 +77,11 @@ Track-specific examples:
 
 ## Alert YAML schema
 
+For an SDK-adapter pak the prefix follows the pak's `adapter.yaml`
+`content_naming` field: `factory_prefixed` (the default) requires the
+`[VCF Content Factory] ` prefix on every bundled name, `unprefixed` forbids
+it; `validate-sdk` enforces whichever is declared (issue #229). The same rule covers recommendations.
+
 ```yaml
 name: "[VCF Content Factory] <Human Name>"
 description: >

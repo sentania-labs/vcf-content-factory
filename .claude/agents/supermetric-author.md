@@ -75,8 +75,8 @@ Override to host-level if you want per-host comparison."
 3. **Validate before returning:**
    `python -m vcfcf_supermetrics validate content/supermetrics/<file>.yaml`
    (for a pak file, pass its path under `content/sdk-adapters/<name>/supermetrics/`;
-   this validator enforces the `[VCF Content Factory]` prefix, so for a pak
-   whose names are unprefixed use
+   this validator always enforces the `[VCF Content Factory]` prefix, so for
+   a pak whose `adapter.yaml` declares `content_naming: unprefixed` use
    `python3 -m vcfcf_managementpacks validate-sdk content/sdk-adapters/<name>`
    once the file is listed in `adapter.yaml` `bundled_content`, and say in
    your report that it is unvalidated until then).
@@ -91,6 +91,10 @@ Override to host-level if you want per-host comparison."
 ```yaml
 id: <uuid4>                          # set on first validate
 name: "[VCF Content Factory] <Scope> - <Human Name> (<unit>)"
+# For an SDK-adapter pak the prefix follows the pak's `adapter.yaml`
+# `content_naming` field: `factory_prefixed` (the default) requires the
+# `[VCF Content Factory] ` prefix on every bundled name, `unprefixed` forbids
+# it; `validate-sdk` enforces whichever is declared (issue #229).
 resource_kinds:
   - resource_kind_key: <ResourceKind>
     adapter_kind_key: VMWARE
