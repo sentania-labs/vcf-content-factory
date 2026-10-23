@@ -84,9 +84,11 @@ Track-specific examples:
 ## YAML conventions
 
 - Name prefix: `[VCF Content Factory] `. For an SDK-adapter pak the prefix follows the pak's `adapter.yaml`
-  `content_naming` field: `factory_prefixed` (the default) requires the
-  `[VCF Content Factory] ` prefix on every bundled name, `unprefixed` forbids
-  it; `validate-sdk` enforces whichever is declared (issue #229).
+  `content_naming` field: `factory_prefixed` requires the `[VCF Content
+  Factory] ` prefix on every bundled name, `unprefixed` forbids it, and
+  `validate-sdk` and `build-sdk` fail on a mismatch when the field is
+  declared. When it is absent, match the pak's existing names: the tools
+  assume `factory_prefixed` and only warn (issue #229).
 - SM column reference: `attribute: supermetric:"<exact name>"`
 - UUID v4 in `id` field (loader generates on first validate)
 - **Never write an `id:` line yourself.** The loader mints it on

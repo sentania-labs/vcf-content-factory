@@ -92,9 +92,11 @@ Override to host-level if you want per-host comparison."
 id: <uuid4>                          # set on first validate
 name: "[VCF Content Factory] <Scope> - <Human Name> (<unit>)"
 # For an SDK-adapter pak the prefix follows the pak's `adapter.yaml`
-# `content_naming` field: `factory_prefixed` (the default) requires the
-# `[VCF Content Factory] ` prefix on every bundled name, `unprefixed` forbids
-# it; `validate-sdk` enforces whichever is declared (issue #229).
+# `content_naming` field: `factory_prefixed` requires the `[VCF Content
+# Factory] ` prefix on every bundled name, `unprefixed` forbids it, and
+# `validate-sdk` and `build-sdk` fail on a mismatch when the field is
+# declared. When it is absent, match the pak's existing names: the tools
+# assume `factory_prefixed` and only warn (issue #229).
 resource_kinds:
   - resource_kind_key: <ResourceKind>
     adapter_kind_key: VMWARE
