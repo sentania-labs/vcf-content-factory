@@ -24,8 +24,12 @@ A malformed entry fails closed **only for itself**, never for the whole file:
   - Either way, every other artifact still gates normally.
 
 An unreadable or absent FILE is a different thing from a malformed entry: an
-absent registry warns and passes (RULE-012 is named in the warning), an
-unreadable one raises :class:`DefectRegistryError`.
+absent registry, or one holding no ``DEF`` entry at all, warns and passes
+(RULE-012 is named in the warning), an unreadable one raises
+:class:`DefectRegistryError`.  The standalone entrypoint's
+``--require-registry`` refuses (exit 1) on absent or empty instead, for a
+caller that fetched the registry on purpose and must never read a failed
+fetch as an all-clear (#226).
 
 Public API
 ----------
@@ -52,7 +56,25 @@ load_registry(registry_path) -> List[DefectEntry]
         so it can never repoint a good entry, and it becomes a parse error of
         its own when it carried field lines.  A DEF-prefixed heading with no
         field lines under it is prose (``### DEFECTS``), has nothing that could
-        have bled into the previous entry, and is silent.
+        have bled into the previous entry, and is silent.  The same holds for
+        a heading that only looks like one (#226, ported from the template's
+        vendored ``ci/defect_gate.py``): any depth (``##### DEF-002``), no
+        space (``###DEF-002``), lower case (``### def-002``), behind a
+        blockquote or non-breaking space, indented as code (a tab or 4+
+        spaces) after the first entry, or inside a fenced code block (a
+        digit-free placeholder such as ``### DEF-NNN`` in a fence before the
+        first entry is documentation and is skipped)
+      - a field line that is not a plain field at the entry's field indent:
+        code-indented, blockquoted, behind a non-breaking space, nested at a
+        different indent (``  - **Status:** closed`` under Summary), or a
+        field repeated within one entry (#226).  Fenced lines are description
+        text, never fields.  Up to three spaces of indent before a heading or
+        a field are allowed, as in Markdown, and a byte-order mark is ignored
+      - an ``Affects:`` holding a comma or a backtick (#226)
+
+    A malformed entry fails closed for EVERY scope it names: each item of a
+    comma list and each ``Affects:`` line, repeated or nested ones included.
+    Every gate match is case-insensitive (``Synology`` gates ``synology``).
 
 gate_pak(pak_name, registry_path) -> List[DefectEntry]
     Return all open blocking defects whose ``Affects:`` token is ``pak_name``.
@@ -94,7 +116,7 @@ import re
 import sys
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 
 # ---------------------------------------------------------------------------
@@ -161,6 +183,11 @@ class ParseError:
     #: the pak being gated, which needs no managed-paks lookup and so also
     #: works when this file runs as a vendored standalone script (#153).
     candidate: str = ""
+    #: Further scopes the broken entry names beyond ``affects``: the other
+    #: items of a comma list (``template,unifi``), or a second ``Affects:``
+    #: line (repeated, nested, fenced into a malformed entry).  The entry
+    #: fails closed for every one of them (#226).
+    extra_scopes: Tuple[str, ...] = ()
 
     @property
     def scoped(self) -> bool:
@@ -190,14 +217,31 @@ class Registry:
         appended after the valid ones, which keeps the common (clean) case
         byte-identical to the old behaviour.
         """
-        return list(self.entries) + [
-            _synthetic_entry(err, self.path) for err in self.errors if err.scoped
-        ]
+        synthetic: List[DefectEntry] = []
+        for err in self.errors:
+            if not err.scoped:
+                continue
+            synthetic.append(_synthetic_entry(err, self.path))
+            synthetic.extend(
+                _synthetic_entry(replace(err, affects=scope), self.path)
+                for scope in err.extra_scopes
+            )
+        return list(self.entries) + synthetic
 
     @property
     def unscoped_errors(self) -> List[ParseError]:
         """Parse errors that block nothing because ``Affects:`` was unreadable."""
         return [e for e in self.errors if not e.scoped]
+
+    @property
+    def empty(self) -> bool:
+        """True when the file exists but holds no ``DEF`` entry, good or bad.
+
+        An empty, truncated or reformatted registry (or an error page saved
+        in its place) parses to nothing.  The gates warn and pass on it, as
+        on an absent file; ``--require-registry`` refuses it (#226).
+        """
+        return self.exists and not self.entries and not self.errors
 
 
 # ---------------------------------------------------------------------------
@@ -218,27 +262,70 @@ class DefectRegistryError(ValueError):
 # Regex patterns  (mirror managed_paks.py style: per-field regexes)
 # ---------------------------------------------------------------------------
 
-_SECTION_RE = re.compile(r"^#{1,4}\s+(DEF-\d+)\s*$")
+# A well-formed entry heading, matched against the line with up to three
+# spaces of indent already split off (Markdown allows that much before an ATX
+# heading).  Space or tab only between the hashes and the id: a non-breaking
+# space there is a disguised heading, caught by _LOOSE_DEF_HEADING_RE.
+_SECTION_RE = re.compile(r"^#{1,4}[ \t]+(DEF-\d+)[ \t]*$")
 
-#: A heading that MEANT to be an entry but whose id is not ``DEF-NNN``: a typo
-#: (``DEF-1O2``, letter O), a suffix, or trailing text.  Without this, such a
-#: heading matched nothing, fell through to the continuation-line branch, and
-#: the following entry's field lines silently overwrote the PREVIOUS entry's
-#: fields: a real defect stopped gating the artifact it named, with no error.
-#: Matching it here makes it a ParseError instead, so it goes through the same
-#: scoped/unscoped isolation as every other malformed entry.
-#:
-#: Anchored on bare ``DEF`` rather than ``DEF-`` on purpose: requiring the
-#: hyphen would let ``### DEF102`` fall back through to the continuation
-#: branch and reproduce the exact silent field-bleed this exists to remove,
-#: on a typo from the same keystroke class.  Matching here is only half the
-#: contract; ``_flush_entry`` decides whether to REPORT, and does so only
-#: when the section collected field lines, which is what keeps an all-caps
-#: prose heading (``### DEFECTS``) silent.  Lowercase prose (``## Defects``,
-#: ``## Schema``) never matches at all.
-_BAD_SECTION_RE = re.compile(r"^#{1,4}\s+(DEF.*?)\s*$")
+#: Anything that LOOKS like a defect heading (#226, ported from the template's
+#: vendored ci/defect_gate.py): any depth of '#', optional whitespace
+#: (non-breaking space included), behind any indent or blockquote marker,
+#: then ``DEF`` in capitals or ``def-`` in any case.  A line matching this but
+#: not _SECTION_RE opens a MALFORMED entry, which terminates the previous one.
+#: Before this, ``##### DEF-002``, ``###DEF-002``, ``### def-002``, a
+#: blockquoted or code-indented heading all fell through to the
+#: continuation branch and their field lines overwrote the previous entry's:
+#: an open blocker followed by such an entry marked tracked simply vanished.
+_LOOSE_DEF_HEADING_RE = re.compile(r"^[\s>]*#+\s*(?:DEF|(?i:def-))")
 
+#: Leading run of spaces/tabs.  Four or more spaces, or any tab, make a line an
+#: indented code block in Markdown, never a heading or a field.
+_INDENT_RE = re.compile(r"^([ \t]*)(.*)$")
+
+#: A fenced code block delimiter (indent already split off): three or more
+#: backticks or tildes, optional info string on the opening fence.  Fenced
+#: lines are description text, never fields (#226: a fenced ``Status:
+#: closed`` used to close the open blocker it sat in).
+_FENCE_RE = re.compile(r"^(`{3,}|~{3,})(.*)$")
+
+#: The id tail (after ``DEF-``) of a schema placeholder such as the ``NNN`` in
+#: ``### DEF-NNN``: no digit.  Only a placeholder may sit in a fence before the
+#: first entry; a numeric id there opens a malformed entry instead.
+_FENCED_PLACEHOLDER_ID_RE = re.compile(r"^[^\d\s]+(?:\s|$)")
+
+#: Anything that LOOKS like a field line: behind any indent, blockquote
+#: marker or non-breaking space.  One that is not a plain field at the
+#: entry's field indent marks the entry malformed; it is still read, so the
+#: entry fails closed for every Affects scope it names.
+_LOOSE_FIELD_RE = re.compile(r"^[\s>]*-\s+\*\*([^:]+):\*\*\s*(.*)")
+
+# Notes on _LOOSE_DEF_HEADING_RE, the malformed-heading detector.
+#
+# A heading that MEANT to be an entry but whose id is not ``DEF-NNN`` (a typo
+# such as ``DEF-1O2``, a suffix, trailing text, or any disguise listed above)
+# used to match nothing, fall through to the continuation-line branch, and
+# let the following entry's field lines silently overwrite the PREVIOUS
+# entry's fields: a real defect stopped gating the artifact it named, with no
+# error.  Matching it makes it a ParseError instead, so it goes through the
+# same scoped/unscoped isolation as every other malformed entry.
+#
+# Capital ``DEF`` is matched bare, without the hyphen, on purpose: requiring
+# it would let ``### DEF102`` fall back through to the continuation branch
+# and reproduce the exact silent field-bleed this exists to remove, on a typo
+# from the same keystroke class.  Lowercase needs the hyphen (``def-002``),
+# so lowercase prose (``## Defects``, ``## Schema``) never matches at all.
+# Matching is only half the contract; ``_flush_entry`` decides whether to
+# REPORT, and does so only when the section collected field lines, which is
+# what keeps an all-caps prose heading (``### DEFECTS``) silent.
+
+#: A plain field line, matched against the line with its indent split off.
 _FIELD_RE = re.compile(r"^-\s+\*\*([^:]+):\*\*\s*(.*)")
+
+#: Characters that make one ``Affects:`` token a list or a quoted token
+#: (``template,unifi``, ```template```), ported from the vendored gate's
+#: one-token rule (#226).  Whitespace is handled separately (multi-token).
+_LIST_CHARS_RE = re.compile(r"[,`]")
 
 # DEF-NNN id format.
 _ID_RE = re.compile(r"^DEF-\d+$")
@@ -377,7 +464,9 @@ def parse_registry(
         raise FileNotFoundError(f"defect registry not found: {registry_path}")
 
     try:
-        lines = registry_path.read_text(encoding="utf-8").splitlines()
+        # utf-8-sig: a byte-order mark must not hide a first-line heading
+        # (#226; it used to turn a one-entry registry into an empty one).
+        lines = registry_path.read_text(encoding="utf-8-sig").splitlines()
     except (OSError, UnicodeDecodeError) as exc:
         # A file we cannot read is not the same as an entry we cannot parse:
         # there is nothing to isolate, and silently gating nothing would be
@@ -397,14 +486,47 @@ def parse_registry(
     current_last_field: Optional[str] = None
     current_id_lineno: int = 0
     # False when the heading that opened this entry was DEF-prefixed but not a
-    # well-formed id.  Such an entry can never validate, so it is flushed
-    # straight to a ParseError carrying whatever Affects: it managed to state.
+    # well-formed id (or was disguised, code-indented or fenced).  Such an
+    # entry can never validate, so it is flushed straight to a ParseError
+    # carrying whatever Affects: it managed to state.
     current_id_wellformed: bool = True
+    # First structural problem seen inside a well-formed entry (a field line
+    # that is code-indented, blockquoted, nested or repeated).  Such an entry
+    # is malformed whatever its fields say (#226).
+    current_problem: Optional[str] = None
+    # Every Affects value stated anywhere in the entry, in order: a repeated
+    # or nested Affects line names a scope too, and a malformed entry fails
+    # closed for each one.
+    current_affects: List[str] = []
+    # Indent of the entry's first field line; every later field must match.
+    field_indent: Optional[int] = None
+    # True when the entry was opened by a heading inside a fence, so the
+    # fenced field lines that follow are read (for its scope) rather than
+    # treated as description text.
+    current_fence_opened: bool = False
+    # The opening delimiter while inside a fenced code block, else None.
+    fence: Optional[str] = None
+
+    def _open_entry(entry_id: str, lineno: int, wellformed: bool,
+                    fence_opened: bool = False) -> None:
+        nonlocal current_id, current_id_lineno, current_fields
+        nonlocal current_last_field, current_id_wellformed, current_problem
+        nonlocal current_affects, field_indent, current_fence_opened
+        _flush_entry(lineno)
+        current_id = entry_id
+        current_id_lineno = lineno
+        current_fields = {}
+        current_last_field = None
+        current_id_wellformed = wellformed
+        current_problem = None
+        current_affects = []
+        field_indent = None
+        current_fence_opened = fence_opened
 
     def _flush_entry(lineno: int) -> None:
         """Validate the current entry, recording either it or its error."""
         nonlocal current_id, current_fields, current_last_field
-        nonlocal current_id_wellformed
+        nonlocal current_id_wellformed, current_problem, current_affects
         if current_id is None:
             return
         if not current_id_wellformed:
@@ -418,20 +540,21 @@ def parse_registry(
             # Note that TERMINATION of the previous entry is unconditional and
             # happens above: that is the property that removes the corruption.
             if current_fields:
-                errors.append(ParseError(
-                    entry_id=_clip(current_id, 40),
-                    lineno=current_id_lineno,
-                    reason=(
-                        f"heading {_clip(current_id, 40)!r} is not a well-formed "
-                        f"defect id (expected 'DEF-NNN'), so this entry could not "
-                        f"be read"
-                    ),
-                    affects=_readable_affects(current_fields),
-                    candidate=(
-                        "" if _readable_affects(current_fields)
-                        else _affects_candidate(current_fields)
-                    ),
+                errors.append(_structural_error(
+                    _clip(current_id, 40), current_id_lineno,
+                    f"heading {_clip(current_id, 40)!r} is not a well-formed "
+                    f"defect id (expected '### DEF-NNN' at the start of the "
+                    f"line, not fenced, indented as code, blockquoted or "
+                    f"behind a non-breaking space), so this entry could not "
+                    f"be read",
+                    current_fields, current_affects,
                 ))
+        elif current_problem is not None:
+            seen_ids.setdefault(current_id, current_id_lineno)
+            errors.append(_structural_error(
+                current_id, current_id_lineno, current_problem,
+                current_fields, current_affects,
+            ))
         else:
             err = _validate_and_emit(
                 current_id, current_fields, current_id_lineno, entries, seen_ids
@@ -442,33 +565,80 @@ def parse_registry(
         current_fields = {}
         current_last_field = None
         current_id_wellformed = True
+        current_problem = None
+        current_affects = []
+
+    def _record_field(fname: str, fval: str) -> None:
+        """Record a field line: first value wins, every Affects is kept."""
+        nonlocal current_last_field
+        if fname == "Affects":
+            current_affects.append(fval)
+        current_fields.setdefault(fname, fval)
+        current_last_field = fname
+
+    def _append(text: str) -> None:
+        """Description text: continue the last field's value, if any."""
+        if current_last_field is not None and text.strip():
+            current_fields[current_last_field] = (
+                current_fields[current_last_field] + " " + text.strip()
+            )
 
     for lineno, raw_line in enumerate(lines, start=1):
         line = raw_line.rstrip()
+        # Up to three spaces of indent are allowed before a heading, a field
+        # or a fence; four or more, or a tab, make the line an indented code
+        # block in Markdown.
+        indent, rest = _INDENT_RE.match(line).groups()
+        code_indent = "\t" in indent or len(indent) > 3
 
-        # --- New entry section heading ---
-        m_section = _SECTION_RE.match(line)
-        if m_section:
-            _flush_entry(lineno)
-            current_id = m_section.group(1)
-            current_id_lineno = lineno
-            current_fields = {}
-            current_last_field = None
-            current_id_wellformed = True
+        # --- Fenced code blocks (#226) ---
+        # Fenced lines are description text, never fields or headings.  A
+        # defect heading inside a fence opens a MALFORMED entry, so it can
+        # neither hide a defect nor be read as a real one; the one exception
+        # is a schema placeholder with no digit (``### DEF-NNN``) before the
+        # first entry, which is the registry's own documentation.
+        m_fence = None if code_indent else _FENCE_RE.match(rest)
+        if fence is not None:
+            if (m_fence and m_fence.group(1)[0] == fence[0]
+                    and len(m_fence.group(1)) >= len(fence)
+                    and not m_fence.group(2).strip()):
+                fence = None
+                continue
+            m_fenced_def = _LOOSE_DEF_HEADING_RE.match(line)
+            if m_fenced_def and not (
+                    current_id is None
+                    and _FENCED_PLACEHOLDER_ID_RE.match(line[m_fenced_def.end():])):
+                _open_entry(line.strip().lstrip(">#").strip() or "DEF-?",
+                            lineno, wellformed=False, fence_opened=True)
+                continue
+            if current_id is not None and current_fence_opened:
+                m_loose = _LOOSE_FIELD_RE.match(line)
+                if m_loose:
+                    _record_field(m_loose.group(1).strip(), m_loose.group(2).strip())
+                    continue
+            if current_id is not None:
+                _append(line)
+            continue
+        if m_fence:
+            fence = m_fence.group(1)
             continue
 
-        # --- Malformed entry heading (DEF-prefixed, but not a valid id) ---
-        # Terminates the previous entry exactly as a valid heading does, so the
-        # previous entry's fields are no longer reachable for overwrite, and
-        # opens an entry that is already known to be unreadable.
-        m_bad_section = _BAD_SECTION_RE.match(line)
-        if m_bad_section:
-            _flush_entry(lineno)
-            current_id = m_bad_section.group(1)
-            current_id_lineno = lineno
-            current_fields = {}
-            current_last_field = None
-            current_id_wellformed = False
+        # Before the first entry, indented code (schema examples) is skipped.
+        if current_id is None and code_indent:
+            continue
+
+        # --- Entry heading, well-formed or not ---
+        if _LOOSE_DEF_HEADING_RE.match(line):
+            m_section = None if code_indent else _SECTION_RE.match(rest)
+            if m_section:
+                _open_entry(m_section.group(1), lineno, wellformed=True)
+            else:
+                # Terminates the previous entry exactly as a valid heading
+                # does, so the previous entry's fields are no longer reachable
+                # for overwrite, and opens an entry that is already known to
+                # be unreadable.
+                _open_entry(line.strip().lstrip(">#").strip() or "DEF-?",
+                            lineno, wellformed=False)
             continue
 
         # Skip lines before the first entry.
@@ -476,29 +646,49 @@ def parse_registry(
             continue
 
         # --- Field line ---
-        m_field = _FIELD_RE.match(line)
-        if m_field:
-            fname = m_field.group(1).strip()
-            fval = m_field.group(2).strip()
-            current_fields[fname] = fval
-            current_last_field = fname
+        # Anything field-shaped that is not a plain field at this entry's
+        # field indent marks the entry malformed: a code-block indent, a
+        # blockquote or non-breaking space prefix, a different indent (a
+        # nested sub-bullet such as "  - **Status:** closed" under Summary),
+        # or a repeated field.  Each of those used to be able to overwrite or
+        # drop a real field.  The line is still recorded, so the malformed
+        # entry fails closed for every scope it names.
+        m_loose = _LOOSE_FIELD_RE.match(line)
+        if m_loose:
+            fname = m_loose.group(1).strip()
+            fval = m_loose.group(2).strip()
+            problem = None
+            if code_indent:
+                problem = (f"field line {_clip(rest, 60)!r} is indented like a "
+                           f"code block (a tab or 4+ spaces)")
+            elif not _FIELD_RE.match(rest):
+                problem = (f"field line {_clip(line.strip(), 60)!r} is prefixed "
+                           f"by a blockquote or a non-breaking space")
+            elif field_indent is not None and len(indent) != field_indent:
+                problem = (f"field line {_clip(rest, 60)!r} is indented "
+                           f"{len(indent)} space(s) but the entry's fields are "
+                           f"at {field_indent} (a nested bullet shaped like a "
+                           f"field?)")
+            elif fname in current_fields:
+                problem = f"field {fname!r} appears twice; refusing to pick one"
+            if field_indent is None and problem is None:
+                field_indent = len(indent)
+            if problem is not None and current_problem is None:
+                current_problem = f"line {lineno}: {problem}"
+            _record_field(fname, fval)
             continue
 
         # --- Continuation line (part of a multi-line field value) ---
         # A non-blank, non-section, non-field line that follows a field line
         # is appended to the last field's value (handles Summary, Closing-
         # evidence, etc. which can span 2-4 lines in the markdown).
-        if current_last_field is not None and line.strip():
-            # Only append if we are inside a known entry.
-            current_fields[current_last_field] = (
-                current_fields[current_last_field] + " " + line.strip()
-            )
+        if line.strip():
+            _append(line)
             continue
 
         # Blank line: clear the continuation pointer so a blank line between
         # fields doesn't accidentally merge separate fields.
-        if not line.strip():
-            current_last_field = None
+        current_last_field = None
 
     # Flush the last entry.
     _flush_entry(len(lines) + 1)
@@ -520,7 +710,8 @@ def _known_pak_names() -> frozenset:
     """
     try:
         from .managed_paks import registered_pak_names
-        return registered_pak_names()
+        # Lower-cased: every gate comparison is case-insensitive (#226).
+        return frozenset(_norm(name) for name in registered_pak_names())
     except Exception as exc:
         # Expected when this file runs as a standalone script (a pak repo's
         # vendored ci/defect_gate.py): there is no package to import from.
@@ -543,11 +734,13 @@ _KNOWN_PAKS_WARNED: list = []
 def _affects_problem(raw: str) -> Optional[str]:
     """Why an ``Affects:`` value breaks the one-token contract, else None.
 
-    Two shapes are rejected (#153).  A multi-token value (a token plus a
+    Three shapes are rejected.  A multi-token value (a token plus a
     parenthetical note, a wrapped path, prose) can never equal the pak name
     or ``<type>/<slug>`` a gate matches against, so the entry used to parse
-    as valid and silently block nothing.  A single token carrying a prefix
-    other than ``factory:`` (``pak:synology``) fails the same way.
+    as valid and silently block nothing (#153).  A single token carrying a
+    prefix other than ``factory:`` (``pak:synology``) fails the same way.
+    So does one holding a comma or a backtick (``template,unifi``,
+    ```template```), ported from the vendored gate (#226).
     """
     tokens = raw.split()
     if len(tokens) != 1:
@@ -556,6 +749,12 @@ def _affects_problem(raw: str) -> Optional[str]:
             f"one scope token (a managed pak name, <type>/<slug>, or "
             f"factory:<area>). Move notes such as file paths into Summary or "
             f"Related, and split a multi-artifact entry into one entry each"
+        )
+    if _LIST_CHARS_RE.search(tokens[0]):
+        return (
+            f"Affects {_clip(raw)!r} contains a comma or a backtick; it must be "
+            f"exactly one bare scope token. One issue on N artifacts is N "
+            f"entries"
         )
     if ":" in tokens[0] and not _FACTORY_SCOPE_RE.match(tokens[0]):
         return (
@@ -579,7 +778,9 @@ def _affects_candidate(fields: dict[str, str]) -> str:
     """
     tokens = (fields.get("Affects") or "").split()
     if len(tokens) > 1:
-        return tokens[0]
+        # "template, unifi" and "`template` (note)" name template, not
+        # "template," or "`template`" (#226).
+        return tokens[0].strip("`,")
     if len(tokens) == 1 and ":" in tokens[0] and not _FACTORY_SCOPE_RE.match(tokens[0]):
         return tokens[0].split(":", 1)[1]
     return ""
@@ -591,50 +792,93 @@ def _candidate_entries(
     """Synthetic blockers for unscoped parse errors that carry a candidate.
 
     ``gate_pak`` passes the pak being gated and gets only the matching
-    ones; ``gate_all`` passes nothing and gets every one, each labelled
-    with its candidate, so ``--all`` agrees with ``--pak <candidate>``.
+    ones (compared case-insensitively, like every gate match); ``gate_all``
+    passes nothing and gets every one, each labelled with its candidate, so
+    ``--all`` agrees with ``--pak <candidate>``.
     """
     return [
         _synthetic_entry(replace(err, affects=err.candidate), registry.path)
         for err in registry.unscoped_errors
-        if err.candidate and (pak_name is None or err.candidate == pak_name)
+        if err.candidate and (pak_name is None or _norm(err.candidate) == _norm(pak_name))
     ]
 
 
-def _readable_affects(fields: dict[str, str]) -> str:
-    """The entry's ``Affects:`` scope when it can be attributed, else ``""``.
+def _value_scopes(raw: str) -> List[str]:
+    """The scopes one ``Affects:`` value can be attributed to, in order.
 
     A single token is readable as-is, unless it carries an unrecognised
-    prefix (``pak:synology``), which names no gateable scope.  A multi-token
-    value breaks the registry's one-token contract; it is attributed to its
-    FIRST token only when that token unambiguously names a scope (a known
-    managed pak, ``<type>/<slug>``, or ``factory:<area>``), so the broken
-    entry still fails closed for what it meant to block (#153).  Anything
-    else, including a missing field or a prose sentence, cannot be
-    attributed to one artifact, so it must block nothing.
+    prefix (``pak:synology``), which names no gateable scope.  One token
+    holding commas or backticks is a list or a quoted token
+    (``template,unifi``, ```template```): each item is a scope, with the
+    same prefix rule (#226).  A multi-token value breaks the registry's
+    one-token contract; it is attributed to its FIRST token only when that
+    token unambiguously names a scope (a known managed pak, ``<type>/<slug>``,
+    or ``factory:<area>``), so the broken entry still fails closed for what
+    it meant to block (#153).  Anything else, including a prose sentence,
+    cannot be attributed to one artifact, so it yields nothing.
+
+    Values are returned UNCLIPPED: each has to compare equal to a real pak
+    name or <type>/<slug> token for the synthetic entry to gate anything, and
+    a truncated copy never can.  Callers clip at the point of echo instead,
+    so an over-length token cannot dump the whole field into output while
+    the warning still tells the truth about what it blocks.
     """
-    raw = (fields.get("Affects") or "").strip()
+    raw = (raw or "").strip()
     if not raw:
-        return ""
+        return []
     tokens = raw.split()
-    if len(tokens) == 1:
-        if ":" in raw and not _FACTORY_SCOPE_RE.match(raw):
-            return ""
-    else:
-        first = tokens[0]
+    if len(tokens) > 1:
+        first = tokens[0].strip("`,")
         if (
             _ITEM_SCOPE_RE.match(first)
             or _FACTORY_SCOPE_RE.match(first)
-            or first in _known_pak_names()
+            or _norm(first) in _known_pak_names()
         ):
-            return first
-        return ""
-    # Returned UNCLIPPED: this value has to compare equal to a real pak name
-    # or <type>/<slug> token for the synthetic entry to gate anything, and a
-    # truncated copy never can.  Callers clip at the point of echo instead,
-    # so an over-length token cannot dump the whole field into output while
-    # the warning still tells the truth about what it blocks.
-    return raw
+            return [first]
+        return []
+    parts = [p for p in _LIST_CHARS_RE.split(raw) if p]
+    return [p for p in parts if not (":" in p and not _FACTORY_SCOPE_RE.match(p))]
+
+
+def _entry_scopes(values: List[str]) -> List[str]:
+    """Every distinct scope named by an entry's ``Affects:`` values, in order."""
+    scopes: List[str] = []
+    for value in values:
+        for scope in _value_scopes(value):
+            if _norm(scope) not in {_norm(s) for s in scopes}:
+                scopes.append(scope)
+    return scopes
+
+
+def _readable_affects(fields: dict[str, str]) -> str:
+    """The entry's first attributable ``Affects:`` scope, else ``""``."""
+    scopes = _value_scopes(fields.get("Affects") or "")
+    return scopes[0] if scopes else ""
+
+
+def _structural_error(
+    entry_id: str,
+    lineno: int,
+    reason: str,
+    fields: dict[str, str],
+    affects_values: List[str],
+) -> ParseError:
+    """ParseError for an entry malformed in its SHAPE, not its values.
+
+    Covers a bad heading and a disguised, nested or repeated field line.
+    The entry fails closed for every scope any of its ``Affects:`` lines
+    names; with none attributable, the first value's candidate still blocks
+    a pak gated by exactly that name.
+    """
+    scopes = _entry_scopes(affects_values)
+    return ParseError(
+        entry_id=entry_id,
+        lineno=lineno,
+        reason=reason,
+        affects=scopes[0] if scopes else "",
+        candidate="" if scopes else _affects_candidate(fields),
+        extra_scopes=tuple(scopes[1:]),
+    )
 
 
 def _validate_and_emit(
@@ -650,13 +894,15 @@ def _validate_and_emit(
     entry is valid; returns a :class:`ParseError` (and appends nothing) when
     it is not.  Never raises: one bad entry must not take the file down.
     """
-    affects_hint = _readable_affects(fields)
+    scopes = _value_scopes(fields.get("Affects") or "")
+    affects_hint = scopes[0] if scopes else ""
     candidate = "" if affects_hint else _affects_candidate(fields)
 
     def _err(reason: str) -> ParseError:
         return ParseError(
             entry_id=entry_id, lineno=lineno, reason=reason,
             affects=affects_hint, candidate=candidate,
+            extra_scopes=tuple(scopes[1:]),
         )
 
     # --- Duplicate ID check ---
@@ -818,13 +1064,26 @@ def _read_registry_for_gate(
         return Registry(path=resolved, exists=False)
 
     registry = parse_registry(resolved)
+    if first_time and registry.empty:
+        # Same verdict as an absent file, and just as loud: an empty, truncated
+        # or reformatted registry has nothing to say about any artifact.  It is
+        # also the normal state of a defects.local.md someone just created.
+        # Pak CI that must never pass on this uses --require-registry (#226).
+        _warn(
+            f"WARNING: defect registry {resolved} holds no '### DEF-NNN' "
+            f"entries, the RULE-012 gate has nothing to check and vacuously "
+            f"passes"
+        )
     if first_time:
         for err in registry.errors:
             if err.scoped:
+                scopes = ", ".join(
+                    repr(_clip(s)) for s in (err.affects,) + err.extra_scopes
+                )
                 _warn(
                     f"WARNING: defect registry entry is malformed and is being "
                     f"treated as an open blocking defect against "
-                    f"{_clip(err.affects)!r}: {err}"
+                    f"{scopes}: {err}"
                 )
             elif err.candidate:
                 _warn(
@@ -848,8 +1107,10 @@ def gate_pak(
 ) -> List[DefectEntry]:
     """Return all open blocking defects that affect ``pak_name``.
 
-    ``pak_name`` is matched against the ``Affects:`` token directly,
-    it must be the exact managed-pak name as registered in
+    ``pak_name`` is matched against the ``Affects:`` token ignoring case and
+    surrounding spaces, so ``Synology`` in the registry still gates the
+    ``synology`` pak (#226, as the vendored gate already did).  Otherwise it
+    must be the managed-pak name as registered in
     ``knowledge/context/managed_paks.md`` (e.g. ``"synology"``, ``"unifi"``).
 
     Args:
@@ -870,11 +1131,12 @@ def gate_pak(
     # told us that name is a pak, so fail closed for it even when the
     # managed-paks lookup is unavailable (script mode).
     entries = registry.gate_entries + _candidate_entries(registry, pak_name)
+    want = _norm(pak_name)
     return [
         e for e in entries
         if e.severity == "blocking"
         and e.status == "open"
-        and e.affects == pak_name
+        and _norm(e.affects) == want
     ]
 
 
@@ -885,7 +1147,7 @@ def gate_item(
 ) -> List[DefectEntry]:
     """Return all open blocking defects that affect ``<content_type>/<slug>``.
 
-    The ``Affects:`` token is matched exactly as ``<content_type>/<slug>``.
+    The ``Affects:`` token is matched, ignoring case, as ``<content_type>/<slug>``.
     ``content_type`` is the singular directory name (e.g. ``"dashboard"``,
     ``"view"``).  ``slug`` is the filename stem (e.g.
     ``"demand_driven_capacity_v2"``).
@@ -908,13 +1170,13 @@ def gate_item(
             check), and a malformed ENTRY is isolated to the scope it names,
             so neither raises out of this function.
     """
-    token = f"{content_type}/{slug}"
+    token = _norm(f"{content_type}/{slug}")
     entries = _read_registry_for_gate(registry_path).gate_entries
     return [
         e for e in entries
         if e.severity == "blocking"
         and e.status == "open"
-        and e.affects == token
+        and _norm(e.affects) == token
     ]
 
 
@@ -944,6 +1206,11 @@ def gate_all(
         if e.severity == "blocking"
         and e.status == "open"
     ]
+
+
+def _norm(token: str) -> str:
+    """An ``Affects:`` token or gated name for comparison: trimmed, lower-case."""
+    return (token or "").strip().lower()
 
 
 def format_defect_line(entry: DefectEntry) -> str:
@@ -982,8 +1249,15 @@ def format_defect_line(entry: DefectEntry) -> str:
 #      third-party releases (knowledge/designs/defect-isolation-v1.md).
 #   1, registry file present but unreadable (hard error).  A malformed
 #      ENTRY is no longer a whole-file error: it blocks the scope it names
-#      (exit 2 for that scope) and nothing else.
+#      (exit 2 for that scope) and nothing else.  With --require-registry,
+#      also an absent registry or one with no DEF entry at all: for a caller
+#      that fetched the registry on purpose (pak CI), either means the fetch
+#      went wrong, never an all-clear (the vendored ci/defect_gate.py rule,
+#      kept as an opt-in so the RULE-012 default is unchanged, #226).
 #   2, one or more open blocking defects found
+#
+# The sdk-buildkit ships this file, unchanged but for a generated header, as
+# sdk_buildkit/defect_gate.py (vcfcf_managementpacks/buildkit.py).
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
@@ -1027,6 +1301,15 @@ if __name__ == "__main__":
             f"present, else {_DEFAULT_REGISTRY})"
         ),
     )
+    _p.add_argument(
+        "--require-registry",
+        action="store_true",
+        default=False,
+        help=(
+            "exit 1 when the registry is absent or holds no DEF entry, instead "
+            "of warning and passing (for CI that fetched the registry on purpose)"
+        ),
+    )
 
     _args = _p.parse_args()
     _registry_path = (
@@ -1035,6 +1318,17 @@ if __name__ == "__main__":
     )
 
     try:
+        if _args.require_registry:
+            if not _registry_path.exists():
+                raise FileNotFoundError(
+                    f"--require-registry: no defect registry at {_registry_path}"
+                )
+            if parse_registry(_registry_path).empty:
+                raise DefectRegistryError(
+                    f"--require-registry: {_registry_path} holds no "
+                    f"'### DEF-NNN' entries; the registry is empty or in an "
+                    f"unrecognised format. Refusing to treat it as clear."
+                )
         if _args.all:
             _blockers = gate_all(_registry_path)
             if not _blockers:

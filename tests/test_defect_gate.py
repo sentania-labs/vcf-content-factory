@@ -697,10 +697,10 @@ More prose, and a heading that is not DEF-prefixed.
         branch is ever reached.  Stated explicitly because the previous
         version of this test relied on it without saying so.
         """
-        from vcfcf_packaging.defects import _BAD_SECTION_RE, parse_registry
-        assert _BAD_SECTION_RE.match("## Defects") is None
-        assert _BAD_SECTION_RE.match("### Definitions") is None
-        assert _BAD_SECTION_RE.match("## Schema") is None
+        from vcfcf_packaging.defects import _LOOSE_DEF_HEADING_RE, parse_registry
+        assert _LOOSE_DEF_HEADING_RE.match("## Defects") is None
+        assert _LOOSE_DEF_HEADING_RE.match("### Definitions") is None
+        assert _LOOSE_DEF_HEADING_RE.match("## Schema") is None
 
         reg = _write_registry(
             tmp_path,
@@ -722,9 +722,9 @@ More prose, and a heading that is not DEF-prefixed.
         ``defects.local.md`` a stranger writes from scratch, where
         ``### DEFECTS`` is a natural first-draft heading.
         """
-        from vcfcf_packaging.defects import _BAD_SECTION_RE, parse_registry
+        from vcfcf_packaging.defects import _LOOSE_DEF_HEADING_RE, parse_registry
         for heading in ("### DEFECTS", "### DEFECT LOG", "### DEFINITIONS"):
-            assert _BAD_SECTION_RE.match(heading) is not None, (
+            assert _LOOSE_DEF_HEADING_RE.match(heading) is not None, (
                 f"{heading!r} is DEF-prefixed and must match the regex"
             )
 
