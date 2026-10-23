@@ -112,15 +112,47 @@ def crossref_names(formula: str) -> List[str]:
     return SM_CROSSREF_RE.findall(formula or "")
 
 
-def sm_name_to_uuid_map(supermetrics: Iterable) -> Dict[str, Optional[str]]:
+def sm_name_to_uuid_map(
+    supermetrics: Iterable,
+    *,
+    error_cls: Type[Exception] = SuperMetricCrossRefError,
+) -> Dict[str, Optional[str]]:
     """Build the ``{name: uuid}`` lookup from an iterable of SuperMetricDef.
 
     Accepts anything exposing ``.name`` and ``.id``.  An SM with no ``id`` is
     kept with a ``None`` value rather than dropped, so that a reference to it
     reports the real cause ("in scope but has no id") instead of the generic
     "could not be resolved".
+
+    Two SMs with the same display name and different ids are an error
+    (``error_cls``), naming both source files: the map used to keep whichever
+    came last, so ``@supermetric:"<name>"`` silently resolved to one of them
+    (issue #158).  This matches ``find_by_name``, which raises on a duplicate
+    name rather than guessing.  The same SM listed twice (same name, same id)
+    is not ambiguous and is accepted.
     """
-    return {sm.name: (getattr(sm, "id", None) or None) for sm in supermetrics}
+    out: Dict[str, Optional[str]] = {}
+    origin: Dict[str, object] = {}
+    for sm in supermetrics:
+        name = sm.name
+        sm_id = getattr(sm, "id", None) or None
+        if name in out and out[name] != sm_id:
+            first = origin[name]
+            raise error_cls(
+                f"two super metrics share the display name {name!r} "
+                f"(id {out[name]} in {_sm_origin(first)}; id {sm_id} in "
+                f"{_sm_origin(sm)}), so @supermetric:{name!r} is ambiguous. "
+                f"Rename one, or list only one of them."
+            )
+        out[name] = sm_id
+        origin.setdefault(name, sm)
+    return out
+
+
+def _sm_origin(sm: object) -> str:
+    """Where an SM came from, for an error message: its file, else its id."""
+    src = getattr(sm, "source_path", None)
+    return str(src) if src else "(no source file)"
 
 
 def resolve_sm_formula(
