@@ -29,6 +29,8 @@ import java.util.Map;
  * <p>No JUnit required: call via {@code main()}. A real client runs against
  * a scripted fake {@link HttpURLConnection} behind an
  * {@code openPlatformConnection} override, and logs into a {@link LogCapture}.
+ * Push failures are one WARN line per call with the trace at DEBUG, and an
+ * unexpected failure class shows its trace once (issue #192).
  * Capturing text needs log4j-api and log4j-core at runtime; without them the
  * whole suite is SKIPPED with a message (same convention as
  * {@code SuiteApiStitchRelationshipTest}).
@@ -63,6 +65,11 @@ public class SuiteApiStitchClientTransportTest {
         run("principal absent from configure-time lines", SuiteApiStitchClientTransportTest::testBuilderLinesOmitPrincipal);
         run("principal absent from the 401 failure line", SuiteApiStitchClientTransportTest::testPerpetual401OmitsPrincipal);
         run("principal absent from the no-token failure line", SuiteApiStitchClientTransportTest::testNoTokenOmitsPrincipal);
+        run("push HTTP failure: one WARN line per call, no trace", SuiteApiStitchClientTransportTest::testPushHttpFailureOneLine);
+        run("push HTTP failure: trace at DEBUG", SuiteApiStitchClientTransportTest::testPushHttpFailureTraceAtDebug);
+        run("push unexpected failure: trace on first occurrence only", SuiteApiStitchClientTransportTest::testPushUnexpectedTraceOnce);
+        run("push interrupted: flag restored", SuiteApiStitchClientTransportTest::testPushInterruptRestoresFlag);
+        run("addChild unexpected failure: trace on first occurrence only", SuiteApiStitchClientTransportTest::testAddChildUnexpectedTraceOnce);
         report();
     }
 
@@ -112,6 +119,86 @@ public class SuiteApiStitchClientTransportTest {
             assertFalse("the no-token message does not name the principal",
                     String.valueOf(e.getMessage()).contains(USER));
         }
+    }
+
+    // -----------------------------------------------------------------------
+    // Issue #192: push failures are one WARN line per cycle
+    // -----------------------------------------------------------------------
+
+    private static void testPushHttpFailureOneLine() throws Exception {
+        Harness h = new Harness(okTokenThen(500, ""));
+        h.log.clear();
+        for (int i = 0; i < 3; i++) {
+            h.client.pushStats(RES, one("k", 1.0), 1L);
+            h.client.pushProperties(RES, oneS("p", "v"), 1L);
+        }
+        assertEquals("six failed pushes are six WARN lines", 6, h.log.count("WARN"));
+        assertEquals("no stack trace at WARN for an HTTP failure", 0, h.log.thrown().size());
+        assertTrue("the line names the status", h.log.contains("HTTP 500"));
+        assertTrue("the line names the operation", h.log.contains("pushProperties failed"));
+    }
+
+    private static void testPushHttpFailureTraceAtDebug() throws Exception {
+        Harness h = new Harness(okTokenThen(503, ""), "DEBUG");
+        h.log.clear();
+        h.client.pushStats(RES, one("k", 1.0), 1L);
+        assertEquals("one WARN line", 1, h.log.count("WARN"));
+        assertEquals("one DEBUG line", 1, h.log.count("DEBUG"));
+        assertEquals("the trace rides the DEBUG line only", 1, h.log.thrown().size());
+    }
+
+    private static void testPushUnexpectedTraceOnce() throws Exception {
+        Harness h = new Harness((m, u, b) -> {
+            if (u.equals(TOKEN_URL)) return new Resp(200, "{\"token\":\"tok-1\"}");
+            throw new IllegalStateException("proxy answered with HTML");
+        });
+        h.log.clear();
+        for (int i = 0; i < 3; i++) h.client.pushStats(RES, one("k", 1.0), 1L);
+        assertEquals("three WARN lines", 3, h.log.count("WARN"));
+        assertEquals("the trace is logged once, on the first occurrence", 1, h.log.thrown().size());
+        h.client.pushProperties(RES, oneS("p", "v"), 1L);
+        assertEquals("another operation gets its own first trace", 2, h.log.thrown().size());
+    }
+
+    private static void testPushInterruptRestoresFlag() throws Exception {
+        Harness h = new Harness((m, u, b) -> {
+            if (u.equals(TOKEN_URL)) return new Resp(200, "{\"token\":\"tok-1\"}");
+            throw SuiteApiStitchClientTransportTest.<RuntimeException>sneakyThrow(
+                    new InterruptedException("interrupted mid-request"));
+        });
+        h.log.clear();
+        try {
+            h.client.pushStats(RES, one("k", 1.0), 1L);
+            assertTrue("the interrupt flag is restored after pushStats", Thread.interrupted());
+            h.client.pushProperties(RES, oneS("p", "v"), 1L);
+            assertTrue("the interrupt flag is restored after pushProperties", Thread.interrupted());
+        } finally {
+            Thread.interrupted();
+        }
+        assertEquals("interrupts are one-line WARNs", 0, h.log.thrown().size());
+    }
+
+    private static void testAddChildUnexpectedTraceOnce() throws Exception {
+        Harness h = new Harness((m, u, b) -> {
+            if (u.equals(TOKEN_URL)) return new Resp(200, "{\"token\":\"tok-1\"}");
+            throw new IllegalStateException("unexpected");
+        });
+        h.log.clear();
+        h.client.addChild(RES, "c87c8e39-7cf8-4394-bbf8-04ccd8601efc");
+        h.client.addChild(RES, "c87c8e39-7cf8-4394-bbf8-04ccd8601efc");
+        assertEquals("two WARN lines", 2, h.log.count("WARN"));
+        assertEquals("one trace", 1, h.log.thrown().size());
+    }
+
+    @SuppressWarnings("unchecked")
+    static <X extends Throwable> RuntimeException sneakyThrow(Throwable t) throws X {
+        throw (X) t;
+    }
+
+    static Map<String, String> oneS(String k, String v) {
+        Map<String, String> m = new LinkedHashMap<>();
+        m.put(k, v);
+        return m;
     }
 
     // -----------------------------------------------------------------------

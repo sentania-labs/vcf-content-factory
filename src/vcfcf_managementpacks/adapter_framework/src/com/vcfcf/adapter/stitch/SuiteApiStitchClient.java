@@ -197,6 +197,15 @@ public final class SuiteApiStitchClient {
     /** Guard for token acquire / invalidate operations. */
     private final Object tokenLock = new Object();
 
+    /**
+     * Operation and exception class pairs whose unexpected failure has
+     * already been logged with its stack trace by this client (issue #192):
+     * a repeat logs one line and keeps the trace at DEBUG. Per instance, never
+     * static.
+     */
+    private final Set<String> tracedFailures =
+            java.util.concurrent.ConcurrentHashMap.newKeySet();
+
     // -----------------------------------------------------------------------
     // Private exception — distinguishes 401 for the single-retry path
     // -----------------------------------------------------------------------
@@ -465,8 +474,12 @@ public final class SuiteApiStitchClient {
      *
      * <p>The cached bearer token is used. If the Suite API returns HTTP 401,
      * the token is re-acquired and the push is retried exactly once. Failures
-     * are logged at WARN and swallowed — a stitching failure must not abort
-     * the adapter's primary collect cycle.
+     * are logged at WARN and swallowed, because a stitching failure must not
+     * abort the adapter's primary collect cycle. The push repeats every
+     * cycle, so a failure is one WARN line per call with the stack trace at
+     * DEBUG (an unexpected exception class shows its trace at WARN the first
+     * time only; see {@link #logFailure}). An interrupt restores the thread's
+     * interrupt flag.
      *
      * @param resourceId VCF Ops resource UUID (from {@link ForeignResourceResolver})
      * @param properties map of statKey → string value; no-op if empty
@@ -488,8 +501,11 @@ public final class SuiteApiStitchClient {
                 rawPost(path, body, tok);
             }
         } catch (Exception e) {
-            logger.warn("SuiteApiStitchClient: pushProperties failed for resource="
-                    + resourceId + ": " + e.getMessage(), e);
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
+            logFailure("pushProperties", "SuiteApiStitchClient: pushProperties failed for"
+                    + " resource=" + loggable(resourceId), e);
         }
     }
 
@@ -519,8 +535,11 @@ public final class SuiteApiStitchClient {
                 rawPost(path, body, tok);
             }
         } catch (Exception e) {
-            logger.warn("SuiteApiStitchClient: pushStats failed for resource="
-                    + resourceId + ": " + e.getMessage(), e);
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
+            logFailure("pushStats", "SuiteApiStitchClient: pushStats failed for"
+                    + " resource=" + loggable(resourceId), e);
         }
     }
 
@@ -583,8 +602,10 @@ public final class SuiteApiStitchClient {
      * every failure logged at WARN and swallowed so the collect cycle never
      * sees an exception. An expected failure (an {@link IOException} such as
      * a non-2xx status, timeout or refused connection, or an interrupt) is
-     * one WARN line without a stack trace, with the trace at DEBUG; anything
-     * else keeps its stack trace at WARN (see {@link #isExpectedFailure}).
+     * one WARN line without a stack trace, with the trace at DEBUG; any other
+     * exception class shows its stack trace at WARN the first time this
+     * client sees it for this operation, then logs like an expected one (see
+     * {@link #logFailure}).
      * Blank or non-UUID ids are skipped with a WARN (the ids go into the
      * request path and body, so they are validated rather than escaped; a
      * rejected id is logged truncated and with control characters
@@ -659,7 +680,7 @@ public final class SuiteApiStitchClient {
             if (e instanceof InterruptedException) {
                 Thread.currentThread().interrupt();
             }
-            logFailure("SuiteApiStitchClient: addChildren failed for parent="
+            logFailure("addChildren", "SuiteApiStitchClient: addChildren failed for parent="
                     + parent + " children=" + children, e);
             return false;
         }
@@ -696,8 +717,9 @@ public final class SuiteApiStitchClient {
      *   <li>Query or parse failure: logs at WARN and returns {@code null};
      *       never throws. An expected failure (HTTP status, timeout, refused
      *       connection, interrupt) is one WARN line without a stack trace,
-     *       with the trace at DEBUG; anything else, a malformed response
-     *       included, keeps its stack trace at WARN.</li>
+     *       with the trace at DEBUG; any other exception class, a malformed
+     *       response included, shows its stack trace at WARN the first time
+     *       this client sees it here, then one line per call.</li>
      * </ul>
      *
      * <p><strong>Look up every cycle; do not cache across cycles.</strong> A
@@ -738,8 +760,8 @@ public final class SuiteApiStitchClient {
             if (e instanceof InterruptedException) {
                 Thread.currentThread().interrupt();
             }
-            logFailure("SuiteApiStitchClient: findSingletonResourceId query failed for "
-                    + what, e);
+            logFailure("findSingletonResourceId",
+                    "SuiteApiStitchClient: findSingletonResourceId query failed for " + what, e);
             return null;
         }
         if (totalCount > onPage) {
@@ -764,27 +786,34 @@ public final class SuiteApiStitchClient {
     }
 
     /**
-     * Log a swallowed failure of {@link #addChildren} or
-     * {@link #findSingletonResourceId} without flooding the collector log.
+     * Log a swallowed failure of {@link #pushProperties}, {@link #pushStats},
+     * {@link #addChildren} or {@link #findSingletonResourceId} without
+     * flooding the collector log.
      *
      * <p>These calls repeat every collect cycle, per adapter instance, so a
-     * persistent expected failure (the principal lacks relationship
-     * permission, the parent is gone, the Suite API is down) would otherwise
-     * write a full stack trace every cycle. Expected failures get one WARN
-     * line naming the exception class and message (the transport puts the
-     * HTTP status at the end of the message, which {@link #failureSummary}
-     * keeps when it caps a long one) and the stack trace only at DEBUG;
-     * unexpected ones keep the stack trace at WARN.
+     * persistent failure (the principal lacks permission, the parent is gone,
+     * the Suite API is down, a proxy answers with HTML) would otherwise write
+     * a full stack trace every cycle. Every failure gets one WARN line naming
+     * the exception class and message (the transport puts the HTTP status at
+     * the end of the message, which {@link #failureSummary} keeps when it caps
+     * a long one). The stack trace goes to DEBUG, except the first time this
+     * client sees an unexpected exception class (anything but
+     * {@link #isExpectedFailure}, a malformed response included) for an
+     * operation: that one keeps its trace at WARN so a new kind of fault is
+     * diagnosable from a default-level log (issue #192).
+     *
+     * @param operation the public method name, keying the first-trace memory
      */
-    private void logFailure(String context, Exception e) {
+    private void logFailure(String operation, String context, Exception e) {
         String line = context + ": " + failureSummary(e);
-        if (isExpectedFailure(e)) {
-            logger.warn(line);
-            if (logger.isDebugEnabled()) {
-                logger.debug(line + " (stack trace)", e);
-            }
-        } else {
+        if (!isExpectedFailure(e)
+                && tracedFailures.add(operation + ":" + e.getClass().getName())) {
             logger.warn(line, e);
+            return;
+        }
+        logger.warn(line);
+        if (logger.isDebugEnabled()) {
+            logger.debug(line + " (stack trace)", e);
         }
     }
 

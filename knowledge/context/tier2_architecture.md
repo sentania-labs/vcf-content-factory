@@ -703,13 +703,15 @@ posture matches `pushStats`: one 401 retry, every failure logged at WARN and
 swallowed, the call returns `false`. Blank or non-UUID ids are skipped with a
 WARN before anything is sent (logged truncated, control characters stripped);
 ids are trimmed and lowercased before duplicates collapse, and a child equal
-to its parent is skipped with a WARN. Because both calls repeat every
-cycle, an expected failure of `addChild` / `addChildren` or
-`findSingletonResourceId` (an `IOException` such as a non-2xx status, timeout
-or refused connection, or an interrupt) is logged as one WARN line with the
-exception class and message and its stack trace only at DEBUG, while any
-other exception (a malformed response included) keeps its stack trace at
-WARN.
+to its parent is skipped with a WARN. Because `pushProperties`, `pushStats`,
+`addChild` / `addChildren` and `findSingletonResourceId` repeat every cycle,
+a failure of any of them is logged as one WARN line with the exception class
+and message and its stack trace only at DEBUG. The one exception: the first
+time a client sees an unexpected exception class (anything but the
+`IOException` family and interrupts, a malformed response included) for an
+operation, that line carries the stack trace at WARN; later ones are one line
+(issue #192; until buildkit 1.0.13 the push methods logged a full trace every
+cycle). An interrupt during a push restores the thread's interrupt flag.
 
 **Known limitation: nothing removes these edges.** An edge added through
 `addChild` / `addChildren` persists until something deletes it with
