@@ -19,9 +19,9 @@ time_window:
   unit: DAYS
   count: 1
 
-# Dashboard widget note: sort this view by "Write Latency P95 (24h)" descending
-# (sort_by_column: "Write Latency P95 (24h)", sort_by_dir: desc) to surface the
-# worst-latency vSAN clusters at the top of the detail pane.
+# Sort note: intended order is "Write Latency P95 (24h)" descending, to surface
+# the worst-latency vSAN clusters at the top. A view's default sort is the
+# per-column `sort: desc` key on exactly one list column (not set here yet).
 
 columns:
   # --- IOPS block ---

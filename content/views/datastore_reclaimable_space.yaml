@@ -33,7 +33,7 @@ columns:
     unit: "gb"
 
   # Snapshot space consumed. KB-native; emit as GB.
-  # Primary sort column, apply sort_by_column at the dashboard widget level.
+  # Primary sort column: candidate for the per-column `sort: desc` key (not set yet).
   - attribute: diskspace|snapshot
     display_name: "Snapshot Space (GB)"
     unit: "gb"

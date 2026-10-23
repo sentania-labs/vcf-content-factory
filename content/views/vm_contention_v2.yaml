@@ -85,10 +85,6 @@ columns:
     display_name: "Write Latency Avg (24h)"
     transformation: AVG
 
-# Sort note: the consuming dashboard widget should sort by "CPU Ready P95 (24h)"
-# descending (worst-first) so the most-suffering VMs surface at the top.
-# View-level default sort is not a loader-supported field; apply this in the
-# dashboard widget referencing this view (sort_by_dir: desc,
-# sort_by_column: "CPU Ready P95 (24h)").
-# Precedent: vm_contention_pain.yaml and cluster_demand_overview.yaml use the
-# same widget-sort pattern.
+# Sort note: intended order is "CPU Ready P95 (24h)" descending (worst-first)
+# so the most-suffering VMs surface at the top. A view's default sort is the
+# per-column `sort: desc` key on exactly one list column (not set here yet).
