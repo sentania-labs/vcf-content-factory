@@ -37,7 +37,9 @@ def add_profile_arg(
         metavar="NAME",
         default=None,
         help=(
-            f"Credential profile to use (prod / qa / devel; default: {default!r} "
+            "Credential profile to use (prod or devel; any further profile is named "
+            "from its VCFOPS_<NAME>_* prefix, lowercased, e.g. devel_9_1; "
+            f"default: {default!r} "
             "unless VCFOPS_PROFILE env var is set). "
             "Profile credentials are read from VCFOPS_<PROFILE>_HOST/USER/PASSWORD "
             "in .env."

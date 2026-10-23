@@ -49,7 +49,9 @@ def _build_parser() -> argparse.ArgumentParser:
         "--profile", metavar="NAME",
         default=None,
         help=(
-            "Credential profile to use (prod / qa / devel; default: 'devel'). "
+            "Credential profile to use (prod or devel; any further profile is "
+            "named from its VCFOPS_<NAME>_* prefix, lowercased, e.g. devel_9_1; "
+            "default: 'devel'). "
             "Reads VCFOPS_<PROFILE>_HOST/USER/PASSWORD from .env. "
             "Explicit --host / --user / --password flags override the profile."
         ),
