@@ -1146,9 +1146,27 @@ class MetricSpec:
       ``redBound``, even though the value exists. The loader therefore
       rejects a partial set; none at all is accepted and renders an
       uncolored tile.
-    - Thresholds are ascending and inclusive: ``>= yellow`` Warning,
-      ``>= orange`` Immediate, ``>= red`` Critical. "Red at >= 1" is
-      ``(1, 1, 1)``.
+    - Direction comes from bound order alone; there is no invert flag on
+      the wire (issue #176). Ascending bounds (``yellow <= orange <=
+      red``) mean higher is worse and are inclusive: ``>= yellow``
+      Warning, ``>= orange`` Immediate, ``>= red`` Critical. "Red at
+      >= 1" is ``(1, 1, 1)``. Descending bounds (``yellow >= orange >=
+      red``) mean lower is worse: at or below ``yellow`` Warning, at or
+      below ``orange`` Immediate, at or below ``red`` Critical (replayed
+      on Scoreboard, 9.0.2, 2026-10-23; MetricChart is inferred from the
+      same per-entry keys; exact-boundary inclusivity in this direction
+      is untested). A lower-is-worse score tile::
+
+          color_method: 0
+          yellow_bound: 90     # below 90 Warning
+          orange_bound: 80     # below 80 Immediate
+          red_bound: 70        # below 70 Critical
+
+      A mixed-order triple (for example ``70 / 50 / 90``) has no defined
+      meaning, so the loader rejects it. Equal neighbours are allowed
+      (``(1, 1, 1)`` is the vendor flag pattern). Wire format:
+      knowledge/context/wire-formats/
+      dashboard_sort_color_default_summary_rows.md §#176.
     - ``color_method: 3`` is how vendor exports express the same three
       bounds as a percent of ``max_value``. It is documented here for
       reading those exports only: the factory emits bounds solely for
@@ -3125,6 +3143,22 @@ def load_dashboard(
                             f"{', '.join(missing)}. A partial set renders "
                             f"the tile as '?' / Unknown on the server."
                         )
+                    if not missing:
+                        # Direction is bound order alone (issue #176):
+                        # ascending = higher is worse, descending = lower
+                        # is worse. A triple that is neither has no
+                        # defined meaning (see MetricSpec).
+                        y, o, r = (float(yellow), float(orange), float(red))
+                        if not (y <= o <= r or y >= o >= r):
+                            raise DashboardValidationError(
+                                f"widget {w.get('id', '?')!r}: metric "
+                                f"{m.get('metric_key', '?')!r}: bounds "
+                                f"yellow={yellow}, orange={orange}, red={red} "
+                                f"are in mixed order. Use ascending bounds "
+                                f"(yellow <= orange <= red) when higher is "
+                                f"worse, or descending (yellow >= orange >= "
+                                f"red) when lower is worse."
+                            )
                 elif color_method == 3:
                     # The renderer nulls every bound for any method other
                     # than 0, so bounds on 3 would silently vanish and the

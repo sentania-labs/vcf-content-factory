@@ -193,6 +193,11 @@ columns:
   `red_bound: "Powered Off"`)
 - Thresholds are static literals, not symptom-driven
 - Color method defaults to "no color" when no bounds set
+- Dashboard widget metrics (Scoreboard, MetricChart, PropertyList with
+  `color_method: 0`) have no `ascending_range`: the bound order is the
+  direction. Descending bounds (`yellow_bound: 90`, `orange_bound: 80`,
+  `red_bound: 70`) color lower values worse; a mixed-order triple is
+  rejected (issue #176)
 
 ### Default sort
 
