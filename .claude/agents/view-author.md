@@ -89,7 +89,7 @@ Track-specific examples:
 
 - Name prefix: `[VCF Content Factory] `
 - Totals: `summary:` takes `true`, one mapping, or a list of mappings
-  (`display_name`, `aggregation` SUM/AVG/MIN/MAX, `columns` 0-based),
+  (`display_name`, `aggregation` SUM/AVG/MIN/MAX/DEVIATION, `columns` 0-based),
   one rendered totals row per entry in order (issue #168).
 - SM column reference: `attribute: supermetric:"<exact name>"`
 - UUID v4 in `id` field (loader generates on first validate)
