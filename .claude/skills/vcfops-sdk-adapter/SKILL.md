@@ -111,11 +111,21 @@ discover, so stitching onto foreign resources goes through the Suite
 API. Hold a `SuiteApiStitcher` (`SuiteApiStitcher.create(this, logger)`
 in `configureAdapter`, `discard()` in `onDiscard`). Surface:
 `pushProperties`, `pushStats`, `addChild` / `addChildren`,
-`findSingletonResourceId`, `get`. The push, relationship and lookup
-calls log and swallow failures and never throw into the collect cycle.
-`get` is the exception: it throws `IOException` /
-`InterruptedException`, so catch them at the call site or an outage
-escapes `collect()`.
+`findSingletonResourceId`, `get`, `close` / `isClosed`. The push,
+relationship and lookup calls log and swallow failures and never throw
+into the collect cycle: a failed push is one WARN line per cycle, with
+the stack trace at DEBUG (#192). `get` is the exception: it throws
+`IOException` / `InterruptedException`, and since buildkit 1.0.13 a
+non-2xx response throws `SuiteApiHttpException` (an `IOException`
+carrying the status, the `apiErrorCode` and a body excerpt, #201), so
+catch them at the call site or an outage escapes `collect()`.
+`get(path, accept)` sets the Accept header per call. `discard()` (and
+`close()`) marks the client closed: it never re-acquires a token and
+refuses further calls (#217), so create a fresh stitcher after a
+reconfigure. Framework helpers log under the adapter's class name
+(`<Adapter>.SuiteApiStitcher`), so grep the per-instance log for that,
+not for `com.vcfcf.adapter.stitch` (#228). Configure lines never carry
+the Suite API principal (#227).
 
 **Relationships: POST adds, PUT replaces.** `addChild(parentId,
 childId)` is the additive `POST
