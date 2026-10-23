@@ -28,7 +28,7 @@
 | #175 View widget sort | The dashboard View widget has **no** sort key. Default sort is a per-column `sortCriteria` Property in the **view definition** XML (`true` ascending, `false` descending, absent none). | View XML, `attributes-selector` column Item | seen in export, plus live server render on 9.0.2 |
 | #176 Lower-is-worse Scoreboard color | No flag exists. Write the three bounds in **descending** order (`yellowBound > orangeBound > redBound`) and the server colors lower values worse. The factory renderer already passes the triple through unchanged. | Widget `metric.resourceKindMetrics[]` entry | seen in export, plus live server replay on 9.0.2 |
 | #177 Show all, narrow on selection | No "default resource plus receiver" mode exists on any widget. But an **AlertList** receiver with `selfProvider: false` already shows every matching alert until an interaction arrives, so setting the **provider** View widget's `selectFirstRow` to `false` gives exactly "all on load, narrow on click". This is the vendor's own `Cluster Performance` pattern. A **View** receiver does not fall back (it shows "resource not selected"). | Provider widget `config.selectFirstRow.selectFirstRow` | seen in export (vendor dashboard) plus UI source; on-screen render not checked |
-| #168 Multiple summary rows | `summaryInfos` is a `List` of `Item`s, one per row, each with its own `displayName`, `aggregation`, and `attributeIndexes`. | View XML, `attributes-selector` Control | seen in export (summary presentation) plus live server render; list presentation with two rows inferred |
+| #168 Multiple summary rows | `summaryInfos` is a `List` of `Item`s, one per row, each with its own `displayName`, `aggregation`, and `attributeIndexes`. | View XML, `attributes-selector` Control | seen in export (summary and list presentations; list multi-row in vendor paks) plus live server render of the summary presentation; on-screen list multi-row not observed |
 
 ## #175: default sort for a View widget
 
@@ -365,10 +365,19 @@ visible="false">`, directly before the `pagination-control`:
 <Property name="summaryInfos"><List><Item><Value><Property name="displayName" value="Average of all VMs"/><Property name="aggregation" value="AVG"/><Property name="attributeIndexes"><List><Item value="0"/><Item value="1"/><Item value="2"/></List></Property></Value></Item><Item><Value><Property name="displayName" value="Worst of all VMs"/><Property name="aggregation" value="MAX"/><Property name="attributeIndexes"><List><Item value="0"/><Item value="1"/><Item value="2"/></List></Property></Value></Item></List></Property></Control>
 ```
 
-Corpus inventory (all of `reference/`): 14 views carry `summaryInfos`.
-The three multi-row ones are all presentation `summary`; the 11
-presentation `list` ones each have one row. No export in the corpus or on
-devel shows a `list` view with two summary rows.
+Corpus inventory (all of `reference/references/`, including the views
+inside the `tvs/` vendor paks, corrected 2026-10-23 by the framework
+review of #168; the first pass looked at loose files only and found 14):
+78 distinct views carry `summaryInfos`. 14 of them are presentation
+`list` views with several summary rows, in the Citrix XenDesktop, Oracle
+EM, HPE and IBM Db2 paks under `reference/references/tvs/`; for example
+`Citrix XenDesktop Desktop Instances List View`
+(`CitrixVirtualAppsAndDesktops-7.0_4.0.0_b20200925.190422.pak`, three
+rows SUM, AVG, MAX) and `Oracle Databases Overview`
+(`OracleEnterpriseManager-9.0.0_b20231005.113304.pak` -> `adapters.zip`
+-> `oem_adapter3/conf/reports/Oracle Database Instance Bottlenecks
+Report.xml`, four rows MIN, MAX, AVG, DEVIATION). Aggregations across the
+78: SUM 58, AVG 29, MAX 15, MIN 9, DEVIATION 1, COUNT 0.
 
 ### Live confirmation (devel, 9.0.2, 2026-10-23)
 
@@ -383,9 +392,10 @@ becomes a column.
 For a presentation `list` view, the single-row case renders as an extra
 row with `"summary": true` and `objId` equal to the `displayName` (seen in
 the `VM Cost Details v2.1` render above: `{"summary": true, "1":
-3813.00..., "objId": "Total"}`). Two Items on a list view should render as
-two such rows; that is inferred from the shared editor component and the
-identical XML shape, not observed.
+3813.00..., "objId": "Total"}`). Several Items on a list view are seen in
+vendor pak exports (inventory above); that they render as several such
+rows is inferred from the shared editor component, not observed on
+screen.
 
 ### What the factory needs
 
@@ -401,7 +411,8 @@ identical XML shape, not observed.
   Keeping the single-mapping form as shorthand for a one-item list stays
   byte-identical to today's output.
 - `COUNT` was not seen in any export's `aggregation`; the values seen are
-  `SUM`, `AVG`, `MIN`, `MAX`.
+  `SUM`, `AVG`, `MIN`, `MAX` and `DEVIATION` (one view, Oracle EM pak,
+  "Standard Deviation" row).
 
 ## Not done, and why
 
@@ -416,6 +427,7 @@ identical XML shape, not observed.
   30-second look at the vendor `Cluster Performance` dashboard on devel
   (does `Performance Alerts` list alerts before any cluster is clicked?)
   would confirm it.
-- **List view with two summary rows, and multi-column sort priority.**
-  Confirming either needs a throwaway view import, which this read-only
-  brief did not allow.
+- **On-screen render of a list view with two summary rows, and
+  multi-column sort priority.** The XML shape is seen in vendor paks;
+  confirming the rendered rows, or which sorted column wins, needs a
+  throwaway view import, which this read-only brief did not allow.

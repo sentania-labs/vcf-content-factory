@@ -19,22 +19,24 @@ Flat tabular views. One row per resource, columns show metrics or
 properties. Two presentations:
 
 - `list` — sortable table (default)
-- `summary` — table with footer aggregation row (SUM/AVG/MIN/MAX/COUNT)
+- `summary`: table with footer aggregation rows (SUM/AVG/MIN/MAX/DEVIATION)
 
 Summary (totals) rows: `summary:` takes `true` (one `SUM` row over every
 column), one mapping, or a list of mappings for several rows, each with
-its own label, aggregation and columns (0-based indexes, omitted = all).
+its own label, aggregation (`SUM`, `AVG`, `MIN`, `MAX`, `DEVIATION`,
+all seen in vendor exports; `COUNT` is rejected, no export carries it)
+and columns (0-based indexes, omitted = all).
 Rows render in authored order; on `presentation: summary` each row
 becomes a column instead (issue #168, wire format in
 `wire-formats/dashboard_sort_color_default_summary_rows.md`):
 
 ```yaml
 summary:
-  - display_name: Hosts
-    aggregation: COUNT     # accepted; never seen in an export
-    columns: [0]
   - display_name: Average score
-    aggregation: AVG       # SUM, AVG, MIN, MAX seen in exports
+    aggregation: AVG
+    columns: [1]
+  - display_name: Lowest score
+    aggregation: MIN
     columns: [1]
 ```
 

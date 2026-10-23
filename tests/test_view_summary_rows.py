@@ -125,15 +125,15 @@ def test_two_rows_match_vendor_fragment(tmp_path):
 
 def test_rows_keep_authored_order_and_own_columns(tmp_path):
     got = _summary_infos(tmp_path, [
-        {"display_name": "Count", "aggregation": "COUNT", "columns": [0]},
+        {"display_name": "Spread", "aggregation": "DEVIATION", "columns": [0]},
         {"display_name": "Total", "aggregation": "SUM", "columns": [1, 2]},
         {"display_name": "Lowest", "aggregation": "MIN", "columns": [2]},
     ])
     names = re.findall(r'name="displayName" value="([^"]+)"', got)
     aggs = re.findall(r'name="aggregation" value="([^"]+)"', got)
     idx = re.findall(r'<Property name="attributeIndexes"><List>(.*?)</List>', got)
-    assert names == ["Count", "Total", "Lowest"]
-    assert aggs == ["COUNT", "SUM", "MIN"]
+    assert names == ["Spread", "Total", "Lowest"]
+    assert aggs == ["DEVIATION", "SUM", "MIN"]
     assert idx == ['<Item value="0"/>', '<Item value="1"/><Item value="2"/>', '<Item value="2"/>']
     assert got.count('<Property name="summaryInfos">') == 1
 
@@ -148,6 +148,7 @@ def test_rows_keep_authored_order_and_own_columns(tmp_path):
         ([{"display_name": "A"}, 3], "summary[1] must be a mapping"),
         ("Total", "summary must be true, a mapping, or a list of mappings"),
         ({"aggregation": "MEDIAN"}, "aggregation 'MEDIAN' must be one of"),
+        ({"aggregation": "COUNT"}, "aggregation 'COUNT' must be one of"),
         ([{"aggregation": "SUM"}, {"aggregation": "TOTAL"}], "summary row 1"),
         ({"columns": [3]}, "column indexes below 3"),
         ({"columns": []}, "columns must be a non-empty list"),
@@ -160,3 +161,44 @@ def test_loader_rejects_bad_summary(tmp_path, summary, needle):
 
     with pytest.raises(DashboardValidationError, match=re.escape(needle)):
         load_view(_write(tmp_path, _view(summary)))
+
+
+# Oracle EM vendor pak (reference/references/tvs/
+# OracleEnterpriseManager-9.0.0_b20231005.113304.pak -> adapters.zip ->
+# oem_adapter3/conf/reports/Oracle Database Instance Bottlenecks Report.xml),
+# view "Oracle Databases Overview", presentation list, 13 columns, four
+# summary rows ending in DEVIATION. Verbatim, whitespace between tags removed.
+_OEM_IDX = "".join(f'<Item value="{i}"/>' for i in range(13))
+VENDOR_OEM_FOUR_ROWS = (
+    '<Property name="summaryInfos"><List>'
+    + "".join(
+        '<Item><Value>'
+        f'<Property name="displayName" value="{name}"/>'
+        f'<Property name="aggregation" value="{agg}"/>'
+        f'<Property name="attributeIndexes"><List>{_OEM_IDX}</List></Property>'
+        '</Value></Item>'
+        for name, agg in (
+            ("Minimum", "MIN"), ("Maximum", "MAX"),
+            ("Average", "AVG"), ("Standard Deviation", "DEVIATION"),
+        )
+    )
+    + '</List></Property>'
+)
+
+
+def test_oracle_em_deviation_shape_loads_and_renders(tmp_path):
+    from vcfcf_dashboards.loader import load_view
+    from vcfcf_dashboards.render import _render_view_def_fragment
+
+    data = _view([
+        {"display_name": "Minimum", "aggregation": "MIN"},
+        {"display_name": "Maximum", "aggregation": "MAX"},
+        {"display_name": "Average", "aggregation": "AVG"},
+        {"display_name": "Standard Deviation", "aggregation": "deviation"},
+    ])
+    data["columns"] = [
+        {"attribute": f"metric|m{i}", "display_name": f"M{i}"} for i in range(13)
+    ]
+    v = load_view(_write(tmp_path, data))
+    assert [r.aggregation for r in v.summary] == ["MIN", "MAX", "AVG", "DEVIATION"]
+    assert VENDOR_OEM_FOUR_ROWS in _render_view_def_fragment(v, {})

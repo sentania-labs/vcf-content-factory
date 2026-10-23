@@ -296,9 +296,10 @@ class SummaryRow:
 
     Per entry: ``display_name`` (default ``Summary``), ``aggregation``
     (default ``SUM``; one of ``SUM``, ``AVG``, ``MIN``, ``MAX``,
-    ``COUNT``) and ``columns`` (0-based column indexes; omitted means every
-    column). ``SUM``/``AVG``/``MIN``/``MAX`` are seen in vendor exports;
-    ``COUNT`` is accepted as before but no export carries it.
+    ``DEVIATION``, every one seen in vendor exports, ``DEVIATION`` as the
+    "Standard Deviation" row of the Oracle EM pak's ``Oracle Databases
+    Overview`` list view) and ``columns`` (0-based column indexes; omitted
+    means every column). ``COUNT`` is not accepted: no export carries it.
 
     On a ``presentation: list`` view each entry is an extra row under the
     data; on ``presentation: summary`` each entry becomes a column. Wire
@@ -306,16 +307,18 @@ class SummaryRow:
     dashboard_sort_color_default_summary_rows.md §#168.
     """
     display_name: str = "Summary"
-    aggregation: str = "SUM"  # SUM, AVG, MIN, MAX, COUNT
+    aggregation: str = "SUM"  # SUM, AVG, MIN, MAX, DEVIATION
     # Column indexes to aggregate. None = all columns.
     column_indexes: List[int] | None = None
 
 
-# Summary-row aggregations the loader accepts. SUM/AVG/MIN/MAX are in
-# vendor exports (reference corpus and devel, 2026-10-23); COUNT was
-# accepted before #168 and is kept, though no export has shown it.
+# Summary-row aggregations the loader accepts: exactly the values seen in
+# vendor exports (reference corpus including the tvs/ paks, and devel,
+# 2026-10-23): SUM 58, AVG 29, MAX 15, MIN 9, DEVIATION 1 (Oracle EM pak,
+# "Oracle Databases Overview"). COUNT appears in no export and is not
+# accepted (RULE-002).
 _VALID_SUMMARY_AGGREGATIONS: frozenset[str] = frozenset(
-    {"SUM", "AVG", "MIN", "MAX", "COUNT"}
+    {"SUM", "AVG", "MIN", "MAX", "DEVIATION"}
 )
 
 
@@ -896,14 +899,17 @@ class ViewDef:
                 )
             if c.instanced_group is not None:
                 raise DashboardValidationError(
-                    f"{name_ctx}: sort is not supported on instanced_group columns; "
-                    "no vendor export carries sortCriteria on one, so the factory "
-                    "will not guess the shape. Sort on an ordinary column."
+                    f"{name_ctx}: sort is not supported on instanced_group columns "
+                    "here. Vendor exports carry sortCriteria on the instanced-group "
+                    "driver column (rollUpCount, sortCriteria, isInstancedGroup), but "
+                    "the factory does not model it yet. Sort on an ordinary column."
                 )
         if self.data_type != "list":
             raise DashboardValidationError(
                 f"view {self.name}: column sort is only supported on data_type: list "
-                f"views (got {self.data_type!r}); the vendor evidence is list views only."
+                f"views (got {self.data_type!r}). Distribution views carry sortCriteria "
+                f"in vendor exports too, but it is only verified on list views; its "
+                f"effect elsewhere is unverified."
             )
         if len(sorted_cols) > 1:
             raise DashboardValidationError(
