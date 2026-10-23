@@ -120,17 +120,21 @@ UNSIGNED_PAK_BLOCKED_MSG = (
 def _pak_is_signed(pak_path: Path) -> bool:
     """True when the pak carries a signature at its outer zip root.
 
-    A signed pak has ``signature.mf`` and ``signature.cert`` beside
-    manifest.txt (knowledge/context/mpb/mpb_pak_signing_chain.md).  Factory
-    paks carry neither.  An unreadable zip counts as unsigned; the manifest
-    parse reports it.
+    A signed pak has ``signature.mf`` and a non-empty ``signature.cert``
+    beside manifest.txt (knowledge/context/mpb/mpb_pak_signing_chain.md).
+    Factory paks carry neither.  Community paks (vCommunity) ship
+    ``signature.mf`` with a zero-byte ``signature.cert`` and are unsigned,
+    so an empty cert counts as unsigned.  An unreadable zip counts as
+    unsigned; the manifest parse reports it.
     """
     try:
         with zipfile.ZipFile(pak_path) as zf:
             names = set(zf.namelist())
+            if not {"signature.mf", "signature.cert"} <= names:
+                return False
+            return zf.getinfo("signature.cert").file_size > 0
     except (zipfile.BadZipFile, OSError):
         return False
-    return {"signature.mf", "signature.cert"} <= names
 
 
 def _parse_unsigned_policy(body: Dict[str, Any]) -> Optional[bool]:

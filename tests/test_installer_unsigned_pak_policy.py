@@ -100,6 +100,22 @@ def test_pak_is_signed_detection(tmp_path):
     assert installer._pak_is_signed(bad) is False
 
 
+def test_zero_byte_signature_cert_is_unsigned(tmp_path, capsys):
+    """vCommunity-style community pak: signature.mf plus an EMPTY
+    signature.cert. Unsigned, so the switch is read and a false stops it."""
+    p = tmp_path / "community.pak"
+    with zipfile.ZipFile(p, "w") as zf:
+        zf.writestr("manifest.txt", '{"name": "C", "version": "1"}')
+        zf.writestr("signature.mf", "SHA1(manifest.txt)= 00")
+        zf.writestr("signature.cert", "")
+    assert installer._pak_is_signed(p) is False
+    ui = _UI({"isUnsignedPakInstallationAllowed": False})
+    with pytest.raises(SystemExit):
+        installer._preflight_unsigned_policy(ui, p)
+    assert ui.calls == 1
+    assert "Activate Unsigned PAK Installation" in capsys.readouterr().err
+
+
 def test_raw_upload_error_is_translated(tmp_path):
     """If the gate is still hit (switch flipped between read and upload),
     the raw key comes back with the same explanation."""
