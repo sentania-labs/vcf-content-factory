@@ -227,7 +227,17 @@ def sync_bundle(
 
         print(f"\n  [{content_type}] syncing {len(yaml_paths)} item(s)...")
         try:
-            result = handler.sync(yaml_paths, session)
+            # A handler that can take the objects load_bundle already built
+            # gets them, so it syncs with the bundle's own context
+            # (factory_native prefix rule, resolved references) instead of
+            # reloading the files with factory defaults (#232 review W4).
+            sync_loaded = getattr(handler, "sync_loaded", None)
+            if callable(sync_loaded):
+                result = sync_loaded(
+                    list(getattr(bundle, content_type, None) or []), yaml_paths, session
+                )
+            else:
+                result = handler.sync(yaml_paths, session)
         except Exception as exc:  # noqa: BLE001
             _print_fail(f"{content_type}: unexpected error: {exc}")
             any_failure = True

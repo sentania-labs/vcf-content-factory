@@ -61,7 +61,24 @@ class ReportsHandler(ContentHandler):
                 result.items.append(
                     ItemResult(name=p, status="failed", message=str(exc))
                 )
+        return self._import(reports, result, session)
 
+    def sync_loaded(self, reports: list, yaml_paths: List[str],
+                    session: VCFOpsClient) -> SyncResult:
+        """Bundle sync entry: import the ReportDefs load_bundle already built.
+
+        load_bundle validated them with the bundle's own context (its
+        factory_native prefix rule and its report view/dashboard dirs), so
+        reloading the files here with factory defaults would reject a
+        third-party bundle's report that its build accepts (#232 review W4).
+        Falls back to :meth:`sync` when no loaded objects are handed in.
+        """
+        if not reports:
+            return self.sync(yaml_paths, session)
+        return self._import(list(reports), SyncResult(content_type=self.content_type), session)
+
+    def _import(self, reports: list, result: SyncResult,
+                session: VCFOpsClient) -> SyncResult:
         if not reports:
             return result
 
