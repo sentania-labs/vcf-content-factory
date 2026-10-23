@@ -25,7 +25,11 @@ Public API (online, requires VCFOpsClient)
       skip_metric_check=False,
   ) -> WalkResult
 
-  WalkResult.ok           # True if no blockers (WARN is not a blocker when skip_metric_check=True)
+  check_sm_referents(client, supermetrics, sm_name_map=None) -> WalkResult
+      # read-only Phase 1 + 1b over SM formulas: a missing
+      # @supermetric:"<name>" is an ERROR; run before an import (#154)
+
+  WalkResult.ok          # True if no blockers (WARN is not a blocker when skip_metric_check=True)
   WalkResult.sm_enabled   # list[str]: SM names that were auto-enabled
   WalkResult.sm_already   # list[str]: SM names already enabled (no-op)
   WalkResult.sm_failed    # list[str]: SM names that failed to enable
@@ -189,6 +193,70 @@ def _enable_sm(
         result._msg("ERROR", f"SM verify failed for '{sm_name or sm_uuid}': {e}")
 
 
+def _resolve_name_only_sm_refs(
+    client: "VCFOpsClient",
+    sm_refs: "List[SmRef]",
+    result: WalkResult,
+    uuid_to_name: dict,
+) -> None:
+    """Phase 1b: resolve name-only SM refs (``@supermetric:"<name>"``).
+
+    A referent that is neither in this batch nor in the repo SM YAML may
+    still exist on the target (the push-time resolver falls back to
+    find_by_name the same way).  Resolve it so the policy check covers it;
+    when nothing knows the name, say so up front, naming the referrer and
+    the referent, instead of letting the push fail later.  Read-only:
+    find_by_name lookups only.  Sets ``ref.sm_id`` on each resolved ref and
+    records the name in ``uuid_to_name``.
+    """
+    remote_by_name: dict = {}
+    missing_reported: Set[Tuple[str, str]] = set()  # (source, name)
+    for ref in sm_refs:
+        if ref.sm_id or not ref.name:
+            continue
+        if ref.name not in remote_by_name:
+            remote_by_name[ref.name] = _lookup_sm_uuid_on_target(
+                client, ref.name, result
+            )
+        uid = remote_by_name[ref.name]
+        if uid is _LOOKUP_FAILED:
+            continue  # already reported as a failed lookup; not "absent"
+        if uid:
+            ref.sm_id = uid
+            uuid_to_name[uid] = ref.name
+        elif (ref.source, ref.name) not in missing_reported:
+            missing_reported.add((ref.source, ref.name))
+            result._msg(
+                "ERROR",
+                f"{ref.source} references @supermetric:\"{ref.name}\" but no "
+                f"super metric with that name is in this sync batch, in the "
+                f"repo SM YAML, or on the target instance. Sync that super "
+                f"metric first, or fix the name in the formula."
+            )
+
+
+def check_sm_referents(
+    client: "VCFOpsClient",
+    supermetrics: "List[SuperMetricDef]",
+    sm_name_map: Optional[dict] = None,
+) -> WalkResult:
+    """Read-only pre-import check: every ``@supermetric:"<name>"`` resolves.
+
+    Runs only the walker's Phase 1 extraction and Phase 1b name resolution
+    over ``supermetrics``, so a caller can report a missing referent before
+    it imports anything (issue #154).  It writes nothing: the policy checks
+    and enables (Phases 2 and 3) stay in :func:`walk_and_check`, which
+    callers run after the import as before.
+    """
+    result = WalkResult()
+    uuid_to_name: dict = {v: k for k, v in (sm_name_map or {}).items()}
+    sm_refs, _metric_refs = extract_refs_from_supermetrics(
+        supermetrics, sm_name_map=sm_name_map or {}
+    )
+    _resolve_name_only_sm_refs(client, sm_refs, result, uuid_to_name)
+    return result
+
+
 # ---------------------------------------------------------------------------
 # Main entry point
 # ---------------------------------------------------------------------------
@@ -264,35 +332,7 @@ def walk_and_check(
     metric_refs_all.extend(m_r)
 
     # --- Phase 1b: name-only SM refs (@supermetric:"<name>" tokens) --------
-    # A referent that is neither in this batch nor in the repo SM YAML may
-    # still exist on the target (the push-time resolver falls back to
-    # find_by_name the same way).  Resolve it here so the policy check below
-    # covers it; when nothing knows the name, say so up front, naming the
-    # referrer and the referent, instead of letting the push fail later.
-    _remote_by_name: dict = {}
-    _missing_reported: Set[Tuple[str, str]] = set()  # (source, name)
-    for ref in sm_refs_all:
-        if ref.sm_id or not ref.name:
-            continue
-        if ref.name not in _remote_by_name:
-            _remote_by_name[ref.name] = _lookup_sm_uuid_on_target(
-                client, ref.name, result
-            )
-        uid = _remote_by_name[ref.name]
-        if uid is _LOOKUP_FAILED:
-            continue  # already reported as a failed lookup; not "absent"
-        if uid:
-            ref.sm_id = uid
-            _uuid_to_name[uid] = ref.name
-        elif (ref.source, ref.name) not in _missing_reported:
-            _missing_reported.add((ref.source, ref.name))
-            result._msg(
-                "ERROR",
-                f"{ref.source} references @supermetric:\"{ref.name}\" but no "
-                f"super metric with that name is in this sync batch, in the "
-                f"repo SM YAML, or on the target instance. Sync that super "
-                f"metric first, or fix the name in the formula."
-            )
+    _resolve_name_only_sm_refs(client, sm_refs_all, result, _uuid_to_name)
 
     # Deduplicate SM refs by UUID, collecting sources
     sm_by_uuid: dict = {}

@@ -81,6 +81,14 @@ def cmd_sync(args) -> int:
         return 1
     profile, default = resolve_profile_from_args(args)
     client = VCFOpsClient.from_env(profile=profile, default_profile=default)
+
+    # Referent check before the import (issue #154): a missing
+    # @supermetric:"<name>" is reported by name, referrer and referent,
+    # instead of failing inside the import.  Read-only; the policy checks
+    # and enables stay in the walker after the import.
+    if _check_sm_referents_before_import(client, defs):
+        return 1
+
     bundle = [
         {
             "id": d.id,
@@ -131,6 +139,39 @@ def cmd_sync(args) -> int:
         skip_metric_check=getattr(args, "skip_metric_check", False),
     )
     return rc
+
+
+def _check_sm_referents_before_import(
+    client: VCFOpsClient,
+    defs: List[SuperMetricDef],
+) -> int:
+    """Resolve every ``@supermetric:"<name>"`` in ``defs`` before importing.
+
+    Returns 1 (and prints DEP-ERROR lines) when a referent is in neither
+    this batch nor on the target, or a lookup failed; 0 otherwise.  Uses the
+    same batch-then-target order as the import's own resolver.
+    """
+    try:
+        from vcfcf_common.dep_walker import check_sm_referents
+    except ImportError as e:
+        print(f"WARN  dep walker unavailable: {e}", file=sys.stderr)
+        return 0
+    walk = check_sm_referents(
+        client, defs, sm_name_map={d.name: d.id for d in defs}
+    )
+    for level, msg in walk.messages:
+        if level == "ERROR":
+            print(f"DEP-{level}  {msg}", file=sys.stderr)
+        else:
+            print(f"DEP-{level}  {msg}")
+    if not walk.ok:
+        print(
+            "sync aborted before import: unresolved super metric reference(s) "
+            "(see DEP-ERROR above); nothing was imported",
+            file=sys.stderr,
+        )
+        return 1
+    return 0
 
 
 def _run_dep_walker_for_sms(
