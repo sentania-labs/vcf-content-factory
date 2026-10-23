@@ -12,8 +12,10 @@ REGENERATE every run (derived from describe.xml / adapter.yaml):
   docs/README.md                  - index linking all docset sections
 
 READ, never written (hand-curated extension point):
-  docs/_index_extra.md            - optional Markdown merged verbatim into
-                                    docs/README.md under the stable heading
+  docs/_index_extra.md            - optional Markdown merged as written
+                                    (leading and trailing blank lines
+                                    dropped) into docs/README.md under the
+                                    stable heading
                                     INDEX_EXTRA_HEADING, so an adapter can
                                     add its own index entries without the
                                     next build erasing them (#171)
@@ -1073,8 +1075,9 @@ def generate_readme_md(model: AdapterDocModel, index_extra: str = "") -> str:
     """Generate docs/README.md index content.
 
     ``index_extra`` is the text of the adapter's ``docs/_index_extra.md``
-    (empty when the file is absent). Non-blank text is appended verbatim
-    under ``INDEX_EXTRA_HEADING``; blank text emits nothing, so an adapter
+    (empty when the file is absent). Non-blank text is appended as written,
+    minus leading and trailing blank lines, under ``INDEX_EXTRA_HEADING``;
+    blank text emits nothing, so an adapter
     without the include gets a byte-identical index.
     """
     contents_rows = [
@@ -1118,8 +1121,18 @@ def generate_readme_md(model: AdapterDocModel, index_extra: str = "") -> str:
 
 
 def _render_index_extra(index_extra: str) -> str:
-    """Render the ``docs/_index_extra.md`` section, or "" when there is none."""
-    body = (index_extra or "").strip()
+    """Render the ``docs/_index_extra.md`` section, or "" when there is none.
+
+    Leading and trailing blank lines are dropped; every other line is kept
+    as written, indentation included (an include may open with an indented
+    code block). Line endings are normalized to LF.
+    """
+    lines = (index_extra or "").splitlines()
+    while lines and not lines[0].strip():
+        lines.pop(0)
+    while lines and not lines[-1].strip():
+        lines.pop()
+    body = "\n".join(lines)
     if not body:
         return ""
     return (
@@ -1218,7 +1231,9 @@ def generate_docset(
     index_extra = ""
     index_extra_path = docs_dir / INDEX_EXTRA_FILENAME
     if index_extra_path.is_file():
-        index_extra = index_extra_path.read_text(encoding="utf-8")
+        # utf-8-sig: a BOM (common from Windows editors) is dropped
+        # instead of landing mid-README in front of the first heading.
+        index_extra = index_extra_path.read_text(encoding="utf-8-sig")
         results[f"docs/{INDEX_EXTRA_FILENAME}"] = "merged"
         _log(f"  merged docs/{INDEX_EXTRA_FILENAME} into docs/README.md")
     readme_md = generate_readme_md(model, index_extra=index_extra)

@@ -144,4 +144,27 @@ class TestIndexExtraMerged:
         (project_dir / "docs").mkdir()
         (project_dir / "docs" / INDEX_EXTRA_FILENAME).write_text(_EXTRA, encoding="utf-8")
         generate_docset(project_dir)
-        assert "—" not in _readme(project_dir)
+        assert "\u2014" not in _readme(project_dir)
+
+
+class TestIndexExtraEncodingAndWhitespace:
+    def test_bom_saved_include_does_not_leak_into_readme(self, tmp_path: Path) -> None:
+        project_dir = _make_project(tmp_path)
+        (project_dir / "docs").mkdir()
+        (project_dir / "docs" / INDEX_EXTRA_FILENAME).write_bytes(
+            b"\xef\xbb\xbf" + _EXTRA.encode("utf-8"))
+        generate_docset(project_dir)
+        readme = _readme(project_dir)
+        assert "﻿" not in readme
+        # The first heading starts its own line, so CommonMark parses it.
+        assert "\n### Pushed onto VMWARE objects\n" in readme
+
+    def test_indentation_kept_and_only_outer_blank_lines_dropped(self, tmp_path: Path) -> None:
+        project_dir = _make_project(tmp_path)
+        (project_dir / "docs").mkdir()
+        include = "\n\n    indented code line\n    second line\n\nText after.\n\n\n"
+        (project_dir / "docs" / INDEX_EXTRA_FILENAME).write_text(include, encoding="utf-8")
+        generate_docset(project_dir)
+        readme = _readme(project_dir)
+        assert "-->\n\n    indented code line\n    second line\n\nText after.\n" in readme
+        assert readme.endswith("Text after.\n")

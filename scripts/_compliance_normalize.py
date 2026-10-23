@@ -1134,18 +1134,19 @@ def classify_service_state_reclass(control_id: str):
 #
 # value: (source_products, (parameter, read_recipe_style, vim_path,
 #         expected_override_or_None))
+# DVPG VGT check: the vlan_id_not recipe reads the vlan object's type/id
+# and returns true when VLAN 4095 (VGT) is NOT configured. One constant,
+# shared by this rule and the deprecated source-ID table below, so the two
+# cannot diverge.
+_VGT_DVPG_RECIPE: tuple = (
+    "config.defaultPortConfig.vlan.notVgt",
+    "vlan_id_not",
+    "config.defaultPortConfig.vlan",
+    "true",
+)
+
 _VIM_RECLASS_BY_CONTROL_ID_AND_PRODUCT: Dict[str, tuple] = {
-    # DVPG VGT check: the vlan_id_not recipe reads the vlan object's
-    # type/id and returns true when VLAN 4095 (VGT) is NOT configured.
-    "dvpg.network-vgt": (
-        frozenset({"vc"}),
-        (
-            "config.defaultPortConfig.vlan.notVgt",
-            "vlan_id_not",
-            "config.defaultPortConfig.vlan",
-            "true",
-        ),
-    ),
+    "dvpg.network-vgt": (frozenset({"vc"}), _VGT_DVPG_RECIPE),
 }
 
 
@@ -1191,23 +1192,12 @@ def classify_scoped_vim_reclass(control_id: str, source_id: str):
 # output is unchanged because the control_id rule covers the same rows.
 # Remove both once those drivers use classify_scoped_vim_reclass.
 #
-# value: (parameter, read_recipe_style, vim_path, expected_override_or_None)
+# value: (parameter, read_recipe_style, vim_path, expected_override_or_None).
+# Built from _VGT_DVPG_RECIPE, the tuple the control_id rule uses, so an
+# edit to the recipe reaches both.
 _VIM_RECLASS_BY_SOURCE_ID: Dict[str, tuple] = {
-    # vcenter-8.network-vgt / vcenter-9.network-vgt
-    # Build 40: DVPG VGT check — vlan_id_not recipe reads the vlan object's
-    # type/id and returns true when VLAN 4095 (VGT) is NOT configured.
-    "vcenter-8.network-vgt": (
-        "config.defaultPortConfig.vlan.notVgt",
-        "vlan_id_not",
-        "config.defaultPortConfig.vlan",
-        "true",
-    ),
-    "vcenter-9.network-vgt": (
-        "config.defaultPortConfig.vlan.notVgt",
-        "vlan_id_not",
-        "config.defaultPortConfig.vlan",
-        "true",
-    ),
+    "vcenter-8.network-vgt": _VGT_DVPG_RECIPE,
+    "vcenter-9.network-vgt": _VGT_DVPG_RECIPE,
 }
 
 

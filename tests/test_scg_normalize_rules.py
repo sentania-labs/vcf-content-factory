@@ -206,6 +206,19 @@ def test_missing_required_column_is_rc2(tmp_path):
     assert not out.exists()
 
 
+def test_deprecated_source_id_vgt_table_matches_control_id_rule():
+    """The deprecated table (still read by the compliance repo's 6.7 / 7.0
+    drivers) and the control_id rule must carry the same recipe, or those
+    versions would silently score VGT differently from 8.0 / 9.x."""
+    products, recipe = base._VIM_RECLASS_BY_CONTROL_ID_AND_PRODUCT["dvpg.network-vgt"]
+    assert products == frozenset({"vc"})
+    assert base._VIM_RECLASS_BY_SOURCE_ID, "deprecated table emptied"
+    for sid, entry in base._VIM_RECLASS_BY_SOURCE_ID.items():
+        assert entry == recipe, sid
+        assert base.classify_source_id_vim_reclass(sid) == (
+            base.classify_scoped_vim_reclass("dvpg.network-vgt", sid))
+
+
 def test_driver_patch_targets_still_exist():
     """Names the compliance repo's 7.0 / 9.1 drivers guard on before patching."""
     for name in ("SOURCE_TOKEN", "normalize"):
@@ -235,8 +248,11 @@ _VMX_MINIMUM = r"(?i)^vmx-(\d+)\s+or\s+(?:higher|newer)$"
 
 
 @pytest.mark.parametrize("raw,want", [
-    ("vmx-21", "vmx-21 or newer"),      # SCG 8.0 baseline
-    ("vmx-19", "vmx-19 or newer"),      # SCG 9.0 baseline
+    # Baseline-column cells of the ingested 8.0 / 9.0 sources (vendor rev
+    # 803-20260107-01 and its 9.0 counterpart); newer vendor revisions
+    # write "vmx-17 or higher", which passes through unchanged below.
+    ("vmx-21", "vmx-21 or newer"),
+    ("vmx-19", "vmx-19 or newer"),
     (" VMX-19 ", "vmx-19 or newer"),
     ("vmx-13 or newer", "vmx-13 or newer"),     # SCG 7.0, unchanged
     ("vmx-17 or higher", "vmx-17 or higher"),   # SCG 9.1, unchanged

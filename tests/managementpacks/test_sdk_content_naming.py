@@ -177,3 +177,25 @@ def test_build_sdk_fails_on_declared_mismatch(tmp_path, monkeypatch):
     monkeypatch.setattr(sb, "_stamp_build_version", lambda *_a, **_k: None)
     with pytest.raises(sb.SdkBuildError, match="must not carry"):
         sb.build_sdk_pak(p, tmp_path / "dist")
+
+
+class _PastNamingCheck(Exception):
+    """Raised by the stubbed JDK probe, the first build step after the check."""
+
+
+def test_build_sdk_undeclared_mismatch_warns_and_continues(tmp_path, monkeypatch, capsys):
+    """The path every vCommunity release CI takes today: the field is absent,
+    names are unprefixed, build-sdk warns once and carries on to compile."""
+    import vcfcf_managementpacks.sdk_builder as sb
+    p = _project(tmp_path, "", ["Bare One", "Bare Two"])
+    monkeypatch.setattr(sb, "_stamp_build_version", lambda *_a, **_k: None)
+
+    def _jdk_probe():
+        raise _PastNamingCheck()
+
+    monkeypatch.setattr(sb, "_detect_jdk", _jdk_probe)
+    with pytest.raises(_PastNamingCheck):
+        sb.build_sdk_pak(p, tmp_path / "dist")
+    err = capsys.readouterr().err
+    assert err.count("build-sdk: warning: content_naming not declared") == 1
+    assert "2 bundled name(s)" in err
