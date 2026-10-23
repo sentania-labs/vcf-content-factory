@@ -16,10 +16,13 @@ cases, and runs every row against BOTH:
   - the defect_gate.py extracted from an assembled sdk-buildkit tarball
 
 and asserts the expected exit code for each.  Where a row's expectation
-differs from the vendored script's verdict it says why: RULE-012 keeps an
-absent or empty registry a warning by default (``--require-registry`` restores
-the vendored refusal) and keeps a malformed entry from blocking a pak it does
-not name.  Every other row the vendored script refused, this gate refuses.
+differs from the vendored script's verdict it says why.  There are exactly
+two divergences, both from RULE-012: an absent, empty or unreadable registry
+is a warning by default (``--require-registry`` restores the vendored
+refusal), and a malformed entry does not block a pak it does not name.  Where
+the vendored script refused (exit 1) this gate refuses too (exit 2 for the
+named pak); where it allowed, this gate allows, trailing heading text
+included.
 """
 from __future__ import annotations
 
@@ -197,6 +200,42 @@ MATRIX = [
      "template", [], 2),
     ("case-gated-name", registry(entry(1, "template")), "TEMPLATE", [], 2),
 
+    # --- review fixes (2026-10-23 framework review) ---
+    # B1: every pak a malformed Affects names is refused, not the first only.
+    ("b1-comma-spaced-second", registry(entry(1, "synology"), entry(2, "template, unifi")),
+     "unifi", [], 2),
+    ("b1-real-paks-second", registry(entry(1, "compliance"), entry(2, "synology, unifi")),
+     "unifi", [], 2),
+    ("b1-space-list-second", registry(entry(1, "synology"), entry(2, "template unifi")),
+     "unifi", [], 2),
+    ("b1-backtick-list-second", registry(entry(1, "synology"), entry(2, "`template`, `unifi`")),
+     "unifi", [], 2),
+    ("b1-prose-list-second", registry(entry(1, "synology"), entry(2, "template and unifi")),
+     "unifi", [], 2),
+    ("b1-prose-unnamed-pak", registry(entry(1, "synology", severity="tracked"),
+                                      entry(2, "template and unifi")), "synology", [], 0),
+    # B2: headings kept, field syntax changed: no VALID entry, so refused.
+    ("b2-star-bullets-required", registry(
+        entry(1, "template").replace("- **", "* **"),
+        entry(2, "unifi").replace("- **", "* **")), "template", ["--require-registry"], 1),
+    ("b2-table-required", registry(
+        "### DEF-001\n\n| Field | Value |\n|---|---|\n| Affects | template |\n"),
+     "template", ["--require-registry"], 1),
+    # W2: trailing heading text is tolerated, as in the vendored gate, so a
+    # closed entry under such a heading no longer blocks.
+    ("w2-trailing-text-closed", registry(entry(1, "unifi"), entry(
+        2, "template", heading="### DEF-002 (template build 2)", status="closed",
+    ).replace("- **Summary:**", "- **Closing-evidence:** fixed in build 3\n- **Summary:**")),
+     "template", [], 0),
+    ("w2-trailing-text-tracked", registry(entry(1, "unifi"), entry(
+        2, "template", severity="tracked", heading="### DEF-002 (template build 2)")),
+     "template", [], 0),
+    # N1: edge punctuation on a bare token is malformed and still refuses.
+    ("n1-trailing-period", registry(entry(1, "unifi"), entry(2, "template.")),
+     "template", [], 2),
+    ("n1-parenthesised", registry(entry(1, "unifi"), entry(2, "(template)")),
+     "template", [], 2),
+
     # --- value errors stay scoped ---
     ("waived", registry(entry(1, "unifi"), entry(2, "template", status="waived")),
      "template", [], 2),
@@ -318,6 +357,30 @@ def test_case_insensitive_item_gate(tmp_path):
 def test_comma_list_fails_closed_for_every_item(tmp_path):
     reg = _write(tmp_path, registry(entry(1, "template,unifi")))
     assert sorted(e.affects for e in gate_all(reg)) == ["template", "unifi"]
+
+
+def test_digit_bearing_bad_heading_warns_without_dash_fields(tmp_path, capsys):
+    """W1: ``### DEF-1O2`` with ``*`` bullets used to be silent."""
+    text = entry(2, "template", heading="### DEF-1O2").replace("- **", "* **")
+    reg = _write(tmp_path, registry(entry(1, "unifi"), text))
+    registry_ = parse_registry(reg)
+    assert [e.entry_id for e in registry_.errors] == ["DEF-1O2"]
+    gate_pak("template", reg)
+    assert "DEF-1O2" in capsys.readouterr().err
+
+
+def test_digit_free_prose_heading_stays_silent(tmp_path, capsys):
+    reg = _write(tmp_path, registry(entry(1, "unifi")) + "\n### DEFECTS 2026\n\n* prose\n")
+    assert parse_registry(reg).errors == []
+    gate_pak("template", reg)
+    assert capsys.readouterr().err == ""
+
+
+def test_unreadable_vs_empty(tmp_path):
+    """B2: errors but no valid entry is unreadable, not empty."""
+    reg = _write(tmp_path, registry(entry(1, "template").replace("- **", "* **")))
+    registry_ = parse_registry(reg)
+    assert registry_.unreadable and not registry_.empty
 
 
 def test_shipped_registry_still_parses_clean():

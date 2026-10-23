@@ -146,7 +146,10 @@ def kit_defect_gate_source(version: str = None) -> str:
         "# the factory module, never this copy: one implementation (#226).\n"
         "#\n"
         "#   python3 defect_gate.py --pak <name> --registry <defects.md> "
-        "[--require-registry]\n"
+        "--require-registry\n"
+        "#\n"
+        "# --require-registry is required in CI: without it an absent, empty or\n"
+        "# unreadable registry (a failed fetch) warns and passes (RULE-012).\n"
     )
     return header + _DEFECT_GATE_SOURCE.read_text(encoding="utf-8")
 

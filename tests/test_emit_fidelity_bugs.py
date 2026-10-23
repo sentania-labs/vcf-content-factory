@@ -469,11 +469,17 @@ def _view_corpora() -> list[tuple[str, list[Path], list[Path]]]:
             f"third_party/{project.parent.name}",
             yamls(project), yamls(project.parent / "supermetrics"),
         ))
-    for pak in sorted((_REPO_ROOT / "content" / "sdk-adapters").glob("*/views")):
-        corpora.append((
-            f"sdk-adapters/{pak.parent.name}",
-            yamls(pak), yamls(pak.parent / "supermetrics"),
-        ))
+    # Registered live paks only, so a workstation that still holds retired
+    # clones tests the same corpus CI does (#226 review N3).
+    from vcfcf_packaging.managed_paks import load_registry
+
+    for name in sorted(p.name for p in load_registry()):
+        pak = _REPO_ROOT / "content" / "sdk-adapters" / name
+        if (pak / "views").is_dir():
+            corpora.append((
+                f"sdk-adapters/{name}",
+                yamls(pak / "views"), yamls(pak / "supermetrics"),
+            ))
     return corpora
 
 

@@ -52,7 +52,7 @@ load_registry(registry_path) -> List[DefectEntry]
         prefix other than ``factory:``); such an entry used to parse as valid
         and silently gate nothing (#153)
       - a ``DEF``-prefixed heading whose id is not ``DEF-NNN`` (a typo such as
-        ``DEF-1O2``, or trailing text): it always terminates the previous entry,
+        ``DEF-1O2``, or a suffix glued to the id): it always terminates the previous entry,
         so it can never repoint a good entry, and it becomes a parse error of
         its own when it carried field lines.  A DEF-prefixed heading with no
         field lines under it is prose (``### DEFECTS``), has nothing that could
@@ -70,10 +70,17 @@ load_registry(registry_path) -> List[DefectEntry]
         field repeated within one entry (#226).  Fenced lines are description
         text, never fields.  Up to three spaces of indent before a heading or
         a field are allowed, as in Markdown, and a byte-order mark is ignored
-      - an ``Affects:`` holding a comma or a backtick (#226)
+      - an ``Affects:`` holding a comma or a backtick, or a bare token with
+        leading or trailing punctuation (``synology.``) (#226)
 
-    A malformed entry fails closed for EVERY scope it names: each item of a
-    comma list and each ``Affects:`` line, repeated or nested ones included.
+    A malformed entry fails closed for EVERY pak it names: every token of a
+    malformed ``Affects:`` (``template, unifi`` and ``template unifi`` name
+    both) and every ``Affects:`` line, repeated or nested ones included.  A
+    token that is a known pak, ``<type>/<slug>`` or ``factory:<area>`` is a
+    scope; any other pak-shaped token blocks a pak gated by exactly that name.
+    Trailing text after a well-formed id (``### DEF-027 (note)``) is
+    tolerated, as in the vendored gate, and a malformed heading whose id
+    carries a digit is reported even when it collected no dash-bullet field.
     Every gate match is case-insensitive (``Synology`` gates ``synology``).
 
 gate_pak(pak_name, registry_path) -> List[DefectEntry]
@@ -177,12 +184,15 @@ class ParseError:
     lineno: int
     reason: str
     affects: str = ""
-    #: First token of a multi-token ``Affects:`` that could not be attributed
-    #: on its own (not a KNOWN pak, not ``<type>/<slug>`` or
-    #: ``factory:<area>``).  ``gate_pak`` still fails closed when this equals
-    #: the pak being gated, which needs no managed-paks lookup and so also
-    #: works when this file runs as a vendored standalone script (#153).
-    candidate: str = ""
+    #: Every pak-shaped token of a malformed ``Affects:`` that could not be
+    #: attributed on its own (not a KNOWN pak, not ``<type>/<slug>`` or
+    #: ``factory:<area>``), the name after an unrecognised prefix included
+    #: (``pak:synology`` -> ``synology``).  ``gate_pak`` fails closed when the
+    #: pak being gated equals any of them, which needs no managed-paks lookup
+    #: and so also works when this file runs as a standalone script (#153).
+    #: Every token, not the first only: ``template, unifi`` names unifi too
+    #: (#226 review B1).
+    candidates: Tuple[str, ...] = ()
     #: Further scopes the broken entry names beyond ``affects``: the other
     #: items of a comma list (``template,unifi``), or a second ``Affects:``
     #: line (repeated, nested, fenced into a malformed entry).  The entry
@@ -193,6 +203,11 @@ class ParseError:
     def scoped(self) -> bool:
         """True when this error can be attributed to a single artifact."""
         return bool(self.affects)
+
+    @property
+    def candidate(self) -> str:
+        """The first candidate, or ``""``; see ``candidates``."""
+        return self.candidates[0] if self.candidates else ""
 
     def __str__(self) -> str:  # pragma: no cover - trivial
         who = self.entry_id or "<unnamed entry>"
@@ -239,9 +254,22 @@ class Registry:
 
         An empty, truncated or reformatted registry (or an error page saved
         in its place) parses to nothing.  The gates warn and pass on it, as
-        on an absent file; ``--require-registry`` refuses it (#226).
+        on an absent file.  ``--require-registry`` refuses on the stronger
+        :attr:`unreadable` (#226).
         """
         return self.exists and not self.entries and not self.errors
+
+    @property
+    def unreadable(self) -> bool:
+        """True when the file exists but not one entry in it is VALID.
+
+        Covers :attr:`empty` and also a registry that kept its ``### DEF-NNN``
+        headings while its field syntax changed (``* **Field:**`` bullets, a
+        table): every entry is then a parse error, which the default gate
+        reports but which is no all-clear for CI that fetched the file on
+        purpose (#226 review B2).
+        """
+        return self.exists and not self.entries
 
 
 # ---------------------------------------------------------------------------
@@ -266,7 +294,12 @@ class DefectRegistryError(ValueError):
 # spaces of indent already split off (Markdown allows that much before an ATX
 # heading).  Space or tab only between the hashes and the id: a non-breaking
 # space there is a disguised heading, caught by _LOOSE_DEF_HEADING_RE.
-_SECTION_RE = re.compile(r"^#{1,4}[ \t]+(DEF-\d+)[ \t]*$")
+# Text after the id, past a word break, is tolerated (``### DEF-027 (synology
+# build 32)``), as the vendored gate tolerates it (template issue #18 CI4): the
+# id is unambiguous, and treating such a heading as malformed turned a closed
+# or tracked entry into an open blocker (#226 review W2).  ``DEF-1O2`` still
+# fails, since there is no word break between ``1`` and ``O``.
+_SECTION_RE = re.compile(r"^#{1,4}[ \t]+(DEF-\d+)\b.*$")
 
 #: Anything that LOOKS like a defect heading (#226, ported from the template's
 #: vendored ci/defect_gate.py): any depth of '#', optional whitespace
@@ -303,7 +336,7 @@ _LOOSE_FIELD_RE = re.compile(r"^[\s>]*-\s+\*\*([^:]+):\*\*\s*(.*)")
 # Notes on _LOOSE_DEF_HEADING_RE, the malformed-heading detector.
 #
 # A heading that MEANT to be an entry but whose id is not ``DEF-NNN`` (a typo
-# such as ``DEF-1O2``, a suffix, trailing text, or any disguise listed above)
+# such as ``DEF-1O2``, a suffix glued to the id, or any disguise listed above)
 # used to match nothing, fall through to the continuation-line branch, and
 # let the following entry's field lines silently overwrite the PREVIOUS
 # entry's fields: a real defect stopped gating the artifact it named, with no
@@ -326,6 +359,16 @@ _FIELD_RE = re.compile(r"^-\s+\*\*([^:]+):\*\*\s*(.*)")
 #: (``template,unifi``, ```template```), ported from the vendored gate's
 #: one-token rule (#226).  Whitespace is handled separately (multi-token).
 _LIST_CHARS_RE = re.compile(r"[,`]")
+
+#: Splits a malformed ``Affects:`` value into the tokens it names.
+_AFFECTS_SPLIT_RE = re.compile(r"[\s,`]+")
+
+#: Punctuation that may wrap a token in prose or a list (``(synology)``,
+#: ``synology.``, ``<pak>``); stripped before a token is classified.
+_EDGE_PUNCT = "()[]{}<>.,;:!?'\"`"
+
+#: The shape of a bare managed-pak name.
+_PAK_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.\-]*$")
 
 # DEF-NNN id format.
 _ID_RE = re.compile(r"^DEF-\d+$")
@@ -539,7 +582,12 @@ def parse_registry(
             # most in the defects.local.md a stranger writes from scratch.
             # Note that TERMINATION of the previous entry is unconditional and
             # happens above: that is the property that removes the corruption.
-            if current_fields:
+            # A digit in the id token (``DEF-1O2``, ``DEF102``) is evidence on
+            # its own: that heading meant to be an entry, so it is reported
+            # even when its fields are in some other syntax (``* **Field:**``
+            # bullets) and nothing was collected (#226 review W1).
+            id_token = (current_id.split() or [""])[0]
+            if current_fields or any(ch.isdigit() for ch in id_token):
                 errors.append(_structural_error(
                     _clip(current_id, 40), current_id_lineno,
                     f"heading {_clip(current_id, 40)!r} is not a well-formed "
@@ -734,13 +782,14 @@ _KNOWN_PAKS_WARNED: list = []
 def _affects_problem(raw: str) -> Optional[str]:
     """Why an ``Affects:`` value breaks the one-token contract, else None.
 
-    Three shapes are rejected.  A multi-token value (a token plus a
+    Four shapes are rejected.  A multi-token value (a token plus a
     parenthetical note, a wrapped path, prose) can never equal the pak name
     or ``<type>/<slug>`` a gate matches against, so the entry used to parse
     as valid and silently block nothing (#153).  A single token carrying a
     prefix other than ``factory:`` (``pak:synology``) fails the same way.
     So does one holding a comma or a backtick (``template,unifi``,
-    ```template```), ported from the vendored gate (#226).
+    ```template```), ported from the vendored gate (#226), and one with
+    leading or trailing punctuation (``synology.``, #226 review N1).
     """
     tokens = raw.split()
     if len(tokens) != 1:
@@ -756,6 +805,11 @@ def _affects_problem(raw: str) -> Optional[str]:
             f"exactly one bare scope token. One issue on N artifacts is N "
             f"entries"
         )
+    if tokens[0].strip(_EDGE_PUNCT) != tokens[0]:
+        return (
+            f"Affects {_clip(raw)!r} has leading or trailing punctuation; it "
+            f"must be exactly one bare scope token"
+        )
     if ":" in tokens[0] and not _FACTORY_SCOPE_RE.match(tokens[0]):
         return (
             f"Affects {_clip(raw)!r} is not a recognised scope: the only "
@@ -765,95 +819,133 @@ def _affects_problem(raw: str) -> Optional[str]:
     return None
 
 
-def _affects_candidate(fields: dict[str, str]) -> str:
-    """The pak an unattributable ``Affects:`` most plausibly names, else ``""``.
+def _classify_affects(raw: str) -> Tuple[List[str], List[str]]:
+    """``(scopes, candidates)`` for one ``Affects:`` value.
 
-    - multi-token: its first token (``synology (note)`` -> ``synology``);
-    - one token with an unrecognised prefix: the text after the first
-      colon (``pak:synology`` -> ``synology``).
+    A valid value (one bare token) is its own single scope.  A malformed one
+    is split into tokens on whitespace, commas and backticks, each stripped
+    of edge punctuation, and EVERY token is classified (#226 review B1:
+    ``template, unifi`` names unifi as much as template):
 
-    Not an attribution on its own (prose starts with a word too); see
-    ``ParseError.candidate`` and :func:`_candidate_entries` for how it is
-    used: only to fail closed for a pak gated by exactly this name.
-    """
-    tokens = (fields.get("Affects") or "").split()
-    if len(tokens) > 1:
-        # "template, unifi" and "`template` (note)" name template, not
-        # "template," or "`template`" (#226).
-        return tokens[0].strip("`,")
-    if len(tokens) == 1 and ":" in tokens[0] and not _FACTORY_SCOPE_RE.match(tokens[0]):
-        return tokens[0].split(":", 1)[1]
-    return ""
+    - a ``<type>/<slug>`` or ``factory:<area>`` token is a scope;
+    - a pak-shaped token is a scope when it is a KNOWN managed pak, or when
+      the value has no whitespace at all (``template,unifi``, ``synology.``:
+      a list or a decorated token, never prose), and a candidate otherwise;
+    - a token with an unrecognised prefix offers the name after the colon
+      as a candidate (``pak:synology`` -> ``synology``).
 
+    A scope fails closed for that artifact everywhere.  A candidate fails
+    closed only for a pak gated by exactly that name, so a prose word can
+    never block anything but a pak literally called that, and needs no
+    managed-paks lookup (the standalone-script path).
 
-def _candidate_entries(
-    registry: "Registry", pak_name: Optional[str] = None,
-) -> List[DefectEntry]:
-    """Synthetic blockers for unscoped parse errors that carry a candidate.
-
-    ``gate_pak`` passes the pak being gated and gets only the matching
-    ones (compared case-insensitively, like every gate match); ``gate_all``
-    passes nothing and gets every one, each labelled with its candidate, so
-    ``--all`` agrees with ``--pak <candidate>``.
-    """
-    return [
-        _synthetic_entry(replace(err, affects=err.candidate), registry.path)
-        for err in registry.unscoped_errors
-        if err.candidate and (pak_name is None or _norm(err.candidate) == _norm(pak_name))
-    ]
-
-
-def _value_scopes(raw: str) -> List[str]:
-    """The scopes one ``Affects:`` value can be attributed to, in order.
-
-    A single token is readable as-is, unless it carries an unrecognised
-    prefix (``pak:synology``), which names no gateable scope.  One token
-    holding commas or backticks is a list or a quoted token
-    (``template,unifi``, ```template```): each item is a scope, with the
-    same prefix rule (#226).  A multi-token value breaks the registry's
-    one-token contract; it is attributed to its FIRST token only when that
-    token unambiguously names a scope (a known managed pak, ``<type>/<slug>``,
-    or ``factory:<area>``), so the broken entry still fails closed for what
-    it meant to block (#153).  Anything else, including a prose sentence,
-    cannot be attributed to one artifact, so it yields nothing.
-
-    Values are returned UNCLIPPED: each has to compare equal to a real pak
+    Scopes are returned UNCLIPPED: each has to compare equal to a real pak
     name or <type>/<slug> token for the synthetic entry to gate anything, and
-    a truncated copy never can.  Callers clip at the point of echo instead,
-    so an over-length token cannot dump the whole field into output while
-    the warning still tells the truth about what it blocks.
+    a truncated copy never can.  Callers clip at the point of echo instead.
     """
     raw = (raw or "").strip()
     if not raw:
-        return []
-    tokens = raw.split()
-    if len(tokens) > 1:
-        first = tokens[0].strip("`,")
-        if (
-            _ITEM_SCOPE_RE.match(first)
-            or _FACTORY_SCOPE_RE.match(first)
-            or _norm(first) in _known_pak_names()
-        ):
-            return [first]
-        return []
-    parts = [p for p in _LIST_CHARS_RE.split(raw) if p]
-    return [p for p in parts if not (":" in p and not _FACTORY_SCOPE_RE.match(p))]
+        return [], []
+    if _affects_problem(raw) is None:
+        return [raw], []
+    no_whitespace = len(raw.split()) == 1
+    known = _known_pak_names()
+    scopes: List[str] = []
+    candidates: List[str] = []
+    for token in _AFFECTS_SPLIT_RE.split(raw):
+        # Keep an edge colon for the prefix test below: ``pak:`` names no pak.
+        token = token.strip(_EDGE_PUNCT.replace(":", ""))
+        if not token:
+            continue
+        if _ITEM_SCOPE_RE.match(token) or _FACTORY_SCOPE_RE.match(token):
+            scopes.append(token)
+        elif ":" in token:
+            name = token.split(":", 1)[1].strip(_EDGE_PUNCT)
+            if _PAK_NAME_RE.match(name):
+                (scopes if _norm(name) in known else candidates).append(name)
+        elif _PAK_NAME_RE.match(token):
+            if no_whitespace or _norm(token) in known:
+                scopes.append(token)
+            else:
+                candidates.append(token)
+    return scopes, candidates
+
+
+def _dedupe(values: List[str], exclude: Tuple[str, ...] = ()) -> List[str]:
+    """Order-preserving, case-insensitive de-duplication."""
+    seen = {_norm(v) for v in exclude}
+    out: List[str] = []
+    for value in values:
+        if _norm(value) not in seen:
+            seen.add(_norm(value))
+            out.append(value)
+    return out
+
+
+def _affects_attribution(values: List[str]) -> Tuple[List[str], List[str]]:
+    """``(scopes, candidates)`` across every ``Affects:`` value of an entry."""
+    scopes: List[str] = []
+    candidates: List[str] = []
+    for value in values:
+        s, c = _classify_affects(value)
+        scopes += s
+        candidates += c
+    scopes = _dedupe(scopes)
+    return scopes, _dedupe(candidates, exclude=tuple(scopes))
+
+
+def _value_scopes(raw: str) -> List[str]:
+    """The scopes one ``Affects:`` value is attributed to (no candidates)."""
+    return _classify_affects(raw)[0]
 
 
 def _entry_scopes(values: List[str]) -> List[str]:
     """Every distinct scope named by an entry's ``Affects:`` values, in order."""
-    scopes: List[str] = []
-    for value in values:
-        for scope in _value_scopes(value):
-            if _norm(scope) not in {_norm(s) for s in scopes}:
-                scopes.append(scope)
-    return scopes
+    return _affects_attribution(values)[0]
 
 
 def _readable_affects(fields: dict[str, str]) -> str:
     """The entry's first attributable ``Affects:`` scope, else ``""``."""
     scopes = _value_scopes(fields.get("Affects") or "")
     return scopes[0] if scopes else ""
+
+
+def _candidate_entries(
+    registry: "Registry", pak_name: Optional[str] = None,
+) -> List[DefectEntry]:
+    """Synthetic blockers for the candidates of every parse error.
+
+    ``gate_pak`` passes the pak being gated and gets one per error naming it
+    as a candidate (compared case-insensitively, like every gate match);
+    ``gate_all`` passes nothing and gets one per candidate, each labelled
+    with it, so ``--all`` agrees with ``--pak <candidate>``.  Scoped errors
+    count too: ``synology, newpak`` is scoped to a known synology and still
+    names newpak.
+    """
+    out: List[DefectEntry] = []
+    for err in registry.errors:
+        for name in err.candidates:
+            if pak_name is None or _norm(name) == _norm(pak_name):
+                out.append(_synthetic_entry(replace(err, affects=name), registry.path))
+    return out
+
+
+def _parse_error(
+    entry_id: str,
+    lineno: int,
+    reason: str,
+    affects_values: List[str],
+) -> ParseError:
+    """A ParseError that fails closed for every scope and candidate named."""
+    scopes, candidates = _affects_attribution(affects_values)
+    return ParseError(
+        entry_id=entry_id,
+        lineno=lineno,
+        reason=reason,
+        affects=scopes[0] if scopes else "",
+        candidates=tuple(candidates),
+        extra_scopes=tuple(scopes[1:]),
+    )
 
 
 def _structural_error(
@@ -867,18 +959,9 @@ def _structural_error(
 
     Covers a bad heading and a disguised, nested or repeated field line.
     The entry fails closed for every scope any of its ``Affects:`` lines
-    names; with none attributable, the first value's candidate still blocks
-    a pak gated by exactly that name.
+    names, and for a pak gated by exactly any candidate name in them.
     """
-    scopes = _entry_scopes(affects_values)
-    return ParseError(
-        entry_id=entry_id,
-        lineno=lineno,
-        reason=reason,
-        affects=scopes[0] if scopes else "",
-        candidate="" if scopes else _affects_candidate(fields),
-        extra_scopes=tuple(scopes[1:]),
-    )
+    return _parse_error(entry_id, lineno, reason, affects_values)
 
 
 def _validate_and_emit(
@@ -894,16 +977,10 @@ def _validate_and_emit(
     entry is valid; returns a :class:`ParseError` (and appends nothing) when
     it is not.  Never raises: one bad entry must not take the file down.
     """
-    scopes = _value_scopes(fields.get("Affects") or "")
-    affects_hint = scopes[0] if scopes else ""
-    candidate = "" if affects_hint else _affects_candidate(fields)
+    affects_values = [fields["Affects"]] if fields.get("Affects") else []
 
     def _err(reason: str) -> ParseError:
-        return ParseError(
-            entry_id=entry_id, lineno=lineno, reason=reason,
-            affects=affects_hint, candidate=candidate,
-            extra_scopes=tuple(scopes[1:]),
-        )
+        return _parse_error(entry_id, lineno, reason, affects_values)
 
     # --- Duplicate ID check ---
     if entry_id in seen_ids:
@@ -1076,20 +1153,25 @@ def _read_registry_for_gate(
         )
     if first_time:
         for err in registry.errors:
+            names = ", ".join(repr(_clip(c)) for c in err.candidates[:10])
             if err.scoped:
                 scopes = ", ".join(
                     repr(_clip(s)) for s in (err.affects,) + err.extra_scopes
                 )
+                also = (
+                    f", and against a pak gated by the exact name {names}"
+                    if names else ""
+                )
                 _warn(
                     f"WARNING: defect registry entry is malformed and is being "
                     f"treated as an open blocking defect against "
-                    f"{scopes}: {err}"
+                    f"{scopes}{also}: {err}"
                 )
-            elif err.candidate:
+            elif err.candidates:
                 _warn(
                     f"WARNING: defect registry entry is malformed AND its "
                     f"'Affects:' scope could not be confirmed; it blocks only "
-                    f"a pak gated by the exact name {_clip(err.candidate)!r}, "
+                    f"a pak gated by the exact name {names}, "
                     f"and nothing else: {err}"
                 )
             else:
@@ -1323,10 +1405,10 @@ if __name__ == "__main__":
                 raise FileNotFoundError(
                     f"--require-registry: no defect registry at {_registry_path}"
                 )
-            if parse_registry(_registry_path).empty:
+            if parse_registry(_registry_path).unreadable:
                 raise DefectRegistryError(
-                    f"--require-registry: {_registry_path} holds no "
-                    f"'### DEF-NNN' entries; the registry is empty or in an "
+                    f"--require-registry: {_registry_path} holds no valid "
+                    f"'### DEF-NNN' entry; the registry is empty or in an "
                     f"unrecognised format. Refusing to treat it as clear."
                 )
         if _args.all:

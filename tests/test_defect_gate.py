@@ -633,14 +633,13 @@ class TestMalformedHeadingIsolation:
         assert len(registry.unscoped_errors) == 1, (
             f"an unreadable scope must be unscoped; got {registry.errors}"
         )
-        # No confirmed scope, so it gates no real artifact.  Since #153 its
-        # first word is a pak-name candidate: `--pak all` would refuse, and
-        # `--all` lists it under that label so the two agree.
+        # No confirmed scope, so it gates no real artifact.  Since #226 every
+        # word is a pak-name candidate (`--pak all` or `--pak dashboards`
+        # would refuse), and `--all` lists each so the two agree.
         from vcfcf_packaging.defects import gate_pak
-        assert [e.affects for e in gate_all(reg)] == ["all"], (
-            "a malformed heading with no readable scope is listed only under "
-            "its first-word candidate"
-        )
+        assert [e.affects for e in gate_all(reg)] == [
+            "all", "of", "the", "dashboards", "probably",
+        ], "a malformed heading with no readable scope is listed under its candidates"
         assert gate_pak("synology", reg) == [], (
             "a malformed heading with no readable scope must not gate a real pak"
         )
