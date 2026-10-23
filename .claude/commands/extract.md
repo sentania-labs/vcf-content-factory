@@ -23,13 +23,13 @@ Drive a conversational flow to pull a dashboard and its dependencies off the liv
   says so at session start and the credential wizard
   (`python3 -m vcfcf_common setup`) creates it.
 - Run commands from the repo root.
-- The `.env` defines three credential profiles: `prod` (primary lab, read-only `claude`), `qa` (primary lab, `admin` for uninstall round-trips), `devel` (devel lab, `admin` for destructive playground). `/extract` defaults to `devel` because authoring iterations happen on devel by policy. Override with `from <profile>` in `$ARGUMENTS` (e.g. `from prod`, `from qa`).
+- The `.env` defines the credential profiles: `prod` (primary lab, read-only), `devel` (devel lab 9.0.2, `admin` for destructive playground), `devel_9_1` (devel lab 9.1.1) and `devel_8_18` (devel lab 8.18). The former `qa` profile was removed 2026-10-14 (it pointed at prod). `/extract` defaults to `devel` because authoring iterations happen on devel by policy. Override with `from <profile>` in `$ARGUMENTS` (e.g. `from prod`, `from devel_9_1`).
 
 ## Flow
 
 ### 1. Identify the target dashboard, profile, and build intent
 
-- **Profile**: scan `$ARGUMENTS` for `from <profile>` — `from prod`, `from qa`, `from devel`. If no `from` clause, default to `devel` (per the per-command rule for mutating/authoring round-trips). The resolved profile is passed to every CLI invocation as `--profile <name>`.
+- **Profile**: scan `$ARGUMENTS` for `from <profile>`: `from prod`, `from devel`, `from devel_9_1`, `from devel_8_18`. If no `from` clause, default to `devel` (per the per-command rule for mutating/authoring round-trips). The resolved profile is passed to every CLI invocation as `--profile <name>`.
 - If `$ARGUMENTS` contains a dashboard name, use it as the candidate. Confirm with the user that this is the right one.
 - Otherwise, run:
   ```

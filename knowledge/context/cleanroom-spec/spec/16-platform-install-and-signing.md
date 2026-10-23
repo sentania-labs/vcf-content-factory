@@ -1,5 +1,15 @@
 # 16 — Platform Install Pipeline + Signature Validation
 
+> **Correction, 2026-10-23.** This file's claim that the appliance accepts
+> unsigned paks by default was a lab artifact: the devel appliance it was
+> observed on had the "Allow Unsigned PAK Installation" toggle switched on
+> by hand on 2026-04-17. A fresh 9.1.1 install comes up with the toggle off
+> and refuses every unsigned pak, and the platform trusts only
+> VMware/Broadcom signatures, so a self-signed pak still needs the toggle.
+> The unsigned-install statements below are left as written for the record.
+> Evidence: `knowledge/context/investigations/2026-10-14-unsigned-pak-policy-9-1-1.md`;
+> the corrected statement is in `knowledge/context/tier2_architecture.md`.
+
 **Status**: DRAFT (Pass 23, 2026-05-16). Field-confirmed against the
 devel ops appliance via cross-workspace request (request_id
 `6d25e88d-...`); evidence bundle at

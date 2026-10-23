@@ -70,10 +70,11 @@ themselves, so `--profile <name>` is all they need, and sourcing exports
 every secret into that shell where any later `env` or error dump prints
 them.
 
-Three profiles exist by convention: `prod` (read-only recon), `qa` (admin
-for round-trips), `devel` (destructive playground). Validate and list
-commands default to `prod`; sync, enable and delete default to `devel`.
-Override on any command with `--profile <name>`.
+Two profiles exist by convention: `prod` (read-only recon) and `devel`
+(destructive playground). Add one per extra instance; the name is the
+lowercased variable prefix, so `VCFOPS_DEVEL_9_1_*` is `--profile devel_9_1`.
+Validate and list commands default to `prod`; sync, enable and delete
+default to `devel`. Override on any command with `--profile <name>`.
 
 Federated SSO sources (VIDB, VIDM) are not supported on the install path.
 Create a Local service account if those are the only options available.
