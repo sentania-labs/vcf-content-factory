@@ -104,7 +104,7 @@ All components compile against `vrops-adapters-sdk-2.2.jar` only.
 | `SimpleJson` | `com.vcfcf.adapter.json` | Zero-dep recursive-descent JSON parser. |
 | `AmbientCredential` | `com.vcfcf.adapter.stitch` | Reads `/usr/lib/vmware-vcops/user/conf/maintenanceuser.properties`; decrypts via SDK `Crypt.getDefaultCrypt().decrypt()` — the only FIPS-safe path under `-Dorg.bouncycastle.fips.approved_only=true` (9.1+). Path resolution order: (1) system property `vcfcf.suiteapi.credential.path` if set; (2) hard-wired default `/usr/lib/vmware-vcops/user/conf/maintenanceuser.properties`. **`CommonConstants.VCOPS` is NOT used** — it is a product display-name string (`"VCF Ops"`), not a filesystem path. See `knowledge/lessons/sdk-constants-are-display-names.md`. Never hand-roll the cipher. |
 | `SuiteApiStitchClient` | `com.vcfcf.adapter.stitch` | Framework REST transport for Suite API stitching. Token cached per instance; re-acquired on 401; released on `discard()`. Credential resolution: explicit adapter-config fields > ambient `maintenanceuser.properties` > fail with actionable message. **Unified transport:** ALL calls go through `VcfCfAdapter.openPlatformConnection` (`HttpsURLConnection` mirroring the vendor `SuiteAPIClient`: trust-all + ignore-hostname, or cluster truststore + ignore-hostname when `IS_FIPS=true`; see "SSL / hostname verification" below). No `java.net.http.HttpClient` path. source-11 baseline. |
-| `SuiteApiStitcher` | `com.vcfcf.adapter.stitch` | Thin facade adapter authors hold as a field. Factory methods: `SuiteApiStitcher.create(adapter, logger)` (ambient) and `SuiteApiStitcher.createExplicit(adapter, logger, host, user, pass)` (remote-collector fallback). No transport code required in the adapter. Surface: `pushProperties`, `pushStats`, `addChild` / `addChildren` (additive Suite API relationship POST, never PUT), `findSingletonResourceId`, `get`, `discard`. |
+| `SuiteApiStitcher` | `com.vcfcf.adapter.stitch` | Thin facade adapter authors hold as a field. Factory methods: `SuiteApiStitcher.create(adapter, logger)` (ambient) and `SuiteApiStitcher.createExplicit(adapter, logger, host, user, pass)` (remote-collector fallback). No transport code required in the adapter. Surface: `pushProperties`, `pushStats`, `addChild` / `addChildren` (additive Suite API relationship POST, never PUT), `findSingletonResourceId`, `get` (and `get(path, accept)`), `discard`. A non-2xx GET throws `SuiteApiHttpException` (status, `apiErrorCode`, body excerpt). |
 
 ## Pak format — hard-won lessons (2026-05-19)
 
@@ -574,6 +574,20 @@ Added in the same session as v2, under `com.vcfcf.adapter.stitch`:
 1. Explicit — `host`/`username`/`password` from adapter config. Use for remote collectors.
 2. Ambient — read `maintenanceuser.properties` via `AmbientCredential.load()` (path resolution: system property `vcfcf.suiteapi.credential.path` → hard-wired default `/usr/lib/vmware-vcops/user/conf/maintenanceuser.properties`), decrypt via SDK `Crypt`. Targets `https://localhost/suite-api/`. **Do not derive path from `CommonConstants.VCOPS`** — that field is the display name `"VCF Ops"`, not a filesystem path (live bug: build 43, 2026-06-10; see `knowledge/lessons/sdk-constants-are-display-names.md`).
 3. Neither resolves — `IllegalStateException` with actionable message.
+
+**GET failures and Accept (issue #201):** `get(path)` sends
+`Accept: application/json`; `get(path, accept)` sends the caller's value
+(`null` or blank means JSON; a value with a control character is refused
+before anything is sent). Use `*/*` for endpoints that return a raw body,
+such as `GET /api/configurations/files?path=SolutionConfig/<name>.xml`. A
+non-2xx answer throws `SuiteApiHttpException`, an `IOException` subclass, with
+`getStatusCode()`, `getApiErrorCode()` (the JSON body's numeric
+`apiErrorCode`, or `null`) and `getBodyExcerpt()` (at most 512 characters,
+control characters replaced). The message keeps its shape (`Suite API GET
+<url> HTTP <status>`) plus ` apiErrorCode <n>` when present; the body is not in
+the message. Example: the configuration-file store answers a missing file with
+HTTP 400 and `apiErrorCode` 1501, so a pak can now tell it from any other bad
+request (compliance and vcommunity treat every 400 and 404 as absent today).
 
 **What the client logs (issue #227):** the credential mechanism
 (`explicit` or `ambient`), the ambient source label and the endpoint, never

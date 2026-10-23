@@ -276,6 +276,25 @@ public final class SuiteApiStitcher {
     }
 
     /**
+     * Authenticated GET with a caller-chosen {@code Accept} header (issue
+     * #201); {@code null} or blank means {@code application/json}. A non-2xx
+     * answer throws {@link SuiteApiHttpException} carrying the status, the
+     * {@code apiErrorCode} and a body excerpt.
+     *
+     * @param path   path relative to the Suite API base
+     * @param accept the {@code Accept} header value
+     * @return the response body
+     * @throws java.io.IOException  on HTTP (as {@link SuiteApiHttpException})
+     *                              or network error
+     * @throws InterruptedException if the calling thread is interrupted
+     * @see SuiteApiStitchClient#get(String, String)
+     */
+    public String get(String path, String accept)
+            throws java.io.IOException, InterruptedException {
+        return client.get(path, accept);
+    }
+
+    /**
      * Release underlying HTTP resources.
      *
      * <p>Call from the adapter's {@link VcfCfAdapter#onDiscard()} method:

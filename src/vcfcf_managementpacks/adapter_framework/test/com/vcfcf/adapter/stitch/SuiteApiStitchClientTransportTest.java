@@ -30,7 +30,10 @@ import java.util.Map;
  * a scripted fake {@link HttpURLConnection} behind an
  * {@code openPlatformConnection} override, and logs into a {@link LogCapture}.
  * Push failures are one WARN line per call with the trace at DEBUG, and an
- * unexpected failure class shows its trace once (issue #192).
+ * unexpected failure class shows its trace once (issue #192). A non-2xx
+ * answer reaches {@code get} callers as a {@link SuiteApiHttpException} with
+ * the status, {@code apiErrorCode} and a body excerpt, and the GET
+ * {@code Accept} header is settable (issue #201).
  * Capturing text needs log4j-api and log4j-core at runtime; without them the
  * whole suite is SKIPPED with a message (same convention as
  * {@code SuiteApiStitchRelationshipTest}).
@@ -70,6 +73,15 @@ public class SuiteApiStitchClientTransportTest {
         run("push unexpected failure: trace on first occurrence only", SuiteApiStitchClientTransportTest::testPushUnexpectedTraceOnce);
         run("push interrupted: flag restored", SuiteApiStitchClientTransportTest::testPushInterruptRestoresFlag);
         run("addChild unexpected failure: trace on first occurrence only", SuiteApiStitchClientTransportTest::testAddChildUnexpectedTraceOnce);
+        run("GET 400 surfaces status, apiErrorCode and body", SuiteApiStitchClientTransportTest::testGetErrorCarriesApiErrorCode);
+        run("GET error without a body", SuiteApiStitchClientTransportTest::testGetErrorWithoutBody);
+        run("GET error with a non-JSON body", SuiteApiStitchClientTransportTest::testGetErrorHtmlBody);
+        run("GET error excerpt is capped and sanitized", SuiteApiStitchClientTransportTest::testGetErrorExcerptCapped);
+        run("GET 401 after the retry is a SuiteApiHttpException", SuiteApiStitchClientTransportTest::testGet401IsHttpException);
+        run("Accept defaults to JSON and is overridable", SuiteApiStitchClientTransportTest::testAcceptOverride);
+        run("Accept with a control character is refused before sending", SuiteApiStitchClientTransportTest::testAcceptControlCharRefused);
+        run("facade get(path, accept) delegates", SuiteApiStitchClientTransportTest::testFacadeGetWithAccept);
+        run("parseApiErrorCode edge cases", SuiteApiStitchClientTransportTest::testParseApiErrorCode);
         report();
     }
 
@@ -188,6 +200,128 @@ public class SuiteApiStitchClientTransportTest {
         h.client.addChild(RES, "c87c8e39-7cf8-4394-bbf8-04ccd8601efc");
         assertEquals("two WARN lines", 2, h.log.count("WARN"));
         assertEquals("one trace", 1, h.log.thrown().size());
+    }
+
+    // -----------------------------------------------------------------------
+    // Issue #201: error body and apiErrorCode reach the caller; Accept is settable
+    // -----------------------------------------------------------------------
+
+    static final String ERR_1501 = "{\"message\":\"No such file\",\"httpStatusCode\":400,"
+            + "\"apiErrorCode\":1501}";
+
+    private static void testGetErrorCarriesApiErrorCode() throws Exception {
+        Harness h = new Harness(okTokenThen(400, ERR_1501));
+        try {
+            h.client.get("/api/configurations/files?path=SolutionConfig/x.xml", "*/*");
+            fail("GET 400 must throw");
+        } catch (SuiteApiHttpException e) {
+            assertEquals("status", 400, e.getStatusCode());
+            assertEquals("apiErrorCode", 1501, e.getApiErrorCode());
+            assertTrue("body excerpt carries the server text", e.getBodyExcerpt().contains("No such file"));
+            assertTrue("message keeps the status and adds the code",
+                    e.getMessage().endsWith("HTTP 400 apiErrorCode 1501"));
+            assertFalse("message does not carry the body", e.getMessage().contains("No such file"));
+        }
+    }
+
+    private static void testGetErrorWithoutBody() throws Exception {
+        Harness h = new Harness(okTokenThen(404, null));
+        try {
+            h.client.get("/api/x");
+            fail("GET 404 must throw");
+        } catch (SuiteApiHttpException e) {
+            assertEquals("status 404", 404, e.getStatusCode());
+            assertEquals("no apiErrorCode", null, e.getApiErrorCode());
+            assertEquals("empty excerpt", "", e.getBodyExcerpt());
+            assertTrue("message unchanged in shape", e.getMessage().endsWith("HTTP 404"));
+        }
+    }
+
+    private static void testGetErrorHtmlBody() throws Exception {
+        Harness h = new Harness(okTokenThen(502, "<html><body>Bad Gateway</body></html>"));
+        try {
+            h.client.get("/api/x");
+            fail("GET 502 must throw");
+        } catch (SuiteApiHttpException e) {
+            assertEquals("no apiErrorCode from HTML", null, e.getApiErrorCode());
+            assertTrue("HTML excerpt kept", e.getBodyExcerpt().startsWith("<html>"));
+        }
+    }
+
+    private static void testGetErrorExcerptCapped() throws Exception {
+        StringBuilder big = new StringBuilder("line1\r\nline2 ");
+        for (int i = 0; i < 2000; i++) big.append('x');
+        Harness h = new Harness(okTokenThen(500, big.toString()));
+        try {
+            h.client.get("/api/x");
+            fail("GET 500 must throw");
+        } catch (SuiteApiHttpException e) {
+            String ex = e.getBodyExcerpt();
+            assertTrue("excerpt capped (" + ex.length() + ")",
+                    ex.length() <= SuiteApiStitchClient.ERROR_BODY_EXCERPT_MAX + 3);
+            assertTrue("excerpt marks the cut", ex.endsWith("..."));
+            assertFalse("no CR or LF in the excerpt", ex.contains("\r") || ex.contains("\n"));
+        }
+    }
+
+    private static void testGet401IsHttpException() throws Exception {
+        Harness h = new Harness(okTokenThen(401, "{\"apiErrorCode\":1}"));
+        try {
+            h.client.get("/api/x");
+            fail("perpetual 401 must throw");
+        } catch (SuiteApiHttpException e) {
+            assertEquals("status 401", 401, e.getStatusCode());
+            assertEquals("apiErrorCode on a 401", 1, e.getApiErrorCode());
+        }
+    }
+
+    private static void testAcceptOverride() throws Exception {
+        Harness h = new Harness(okTokenThen(200, "raw file body"));
+        h.client.get("/api/a");
+        assertEquals("default Accept", "application/json", h.lastTo(BASE + "/api/a").headers.get("Accept"));
+        assertEquals("body returned", "raw file body", h.client.get("/api/b", "*/*"));
+        assertEquals("caller Accept", "*/*", h.lastTo(BASE + "/api/b").headers.get("Accept"));
+        h.client.get("/api/c", "   ");
+        assertEquals("blank Accept means JSON", "application/json", h.lastTo(BASE + "/api/c").headers.get("Accept"));
+        h.client.pushStats(RES, one("k", 1.0), 1L);
+        assertEquals("POSTs keep JSON", "application/json",
+                h.lastTo(BASE + "/api/resources/" + RES + "/stats").headers.get("Accept"));
+        assertEquals("token acquire keeps JSON", "application/json", h.lastTo(TOKEN_URL).headers.get("Accept"));
+    }
+
+    private static void testAcceptControlCharRefused() throws Exception {
+        Harness h = new Harness(okTokenThen(200, ""));
+        try {
+            h.client.get("/api/a", "application/json\r\nX-Evil: 1");
+            fail("Accept with CR/LF must be refused");
+        } catch (IllegalArgumentException e) {
+            assertEquals("nothing sent", 0, h.requests.size());
+        }
+    }
+
+    private static void testFacadeGetWithAccept() throws Exception {
+        FakeAdapter a = allocate(FakeAdapter.class);
+        a.requests = new ArrayList<>();
+        a.responder = okTokenThen(200, "x");
+        LogCapture log = LogCapture.create();
+        SuiteApiStitcher st = SuiteApiStitcher.createExplicit(a, log.logger(), "localhost", USER, "p");
+        assertEquals("facade body", "x", st.get("/api/f", "text/plain"));
+        String accept = null;
+        for (Req r : a.requests) if ((BASE + "/api/f").equals(r.url)) accept = r.headers.get("Accept");
+        assertEquals("facade passes Accept", "text/plain", accept);
+    }
+
+    private static void testParseApiErrorCode() {
+        assertEquals("plain", 1501, SuiteApiStitchClient.parseApiErrorCode(ERR_1501));
+        assertEquals("quoted number", 7, SuiteApiStitchClient.parseApiErrorCode("{\"apiErrorCode\":\"7\"}"));
+        assertEquals("text code", null, SuiteApiStitchClient.parseApiErrorCode("{\"apiErrorCode\":\"abc\"}"));
+        assertEquals("float code", null, SuiteApiStitchClient.parseApiErrorCode("{\"apiErrorCode\":1.5}"));
+        assertEquals("out of int range", null, SuiteApiStitchClient.parseApiErrorCode("{\"apiErrorCode\":99999999999}"));
+        assertEquals("array", null, SuiteApiStitchClient.parseApiErrorCode("[1501]"));
+        assertEquals("not JSON", null, SuiteApiStitchClient.parseApiErrorCode("Bad Gateway"));
+        assertEquals("empty", null, SuiteApiStitchClient.parseApiErrorCode(""));
+        assertEquals("null", null, SuiteApiStitchClient.parseApiErrorCode(null));
+        assertEquals("absent", null, SuiteApiStitchClient.parseApiErrorCode("{\"message\":\"m\"}"));
     }
 
     @SuppressWarnings("unchecked")

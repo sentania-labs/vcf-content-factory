@@ -210,10 +210,27 @@ public final class SuiteApiStitchClient {
     // Private exception — distinguishes 401 for the single-retry path
     // -----------------------------------------------------------------------
 
-    /** Thrown by {@code rawPost}/{@code rawGet} on HTTP 401 only. */
-    private static final class Suite401Exception extends IOException {
-        Suite401Exception(String message) { super(message); }
+    /**
+     * Thrown by {@code rawPost}/{@code rawGet} on HTTP 401 only. A
+     * {@link SuiteApiHttpException}, so a 401 that survives the single retry
+     * reaches {@link #get} callers with its status and body like any other.
+     */
+    private static final class Suite401Exception extends SuiteApiHttpException {
+        private static final long serialVersionUID = 1L;
+
+        Suite401Exception(String message, Integer apiErrorCode, String bodyExcerpt) {
+            super(message, 401, apiErrorCode, bodyExcerpt);
+        }
     }
+
+    /** Accept header sent when the caller names none. */
+    static final String DEFAULT_ACCEPT = "application/json";
+
+    /** Most bytes of an error body read from the server (issue #201). */
+    static final int ERROR_BODY_READ_MAX = 8192;
+
+    /** Longest error body excerpt kept on a {@link SuiteApiHttpException}. */
+    public static final int ERROR_BODY_EXCERPT_MAX = 512;
 
     // -----------------------------------------------------------------------
     // Constructor (private — use Builder)
@@ -871,7 +888,8 @@ public final class SuiteApiStitchClient {
     }
 
     /**
-     * Perform an authenticated GET against the Suite API.
+     * Perform an authenticated GET against the Suite API with
+     * {@code Accept: application/json}.
      *
      * <p>The cached bearer token is used. If the Suite API returns HTTP 401,
      * the token is re-acquired and the GET is retried exactly once.
@@ -879,17 +897,63 @@ public final class SuiteApiStitchClient {
      * @param path path relative to the Suite API base (e.g.
      *             {@code "/api/resources?adapterKind=VMWARE"})
      * @return the response body as a string
-     * @throws IOException          on HTTP or network error
+     * @throws SuiteApiHttpException on a non-2xx answer: carries the status,
+     *                               the {@code apiErrorCode} when the body has
+     *                               one, and a body excerpt (issue #201)
+     * @throws IOException          on any other HTTP or network error
      * @throws InterruptedException if the calling thread is interrupted
      */
     public String get(String path) throws IOException, InterruptedException {
+        return get(path, null);
+    }
+
+    /**
+     * Perform an authenticated GET with a caller-chosen {@code Accept} header
+     * (issue #201). Use it for endpoints that do not answer JSON, for example
+     * the configuration-file store ({@code /api/configurations/files}), which
+     * returns the raw file body ({@code "*}{@code /*"}).
+     *
+     * <p>Token handling, the single 401 retry and the failure contract match
+     * {@link #get(String)}.
+     *
+     * @param path   path relative to the Suite API base
+     * @param accept the {@code Accept} header value; {@code null} or blank
+     *               means {@code application/json}
+     * @return the response body as a string
+     * @throws IllegalArgumentException if {@code accept} contains a control
+     *                                  character (a header must stay one line)
+     * @throws SuiteApiHttpException    on a non-2xx answer
+     * @throws IOException              on any other HTTP or network error
+     * @throws InterruptedException     if the calling thread is interrupted
+     */
+    public String get(String path, String accept) throws IOException, InterruptedException {
+        String acceptHeader = acceptHeader(accept);
         String tok = ensureToken();
         try {
-            return rawGet(path, tok);
+            return rawGet(path, tok, acceptHeader);
         } catch (Suite401Exception e) {
             tok = reAcquireToken(tok);
-            return rawGet(path, tok);
+            return rawGet(path, tok, acceptHeader);
         }
+    }
+
+    /**
+     * The {@code Accept} value to send: {@link #DEFAULT_ACCEPT} for
+     * {@code null} or blank, else the trimmed value. Visible to tests.
+     *
+     * @throws IllegalArgumentException if the value holds a control character
+     */
+    static String acceptHeader(String accept) {
+        if (accept == null || accept.trim().isEmpty()) return DEFAULT_ACCEPT;
+        String a = accept.trim();
+        for (int i = 0; i < a.length(); i++) {
+            if (Character.isISOControl(a.charAt(i))) {
+                throw new IllegalArgumentException(
+                        "SuiteApiStitchClient: Accept header value contains a control"
+                        + " character: " + loggable(a));
+            }
+        }
+        return a;
     }
 
     /**
@@ -959,7 +1023,7 @@ public final class SuiteApiStitchClient {
                 + ",\"authSource\":" + jsonStr(AUTH_SOURCE) + "}";
 
         String responseBody = urlConnRequest("POST",
-                suiteApiBase + "/api/auth/token/acquire", body, null);
+                suiteApiBase + "/api/auth/token/acquire", body, null, DEFAULT_ACCEPT);
 
         SimpleJson parsed = SimpleJson.parse(responseBody);
         String token = parsed.get("token").asString(null);
@@ -983,7 +1047,7 @@ public final class SuiteApiStitchClient {
         try {
             String body = "{\"token\":" + jsonStr(token) + "}";
             urlConnRequest("POST",
-                    suiteApiBase + "/api/auth/token/release", body, null);
+                    suiteApiBase + "/api/auth/token/release", body, null, DEFAULT_ACCEPT);
         } catch (Exception e) {
             logger.warn("SuiteApiStitchClient: token release failed (non-fatal): "
                     + e.getMessage());
@@ -1002,18 +1066,19 @@ public final class SuiteApiStitchClient {
      */
     private void rawPost(String apiPath, String body, String opsToken)
             throws IOException, InterruptedException {
-        urlConnRequest("POST", suiteApiBase + apiPath, body, opsToken);
+        urlConnRequest("POST", suiteApiBase + apiPath, body, opsToken, DEFAULT_ACCEPT);
     }
 
     /**
-     * GET {@code apiPath} with the given {@code opsToken} and return the body.
+     * GET {@code apiPath} with the given {@code opsToken} and {@code Accept}
+     * value, and return the body.
      *
      * @throws Suite401Exception on HTTP 401 (caller must single-retry)
      * @throws IOException       on other HTTP or network error
      */
-    private String rawGet(String apiPath, String opsToken)
+    private String rawGet(String apiPath, String opsToken, String accept)
             throws IOException, InterruptedException {
-        return urlConnRequest("GET", suiteApiBase + apiPath, null, opsToken);
+        return urlConnRequest("GET", suiteApiBase + apiPath, null, opsToken, accept);
     }
 
     // -----------------------------------------------------------------------
@@ -1038,13 +1103,16 @@ public final class SuiteApiStitchClient {
      * @param body     request body for POST, or {@code null} for GET
      * @param opsToken {@code OpsToken} header value, or {@code null} to omit
      *                 the {@code Authorization} header (used for token acquire/release)
+     * @param accept   {@code Accept} header value
      * @return response body as String (empty string if the server sends no body)
-     * @throws Suite401Exception on HTTP 401
-     * @throws IOException       on other HTTP or connection error
-     * @throws InterruptedException if the thread is interrupted before the call
+     * @throws Suite401Exception     on HTTP 401
+     * @throws SuiteApiHttpException on any other non-2xx status, with the
+     *                               {@code apiErrorCode} and a body excerpt
+     * @throws IOException           on a connection error
+     * @throws InterruptedException  if the thread is interrupted before the call
      */
-    private String urlConnRequest(String method, String fullUrl, String body, String opsToken)
-            throws IOException, InterruptedException {
+    private String urlConnRequest(String method, String fullUrl, String body, String opsToken,
+            String accept) throws IOException, InterruptedException {
         if (Thread.currentThread().isInterrupted()) {
             throw new InterruptedException(
                     "SuiteApiStitchClient: thread interrupted before "
@@ -1056,7 +1124,7 @@ public final class SuiteApiStitchClient {
             conn.setRequestMethod(method);
             conn.setConnectTimeout((int) REQUEST_TIMEOUT.toMillis());
             conn.setReadTimeout((int) REQUEST_TIMEOUT.toMillis());
-            conn.setRequestProperty("Accept", "application/json");
+            conn.setRequestProperty("Accept", accept);
             if (body != null) {
                 conn.setDoOutput(true);
                 conn.setRequestProperty("Content-Type", "application/json");
@@ -1071,15 +1139,21 @@ public final class SuiteApiStitchClient {
                 }
             }
             int status = conn.getResponseCode();
-            if (status == 401) {
-                throw new Suite401Exception(
-                        "Suite API " + method + " " + fullUrl
-                        + " returned 401 (token expired or credential invalid)"
-                        + " mechanism=" + mechanism);
-            }
             if (status < 200 || status >= 300) {
-                throw new IOException(
-                        "Suite API " + method + " " + fullUrl + " HTTP " + status);
+                String errorBody = readErrorBody(conn);
+                Integer apiErrorCode = parseApiErrorCode(errorBody);
+                String excerpt = errorBodyExcerpt(errorBody);
+                String code = apiErrorCode == null ? "" : " apiErrorCode " + apiErrorCode;
+                if (status == 401) {
+                    throw new Suite401Exception(
+                            "Suite API " + method + " " + fullUrl
+                            + " returned 401 (token expired or credential invalid)"
+                            + " mechanism=" + mechanism + code,
+                            apiErrorCode, excerpt);
+                }
+                throw new SuiteApiHttpException(
+                        "Suite API " + method + " " + fullUrl + " HTTP " + status + code,
+                        status, apiErrorCode, excerpt);
             }
             // Read response body. Callers that do not need it ignore the return value.
             InputStream is = conn.getInputStream();
@@ -1095,6 +1169,58 @@ public final class SuiteApiStitchClient {
         } finally {
             conn.disconnect();
         }
+    }
+
+    /**
+     * Read at most {@link #ERROR_BODY_READ_MAX} bytes of a non-2xx answer's
+     * body (UTF-8). Returns {@code ""} when the server sent none or the
+     * stream fails: a missing body must never hide the status.
+     */
+    private static String readErrorBody(HttpURLConnection conn) {
+        try (InputStream es = conn.getErrorStream()) {
+            if (es == null) return "";
+            byte[] buf = new byte[ERROR_BODY_READ_MAX];
+            int total = 0;
+            int n;
+            while (total < buf.length && (n = es.read(buf, total, buf.length - total)) != -1) {
+                total += n;
+            }
+            return new String(buf, 0, total, StandardCharsets.UTF_8);
+        } catch (IOException | RuntimeException e) {
+            return "";
+        }
+    }
+
+    /**
+     * The numeric {@code apiErrorCode} of a Suite API JSON error body, or
+     * {@code null} when the body is empty, not a JSON object, or has no
+     * numeric {@code apiErrorCode} in int range. Never throws. Visible to tests.
+     */
+    static Integer parseApiErrorCode(String body) {
+        if (body == null || body.trim().isEmpty()) return null;
+        try {
+            SimpleJson root = SimpleJson.parse(body);
+            if (!root.isObject()) return null;
+            SimpleJson code = root.get("apiErrorCode");
+            if (code.isNull()) return null;
+            String raw = code.asString("").trim();
+            if (!raw.matches("-?\\d{1,10}")) return null;
+            long v = Long.parseLong(raw);
+            if (v < Integer.MIN_VALUE || v > Integer.MAX_VALUE) return null;
+            return (int) v;
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+
+    /**
+     * Log-safe start of an error body: unsafe characters replaced as in
+     * {@link #loggable}, at most {@link #ERROR_BODY_EXCERPT_MAX} characters
+     * plus a {@code ...} marker when cut. Visible to tests.
+     */
+    static String errorBodyExcerpt(String body) {
+        if (body == null || body.isEmpty()) return "";
+        return loggable(body, ERROR_BODY_EXCERPT_MAX);
     }
 
     // -----------------------------------------------------------------------
