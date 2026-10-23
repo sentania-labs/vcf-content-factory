@@ -1,0 +1,13 @@
+id: ba735f26-7230-41a1-b116-e5eeaebb2696
+name: Fixture - ESXi Distribution by CPU Socket (unfixed)
+description: 'Synthetic fixture: ESXi Distribution by CPU Socket (unfixed).'
+subject:
+  adapter_kind: VMWARE
+  resource_kind: HostSystem
+data_type: distribution
+columns:
+- attribute: hardware|cpuInfo|numCpuPackages
+  display_name: Sockets
+time_window:
+  unit: DAYS
+  count: 7

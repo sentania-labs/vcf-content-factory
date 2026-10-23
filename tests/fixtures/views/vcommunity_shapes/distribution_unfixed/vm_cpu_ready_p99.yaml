@@ -1,0 +1,16 @@
+id: f059553d-5229-436f-b489-b2b9e2a2cd89
+name: Fixture - VM CPU Ready Distribution (unfixed)
+description: 'Synthetic fixture: VM CPU Ready Distribution (unfixed).'
+subject:
+  adapter_kind: VMWARE
+  resource_kind: VirtualMachine
+data_type: distribution
+columns:
+- attribute: cpu|20_sec_peak_readyPct
+  display_name: CPU Ready
+  unit: percent
+  transformation: PERCENTILE
+  percentile: 99
+time_window:
+  unit: DAYS
+  count: 1

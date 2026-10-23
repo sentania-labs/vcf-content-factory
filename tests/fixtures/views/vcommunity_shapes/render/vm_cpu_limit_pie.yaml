@@ -1,0 +1,14 @@
+id: 9dc92a27-a644-4321-8420-8e3f65d61b10
+name: Fixture - VM CPU Limit
+description: 'Synthetic fixture: VM CPU Limit.'
+subject:
+  adapter_kind: VMWARE
+  resource_kind: VirtualMachine
+data_type: distribution
+presentation: pie-chart
+columns:
+- attribute: config|cpuAllocation|limit
+  display_name: VMs
+time_window:
+  unit: DAYS
+  count: 7

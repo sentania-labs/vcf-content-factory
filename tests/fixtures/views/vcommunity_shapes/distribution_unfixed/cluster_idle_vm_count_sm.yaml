@@ -1,0 +1,14 @@
+id: c19e8d87-33e6-4b95-a2f6-90227c36930f
+name: Fixture - Cluster Distribution by Idle VM Count (unfixed)
+description: 'Synthetic fixture: Cluster Distribution by Idle VM Count (unfixed).'
+subject:
+  adapter_kind: VMWARE
+  resource_kind: ClusterComputeResource
+data_type: distribution
+presentation: donut-chart
+columns:
+- attribute: supermetric:"[VCF Content Factory] Cluster - Idle VM Count"
+  display_name: Idle VMs
+time_window:
+  unit: DAYS
+  count: 7

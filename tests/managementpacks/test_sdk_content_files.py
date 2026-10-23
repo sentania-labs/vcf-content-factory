@@ -345,11 +345,16 @@ class TestSafetyAssertion:
 
 
 # ---------------------------------------------------------------------------
-# Test 4: vcommunity in-tree adapter has all 6 XMLs (integration smoke)
+# Test 4: the six vCommunity SolutionConfig XMLs all reach the pak
+#
+# Before #218 this read the retired vcommunity clone, absent in CI, so it
+# skipped there. It now reads a fixture adapter dir that keeps that pak's six
+# file names and root elements with synthetic bodies (provenance:
+# tests/fixtures/views/vcommunity_shapes/README.md).
 # ---------------------------------------------------------------------------
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_VCOMMUNITY_DIR = _REPO_ROOT / "content" / "sdk-adapters" / "vcommunity"
+_VCOMMUNITY_DIR = _REPO_ROOT / "tests" / "fixtures" / "sdk_adapters" / "solutionconfig_six"
 _EXPECTED_SOLUTIONCONFIG = [
     "esxi_advanced_system_settings.xml",
     "esxi_packages.xml",
@@ -360,20 +365,19 @@ _EXPECTED_SOLUTIONCONFIG = [
 ]
 
 
-@pytest.mark.skipif(
-    not _VCOMMUNITY_DIR.is_dir(),
-    reason="vcommunity adapter not checked out in content/sdk-adapters/vcommunity/",
-)
 class TestVCommunityIntegration:
-    """Integration smoke: the in-tree vCommunity adapter sources have the 6 XMLs
-    and _write_outer_pak includes them all."""
+    """Integration smoke: an adapter dir with the vCommunity pak's 6
+    SolutionConfig XMLs, and _write_outer_pak includes them all."""
 
     def test_vcommunity_solutionconfig_xmls_exist_in_tree(self) -> None:
-        """All 6 SolutionConfig XMLs are present in the in-tree adapter sources."""
+        """All 6 SolutionConfig XMLs are present and well-formed in the adapter dir."""
+        import xml.etree.ElementTree as ET
+
         sc_dir = _VCOMMUNITY_DIR / "content" / "files" / "solutionconfig"
         assert sc_dir.is_dir(), f"solutionconfig dir missing: {sc_dir}"
         for fn in _EXPECTED_SOLUTIONCONFIG:
             assert (sc_dir / fn).is_file(), f"{fn} missing from {sc_dir}"
+            ET.parse(sc_dir / fn)
 
     def test_write_outer_pak_packages_all_six_xmls(self, tmp_path: Path) -> None:
         """_write_outer_pak packs all 6 SolutionConfig XMLs from the vcommunity dir."""

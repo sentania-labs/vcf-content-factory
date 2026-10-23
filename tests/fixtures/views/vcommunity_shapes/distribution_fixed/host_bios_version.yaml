@@ -1,0 +1,19 @@
+id: 70eddf31-cb60-4110-9df0-4a0620fc7451
+name: Fixture - ESXi BIOS Version Distribution
+description: 'Synthetic fixture: ESXi BIOS Version Distribution.'
+subject:
+  adapter_kind: VMWARE
+  resource_kind: HostSystem
+data_type: distribution
+presentation: donut-chart
+columns:
+- attribute: hardware|biosVersion
+  display_name: BIOS Versions
+  is_property: true
+  is_string_attribute: true
+buckets:
+  dynamic: true
+  calc_function: DISCRETE
+time_window:
+  unit: DAYS
+  count: 7
