@@ -17,9 +17,10 @@ import yaml
 from vcfcf_packaging.handler import SyncResult
 from vcfcf_packaging.syncer import _get_yaml_paths_for_type, sync_bundle
 
-# Every content type the syncer collects paths for.
+# Every content type the syncer collects paths for. Reports were missing
+# until #232, so a bundle's reports were silently never synced.
 SYNC_TYPES = ("supermetrics", "customgroups", "views", "dashboards",
-              "symptoms", "alerts")
+              "symptoms", "alerts", "reports")
 
 P = "[VCF Content Factory] Sync Paths"
 
@@ -83,6 +84,14 @@ _FILES = {
             "symptoms": [{"name": f"{P} Symptom"}],
         }]},
     }),
+    "reports": ("content/reports/r.yaml", {
+        "id": "dddddddd-4444-4444-8444-444444444444",
+        "name": f"{P} Report",
+        "description": "d",
+        "subject_types": [{"adapter_kind": "VMWARE",
+                           "resource_kind": "HostSystem", "type": "self"}],
+        "sections": [{"type": "CoverPage"}],
+    }),
 }
 
 
@@ -145,3 +154,92 @@ def test_get_yaml_paths_for_type_on_loaded_bundle(bundle_repo):
         got = _get_yaml_paths_for_type(bundle, ct)
         assert [Path(p).resolve() for p in got] == [(root / rel).resolve()], ct
     assert _get_yaml_paths_for_type(bundle, "no-such-type") == []
+    # recommendations load onto the Bundle but have no sync handler: they
+    # are reported by the unsynced-content warning, not handed to a handler.
+    assert _get_yaml_paths_for_type(bundle, "recommendations") == []
+
+
+def test_syncer_types_match_handlers():
+    """Every type the syncer walks has a real handler, and every handler's
+    type is one the syncer walks (nothing discovered then dropped)."""
+    from vcfcf_packaging.handler import discover_handlers
+    from vcfcf_packaging.syncer import SYNC_CONTENT_TYPES
+
+    handler_types = {h.content_type for h in discover_handlers()}
+    assert handler_types == set(SYNC_CONTENT_TYPES)
+    assert set(SYNC_TYPES) == set(SYNC_CONTENT_TYPES)
+
+
+def test_known_manifest_keys_match_what_the_loader_reads():
+    """KNOWN_MANIFEST_KEYS must list every top-level key the core bundle
+    loader reads, or sync would call a real key unknown (and miss a new one)."""
+    import re
+
+    import vcfcf_core.packaging.loader as core_loader
+    from vcfcf_packaging.syncer import KNOWN_MANIFEST_KEYS
+
+    src = Path(core_loader.__file__).read_text(encoding="utf-8")
+    read = set(re.findall(r'data(?:\.get\(|\[)"([a-z_]+)"', src))
+    assert read, "regex no longer finds the loader's manifest reads"
+    assert read == set(KNOWN_MANIFEST_KEYS)
+
+
+def _write_manifest(root: Path, extra: dict) -> Path:
+    manifest = {"name": "sync-extra", "description": "unsynced content"}
+    manifest["supermetrics"] = [_FILES["supermetrics"][0]]
+    manifest.update(extra)
+    path = root / "bundles" / "sync-extra.yaml"
+    path.write_text(yaml.safe_dump(manifest, sort_keys=False), encoding="utf-8")
+    return path.relative_to(root)
+
+
+def test_unknown_manifest_key_with_entries_warns_loudly(bundle_repo, capsys):
+    """managementpacks: (and any typo key) is ignored by the loader; sync
+    must say the entries were not installed, and the trailer must count it."""
+    root, _manifest = bundle_repo
+    manifest = _write_manifest(root, {"managementpacks": ["mp.yaml"],
+                                      "report": ["content/reports/r.yaml"]})
+    calls: dict = {}
+    handlers = [_RecordingHandler(ct, i, calls) for i, ct in enumerate(SYNC_TYPES)]
+    rc = sync_bundle(manifest, handlers=handlers, session=object())
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "WARN  manifest 'managementpacks': unknown manifest key with 1 entry, NOT installed" in out
+    assert "WARN  manifest 'report': unknown manifest key" in out
+    assert "need attention" in out and "not-synced" in out
+
+
+def test_empty_unknown_key_is_not_reported(bundle_repo, capsys):
+    root, _manifest = bundle_repo
+    manifest = _write_manifest(root, {"managementpacks": []})
+    calls: dict = {}
+    handlers = [_RecordingHandler(ct, i, calls) for i, ct in enumerate(SYNC_TYPES)]
+    sync_bundle(manifest, handlers=handlers, session=object())
+    out = capsys.readouterr().out
+    assert "managementpacks" not in out
+    assert "need attention" not in out
+
+
+def test_recommendations_and_builtin_enables_are_named_not_dropped(bundle_repo, capsys):
+    root, _manifest = bundle_repo
+    rec = root / "content" / "recommendations" / "rec.yaml"
+    rec.parent.mkdir(parents=True, exist_ok=True)
+    rec.write_text(yaml.safe_dump({
+        "name": f"{P} Rec",
+        "description": "Do the thing.",
+        "adapter_kind": "VMWARE",
+    }, sort_keys=False), encoding="utf-8")
+    manifest = _write_manifest(root, {
+        "recommendations": ["content/recommendations/rec.yaml"],
+        "builtin_metric_enables": [{
+            "adapter_kind": "VMWARE", "resource_kind": "VirtualMachine",
+            "metric_key": "net|packetsPerSec", "reason": "test",
+        }],
+    })
+    calls: dict = {}
+    handlers = [_RecordingHandler(ct, i, calls) for i, ct in enumerate(SYNC_TYPES)]
+    sync_bundle(manifest, handlers=handlers, session=object())
+    out = capsys.readouterr().out
+    assert "WARN  manifest 'recommendations': 1 entry NOT installed" in out
+    assert "WARN  manifest 'builtin_metric_enables': 1 entry NOT installed" in out
+    assert "recommendations" not in calls

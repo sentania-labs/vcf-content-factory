@@ -8,6 +8,9 @@ This module drives the sync/uninstall workflow:
    - If the bundle has YAML paths for that type AND a handler is available:
      call handler.sync() / handler.delete().
    - If no handler is available for a type that has entries: WARN and skip.
+5. WARN for manifest content sync never installs (recommendations,
+   builtin_metric_enables, unknown keys that list entries), so nothing a
+   manifest declares is dropped silently.
 
 Exit code contract:
     0, all items OK (or no items to process)
@@ -41,6 +44,30 @@ def _print_fail(msg: str) -> None:
     print(f"  FAIL  {msg}", file=sys.stderr)
 
 
+#: Content types bundle sync installs, in manifest-key form.  Each is a
+#: Bundle attribute of the same name and has a handler (``vcfcf_*/handler.py``).
+#: Reports were missing here, so a bundle's reports were silently never
+#: synced (#232).
+SYNC_CONTENT_TYPES = ("supermetrics", "customgroups", "views", "dashboards",
+                      "symptoms", "alerts", "reports")
+
+#: Manifest content the loader reads but bundle sync does not install.
+#: Named with the reason so a sync never drops them silently (#232).
+UNSYNCED_CONTENT_TYPES = {
+    "recommendations": "bundle sync has no recommendations handler",
+    "builtin_metric_enables": "bundle sync does not enable built-in metrics",
+}
+
+#: Every top-level manifest key the bundle loader reads.  A key outside this
+#: set (``managementpacks:``, a typo such as ``report:``) is ignored by the
+#: loader; sync warns when one lists entries (#232).
+KNOWN_MANIFEST_KEYS = frozenset({
+    "name", "description", "sync", "author", "license", "source",
+    "factory_native", "display_name", "design", "released", "version",
+    *SYNC_CONTENT_TYPES, *UNSYNCED_CONTENT_TYPES,
+})
+
+
 def _get_yaml_paths_for_type(bundle: Bundle, content_type: str) -> List[str]:
     """Return the list of absolute YAML path strings for a content type.
 
@@ -49,15 +76,44 @@ def _get_yaml_paths_for_type(bundle: Bundle, content_type: str) -> List[str]:
     ``bundle.alert_paths``, which the Bundle model never had, so every sync
     raised AttributeError before doing anything: #196.)
     """
-    items = {
-        "supermetrics": bundle.supermetrics,
-        "customgroups": bundle.customgroups,
-        "views": bundle.views,
-        "dashboards": bundle.dashboards,
-        "symptoms": bundle.symptoms,
-        "alerts": bundle.alerts,
-    }.get(content_type, [])
+    if content_type not in SYNC_CONTENT_TYPES:
+        return []
+    items = getattr(bundle, content_type, None) or []
     return [str(obj.source_path) for obj in items if obj.source_path]
+
+
+def _unsynced_manifest_content(bundle: Bundle, bundle_path: str | Path) -> List[str]:
+    """Describe manifest content that bundle sync will not install.
+
+    Covers types the loader reads but sync has no handler for
+    (:data:`UNSYNCED_CONTENT_TYPES`) and top-level keys the loader does not
+    read at all whose value lists entries.  An empty list (``managementpacks:
+    []``) drops nothing and is not reported.  An unreadable manifest yields
+    nothing here; load_bundle has already reported it.
+    """
+    msgs: List[str] = []
+    for key, reason in UNSYNCED_CONTENT_TYPES.items():
+        n = len(getattr(bundle, key, None) or [])
+        if n:
+            msgs.append(f"'{key}': {n} entr{'y' if n == 1 else 'ies'} NOT installed ({reason})")
+    try:
+        import yaml
+        raw = yaml.safe_load(Path(bundle_path).read_text(encoding="utf-8")) or {}
+    except Exception:  # noqa: BLE001
+        return msgs
+    if not isinstance(raw, dict):
+        return msgs
+    for key in sorted(str(k) for k in raw):
+        if key in KNOWN_MANIFEST_KEYS:
+            continue
+        val = raw.get(key)
+        if isinstance(val, (list, dict)) and val:
+            msgs.append(
+                f"'{key}': unknown manifest key with {len(val)} entr"
+                f"{'y' if len(val) == 1 else 'ies'}, NOT installed (bundle sync "
+                f"handles {', '.join(SYNC_CONTENT_TYPES)})"
+            )
+    return msgs
 
 
 def _get_names_for_type(bundle: Bundle, content_type: str) -> List[str]:
@@ -67,6 +123,7 @@ def _get_names_for_type(bundle: Bundle, content_type: str) -> List[str]:
         "customgroups": [cg.name for cg in bundle.customgroups],
         "views": [v.name for v in bundle.views],
         "dashboards": [d.name for d in bundle.dashboards],
+        "reports": [r.name for r in bundle.reports],
         # symptoms/alerts: names not available without the package loader;
         # the handler is responsible for resolving them from the YAML files.
         "symptoms": [],
@@ -190,8 +247,7 @@ def sync_bundle(
 
     # Warn about content types the bundle has entries for but no handler covers
     all_known_types = {h.content_type for h in handlers}
-    for content_type in ("supermetrics", "customgroups", "views", "dashboards",
-                         "symptoms", "alerts"):
+    for content_type in SYNC_CONTENT_TYPES:
         if content_type in all_known_types:
             continue
         yaml_paths = _get_yaml_paths_for_type(bundle, content_type)
@@ -199,6 +255,12 @@ def sync_bundle(
             _print_warn(
                 f"no handler for '{content_type}' ({len(yaml_paths)} file(s) skipped)"
             )
+            warn_counts[content_type] = warn_counts.get(content_type, 0) + len(yaml_paths)
+
+    # Manifest content sync does not install at all: say so (#232).
+    for msg in _unsynced_manifest_content(bundle, bundle_path):
+        _print_warn(f"manifest {msg}")
+        warn_counts["not-synced"] = warn_counts.get("not-synced", 0) + 1
 
     if warn_counts:
         detail = ", ".join(
@@ -299,7 +361,7 @@ def uninstall_bundle(
         print("  (--force: skipping cross-bundle sharing checks)")
 
     # Print what will be removed
-    for content_type in ("alerts", "symptoms", "dashboards", "views",
+    for content_type in ("reports", "alerts", "symptoms", "dashboards", "views",
                          "customgroups", "supermetrics"):
         names = _get_names_for_type(bundle, content_type)
         if names:
