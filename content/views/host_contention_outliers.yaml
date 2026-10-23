@@ -84,10 +84,6 @@ columns:
     red_bound: 20.0
     ascending_range: false
 
-# Sort note: the consuming dashboard widget should sort by
-# "VMs Facing CPU Ready (P95, 24h)" descending (worst-offender host at top).
-# View-level default sort is not a loader-supported field; apply this in the
-# dashboard widget referencing this view (sort_by_dir: desc,
-# sort_by_column: "VMs Facing CPU Ready (P95, 24h)").
-# Precedent: cluster_demand_overview.yaml and vm_contention_pain.yaml use
-# the same widget-sort pattern.
+# Sort note: intended order is "VMs Facing CPU Ready (P95, 24h)" descending
+# (worst-offender host at top). A view's default sort is the per-column
+# `sort: desc` key on exactly one list column (not set here yet).
