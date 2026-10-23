@@ -22,7 +22,14 @@
 # JAVA_HOME_<N>_X64, or $VCFCF_SDK_COMPAT_JAVAC); without the jar or the JDK
 # it is skipped with a loud warning, or fails when VCFCF_SDK_COMPAT_REQUIRED=1.
 # The pass runs in python3 (sdk_builder.check_framework_sdk_compat), the same
-# code build-sdk and validate-sdk use.
+# code build-sdk and validate-sdk use. When no 9.1.1.0100 jar is present and
+# the pass is not required, it is skipped here in the shell, so a plain
+# framework build needs neither python3 nor PyYAML.
+#
+# Exit codes: 0 built (pass passed or skipped), 1 the framework does not
+# compile (primary pass, or against the 9.1.1.0100 jar), 3 the compat pass
+# could not run (required but jar or JDK 25 missing, misconfigured, or
+# python3 cannot import vcfcf_managementpacks).
 #
 # Usage:
 #   cd vcfcf_managementpacks/
@@ -33,7 +40,7 @@
 # Requirements:
 #   - javac (JDK 11 or newer; JDK 17 recommended)
 #   - adapter_runtime/vrops-adapters-sdk-2.2.jar
-#   - python3 (for the compat pass)
+#   - python3 with PyYAML (only when the compat pass runs)
 #   - optional: adapter_runtime/vrops-adapters-sdk-9.1.1.0100.jar + JDK 25+
 #
 # Output:
@@ -58,15 +65,63 @@ case "${1:-}" in
 esac
 
 # Second compile target (issue #211); see the header.
+COMPAT_JAR_NAME="vrops-adapters-sdk-9.1.1.0100.jar"
+COMPAT_COULD_NOT_RUN=3   # sdk_builder.COMPAT_COULD_NOT_RUN
+
+compat_required() {
+    case "$(printf '%s' "${VCFCF_SDK_COMPAT_REQUIRED:-}" | tr '[:upper:]' '[:lower:]')" in
+        1|true|yes) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+# Returns 0 on pass or skip (skip prints a notice); 1 on a compile failure;
+# COMPAT_COULD_NOT_RUN when the pass could not run.
 compat_pass() {
+    if [ -z "${VCFCF_SDK_COMPAT_JAR:-}" ] && [ ! -f "$RUNTIME_DIR/$COMPAT_JAR_NAME" ] \
+            && ! compat_required; then
+        echo "  ========================================================================"
+        echo "  WARNING: SDK COMPAT CHECK SKIPPED: framework source vs the VCF Ops 9.1.1.0100 SDK jar"
+        echo "    reason: $COMPAT_JAR_NAME is not in adapter_runtime/ and VCFCF_SDK_COMPAT_JAR is not set"
+        echo "    This run did NOT check for classes or members missing from the 9.1.1.0100 jar."
+        echo "    Set VCFCF_SDK_COMPAT_REQUIRED=1 to make a skipped check fail."
+        echo "  ========================================================================"
+        return 0
+    fi
     echo "Compat pass: framework source vs the VCF Ops 9.1.1.0100 SDK jar ..."
-    PYTHONPATH="$ROOT/..${PYTHONPATH:+:$PYTHONPATH}" python3 -c \
-        'import sys; from vcfcf_managementpacks.sdk_builder import check_framework_sdk_compat as c; sys.exit(c())'
+    local rc=0
+    PYTHONPATH="$ROOT/..${PYTHONPATH:+:$PYTHONPATH}" python3 -c '
+import sys
+try:
+    from vcfcf_managementpacks.sdk_builder import check_framework_sdk_compat
+except Exception as exc:
+    print("ERROR: the compat pass could not run: python3 cannot import "
+          "vcfcf_managementpacks.sdk_builder (%s: %s). It needs python3 with "
+          "PyYAML." % (type(exc).__name__, exc), file=sys.stderr)
+    sys.exit(3)
+sys.exit(check_framework_sdk_compat())
+' || rc=$?
+    return "$rc"
+}
+
+compat_report_failure() {
+    # $1: exit code from compat_pass
+    if [ "$1" -eq 1 ]; then
+        echo "COMPAT PASS FAILED: framework source does not compile against the" >&2
+        echo "9.1.1.0100 SDK jar." >&2
+    else
+        echo "COMPAT PASS COULD NOT RUN (exit $1): see the ERROR above; nothing" >&2
+        echo "was checked against the 9.1.1.0100 SDK jar." >&2
+    fi
 }
 
 if [ "$COMPAT_ONLY" -eq 1 ]; then
-    compat_pass
-    exit $?
+    rc=0
+    compat_pass || rc=$?
+    if [ "$rc" -ne 0 ]; then
+        compat_report_failure "$rc"
+    fi
+    exit "$rc"
 fi
 
 # ---- Preflight checks -------------------------------------------------------
@@ -146,11 +201,13 @@ fi
 echo "Compilation successful — no aria-ops-core symbols referenced."
 
 # ---- Second compile target (9.1.1.0100) -------------------------------------
-if ! compat_pass; then
-    echo "COMPAT PASS FAILED: framework source does not compile against the" >&2
-    echo "9.1.1.0100 SDK jar. vcfcf-adapter-base.jar was NOT written." >&2
+COMPAT_RC=0
+compat_pass || COMPAT_RC=$?
+if [ "$COMPAT_RC" -ne 0 ]; then
+    compat_report_failure "$COMPAT_RC"
+    echo "vcfcf-adapter-base.jar was NOT written." >&2
     rm -rf "$BUILD_DIR"
-    exit 1
+    exit "$COMPAT_RC"
 fi
 
 # ---- Verify no TVS residue --------------------------------------------------

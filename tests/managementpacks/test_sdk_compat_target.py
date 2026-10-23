@@ -127,18 +127,64 @@ def test_compat_jar_is_not_on_the_primary_classpath(runtime, tmp_path):
     assert str(compat) not in sdk_builder._build_classpath(tmp_path)
 
 
-def test_primary_sdk_glob_skips_the_compat_jar(runtime):
+def _sdk_jars_on(jars):
+    return [j for j in jars if j.name.startswith("vrops-adapters-sdk")]
+
+
+def test_primary_classpath_takes_exactly_one_sdk_jar(runtime, tmp_path):
     primary = _touch_jar(runtime / "vrops-adapters-sdk-2.2.jar")
     _touch_jar(runtime / sdk_builder._SDK_COMPAT_JAR_NAME)
-    assert sdk_builder._primary_sdk_jars(runtime) == [primary]
+    assert sdk_builder._primary_sdk_jar() == primary
+    assert _sdk_jars_on(sdk_builder._build_classpath_jars(tmp_path)) == [primary]
 
 
 def test_compat_jar_alone_is_not_a_primary_sdk_jar(runtime, tmp_path):
     """A runtime holding only the 9.1.1 jar must not pass as having the SDK."""
     _touch_jar(runtime / sdk_builder._SDK_COMPAT_JAR_NAME)
-    assert sdk_builder._primary_sdk_jars(runtime) == []
+    assert sdk_builder._primary_sdk_jar() is None
     with pytest.raises(SdkBuildError, match="not found in adapter_runtime"):
         sdk_builder._build_classpath_jars(tmp_path)
+
+
+@pytest.mark.parametrize("stray", [
+    "vrops-adapters-sdk.jar",        # the name the appliance gives it
+    "vrops-adapters-sdk-1.0.jar",    # its identical sibling on the appliance
+    "vrops-adapters-sdk-9.1.1.0.jar",
+])
+def test_a_second_sdk_jar_under_any_name_is_an_error(runtime, tmp_path, stray):
+    """Review B1: the 9.1.1 jar copied under its appliance name used to join
+    the primary classpath beside 2.2 while the compat pass skipped."""
+    _touch_jar(runtime / "vrops-adapters-sdk-2.2.jar")
+    _touch_jar(runtime / stray)
+    with pytest.raises(SdkBuildError) as exc:
+        sdk_builder._build_classpath_jars(tmp_path)
+    assert stray in str(exc.value)
+    assert sdk_builder._SDK_COMPAT_JAR_NAME in str(exc.value)
+
+
+def test_an_sdk_jar_under_adapter_runtime_lib_is_an_error(runtime, tmp_path):
+    _touch_jar(runtime / "vrops-adapters-sdk-2.2.jar")
+    (runtime / "lib").mkdir()
+    _touch_jar(runtime / "lib" / "vrops-adapters-sdk.jar")
+    with pytest.raises(SdkBuildError, match="lib/vrops-adapters-sdk.jar"):
+        sdk_builder._build_classpath_jars(tmp_path)
+
+
+def test_env_sdk_jar_is_the_only_sdk_jar_on_the_classpath(runtime, tmp_path, monkeypatch):
+    _touch_jar(runtime / "vrops-adapters-sdk-2.2.jar")
+    env_jar = _touch_jar(tmp_path / "supplied-sdk.jar")
+    monkeypatch.setenv("VCFCF_SDK_JAR", str(env_jar))
+    jars = sdk_builder._build_classpath_jars(tmp_path)
+    assert jars[0] == env_jar
+    assert _sdk_jars_on(jars) == []  # the runtime 2.2 copy stays off
+
+
+def test_framework_compile_refuses_two_sdk_jars(runtime):
+    _touch_jar(runtime / "vrops-adapters-sdk-2.2.jar")
+    _touch_jar(runtime / "vrops-adapters-sdk.jar")
+    _write_java(sdk_builder._ADAPTER_FRAMEWORK_SRC_DIR, "fw/F.java", "package fw; class F {}\n")
+    with pytest.raises(SdkBuildError, match="exactly one primary SDK jar"):
+        sdk_builder._ensure_framework_jar()
 
 
 def test_adapter_version_ref_ignores_the_compat_jar(runtime):
@@ -155,6 +201,9 @@ def test_adapter_version_ref_ignores_the_compat_jar(runtime):
     assert "Adapter-Version-Ref=N/A" in sdk_builder._generate_version_txt(project)
     _touch_jar(runtime / "vrops-adapters-sdk-2.2.jar")
     assert "Adapter-Version-Ref=2.2" in sdk_builder._generate_version_txt(project)
+    (runtime / "vrops-adapters-sdk-2.2.jar").unlink()
+    _touch_jar(runtime / "vrops-adapters-sdk.jar")  # no version in the name
+    assert "Adapter-Version-Ref=N/A" in sdk_builder._generate_version_txt(project)
 
 
 # ---------------------------------------------------------------------------
@@ -208,8 +257,26 @@ def test_missing_jar_is_a_loud_skip(runtime, capsys):
 
 def test_missing_jar_fails_when_required(runtime, monkeypatch):
     monkeypatch.setenv("VCFCF_SDK_COMPAT_REQUIRED", "1")
-    with pytest.raises(SdkBuildError, match="could not run"):
+    with pytest.raises(sdk_builder.SdkCompatUnavailable, match="could not run"):
         sdk_builder._sdk_compat_check([], [], "test source")
+
+
+@pytest.mark.parametrize("release,actions,annotated", [
+    ("1", "true", True),
+    ("", "true", False),
+    ("1", "", False),
+])
+def test_release_build_skip_is_annotated_on_github_actions(
+    runtime, monkeypatch, capsys, release, actions, annotated,
+):
+    """Review W1: a tagged pak release that skips the pass shows a
+    ::warning:: on the run page, not only the stderr box."""
+    monkeypatch.setenv("VCFCF_RELEASE_BUILD", release)
+    monkeypatch.setenv("GITHUB_ACTIONS", actions)
+    assert sdk_builder._sdk_compat_check([], [], "test source") is False
+    out = capsys.readouterr()
+    assert ("::warning title=sdk-compat skipped::" in out.out) is annotated
+    assert "SDK COMPAT CHECK SKIPPED" in out.err
 
 
 @needs_javac
@@ -338,3 +405,131 @@ def test_kit_main_parses_the_flags_and_sets_the_env(cmd, monkeypatch):
     namespace["_apply_sdk_jar"](args)
     assert os.environ["VCFCF_SDK_COMPAT_JAR"] == "/k/compat.jar"
     assert os.environ["VCFCF_SDK_COMPAT_REQUIRED"] == "1"
+
+
+# ---------------------------------------------------------------------------
+# Wiring: the pass is actually called from validate-sdk, build-sdk and
+# build-framework.sh (review W3: replacing both calls with `pass` used to
+# leave the suite green)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def scaffolded(tmp_path, monkeypatch, capsys):
+    """A scaffolded adapter project with the primary compile stubbed out and
+    _sdk_compat_check replaced by a recorder that fails like a real miss."""
+    for name in _COMPAT_ENV:
+        monkeypatch.delenv(name, raising=False)
+    project = sdk_builder.scaffold_sdk_project("Compat Wiring", tmp_path)
+    capsys.readouterr()
+    calls = []
+    monkeypatch.setattr(sdk_builder, "_ensure_framework_jar", lambda: None)
+    monkeypatch.setattr(sdk_builder, "_build_classpath_jars", lambda _pd: [])
+    monkeypatch.setattr(sdk_builder, "_compile", lambda *a, **k: calls.append("compile"))
+
+    def fake_check(sources, other_jars, what):
+        calls.append(("compat", [Path(s).name for s in sources]))
+        raise SdkBuildError("SDK compat check failed: missing class Gone")
+
+    monkeypatch.setattr(sdk_builder, "_sdk_compat_check", fake_check)
+    return project, calls
+
+
+def test_validate_sdk_runs_the_pass_and_reports_its_failure(scaffolded, tmp_path, monkeypatch):
+    project, calls = scaffolded
+    monkeypatch.setattr(sdk_builder.shutil, "which", lambda _n: "/usr/bin/javac")
+    monkeypatch.setenv("VCFCF_SDK_JAR", str(_touch_jar(tmp_path / "sdk.jar")))
+    errors = sdk_builder.validate_sdk_project(project)
+    assert "SDK compat check failed: missing class Gone" in errors
+    assert calls[0] == "compile"
+    compat_sources = calls[1][1]
+    # Adapter source and framework source are both compiled in the pass.
+    assert "CompatWiringAdapter.java" in compat_sources
+    assert "VcfCfAdapter.java" in compat_sources
+
+
+def test_build_sdk_fails_on_the_pass_before_packaging(scaffolded, tmp_path, monkeypatch):
+    project, calls = scaffolded
+    monkeypatch.setattr(sdk_builder, "_detect_jdk", lambda: "javac")
+    monkeypatch.setattr(sdk_builder, "_detect_jar_tool", lambda: "jar")
+    monkeypatch.setattr(
+        sdk_builder, "_write_adapter_properties", lambda *a, **k: calls.append("step5"),
+    )
+    out = tmp_path / "out"
+    with pytest.raises(SdkBuildError, match="missing class Gone"):
+        sdk_builder.build_sdk_pak(project, out)
+    assert [c if isinstance(c, str) else c[0] for c in calls] == ["compile", "compat"]
+    assert not out.exists() or not list(out.glob("*.pak"))
+
+
+_BUILD_FRAMEWORK = (
+    Path(sdk_builder.__file__).parent / "adapter_framework" / "build-framework.sh"
+)
+
+
+def _clean_env(**extra):
+    env = {k: v for k, v in os.environ.items()
+           if not k.startswith("VCFCF_") and k != "PYTHONPATH"}
+    env.update(extra)
+    return env
+
+
+def _run_build_framework(script: Path, env) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        [shutil.which("bash") or "/bin/bash", str(script), "--compat-only"],
+        capture_output=True, text=True, env=env, timeout=600,
+    )
+
+
+def _isolated_script(tmp_path: Path) -> Path:
+    """build-framework.sh in a scratch package tree with an empty adapter_runtime/."""
+    pkg = tmp_path / "pkgroot" / "vcfcf_managementpacks"
+    (pkg / "adapter_framework").mkdir(parents=True)
+    (pkg / "adapter_runtime").mkdir()
+    script = pkg / "adapter_framework" / "build-framework.sh"
+    shutil.copy(_BUILD_FRAMEWORK, script)
+    return script
+
+
+@needs_javac
+def test_build_framework_compat_only_fails_on_a_missing_class(tmp_path):
+    # The stub "9.1.1" jar lacks every SDK class the real framework uses.
+    jar = _stub_sdk_jar(tmp_path, tmp_path / "compat.jar", ["Present"])
+    r = _run_build_framework(_BUILD_FRAMEWORK, _clean_env(VCFCF_SDK_COMPAT_JAR=str(jar)))
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "SDK compat check failed" in r.stderr
+    assert "COMPAT PASS FAILED" in r.stderr
+
+
+@needs_javac
+def test_build_framework_required_pass_that_cannot_run_exits_3(tmp_path):
+    jar = _stub_sdk_jar(tmp_path, tmp_path / "compat.jar", ["Present"], major=200)
+    r = _run_build_framework(
+        _BUILD_FRAMEWORK,
+        _clean_env(VCFCF_SDK_COMPAT_JAR=str(jar), VCFCF_SDK_COMPAT_REQUIRED="1"),
+    )
+    assert r.returncode == sdk_builder.COMPAT_COULD_NOT_RUN == 3, r.stdout + r.stderr
+    assert "COMPAT PASS COULD NOT RUN" in r.stderr
+
+
+def test_build_framework_skips_in_shell_without_a_jar(tmp_path):
+    """Review W2: no jar and not required means no python3 at all."""
+    script = _isolated_script(tmp_path)
+    tools = tmp_path / "bin"
+    tools.mkdir()
+    for tool in ("dirname", "tr"):
+        (tools / tool).symlink_to(shutil.which(tool))
+    r = _run_build_framework(script, _clean_env(PATH=str(tools)))
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "SDK COMPAT CHECK SKIPPED" in r.stdout
+
+
+def test_build_framework_import_failure_is_could_not_run(tmp_path):
+    """Review W2: a python3 that cannot import the package is not reported
+    as a 9.1.1 compile failure."""
+    script = _isolated_script(tmp_path)
+    jar = _touch_jar(tmp_path / "compat.jar")
+    r = _run_build_framework(script, _clean_env(VCFCF_SDK_COMPAT_JAR=str(jar)))
+    assert r.returncode == 3, r.stdout + r.stderr
+    assert "cannot import" in r.stderr
+    assert "COMPAT PASS COULD NOT RUN" in r.stderr
