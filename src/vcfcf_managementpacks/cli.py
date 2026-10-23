@@ -392,6 +392,12 @@ def _apply_sdk_jar_flag(args) -> None:
     sdk_jar = getattr(args, "sdk_jar", None)
     if sdk_jar:
         _os.environ["VCFCF_SDK_JAR"] = str(sdk_jar)
+    # Second compile target (issue #211): same env-var injection.
+    compat_jar = getattr(args, "sdk_compat_jar", None)
+    if compat_jar:
+        _os.environ["VCFCF_SDK_COMPAT_JAR"] = str(compat_jar)
+    if getattr(args, "require_sdk_compat", False):
+        _os.environ["VCFCF_SDK_COMPAT_REQUIRED"] = "1"
 
 
 def _cmd_build_sdk_inner(project_dir: Path, output_dir: Path,
@@ -1002,6 +1008,29 @@ def build_parser() -> argparse.ArgumentParser:
             "Rejected together with --release."
         ),
     )
+    pbsdk.add_argument(
+        "--sdk-compat-jar",
+        dest="sdk_compat_jar",
+        default=None,
+        metavar="JAR_PATH",
+        help=(
+            "path to vrops-adapters-sdk-9.1.1.0100.jar, the second compile "
+            "target: the source must also compile against it (needs JDK 25+). "
+            "Alternatively set VCFCF_SDK_COMPAT_JAR. In the factory the jar "
+            "sits in adapter_runtime/. Skipped with a warning when absent."
+        ),
+    )
+    pbsdk.add_argument(
+        "--require-sdk-compat",
+        dest="require_sdk_compat",
+        action="store_true",
+        default=False,
+        help=(
+            "fail instead of warning when the 9.1.1.0100 compat compile "
+            "cannot run (jar or JDK 25+ missing). Equivalent to setting "
+            "VCFCF_SDK_COMPAT_REQUIRED=1."
+        ),
+    )
     pbsdk.set_defaults(func=cmd_build_sdk)
 
     pvsdk = sub.add_parser(
@@ -1021,6 +1050,29 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "path to vrops-adapters-sdk-2.2.jar. Alternatively set VCFCF_SDK_JAR. "
             "Not needed in the factory (jar is in adapter_runtime/)."
+        ),
+    )
+    pvsdk.add_argument(
+        "--sdk-compat-jar",
+        dest="sdk_compat_jar",
+        default=None,
+        metavar="JAR_PATH",
+        help=(
+            "path to vrops-adapters-sdk-9.1.1.0100.jar, the second compile "
+            "target: the source must also compile against it (needs JDK 25+). "
+            "Alternatively set VCFCF_SDK_COMPAT_JAR. In the factory the jar "
+            "sits in adapter_runtime/. Skipped with a warning when absent."
+        ),
+    )
+    pvsdk.add_argument(
+        "--require-sdk-compat",
+        dest="require_sdk_compat",
+        action="store_true",
+        default=False,
+        help=(
+            "fail instead of warning when the 9.1.1.0100 compat compile "
+            "cannot run (jar or JDK 25+ missing). Equivalent to setting "
+            "VCFCF_SDK_COMPAT_REQUIRED=1."
         ),
     )
     pvsdk.set_defaults(func=cmd_validate_sdk)

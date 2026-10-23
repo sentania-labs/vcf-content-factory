@@ -14,13 +14,27 @@
 # The resulting JAR is placed in adapter_runtime/vcfcf-adapter-base.jar
 # and used as compile-time dependency by all Tier 2 SDK adapters.
 #
+# Second compile target (issue #211): after the primary compile, the same
+# source is compiled again against the VCF Ops 9.1.1.0100 SDK jar
+# (adapter_runtime/vrops-adapters-sdk-9.1.1.0100.jar, or $VCFCF_SDK_COMPAT_JAR)
+# and the build fails on anything unresolved there. Nothing from that pass is
+# kept. Its class files are Java 25, so it needs JDK 25+ (PATH, JAVA_HOME,
+# JAVA_HOME_<N>_X64, or $VCFCF_SDK_COMPAT_JAVAC); without the jar or the JDK
+# it is skipped with a loud warning, or fails when VCFCF_SDK_COMPAT_REQUIRED=1.
+# The pass runs in python3 (sdk_builder.check_framework_sdk_compat), the same
+# code build-sdk and validate-sdk use.
+#
 # Usage:
 #   cd vcfcf_managementpacks/
-#   ./adapter_framework/build-framework.sh
+#   ./adapter_framework/build-framework.sh                # build + compat pass
+#   ./adapter_framework/build-framework.sh --compat-only  # compat pass only;
+#       no 2.2 jar needed, nothing written (factory CI uses this)
 #
 # Requirements:
 #   - javac (JDK 11 or newer; JDK 17 recommended)
 #   - adapter_runtime/vrops-adapters-sdk-2.2.jar
+#   - python3 (for the compat pass)
+#   - optional: adapter_runtime/vrops-adapters-sdk-9.1.1.0100.jar + JDK 25+
 #
 # Output:
 #   adapter_runtime/vcfcf-adapter-base.jar
@@ -35,6 +49,25 @@ RUNTIME_DIR="$ROOT/adapter_runtime"
 BUILD_DIR="/tmp/vcfcf-framework-build"
 OUTPUT_JAR="$RUNTIME_DIR/vcfcf-adapter-base.jar"
 SDK_JAR="$RUNTIME_DIR/vrops-adapters-sdk-2.2.jar"
+
+COMPAT_ONLY=0
+case "${1:-}" in
+    "") ;;
+    --compat-only) COMPAT_ONLY=1 ;;
+    *) echo "usage: $0 [--compat-only]" >&2; exit 2 ;;
+esac
+
+# Second compile target (issue #211); see the header.
+compat_pass() {
+    echo "Compat pass: framework source vs the VCF Ops 9.1.1.0100 SDK jar ..."
+    PYTHONPATH="$ROOT/..${PYTHONPATH:+:$PYTHONPATH}" python3 -c \
+        'import sys; from vcfcf_managementpacks.sdk_builder import check_framework_sdk_compat as c; sys.exit(c())'
+}
+
+if [ "$COMPAT_ONLY" -eq 1 ]; then
+    compat_pass
+    exit $?
+fi
 
 # ---- Preflight checks -------------------------------------------------------
 
@@ -111,6 +144,14 @@ if [ $COMPILE_STATUS -ne 0 ]; then
 fi
 
 echo "Compilation successful — no aria-ops-core symbols referenced."
+
+# ---- Second compile target (9.1.1.0100) -------------------------------------
+if ! compat_pass; then
+    echo "COMPAT PASS FAILED: framework source does not compile against the" >&2
+    echo "9.1.1.0100 SDK jar. vcfcf-adapter-base.jar was NOT written." >&2
+    rm -rf "$BUILD_DIR"
+    exit 1
+fi
 
 # ---- Verify no TVS residue --------------------------------------------------
 # Check that no class in the compiled output references com.vmware.tvs
