@@ -47,6 +47,7 @@ content/sdk-adapters/<name>/        # Layer 3: Tier 2 adapter projects
     describe.xml                    # hand-authored, or via framework DSL
     resources/resources.properties
     lib/                            # optional: vendor JARs (JDBC driver, etc.)
+    docs/                           # docset; see "Generated docset" below
 
 src/vcfcf_managementpacks/
     adapter_framework/src/          # Layer 2 framework Java source
@@ -64,6 +65,24 @@ src/vcfcf_managementpacks/
 
 The Tier 1 directories (`content/managementpacks/`, MPB JAR) are
 unchanged. Tier 1 and Tier 2 coexist.
+
+### Generated docset (`docs/`)
+
+`build-sdk` (and the standalone `docs-gen`) runs `docs_gen.py`, which
+owns three classes of file under an adapter's `docs/`:
+
+- **Regenerated every build** (hand edits are lost): `README.md` (the
+  index), `inventory-tree.md`, `inventory-tree.svg`,
+  `inventory-tree.excalidraw`.
+- **Scaffolded once, then hand-curated:** `overview.md`, `installing.md`.
+- **Read, never written:** `_index_extra.md`. Optional. Its Markdown is
+  merged verbatim into `README.md` under the heading
+  `## Adapter-Specific Documentation`, after Quick Reference. Use it to
+  link hand-written pages (for example `data-reference.md`) from the
+  index. Write `###` or deeper headings inside it so they nest under the
+  merged heading. A missing or blank file adds nothing (#171).
+
+Any other file under `docs/` is the adapter's own and is never touched.
 
 ## Build approach: Python + `javac`, no Maven
 

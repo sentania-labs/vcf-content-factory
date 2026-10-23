@@ -11,6 +11,13 @@ REGENERATE every run (derived from describe.xml / adapter.yaml):
                                     pure Python, deterministic, no new deps)
   docs/README.md                  - index linking all docset sections
 
+READ, never written (hand-curated extension point):
+  docs/_index_extra.md            - optional Markdown merged verbatim into
+                                    docs/README.md under the stable heading
+                                    INDEX_EXTRA_HEADING, so an adapter can
+                                    add its own index entries without the
+                                    next build erasing them (#171)
+
 SCAFFOLD if missing (hand-curated thereafter):
   docs/overview.md                - what's in the pack (scaffold only)
   docs/installing.md              - prereqs + config fields table (scaffold only)
@@ -1053,8 +1060,23 @@ When adding a new adapter instance in VCF Operations, you will be prompted for:
 """
 
 
-def generate_readme_md(model: AdapterDocModel) -> str:
-    """Generate docs/README.md index content."""
+# Hand-curated include merged into docs/README.md. The generator reads it and
+# never writes it, so anything in it survives every build. The leading
+# underscore marks it as a fragment rather than a docset page.
+INDEX_EXTRA_FILENAME = "_index_extra.md"
+# Stable heading the include lands under. Authors should use ``###`` or
+# deeper headings inside the include so it nests under this one.
+INDEX_EXTRA_HEADING = "## Adapter-Specific Documentation"
+
+
+def generate_readme_md(model: AdapterDocModel, index_extra: str = "") -> str:
+    """Generate docs/README.md index content.
+
+    ``index_extra`` is the text of the adapter's ``docs/_index_extra.md``
+    (empty when the file is absent). Non-blank text is appended verbatim
+    under ``INDEX_EXTRA_HEADING``; blank text emits nothing, so an adapter
+    without the include gets a byte-identical index.
+    """
     contents_rows = [
         "| Section | Description |",
         "|---------|-------------|",
@@ -1092,7 +1114,20 @@ def generate_readme_md(model: AdapterDocModel) -> str:
 - **Version:** {model.adapter_version}
 - **Traversal spec:** {model.traversal_name or "(none)"}
 - **Resource kinds:** {len([k for k in model.kinds if not k.is_adapter_instance])}
-{cross_mp_line}"""
+{cross_mp_line}""" + _render_index_extra(index_extra)
+
+
+def _render_index_extra(index_extra: str) -> str:
+    """Render the ``docs/_index_extra.md`` section, or "" when there is none."""
+    body = (index_extra or "").strip()
+    if not body:
+        return ""
+    return (
+        f"\n{INDEX_EXTRA_HEADING}\n\n"
+        f"<!-- Merged from docs/{INDEX_EXTRA_FILENAME}; edit that file, "
+        f"not this section. -->\n\n"
+        f"{body}\n"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1116,6 +1151,9 @@ def generate_docset(
       docs/inventory-tree.svg
       docs/README.md
 
+    READ policy (never written):
+      docs/_index_extra.md  merged into docs/README.md when present
+
     SCAFFOLD policy (only written if the file does not already exist):
       docs/overview.md
       docs/installing.md
@@ -1131,7 +1169,8 @@ def generate_docset(
                      ``build_doc_model``.
 
     Returns:
-        Dict mapping relative path (e.g. "docs/README.md") → "generated" | "scaffolded" | "skipped".
+        Dict mapping relative path (e.g. "docs/README.md") → "generated" |
+        "scaffolded" | "skipped" | "merged" (the read-only include).
 
     Raises:
         DocsGenError: if adapter.yaml or describe.xml cannot be parsed.
@@ -1175,8 +1214,14 @@ def generate_docset(
     results["docs/inventory-tree.svg"] = "generated"
     _log("  generated docs/inventory-tree.svg")
 
-    # 4. README.md
-    readme_md = generate_readme_md(model)
+    # 4. README.md, with the adapter's hand-curated include merged in.
+    index_extra = ""
+    index_extra_path = docs_dir / INDEX_EXTRA_FILENAME
+    if index_extra_path.is_file():
+        index_extra = index_extra_path.read_text(encoding="utf-8")
+        results[f"docs/{INDEX_EXTRA_FILENAME}"] = "merged"
+        _log(f"  merged docs/{INDEX_EXTRA_FILENAME} into docs/README.md")
+    readme_md = generate_readme_md(model, index_extra=index_extra)
     (docs_dir / "README.md").write_text(readme_md, encoding="utf-8")
     results["docs/README.md"] = "generated"
     _log("  generated docs/README.md")
