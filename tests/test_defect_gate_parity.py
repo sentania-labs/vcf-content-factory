@@ -21,8 +21,12 @@ two divergences, both from RULE-012: an absent, empty or unreadable registry
 is a warning by default (``--require-registry`` restores the vendored
 refusal), and a malformed entry does not block a pak it does not name.  Where
 the vendored script refused (exit 1) this gate refuses too (exit 2 for the
-named pak); where it allowed, this gate allows, trailing heading text
-included.
+named pak).  Where it allowed, this gate allows, trailing heading text
+included, with one deliberate exception in the strict direction: an
+``Affects:`` token with edge punctuation (``template.``) is malformed here and
+refuses the pak it names, where the vendored script read it as a token
+matching nothing.  Every row was cross-checked against the vendored script
+(template commit 49ab82cf) when written; the disagreements are exactly these.
 """
 from __future__ import annotations
 
@@ -199,6 +203,32 @@ MATRIX = [
     ("case-registry", registry(entry(1, "Template"), entry(2, " TEMPLATE ")),
      "template", [], 2),
     ("case-gated-name", registry(entry(1, "template")), "TEMPLATE", [], 2),
+
+    # --- template cases ported in the review round (W3) ---
+    ("t-heading-indent-2", registry(entry(1, "unifi"), entry(2, "template", heading="  ### DEF-002")),
+     "template", [], 2),
+    ("t-heading-indent-6-code", blocker_then("      ### DEF-002"), "template", [], 2),
+    ("t-heading-indent-space-tab-code", blocker_then(" \t### DEF-002"), "template", [], 2),
+    ("t-fields-indent-space-tab-code", registry(entry(1, "unifi"),
+                                                indent_fields(entry(2, "template"), " \t")),
+     "template", [], 2),
+    ("t-nested-status-alone-2", registry(entry(1, "unifi"), under_summary(
+        entry(2, "template"), "  - **Status:** closed")), "template", [], 2),
+    ("t-nested-status-alone-1", registry(entry(1, "unifi"), under_summary(
+        entry(2, "template"), " - **Status:** closed")), "template", [], 2),
+    ("t-nested-severity-2", registry(entry(1, "unifi"), under_summary(
+        entry(2, "template"), "  - **Severity:** tracked")), "template", [], 2),
+    ("t-repeated-status-alone", registry(entry(1, "unifi"), under_summary(
+        entry(2, "template"), "- **Status:** closed")), "template", [], 2),
+    ("t-repeated-affects", registry(entry(1, "synology"), under_summary(
+        entry(2, "template"), "- **Affects:** unifi")), "template", [], 2),
+    ("t-repeated-affects-second", registry(entry(1, "synology"), under_summary(
+        entry(2, "template"), "- **Affects:** unifi")), "unifi", [], 2),
+    ("t-indented-example-intro-gated", registry(entry(1, "template"), pre=(
+        "# Defect registry\n\nSchema example:\n\n"
+        "    ### DEF-NNN\n    - **Affects:** <pak>\n\n## Defects\n\n")), "template", [], 2),
+    ("t-no-def-sections-html-default", "<html><body>404: Not Found</body></html>\n",
+     "template", [], 0),
 
     # --- review fixes (2026-10-23 framework review) ---
     # B1: every pak a malformed Affects names is refused, not the first only.
