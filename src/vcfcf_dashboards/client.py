@@ -83,6 +83,29 @@ def discover_marker_filename(client: VCFOpsClient, timeout_s: int = 120) -> str:
     Without this, a stale FINISHED state from a previous run causes the
     poll to exit immediately and the zip download returns 400 because
     the prior zip was already consumed."""
+    blob = export_content_zip(
+        client, ["SUPER_METRICS"], timeout_s=timeout_s, label="marker-probe export"
+    )
+    with zipfile.ZipFile(io.BytesIO(blob)) as zf:
+        for name in zf.namelist():
+            if name.endswith("L.v1"):
+                return name
+    raise VCFOpsError("export zip did not contain a *L.v1 marker file")
+
+
+def export_content_zip(
+    client: VCFOpsClient,
+    content_types: list,
+    timeout_s: int = 120,
+    label: str = "export",
+) -> bytes:
+    """Run one CUSTOM content export and return the outer zip bytes.
+
+    Waits for any export already in flight (only one may run at a time),
+    snapshots the prior export's startTime, POSTs, then polls until an
+    export that started after the snapshot reaches FINISHED. ``label``
+    prefixes the error messages.
+    """
     client._ensure_auth()
     # Wait for any export already in flight; only one may run at a time.
     deadline = time.monotonic() + timeout_s
@@ -107,10 +130,10 @@ def discover_marker_filename(client: VCFOpsClient, timeout_s: int = 120) -> str:
     r = client._request(
         "POST",
         "/api/content/operations/export",
-        json={"scope": "CUSTOM", "contentTypes": ["SUPER_METRICS"]},
+        json={"scope": "CUSTOM", "contentTypes": list(content_types)},
     )
     if r.status_code not in (200, 202):
-        raise VCFOpsError(f"marker-probe export failed ({r.status_code}): {r.text}")
+        raise VCFOpsError(f"{label} failed ({r.status_code}): {r.text}")
 
     deadline = time.monotonic() + timeout_s
     while True:
@@ -125,17 +148,65 @@ def discover_marker_filename(client: VCFOpsClient, timeout_s: int = 120) -> str:
         if start_time > prior_start_time and st.startswith("FINI"):
             break
         if time.monotonic() > deadline:
-            raise VCFOpsError(f"marker-probe export timed out; state={st}")
+            raise VCFOpsError(f"{label} timed out; state={st}")
         time.sleep(2)
 
     z = client._session.get(f"{client.base}/api/content/operations/export/zip")
     if z.status_code != 200:
         raise VCFOpsError(f"export zip download failed ({z.status_code})")
-    with zipfile.ZipFile(io.BytesIO(z.content)) as zf:
-        for name in zf.namelist():
-            if name.endswith("L.v1"):
-                return name
-    raise VCFOpsError("export zip did not contain a *L.v1 marker file")
+    return z.content
+
+
+def list_adapter_kind_keys(client: VCFOpsClient) -> set:
+    """Adapter-kind keys installed on the target (GET /api/adapterkinds).
+
+    Response shape per operations-api.json ``adapter-kinds``:
+    ``{"adapter-kind": [{"key": "VMWARE", ...}, ...]}``.
+    """
+    r = client._request("GET", "/api/adapterkinds")
+    if r.status_code != 200:
+        raise VCFOpsError(f"adapterkinds read failed ({r.status_code}): {r.text[:300]}")
+    body = r.json() or {}
+    return {
+        str(ak.get("key"))
+        for ak in (body.get("adapter-kind") or [])
+        if isinstance(ak, dict) and ak.get("key")
+    }
+
+
+def check_dashboard_materialization(client: VCFOpsClient, dashboards: list) -> list:
+    """Phase-2 state of each just-imported dashboard (issue #167).
+
+    One DASHBOARDS export (read-only: it creates no content) gives each
+    dashboard's ``importComplete`` / ``entryKeys``; when any is incomplete,
+    one GET /api/adapterkinds names which pending adapter kinds the target
+    lacks. ``dashboards`` is anything with ``.id`` and ``.name``. Returns
+    :class:`vcfcf_core.dashboards.materialization.MaterializationStatus`
+    per dashboard. Raises VCFOpsError when the export fails; an adapter-kind
+    read failure degrades to "settling" rather than guessing "stalled".
+    See knowledge/context/api-surface/dashboard_import_two_phase_materialization.md.
+    """
+    from vcfcf_core.dashboards.materialization import classify_dashboards, is_incomplete
+    from vcfcf_core.extractor import dashboards_from_export_zip
+
+    wanted = {d.id: d.name for d in dashboards if getattr(d, "id", None)}
+    if not wanted:
+        return []
+    blob = export_content_zip(
+        client, ["DASHBOARDS"], timeout_s=180, label="dashboard materialization export"
+    )
+    try:
+        exported = dashboards_from_export_zip(blob)
+    except ValueError as e:
+        raise VCFOpsError(str(e)) from e
+    ids = {str(i).lower() for i in wanted}
+    installed = None
+    if any(is_incomplete(d) for d in exported if str(d.get("id") or "").lower() in ids):
+        try:
+            installed = list_adapter_kind_keys(client)
+        except VCFOpsError:
+            installed = None
+    return classify_dashboards(exported, wanted, installed)
 
 
 def import_content_zip(client: VCFOpsClient, zip_bytes: bytes, timeout_s: int = 180) -> dict:

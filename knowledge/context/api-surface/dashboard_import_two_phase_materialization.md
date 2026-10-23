@@ -288,6 +288,28 @@ to stop reading success from the import envelope alone.
 5. **Prefer opening the dashboard once** after a sync if the caller wants a
    fast settle, rather than waiting on the background pass.
 
+### Implemented (issue #167)
+
+After a FINISHED import, `vcfcf_dashboards sync` and the bundle-sync
+dashboards handler run one `DASHBOARDS` export and, only when a just-imported
+dashboard is incomplete, one `GET /api/adapterkinds` (response
+`{"adapter-kind": [{"key": ...}]}`). Classifier:
+`src/vcfcf_core/dashboards/materialization.py`. `entryKeys.resourceKind[]`
+and `entryKeys.resource[]` each carry `adapterKindKey` (confirmed against the
+devel 2026-09-14 export in the migrator corpus). Outcomes:
+
+| State | Rule | CLI | Bundle sync item |
+|---|---|---|---|
+| complete | `entryKeys` null and `importComplete` not false | silent | ok |
+| settling | incomplete, every pending adapter kind installed (or kinds unreadable) | NOTE | ok |
+| stalled | incomplete, a pending adapter kind not installed | WARNING naming the kinds, rc 1 | failed |
+| absent | in the import, not in the export | WARNING | warn |
+
+No polling: a missing adapter kind is decidable at once, and the settling
+case completes on its own. `--skip-materialization-check` turns it off. The
+shipped `install.py` and the pak installer do not run this check.
+Not yet exercised against a live instance (fixtures only).
+
 ## Method log (reproducible, read-only)
 
 - Auth: `VCFOpsClient.from_env(profile="devel")` and

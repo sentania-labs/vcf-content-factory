@@ -14,6 +14,7 @@ from vcfcf_supermetrics.loader import sm_id_map
 from .client import (
     DASHBOARD_CONTENT_TYPES,
     all_skipped_content_types,
+    check_dashboard_materialization,
     discover_marker_filename,
     get_current_user,
     import_content_zip,
@@ -534,6 +535,11 @@ def cmd_sync(args) -> int:
                 file=sys.stderr,
             )
 
+    # --- Phase-2 materialization: a FINISHED import only covers phase 1 (#167) ---
+    mat_rc = 0
+    if not getattr(args, "skip_materialization_check", False):
+        mat_rc = _report_materialization(client, dashboards)
+
     # --- Dependency walker: check SM enablement + OOTB metric collection state ---
     dep_rc = _run_dep_walker(
         client,
@@ -543,7 +549,49 @@ def cmd_sync(args) -> int:
         auto_enable_metrics=getattr(args, "auto_enable_metrics", False),
         skip_metric_check=getattr(args, "skip_metric_check", False),
     )
-    return dep_rc
+    return dep_rc or mat_rc
+
+
+def _report_materialization(client, dashboards: list) -> int:
+    """Report, by exception, imported dashboards that have not finished building.
+
+    Complete: silent. Still settling (every adapter kind it waits on is
+    installed): a NOTE, not a failure. Waiting on an adapter kind the target
+    lacks: a WARNING naming the kinds, and rc 1, because it will never
+    complete on its own. In the import but not on the instance afterwards: a
+    WARNING. A failed check is a WARNING, never a failure.
+    """
+    from vcfcf_core.dashboards.materialization import (
+        ABSENT,
+        COMPLETE,
+        STALLED,
+        describe_status,
+    )
+
+    if not dashboards:
+        return 0
+    try:
+        statuses = check_dashboard_materialization(client, dashboards)
+    except Exception as e:  # noqa: BLE001  advisory check; a transport error is a WARNING
+        print(
+            f"WARNING: could not check whether the imported dashboards finished "
+            f"building: {e}",
+            file=sys.stderr,
+        )
+        return 0
+    rc = 0
+    for st in statuses:
+        if st.state == COMPLETE:
+            continue
+        msg = describe_status(st)
+        if st.state == STALLED:
+            print(f"WARNING: {msg}", file=sys.stderr)
+            rc = 1
+        elif st.state == ABSENT:
+            print(f"WARNING: {msg}", file=sys.stderr)
+        else:
+            print(f"NOTE: {msg}")
+    return rc
 
 
 def _run_dep_walker(
@@ -906,6 +954,16 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Skip the OOTB metric defaultMonitored check entirely. "
             "Use when you know the target policy already covers these metrics."
+        ),
+    )
+    ps.add_argument(
+        "--skip-materialization-check",
+        action="store_true",
+        default=False,
+        help=(
+            "Skip the post-import check that each dashboard finished building "
+            "(one DASHBOARDS export plus an adapter-kind read). Default: check, "
+            "and fail when a dashboard waits on an adapter that is not installed."
         ),
     )
     ps.add_argument(
