@@ -231,5 +231,5 @@ phase 0). Never read for current guidance.
 | `reference_docs.md` | Reference docs inventory + PDF extraction |
 | `managed_paks.md` | SDK pak registry — per-repo Tier 2 adapters cloned by `scripts/bootstrap_managed_paks.sh` |
 | `feedback_queue.md` | Intake queue for user feedback/enhancement requests, pre-triage (correctness problems graduate to `defects.md`) |
-| `../../reference/docs/vendor-jars/` | Verbatim Broadcom jars with `PROVENANCE.md`: the 9.1.1.0100 adapter SDK jar (`vrops-adapters-sdk-9.1.1.0100.jar`, sha256 `79f7b1234090`, from the build 25795063 OVA), the second compile target for issue #211 |
+| `../../reference/docs/vendor-jars/` | `PROVENANCE.md` only (the binaries stay out of this public repo): the 9.1.1.0100 adapter SDK jar (`vrops-adapters-sdk-9.1.1.0100.jar`, sha256 `79f7b1234090`, from the build 25795063 OVA), the second compile target for issue #211, held in the private `vcf-content-factory-sdk-runtime` repo and on the lab holding share |
 | `vrops-content-management.md` | Extracted community article (Brock Peterson) on vROps content management via the Suite API |

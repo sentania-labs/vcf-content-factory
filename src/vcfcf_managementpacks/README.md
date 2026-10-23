@@ -152,9 +152,12 @@ on 2026-05-15 by Navani):
 | `aria-ops-core-8.0.0.jar` | Layer 2 — UnlicensedAdapter | No (MUST bundle in pak) |
 
 A fifth, optional jar is a compile check only, never on the shipped
-classpath: `vrops-adapters-sdk-9.1.1.0100.jar` (VCF Ops 9.1.1.0100). Copy it
-from `reference/docs/vendor-jars/` into `adapter_runtime/` and put JDK 25+
-where the build can find it; build-sdk, validate-sdk and
+classpath: `vrops-adapters-sdk-9.1.1.0100.jar` (VCF Ops 9.1.1.0100). It is
+not in this public repo: take it from the private
+`sentania-labs/vcf-content-factory-sdk-runtime` repo (or a 9.1.1.0100
+appliance's `common/lib/vrops-adapters-sdk.jar`), put it in
+`adapter_runtime/`, check its sha256, and put JDK 25+ where the build can
+find it; build-sdk, validate-sdk and
 `build-framework.sh` then also compile against it and fail on anything
 9.1.1 lacks (issue #211). Both SDK jars' hashes and builds:
 `adapter_runtime/PROVENANCE.md`.

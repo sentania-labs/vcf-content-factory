@@ -173,19 +173,29 @@ jobs:
     # same source also compiles against each newer platform's jar, so a class
     # a newer Ops build dropped fails CI instead of failing on a collector.
     #
-    # One leg per extra target. The 9.0.2 leg is absent on purpose: the 2.2
-    # jar lives only in the private vcf-content-factory-sdk-runtime repo and
-    # this repo holds no key for it (the test job above compiles nothing
-    # against a real SDK jar either). Adding it means an SDK_RUNTIME_SSH_KEY
-    # secret here plus a leg that clones that repo, as the pak repos do.
+    # The Broadcom jars never enter this public repo (2026-06-09
+    # redistribution survey). The job clones the private
+    # sentania-labs/vcf-content-factory-sdk-runtime repo with the
+    # SDK_RUNTIME_SSH_KEY deploy key, the same way the pak repos'
+    # build-pak-on-tag.yml does, and checks the jar's sha256 against
+    # src/vcfcf_managementpacks/adapter_runtime/PROVENANCE.md before use.
+    # Without the secret (fork PRs never receive it; this repo until the key
+    # is added) the job skips with a visible notice and passes. With the
+    # secret, a jar missing from that repo or a hash mismatch fails.
+    #
+    # One leg per extra target. No 9.0.2 leg yet: nothing in factory CI
+    # compiles against a real 2.2 jar today; with the key in place that is
+    # one more leg running the primary build-framework.sh.
     #
     # The 9.1.1.0100 jar's class files are Java 25 (major 69); JDK 17 javac
-    # rejects them ("class file has wrong version 69.0"), hence JDK 25 here.
-    # VCFCF_SDK_COMPAT_REQUIRED=1 turns a missing jar or JDK into a failure
-    # instead of the local-build warning.
+    # rejects them ("class file has wrong version 69.0"), hence JDK 25.
+    # VCFCF_SDK_COMPAT_REQUIRED=1: once the jar is fetched, a missing JDK is
+    # a failure, not the local-build warning.
     #
     # GitHub-hosted: needs neither the lab nor a Docker daemon, and this repo
-    # is public, so hosted minutes are free (github-ci skill, rule 4).
+    # is public, so hosted minutes are free (github-ci skill, rule 4). The
+    # runner is ephemeral, and the key file is deleted at the end of the
+    # fetch step, before any repo code runs.
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -195,36 +205,98 @@ jobs:
         include:
           - sdk: "9.1.1.0100"
             jdk: "25"
-            jar: reference/docs/vendor-jars/vrops-adapters-sdk-9.1.1.0100.jar
-            sha256: 79f7b12340906359e04f3619dd87c7e67a9493b3fa5d86bdffe9242da67f46f7
+            jar: vrops-adapters-sdk-9.1.1.0100.jar
     name: sdk-compat (${{ matrix.sdk }})
     steps:
+      - name: Check for the sdk-runtime deploy key
+        id: key
+        env:
+          SDK_RUNTIME_SSH_KEY: ${{ secrets.SDK_RUNTIME_SSH_KEY }}
+          SDK: ${{ matrix.sdk }}
+        run: |
+          if [ -n "${SDK_RUNTIME_SSH_KEY:-}" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            MSG="SDK_RUNTIME_SSH_KEY is not available to this run (fork PR, or the secret is not set on this repo), so the ${SDK} SDK jar was not fetched and the compat compile did NOT run."
+            echo "::notice title=sdk-compat (${SDK}) skipped::${MSG}"
+            {
+              echo "### sdk-compat (${SDK}) skipped"
+              echo "${MSG}"
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        if: steps.key.outputs.present == 'true'
         with:
           persist-credentials: false
 
-      - name: Verify the SDK jar is the recorded build
-        # Hash recorded in reference/docs/vendor-jars/PROVENANCE.md and
-        # src/vcfcf_managementpacks/adapter_runtime/PROVENANCE.md.
+      - name: Fetch the SDK jar (private runtime repo via deploy key)
+        if: steps.key.outputs.present == 'true'
         env:
-          JAR: ${{ matrix.jar }}
-          SHA256: ${{ matrix.sha256 }}
-        run: echo "${SHA256}  ${JAR}" | sha256sum -c -
+          SDK_RUNTIME_SSH_KEY: ${{ secrets.SDK_RUNTIME_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          KEY_FILE="$RUNNER_TEMP/sdk_runtime_key"
+          KNOWN_HOSTS="$RUNNER_TEMP/sdk_runtime_known_hosts"
+          # Remove the key however this step ends, success or failure.
+          trap 'rm -f "$KEY_FILE"' EXIT
+          ( umask 077; printf '%s\n' "$SDK_RUNTIME_SSH_KEY" > "$KEY_FILE" )
+          chmod 600 "$KEY_FILE"
+          # GitHub's published SSH host keys, pinned (same lines as the pak
+          # repos' build-pak-on-tag.yml). Source: https://api.github.com/meta,
+          # field ssh_keys, as published on 2026-10-16. If GitHub rotates a
+          # key, the clone fails with a host key error: update these lines.
+          cat > "$KNOWN_HOSTS" <<'HOSTKEYS'
+          github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl
+          github.com ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBEmKSENjQEezOmxkZMy7opKgwFB9nkt5YRrYMjNuG5N87uRgg6CLrbo5wAdT/y6v0mKV0U2w0WZ2YB/++Tpockg=
+          github.com ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQCj7ndNxQowgcQnjshcLrqPEiiphnt+VTTvDP6mHBL9j1aNUkY4Ue1gvwnGLVlOhGeYrnZaMgRK6+PKCUXaDbC7qtbW8gIkhL7aGCsOr/C56SJMy/BCZfxd1nWzAOxSDPgVsmerOBYfNqltV9/hWCqBywINIR+5dIg6JTJ72pcEpEjcYgXkE2YEFXV1JHnsKgbLWNlhScqb2UmyRkQyytRLtL+38TGxkxCflmO+5Z8CSSNY7GidjMIZ7Q4zMjA2n1nGrlTDkzwDCsw+wqFPGQA179cnfGWOWRVruj16z6XyvxvjJwbz0wQZ75XK5tKSb7FNyeIEs4TT4jk+S4dhPeAUC5y+bDYirYgM4GC7uEnztnZyaVWQ7B381AK4Qdrwt51ZqExKbQpTUNn+EjqoTwvqNj4kqx5QUCI0ThS/YkOxJCXmPUWZbhjpCg56i+2aB6CmK2JGhn57K5mj0MNdBXA4/WnwH6XoPWJzK5Nyu2zB3nAZp+S5hpQs+p1vN1/wsjk=
+          HOSTKEYS
+          # Cloned outside the checkout so nothing in the workspace changes.
+          GIT_SSH_COMMAND="ssh -i $KEY_FILE -o IdentitiesOnly=yes -o UserKnownHostsFile=$KNOWN_HOSTS -o StrictHostKeyChecking=yes" \
+            git clone --depth 1 git@github.com:sentania-labs/vcf-content-factory-sdk-runtime.git "$RUNNER_TEMP/sdk_runtime"
+          ls -l "$RUNNER_TEMP"/sdk_runtime/vrops-adapters-sdk-*.jar
+
+      - name: Verify the SDK jar against adapter_runtime/PROVENANCE.md
+        if: steps.key.outputs.present == 'true'
+        env:
+          JAR_NAME: ${{ matrix.jar }}
+        run: |
+          set -euo pipefail
+          JAR="$RUNNER_TEMP/sdk_runtime/$JAR_NAME"
+          if [ ! -f "$JAR" ]; then
+            echo "::error::${JAR_NAME} is not in sentania-labs/vcf-content-factory-sdk-runtime. Add it there (provenance: src/vcfcf_managementpacks/adapter_runtime/PROVENANCE.md)."
+            exit 1
+          fi
+          # The provenance table row naming this jar carries its full sha256.
+          EXPECTED="$(grep -F "\`${JAR_NAME}\`" src/vcfcf_managementpacks/adapter_runtime/PROVENANCE.md \
+            | grep -oE '[0-9a-f]{64}' | head -n 1 || true)"
+          if [ -z "$EXPECTED" ]; then
+            echo "::error::No sha256 for ${JAR_NAME} in src/vcfcf_managementpacks/adapter_runtime/PROVENANCE.md."
+            exit 1
+          fi
+          echo "${EXPECTED}  ${JAR}" | sha256sum -c -
 
       - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
+        if: steps.key.outputs.present == 'true'
         with:
           distribution: temurin
           java-version: ${{ matrix.jdk }}
 
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        if: steps.key.outputs.present == 'true'
         with:
           python-version: "3.12"
 
       - name: Install PyYAML (the vcfcf_managementpacks import needs it)
+        if: steps.key.outputs.present == 'true'
         run: python3 -m pip install pyyaml
 
       - name: Compile the framework against the ${{ matrix.sdk }} SDK jar
+        if: steps.key.outputs.present == 'true'
         env:
-          VCFCF_SDK_COMPAT_JAR: ${{ matrix.jar }}
+          JAR_NAME: ${{ matrix.jar }}
           VCFCF_SDK_COMPAT_REQUIRED: "1"
-        run: bash src/vcfcf_managementpacks/adapter_framework/build-framework.sh --compat-only
+        run: |
+          export VCFCF_SDK_COMPAT_JAR="$RUNNER_TEMP/sdk_runtime/$JAR_NAME"
+          bash src/vcfcf_managementpacks/adapter_framework/build-framework.sh --compat-only

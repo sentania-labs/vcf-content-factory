@@ -60,3 +60,12 @@ checksum file.
 A workflow that ran the old kit and relied on grepping the compare output
 for "0 BLOCKING" now also fails on the exit code; under `set -o pipefail`
 that is the intended gate.
+
+## Behavior since 1.0.13
+
+- `build-sdk` and `validate-sdk` take `--sdk-compat-jar <path to
+  vrops-adapters-sdk-9.1.1.0100.jar>` (or `VCFCF_SDK_COMPAT_JAR`) to compile
+  the framework and adapter a second time against the VCF Ops 9.1.1.0100 SDK
+  jar on JDK 25+, and `--require-sdk-compat` (or
+  `VCFCF_SDK_COMPAT_REQUIRED=1`) to fail instead of warn when that check
+  cannot run; the pak itself is still compiled against the 2.2 jar.

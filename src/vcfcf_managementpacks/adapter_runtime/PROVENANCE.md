@@ -21,10 +21,13 @@ version".
   `sentania-labs/vcf-content-factory-sdk-runtime` repo carries the same
   bytes for pak CI (hash checked 2026-10-23). The `2.2` in the name is a
   name, not a version.
-- **9.1.1.0100 jar:** a copy of
-  `reference/docs/vendor-jars/vrops-adapters-sdk-9.1.1.0100.jar`, which was
-  extracted from the `Operations-Appliance-9.1.1.0100.25795063.ova` image
-  (full chain in `reference/docs/vendor-jars/PROVENANCE.md`). Prod 9.1.1.0
+- **9.1.1.0100 jar:** extracted from the
+  `Operations-Appliance-9.1.1.0100.25795063.ova` image (full chain in
+  `reference/docs/vendor-jars/PROVENANCE.md`, a provenance record only: the
+  binary is not committed to this public repo). Copies: the private
+  `sentania-labs/vcf-content-factory-sdk-runtime` repo beside the 2.2 jar
+  (where factory CI fetches it), and the lab holding share at
+  `/mnt/holding/vendor/vcf-ops-9.1.1.0100/extracted-jars/`. Prod 9.1.1.0
   build 25679751 carries different bytes (`9e905f1a5164...`, 1,001,089
   bytes, same class set); the 0100 patch rebuilt the jar.
 
@@ -44,6 +47,12 @@ version".
 
 ## Setting it up locally
 
-    cp reference/docs/vendor-jars/vrops-adapters-sdk-9.1.1.0100.jar \
-       src/vcfcf_managementpacks/adapter_runtime/
+Copy the jar from either location above into this directory and check
+both hashes against the table:
+
     sha256sum src/vcfcf_managementpacks/adapter_runtime/vrops-adapters-sdk-*.jar
+
+Factory CI (`.github/workflows/ci.yml`, job `sdk-compat`) clones the
+sdk-runtime repo with the `SDK_RUNTIME_SSH_KEY` deploy key and checks the
+jar against the sha256 in the table above before using it; without that
+secret the job skips with a notice.
