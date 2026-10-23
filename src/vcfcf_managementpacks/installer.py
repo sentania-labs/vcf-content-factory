@@ -68,6 +68,13 @@ POLL_TIMEOUT = 300         # seconds before giving up — NOTE: subprocess wrapp
                            # A 300s subprocess timeout will race the poller and kill the
                            # installer while it is still waiting for the server.
 UPLOAD_POLL_INTERVAL = 3   # seconds between upload-progress polls
+#: (connect, read) timeout in seconds for one /ui/solution.action request.
+#: getIntegrations returns ~590 KB on a populated instance, so the read
+#: allowance is generous; it exists so one hung socket cannot hold a poll or
+#: verify loop forever (issue #235).  The read timeout bounds each socket
+#: read, not the whole response: a server that trickles bytes can still run
+#: longer, a server that goes silent cannot.
+SOLUTION_ACTION_TIMEOUT: Tuple[float, float] = (10.0, 120.0)
 
 
 # ---------------------------------------------------------------------------
@@ -392,13 +399,30 @@ class _UISession:
             self._session = None
             self._csrf = None
 
-    def solution_action(self, **kwargs) -> Dict[str, Any]:
-        """POST /ui/solution.action with arbitrary form fields + CSRF."""
+    def solution_action(self, _timeout: Optional[float] = None,
+                        **kwargs) -> Dict[str, Any]:
+        """POST /ui/solution.action with arbitrary form fields + CSRF.
+
+        Every request carries a timeout (issue #235): ``_timeout`` seconds
+        when given (a caller with its own deadline passes what is left of
+        it), else :data:`SOLUTION_ACTION_TIMEOUT`.  A timeout surfaces as
+        RuntimeError, the error type the install and verify paths handle.
+        """
         assert self._session is not None, "call login() first"
-        r = self._session.post(
-            f"https://{self._host}/ui/solution.action",
-            data={"secureToken": self._csrf or "", **kwargs},
-        )
+        timeout: Any = SOLUTION_ACTION_TIMEOUT
+        if _timeout is not None:
+            timeout = (min(SOLUTION_ACTION_TIMEOUT[0], _timeout), _timeout)
+        try:
+            r = self._session.post(
+                f"https://{self._host}/ui/solution.action",
+                data={"secureToken": self._csrf or "", **kwargs},
+                timeout=timeout,
+            )
+        except requests.exceptions.Timeout as e:
+            raise RuntimeError(
+                f"/ui/solution.action mainAction={kwargs.get('mainAction')!r} "
+                f"timed out (timeout={timeout}s): {e}"
+            ) from e
         r.raise_for_status()
         if not r.text.strip():
             return {}
@@ -597,8 +621,11 @@ class _UISession:
     # Uninstall-side methods
     # ------------------------------------------------------------------
 
-    def get_integrations(self) -> list:
+    def get_integrations(self, timeout: Optional[float] = None) -> list:
         """POST /ui/solution.action mainAction=getIntegrations.
+
+        ``timeout`` (seconds) overrides the default request timeout; the
+        post-install settle loop passes what is left of its window.
 
         Returns the installedMPs[] list.  Each entry has:
           - pakId (str): UI short form, e.g. "Broadcom Security Advisories"
@@ -607,7 +634,7 @@ class _UISession:
           - isUnremovable (bool): True for built-in paks (vSAN, vCenter, NSX, etc.)
           - adapter_kind (str): e.g. "mpb_broadcom_security_advisories"
         """
-        body = self.solution_action(mainAction="getIntegrations")
+        body = self.solution_action(_timeout=timeout, mainAction="getIntegrations")
         return body.get("installedMPs", [])
 
     def remove_pak(self, short_pak_id: str, version: str) -> None:
@@ -765,9 +792,14 @@ def _verify_adapter_registered(
     if matched is not None and _version_mismatch(matched):
         deadline = time.time() + settle_timeout
         while time.time() < deadline:
-            time.sleep(settle_interval)
+            time.sleep(max(0.0, min(settle_interval, deadline - time.time())))
+            remaining = deadline - time.time()
+            if remaining <= 0:
+                break
+            # Each re-read gets only what is left of the window, so one hung
+            # socket cannot hold the verify past settle_timeout (issue #235).
             try:
-                installed = ui.get_integrations()
+                installed = ui.get_integrations(timeout=remaining)
             except Exception as e:
                 _warn(f"getIntegrations re-read failed (will retry): {e}")
                 continue
