@@ -1051,10 +1051,10 @@ hand), each leg picks its own JDK, and every compile, primary and legs,
 uses `javac --release 11` rather than `-source 11 -target 11`, so the Java
 11 library API is enforced too (the 8.18 collector runs Java 11).
 `--release` does not change which class-file versions javac reads on the
-classpath: JDK 17 with `--release 11` reads the 2.2 jar (Java 17), measured
-2026-10-24. That a JDK 25 javac with `--release 11` reads the 9.1.1.0100 jar
-the same way is inferred from that, not run here (no JDK 25 on the
-workstation); the CI `sdk-compat (9.1.1.0100)` row settles it.
+classpath, measured 2026-10-24: JDK 17 with `--release 11` reads the 2.2
+jar (Java 17) and the 8.18.7 jar, and Temurin 25.0.5 with `--release 11`
+reads the 9.1.1.0100 jar (Java 25); compliance built with both legs
+required passed both.
 Devel's one outlier is the `VrAdapter` pack's bundled copy (0f2f3a8c5722, a
 smaller build). The `2.2` and `1.0` in file names are names, not versions.
 
