@@ -175,6 +175,15 @@ entered by IP needs that IP in the certificate's SANs. The Suite API hop
 behaves exactly as before. Reference: compliance (`VCenterCertificates`,
 from which the framework class was ported).
 
+Validate Connection text for an untrusted certificate (#205, 1.0.16): the
+framework's default points at the accept dialog and mentions Allow Insecure
+SSL only when the pak's describe declares the `allowInsecure` identifier.
+For target-specific advice override
+`certificateFailureMessage(failure, config, defaultMessage)`; return `null`
+to keep the default. Do not rethrow certificate failures stripped of their
+cause to dodge the framework text any more; that was compliance's
+pre-1.0.16 workaround.
+
 ## Environment-wide totals: ComputedMetrics on the pak singleton
 
 A number that spans every adapter instance (fleet counts, a weighted

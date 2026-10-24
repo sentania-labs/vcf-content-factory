@@ -608,7 +608,20 @@ the argument), a `getConnectionURLs` override fed by it (falls back to
 the SDK default when empty; it applies no allowInsecure logic itself, that
 is the hook's job), and `onTest` maps a trust failure in the cause chain to
 a readable message (the hook is consulted only after a trust failure is
-found, and any `Throwable` from it means "no prompt"). Two parsers read the
+found, and any `Throwable` from it means "no prompt"). Since buildkit 1.0.16
+(issue #205) that default text is neutral: it points at the accept dialog
+("open the account and click Validate Connection to review and accept the
+certificate", "enter the host by the name on its certificate") and names
+Allow Insecure SSL only when `describesAllowInsecure(config)` is true, which
+by default reads the pak's describe (`onDescribe()`, once per instance) for
+an `allowInsecure` identifier on the tested adapter-instance kind. The
+describe, not the stored config, decides: an account saved before a pak
+dropped the field still stores it. A pak replaces the text by overriding
+`certificateFailureMessage(Throwable failure, ResourceConfig config, String
+defaultMessage)`, called only for a trust failure; `null` or blank keeps the
+default, and anything it throws (but a `VirtualMachineError`) is logged and
+the default kept. Compliance's workaround (rethrowing without the cause and
+the PKIX strings so the framework does not rewrite them) keeps working. Two parsers read the
 `allowInsecure` identifier, from either the legacy free-text value or the
 `enum="true"` pulldown:
 

@@ -10,6 +10,9 @@ import com.integrien.alive.common.adapter3.TestParam;
 import com.integrien.alive.common.adapter3.config.AdapterConfig;
 import com.integrien.alive.common.adapter3.config.ResourceConfig;
 import com.integrien.alive.common.adapter3.config.ResourceIdentifierConfig;
+import com.integrien.alive.common.adapter3.describe.AdapterDescribe;
+import com.integrien.alive.common.adapter3.describe.ResourceIdentifierDescribe;
+import com.integrien.alive.common.adapter3.describe.ResourceKindDescribe;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -67,6 +70,17 @@ public class CertificateReviewTest {
         testOnTestSkipsHookForOtherFailures();
         testOnTestHookErrorDoesNotEscape();
         testPromptAvailableRethrowsVirtualMachineError();
+        testMessageBranchPromptWithAllowInsecureField();
+        testMessageBranchPromptWithoutAllowInsecureField();
+        testMessageBranchNoPromptWithAllowInsecureField();
+        testMessageBranchNoPromptWithoutAllowInsecureField();
+        testDescribesAllowInsecureReadsDescribeNotStoredValue();
+        testOnTestAllowInsecureWordingFollowsDescribe();
+        testOnTestUnreadableDescribeOmitsAllowInsecure();
+        testOnTestMessageHookReplacesText();
+        testOnTestMessageHookNullOrBlankKeepsDefault();
+        testOnTestMessageHookThrowsKeepsDefault();
+        testOnTestMessageHookSkippedForOtherFailures();
         testParseAllowInsecureLegacyAndEnum();
         testParseAllowInsecureLegacyNotFalseMatchesSynology();
         testIsAllowInsecureReadsIdentifier();
@@ -103,6 +117,19 @@ public class CertificateReviewTest {
         @Override
         public AdapterConfig getAdapterConfig() {
             return current;
+        }
+
+        /** Describe returned by onDescribe(); null makes it throw (no describe.xml). */
+        AdapterDescribe describe;
+        int describeCalls;
+
+        @Override
+        public AdapterDescribe onDescribe() {
+            describeCalls++;
+            if (describe == null) {
+                throw new RuntimeException("no describe.xml in this test");
+            }
+            return describe;
         }
 
         @Override
@@ -173,6 +200,48 @@ public class CertificateReviewTest {
         protected List<String> certificateCheckUrls(ResourceConfig rc) {
             throw new IllegalStateException("boom");
         }
+    }
+
+    /** Message hook (issue #205): returns {@code reply}, records what it saw. */
+    static class MessageHookAdapter extends OptedInAdapter {
+        String reply;
+        RuntimeException toThrow;
+        int calls;
+        String sawDefault;
+        ResourceConfig sawConfig;
+        Throwable sawFailure;
+
+        @Override
+        protected String certificateFailureMessage(Throwable failure, ResourceConfig config,
+                String defaultMessage) {
+            calls++;
+            sawFailure = failure;
+            sawConfig = config;
+            sawDefault = defaultMessage;
+            if (toThrow != null) throw toThrow;
+            return reply;
+        }
+    }
+
+    /** A describe whose adapter-instance kind declares the given identifiers. */
+    private static AdapterDescribe describeWith(String... identifierKeys) {
+        List<ResourceIdentifierDescribe> ids = new ArrayList<>();
+        for (String k : identifierKeys) {
+            ResourceIdentifierDescribe id = new ResourceIdentifierDescribe();
+            id.setKey(k);
+            ids.add(id);
+        }
+        ResourceKindDescribe other = new ResourceKindDescribe();
+        other.setKey("some_other_kind");
+        ResourceIdentifierDescribe otherId = new ResourceIdentifierDescribe();
+        otherId.setKey(VcfCfAdapter.ALLOW_INSECURE_IDENTIFIER);
+        other.setResourceIdentifiers(new ArrayList<>(List.of(otherId)));
+        ResourceKindDescribe inst = new ResourceKindDescribe();
+        inst.setKey("test_kind_instance");
+        inst.setResourceIdentifiers(ids);
+        AdapterDescribe d = new AdapterDescribe();
+        d.setResourceKinds(new ArrayList<>(List.of(other, inst)));
+        return d;
     }
 
     @SuppressWarnings("unchecked")
@@ -308,7 +377,7 @@ public class CertificateReviewTest {
     }
 
     private static void testMessageMappingCustomCertificateException() {
-        String msg = VcfCfAdapter.certificateTrustFailureMessage(prodStack(), true);
+        String msg = VcfCfAdapter.certificateTrustFailureMessage(prodStack(), true, true);
         assertTrue("prod stack maps to the readable message; got " + msg,
                 msg != null && msg.startsWith("The target's TLS certificate is not trusted"));
         assertTrue("prompt available: tells the admin to accept via Validate Connection",
@@ -325,12 +394,12 @@ public class CertificateReviewTest {
     private static void testMessageMappingPkixText() {
         Exception e = new javax.net.ssl.SSLHandshakeException(
                 "PKIX path building failed: unable to find valid certification path to requested target");
-        String msg = VcfCfAdapter.certificateTrustFailureMessage(e, false);
+        String msg = VcfCfAdapter.certificateTrustFailureMessage(e, false, true);
         assertTrue("JDK PKIX text without a typed cause still maps; got " + msg,
-                msg != null && msg.contains("No endpoint was offered for certificate review"));
-        assertTrue("no-prompt message covers Allow Insecure already true and blank host",
+                msg != null && msg.contains("offered no certificate for review"));
+        assertTrue("no-prompt message covers Allow Insecure already true and the host",
                 msg != null && msg.contains("Allow Insecure SSL is already true")
-                        && msg.contains("host is blank"));
+                        && msg.contains("host is filled in"));
     }
 
     private static void testMessageMappingCertPathValidator() {
@@ -338,18 +407,18 @@ public class CertificateReviewTest {
         e.initCause(new java.security.cert.CertificateException("x",
                 new java.security.cert.CertPathValidatorException("expired")));
         assertTrue("CertPathValidatorException in the chain maps",
-                VcfCfAdapter.certificateTrustFailureMessage(e, true) != null);
+                VcfCfAdapter.certificateTrustFailureMessage(e, true, false) != null);
     }
 
     private static void testMessageMappingIgnoresOtherFailures() {
         assertTrue("connection refused is not a trust failure",
                 VcfCfAdapter.certificateTrustFailureMessage(
-                        new java.net.ConnectException("Connection refused"), true) == null);
+                        new java.net.ConnectException("Connection refused"), true, true) == null);
         assertTrue("HTTP 401 is not a trust failure",
                 VcfCfAdapter.certificateTrustFailureMessage(
-                        new RuntimeException("HTTP 401 Unauthorized"), true) == null);
+                        new RuntimeException("HTTP 401 Unauthorized"), true, true) == null);
         assertTrue("null is not a trust failure",
-                VcfCfAdapter.certificateTrustFailureMessage(null, true) == null);
+                VcfCfAdapter.certificateTrustFailureMessage(null, true, false) == null);
     }
 
     private static void testMessageMappingIgnoresPeerAlertOnly() {
@@ -358,7 +427,7 @@ public class CertificateReviewTest {
         Exception e = new javax.net.ssl.SSLHandshakeException(
                 "Received fatal alert: certificate_unknown");
         assertTrue("peer-sent certificate_unknown alone is not mapped",
-                VcfCfAdapter.certificateTrustFailureMessage(e, true) == null);
+                VcfCfAdapter.certificateTrustFailureMessage(e, true, false) == null);
     }
 
     private static void testMessageMappingCycleSafe() {
@@ -366,7 +435,7 @@ public class CertificateReviewTest {
         Exception b = new Exception("b", a);
         a.addSuppressed(b);
         assertTrue("cyclic cause/suppressed graph terminates",
-                VcfCfAdapter.certificateTrustFailureMessage(a, true) == null);
+                VcfCfAdapter.certificateTrustFailureMessage(a, true, false) == null);
     }
 
     // -----------------------------------------------------------------------
@@ -391,7 +460,7 @@ public class CertificateReviewTest {
         assertTrue("onTest (not opted in): says the pack cannot offer the prompt; got "
                 + p.getErrorMsg(),
                 p.getErrorMsg() != null
-                        && p.getErrorMsg().contains("No endpoint was offered for certificate review"));
+                        && p.getErrorMsg().contains("offered no certificate for review"));
     }
 
     private static void testOnTestKeepsRawMessageForOtherFailures() throws Exception {
@@ -427,7 +496,181 @@ public class CertificateReviewTest {
         assertFalse("onTest with an Error-throwing hook still returns false", ok);
         assertTrue("onTest with an Error-throwing hook falls back to the no-prompt message",
                 p.getErrorMsg() != null
-                        && p.getErrorMsg().contains("No endpoint was offered for certificate review"));
+                        && p.getErrorMsg().contains("offered no certificate for review"));
+    }
+
+    // -----------------------------------------------------------------------
+    // Issue #205: neutral default text, Allow Insecure only when described,
+    // and the overridable message hook
+    // -----------------------------------------------------------------------
+
+    private static void assertNeutral(String what, String msg) {
+        assertTrue(what + ": starts with the trust sentence; got " + msg,
+                msg != null && msg.startsWith("The target's TLS certificate is not trusted"));
+        assertTrue(what + ": tells the admin to open the account and click Validate Connection",
+                msg != null && msg.toLowerCase(java.util.Locale.ROOT)
+                        .contains("open the account and click validate connection"));
+        assertTrue(what + ": tells the admin to enter the host by the name on its certificate",
+                msg != null && msg.contains("by the name on its certificate"));
+        assertTrue(what + ": carries the detail", msg != null && msg.contains("Detail: "));
+        assertTrue(what + ": no em-dash", msg != null && msg.indexOf('\u2014') < 0);
+    }
+
+    private static void testMessageBranchPromptWithAllowInsecureField() {
+        String msg = VcfCfAdapter.certificateTrustFailureMessage(prodStack(), true, true);
+        assertNeutral("prompt + field", msg);
+        assertTrue("prompt + field: points at the accept dialog",
+                msg.contains("accept the certificate when VCF Operations shows it"));
+        assertTrue("prompt + field: names Allow Insecure SSL as the lab opt-out",
+                msg.contains("set Allow Insecure SSL to true"));
+    }
+
+    private static void testMessageBranchPromptWithoutAllowInsecureField() {
+        String msg = VcfCfAdapter.certificateTrustFailureMessage(prodStack(), true, false);
+        assertNeutral("prompt, no field", msg);
+        assertTrue("prompt, no field: points at the accept dialog",
+                msg.contains("accept the certificate when VCF Operations shows it"));
+        assertFalse("prompt, no field: never mentions Allow Insecure", msg.contains("Insecure"));
+    }
+
+    private static void testMessageBranchNoPromptWithAllowInsecureField() {
+        String msg = VcfCfAdapter.certificateTrustFailureMessage(prodStack(), false, true);
+        assertNeutral("no prompt + field", msg);
+        assertTrue("no prompt + field: says nothing was offered for review",
+                msg.contains("offered no certificate for review"));
+        assertTrue("no prompt + field: Allow Insecure already true turns review off",
+                msg.contains("If Allow Insecure SSL is already true there is nothing to review"));
+    }
+
+    private static void testMessageBranchNoPromptWithoutAllowInsecureField() {
+        String msg = VcfCfAdapter.certificateTrustFailureMessage(prodStack(), false, false);
+        assertNeutral("no prompt, no field", msg);
+        assertTrue("no prompt, no field: says nothing was offered for review",
+                msg.contains("offered no certificate for review"));
+        assertTrue("no prompt, no field: names the unsupported-pack case",
+                msg.contains("does not support certificate review"));
+        assertFalse("no prompt, no field: never mentions Allow Insecure", msg.contains("Insecure"));
+    }
+
+    private static void testDescribesAllowInsecureReadsDescribeNotStoredValue() throws Exception {
+        PlainAdapter a = allocate(PlainAdapter.class);
+        a.describe = describeWith("host");
+        ResourceConfig stored = cfg("host", "vc", VcfCfAdapter.ALLOW_INSECURE_IDENTIFIER, "true")
+                .getAdapterInstResource();
+        assertFalse("field removed from describe: a stored allowInsecure value does not count",
+                a.describesAllowInsecure(stored));
+        assertFalse("another kind declaring the field does not count",
+                a.describesAllowInsecure(cfg("host", "vc").getAdapterInstResource()));
+        PlainAdapter b = allocate(PlainAdapter.class);
+        b.describe = describeWith("host", VcfCfAdapter.ALLOW_INSECURE_IDENTIFIER);
+        assertTrue("field declared on the instance kind",
+                b.describesAllowInsecure(cfg("host", "vc").getAdapterInstResource()));
+        b.describesAllowInsecure(cfg("host", "vc").getAdapterInstResource());
+        assertEquals("describe read once per instance (cached)", 1, b.describeCalls);
+        assertFalse("null config", b.describesAllowInsecure(null));
+    }
+
+    private static void testOnTestAllowInsecureWordingFollowsDescribe() throws Exception {
+        OptedInAdapter with = allocate(OptedInAdapter.class);
+        with.describe = describeWith("host", VcfCfAdapter.ALLOW_INSECURE_IDENTIFIER);
+        with.tester = (cfg, http, param) -> { throw prodStack(); };
+        TestParam p = new TestParam(cfg("host", "vc.example.com"));
+        with.onTest(p);
+        assertTrue("onTest, describe has the field: Allow Insecure named; got " + p.getErrorMsg(),
+                p.getErrorMsg() != null && p.getErrorMsg().contains("Allow Insecure SSL"));
+
+        OptedInAdapter without = allocate(OptedInAdapter.class);
+        without.describe = describeWith("host");
+        without.tester = (cfg, http, param) -> { throw prodStack(); };
+        TestParam q = new TestParam(cfg("host", "vc.example.com",
+                VcfCfAdapter.ALLOW_INSECURE_IDENTIFIER, "false"));
+        without.onTest(q);
+        assertTrue("onTest, field removed from describe (stored value present): accept dialog "
+                + "text, no Allow Insecure; got " + q.getErrorMsg(),
+                q.getErrorMsg() != null
+                        && q.getErrorMsg().contains("Open the account and click Validate Connection")
+                        && !q.getErrorMsg().contains("Insecure"));
+    }
+
+    private static void testOnTestUnreadableDescribeOmitsAllowInsecure() throws Exception {
+        OptedInAdapter a = allocate(OptedInAdapter.class);
+        a.describe = null; // onDescribe throws
+        a.tester = (cfg, http, param) -> { throw prodStack(); };
+        TestParam p = new TestParam(cfg("host", "vc.example.com"));
+        boolean ok;
+        try {
+            ok = a.onTest(p);
+        } catch (Throwable t) {
+            assertTrue("onTest: an unreadable describe must not escape; got " + t, false);
+            return;
+        }
+        assertFalse("onTest, unreadable describe: still false", ok);
+        assertTrue("onTest, unreadable describe: neutral text without Allow Insecure; got "
+                + p.getErrorMsg(), p.getErrorMsg() != null
+                        && p.getErrorMsg().startsWith("The target's TLS certificate")
+                        && !p.getErrorMsg().contains("Insecure"));
+    }
+
+    private static void testOnTestMessageHookReplacesText() throws Exception {
+        MessageHookAdapter a = allocate(MessageHookAdapter.class);
+        a.describe = describeWith("host");
+        Exception failure = prodStack();
+        a.tester = (cfg, http, param) -> { throw failure; };
+        a.reply = "Pak text: accept the NAS certificate.";
+        TestParam p = new TestParam(cfg("host", "nas.example.com"));
+        assertFalse("onTest with hook: returns false", a.onTest(p));
+        assertEquals("hook text lands on TestParam", "Pak text: accept the NAS certificate.",
+                p.getErrorMsg());
+        assertEquals("hook called once", 1, a.calls);
+        assertTrue("hook gets the tester's exception", a.sawFailure == failure);
+        assertTrue("hook gets the tested config",
+                a.sawConfig != null && "nas.example.com".equals(a.getIdentifier(a.sawConfig, "host")));
+        assertTrue("hook gets the framework default text",
+                a.sawDefault != null && a.sawDefault.startsWith("The target's TLS certificate"));
+    }
+
+    private static void testOnTestMessageHookNullOrBlankKeepsDefault() throws Exception {
+        for (String reply : new String[] {null, "", "   "}) {
+            MessageHookAdapter a = allocate(MessageHookAdapter.class);
+            a.describe = describeWith("host");
+            a.tester = (cfg, http, param) -> { throw prodStack(); };
+            a.reply = reply;
+            TestParam p = new TestParam(cfg("host", "vc.example.com"));
+            a.onTest(p);
+            assertTrue("hook returned '" + reply + "': default kept",
+                    a.sawDefault != null && a.sawDefault.equals(p.getErrorMsg()));
+        }
+    }
+
+    private static void testOnTestMessageHookThrowsKeepsDefault() throws Exception {
+        MessageHookAdapter a = allocate(MessageHookAdapter.class);
+        a.describe = describeWith("host");
+        a.tester = (cfg, http, param) -> { throw prodStack(); };
+        a.toThrow = new IllegalStateException("hook bug");
+        TestParam p = new TestParam(cfg("host", "vc.example.com"));
+        boolean ok;
+        try {
+            ok = a.onTest(p);
+        } catch (Throwable t) {
+            assertTrue("onTest: a throwing message hook must not escape; got " + t, false);
+            return;
+        }
+        assertFalse("throwing hook: onTest still false", ok);
+        assertTrue("throwing hook: default kept",
+                a.sawDefault != null && a.sawDefault.equals(p.getErrorMsg()));
+        assertTrue("throwing hook: logged", a.warnings.stream()
+                .anyMatch(w -> w.contains("certificateFailureMessage threw")));
+    }
+
+    private static void testOnTestMessageHookSkippedForOtherFailures() throws Exception {
+        MessageHookAdapter a = allocate(MessageHookAdapter.class);
+        a.tester = (cfg, http, param) -> { throw new RuntimeException("HTTP 401 Unauthorized"); };
+        a.reply = "should not appear";
+        TestParam p = new TestParam(cfg("host", "vc.example.com"));
+        a.onTest(p);
+        assertEquals("non-certificate failure: hook not called", 0, a.calls);
+        assertEquals("non-certificate failure: raw message kept", "HTTP 401 Unauthorized",
+                p.getErrorMsg());
     }
 
     private static void testPromptAvailableRethrowsVirtualMachineError() throws Exception {
