@@ -97,7 +97,21 @@ Rules for pak installs:
    option exists, stop and quote the refusal.
 3. **RULE-009 boundary:** never run remove/deactivate/destructive
    pak operations on prod (`mainAction=remove`). Install ≠ remove.
-4. **Live verification** (adapter logs, per-adapter log level) may
+4. **Exit codes and duration (since 2026-10-24, #244 and #200).**
+   `install` exits 0 on success, 1 when the install itself failed,
+   and 3 when the pak installed but a post-install check failed
+   (a bundled dashboard STALLED on an adapter kind that is not
+   installed). On 3 do not reinstall: report the dashboard lines
+   verbatim and the kind they wait on. After the pak lands the CLI
+   runs the materialization check on the pak's dashboards (up to
+   180 s) and, for a pak with `dashboards.properties` Summary
+   bindings, waits for the bound dashboards and rebinds an unfinished
+   Summary copy (30 s poll, up to 660 s); expect a run that long and
+   keep it in the foreground. `--skip-materialization-check` and
+   `--skip-summary-rebind` turn those steps off; use them only when
+   the brief says so. Record every `MATERIALIZATION` and
+   `SUMMARY REBOUND` line in the install report.
+5. **Live verification** (adapter logs, per-adapter log level) may
    require SSH to the appliance/collector — only when the access
    path is documented in `knowledge/context/investigations/`; a log-level
    change (record prior value) is the only permitted config write.
