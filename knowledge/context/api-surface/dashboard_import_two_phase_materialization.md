@@ -363,6 +363,12 @@ live instance (fixtures only).
   STALLED dashboard exits `install` with 3 (installed, post-install check
   failed), distinct from 1 (the install failed). Not run with `--no-wait`.
 
+The same STALLED state therefore exits differently per tool, each following
+its own existing convention: `vcfcf_dashboards sync` exits 1, the shipped
+`install.py` exits 2 (its "partial failure" code), and the pak `install`
+exits 3 (installed, post-install check failed; 1 there means the install
+itself failed).
+
 ## Method log (reproducible, read-only)
 
 - Auth: `VCFOpsClient.from_env(profile="devel")` and

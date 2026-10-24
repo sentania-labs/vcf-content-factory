@@ -2962,7 +2962,14 @@ def _run_install(args: argparse.Namespace, host: str, user: str,
             print(f"  ATTENTION  {a}")
 
     print()
-    enable_warnings = [w for w in all_warnings if "enable" in w.lower() or "resolve" in w.lower()]
+    # Materialization lines are classified by their prefix, never by the
+    # substring test below: a dashboard or resource name containing
+    # "enable" or "resolve" must not read as a super metric enable failure.
+    enable_warnings = [
+        w for w in all_warnings
+        if not w.startswith("MATERIALIZATION ")
+        and ("enable" in w.lower() or "resolve" in w.lower())
+    ]
     other_warnings = [w for w in all_warnings if w not in enable_warnings]
     if enable_warnings or other_warnings:
         total = len(enable_warnings) + len(other_warnings)

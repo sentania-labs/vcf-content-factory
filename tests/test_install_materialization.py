@@ -120,6 +120,9 @@ PARITY_CASES = [
     ([], INSTALLED, 0),  # everything ABSENT
     ([{"id": ID_DONE.upper(), "importComplete": False, "entryKeys": {}}], set(), 30),
     ([{"id": ID_LICENSE, "importComplete": False, "entryKeys": None}], INSTALLED, 5),
+    # One missing adapter kind: the singular "is" sentence.
+    ([{"id": ID_LICENSE, "importComplete": False,
+       "entryKeys": {"resourceKind": [_rk("rubrik_vm", "mpb_rubrik", 0)]}}], INSTALLED, 0),
 ]
 
 
@@ -589,3 +592,88 @@ def test_install_pak_runs_the_check_after_logout(monkeypatch, tmp_path):
     events.clear()
     assert installer.install_pak(str(pak), poll_interval=0, wait=False) == 0
     assert "materialization" not in events
+
+
+# --- review NIT 6: the re-check flow matches check_dashboard_materialization ---
+
+class _D:
+    def __init__(self, did, name):
+        self.id, self.name = did, name
+
+
+@pytest.mark.parametrize("reads", [
+    [LICENSE, LICENSE_DONE],          # settles on the re-check
+    [LICENSE, LICENSE],               # still building: INCOMPLETE after the wait
+    [LICENSE, RuntimeError("busy")],  # failed re-check: the first read stands
+    [MSSQL],                          # STALLED: no re-check at all
+    [DONE],                           # complete: no re-check
+])
+def test_install_template_recheck_flow_matches_factory(install_mod, monkeypatch, reads):
+    import vcfcf_dashboards.client as dc
+
+    did = reads[0]["id"]
+    wanted = [(did, "X")]
+
+    def _zip_or_raise(item):
+        if isinstance(item, Exception):
+            raise item
+        return _export_zip(item)
+
+    factory_reads = list(reads)
+
+    def _fake_export(client, types, timeout_s=0, label=""):
+        item = factory_reads.pop(0)
+        if isinstance(item, Exception):
+            raise dc.VCFOpsError(str(item))
+        return _export_zip(item)
+
+    monkeypatch.setattr(dc, "export_content_zip", _fake_export)
+    monkeypatch.setattr(dc, "list_adapter_kind_keys", lambda c: set(INSTALLED))
+    core_slept, mine_slept = [], []
+    core = dc.check_dashboard_materialization(
+        object(), [_D(did, "X")], recheck_wait_s=60, _sleep=core_slept.append)
+
+    client = _ExportClient([r for r in reads])
+    client.export_dashboards_zip = (lambda q=list(reads): _zip_or_raise(q.pop(0)))
+    mine = install_mod._check_materialization(client, wanted, 60, _sleep=mine_slept.append)
+
+    assert core_slept == mine_slept
+    assert [(c.state, c.checked_after_s) for c in core] == [
+        (m["state"], m["after"]) for m in mine]
+    assert [mat.describe_status(c) for c in core] == [install_mod._mat_describe(m) for m in mine]
+
+
+# --- review NIT 4: a STALLED line is never filed as a super metric enable failure ---
+
+def test_install_template_stalled_name_with_enable_is_not_an_enable_warning(
+        install_mod, monkeypatch, tmp_path, capsys):
+    stalled = dict(LICENSE, entryKeys={"resourceKind": [_rk("X", "mpb_rubrik", 0)]})
+
+    class _StubClient(_ExportClient):
+        def __init__(self, *a, **k):
+            super().__init__([_export_zip(stalled)])
+            self._user = "admin"
+
+        def authenticate(self):
+            return None
+
+        def discover_marker_filename(self):
+            return "1L.v1"
+
+        def get_current_user(self):
+            return {"id": "u1"}
+
+    def _one_bundle(bundle, gctx, step, total):
+        gctx["imported_dashboards"].append((ID_LICENSE, "Enable and Resolve Board"))
+        return 0, [], []
+
+    monkeypatch.setattr(install_mod, "Client", _StubClient)
+    monkeypatch.setattr(install_mod, "_install_one_bundle", _one_bundle)
+    bundles = [{"dir": tmp_path, "manifest": {"content": {}}, "name": "b"}]
+    with pytest.raises(SystemExit) as exc:
+        install_mod._run_install(_args(skip_enable=True, force=False), "ops.example.test",
+                                 "admin", "local", "pw", False, bundles)
+    assert exc.value.code == 2
+    out = capsys.readouterr().out
+    assert "WARN  MATERIALIZATION STALLED: dashboard 'Enable and Resolve Board'" in out
+    assert "super metrics could not be enabled" not in out
