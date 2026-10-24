@@ -552,9 +552,9 @@ def cmd_install(args) -> int:
     """
     from .installer import install_pak
 
-    # installer.install_pak calls sys.exit() on fatal errors; return code
-    # from this function is only reached on success.
-    install_pak(
+    # installer.install_pak calls sys.exit(1) on fatal errors; a return is
+    # an installed pak: 0, or 3 when a post-install dashboard check failed.
+    return install_pak(
         pak_path=args.pak_path,
         host=args.host,
         user=args.user,
@@ -562,8 +562,9 @@ def cmd_install(args) -> int:
         skip_ssl_verify=args.skip_ssl_verify,
         wait=args.wait,
         profile=getattr(args, "profile", None),
+        materialization_check=not getattr(args, "skip_materialization_check", False),
+        materialization_wait=getattr(args, "materialization_wait", None),
     )
-    return 0
 
 
 def cmd_pak_compare(args) -> int:
@@ -1255,7 +1256,35 @@ def build_parser() -> argparse.ArgumentParser:
         default=True,
         help="trigger install and return immediately without polling for completion",
     )
-    pi.epilog = _creds_help
+    pi.add_argument(
+        "--skip-materialization-check",
+        action="store_true",
+        default=False,
+        help=(
+            "Skip the post-install check that each dashboard the pak ships "
+            "finished building (a dashboard-list read plus an adapter-kind "
+            "read). Default: check. Not run with --no-wait."
+        ),
+    )
+    pi.add_argument(
+        "--materialization-wait",
+        type=int,
+        default=None,
+        metavar="SECONDS",
+        help=(
+            "Seconds to wait before the one re-check of dashboards still "
+            "building after the install (default 180, or "
+            "VCFCF_MATERIALIZATION_WAIT_S; capped at 900; 0 reports them at once)."
+        ),
+    )
+    pi.epilog = (
+        _creds_help
+        + " Exit codes: 0 installed and every check passed; 1 the install "
+        "failed or was refused (nothing to retry blindly: read the ERROR); 2 "
+        "usage error; 3 the pak installed but a post-install dashboard check "
+        "failed (MATERIALIZATION STALLED: a dashboard waits on an adapter "
+        "that is not installed). Do not reinstall on 3."
+    )
     add_profile_arg(pi, default="devel")
     pi.set_defaults(func=cmd_install)
 

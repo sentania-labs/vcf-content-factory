@@ -1035,7 +1035,9 @@ def install_pak(
     poll_interval: int = POLL_INTERVAL,
     poll_timeout: int = POLL_TIMEOUT,
     profile: Optional[str] = None,
-) -> None:
+    materialization_check: bool = True,
+    materialization_wait: Optional[int] = None,
+) -> int:
     """Install a .pak file onto a VCF Ops instance via the /ui/ SPA Struts layer.
 
     All steps run through a single _UISession — no /admin/ session required.
@@ -1053,11 +1055,19 @@ def install_pak(
       6a:  _verify_adapter_registered(): adapter kind present, isInstalled=true,
            and installed version == the uploaded pak's version (issue #202)
       7:   _UISession.logout()
+      8:   post_install.report_pak_dashboards(): did each dashboard the pak
+           ships finish building (issue #244)? Only with ``wait`` and
+           ``materialization_check``.
+
+    Returns 0, or ``post_install.POST_INSTALL_FAILED_RC`` (3) when the pak
+    installed but a post-install dashboard check failed. A failed install
+    exits 1 through ``_abort``.
 
     Credentials resolve order: CLI flags > VCFOPS_USER/VCFOPS_PASSWORD env vars >
     legacy VCFOPS_ADMIN/VCFOPS_ADMINPASSWORD env vars (deprecated, warn).
     """
     p = Path(pak_path)
+    installed = False
     if not p.exists():
         _abort(f"Pak file not found: {pak_path}")
     if not p.is_file():
@@ -1172,17 +1182,19 @@ def install_pak(
                         ui, manifest, server_name, server_version,
                         settle_interval=poll_interval,
                     )
-                    return
+                    installed = True
+                    break
 
                 time.sleep(poll_interval)
 
-            # Timeout
-            _abort(
-                f"Install timed out after {poll_timeout}s. "
-                f"Last known status: {last_state}\n"
-                f"The install may still be running on the server. "
-                f"Check Admin UI > Software Updates > Solutions."
-            )
+            if not installed:
+                # Timeout
+                _abort(
+                    f"Install timed out after {poll_timeout}s. "
+                    f"Last known status: {last_state}\n"
+                    f"The install may still be running on the server. "
+                    f"Check Admin UI > Software Updates > Solutions."
+                )
         else:
             _info(
                 f"[6/6] Install triggered (--no-wait set). "
@@ -1192,6 +1204,17 @@ def install_pak(
     finally:
         # logout
         ui.logout()
+
+    if not installed or not materialization_check:
+        return 0
+    # Post-install (issue #244): the install finishing says nothing about
+    # whether the pak's dashboards finished building.
+    from .post_install import report_pak_dashboards
+
+    return report_pak_dashboards(
+        p, host=host, user=user, password=password,
+        verify_ssl=effective_verify_ssl, wait_s=materialization_wait,
+    )
 
 
 # ---------------------------------------------------------------------------

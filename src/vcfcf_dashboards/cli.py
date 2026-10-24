@@ -581,13 +581,6 @@ def _report_materialization(client, dashboards: list, recheck_wait_s=None) -> in
     - ``MATERIALIZATION UNCHECKED:`` (stderr, WARNING) the check itself
       failed. Never a failure.
     """
-    from vcfcf_core.dashboards.materialization import (
-        ABSENT,
-        COMPLETE,
-        STALLED,
-        describe_status,
-    )
-
     if not dashboards:
         return 0
 
@@ -609,6 +602,22 @@ def _report_materialization(client, dashboards: list, recheck_wait_s=None) -> in
             file=sys.stderr,
         )
         return 0
+    return report_materialization_statuses(statuses)
+
+
+def report_materialization_statuses(statuses: list) -> int:
+    """Print the ``MATERIALIZATION OK:`` count and one WARNING line per
+    dashboard that did not finish building; return 1 when any is STALLED.
+
+    Shared by this CLI and the pak installer (issue #244) so an operator
+    reads the same lines whichever path installed the dashboard.
+    """
+    from vcfcf_core.dashboards.materialization import (
+        COMPLETE,
+        STALLED,
+        describe_status,
+    )
+
     rc = 0
     done = sum(1 for st in statuses if st.state == COMPLETE)
     if done:

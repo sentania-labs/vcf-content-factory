@@ -52,6 +52,12 @@ poller defaults to 300 seconds (`POLL_TIMEOUT`).  If you invoke
 via `subprocess`, set your subprocess timeout to at least 400 seconds —
 a subprocess timeout of 300s or less will race the internal poller and
 kill the process while an install is still in progress on the server.
+After the install, `install` checks that each dashboard the pak ships
+finished building (issue #244); when one is still building it waits once
+(180 s by default, `--materialization-wait`, capped at 900 s) before the
+re-check, so allow that much more, or pass `--skip-materialization-check`.
+Exit code 3 means the pak installed but a dashboard check failed
+(`MATERIALIZATION STALLED`); do not reinstall on it.
 
 **Credential env vars** (matches the rest of the factory):
 
