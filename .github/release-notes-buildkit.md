@@ -60,3 +60,23 @@ checksum file.
 A workflow that ran the old kit and relied on grepping the compare output
 for "0 BLOCKING" now also fails on the exit code; under `set -o pipefail`
 that is the intended gate.
+
+## Behavior since 1.0.15
+
+- `build-sdk` and `validate-sdk` take `--sdk-compat-jar <path to
+  vrops-adapters-sdk-9.1.1.0100.jar>` (or `VCFCF_SDK_COMPAT_JAR`) to compile
+  the framework and adapter a second time against the VCF Ops 9.1.1.0100 SDK
+  jar on JDK 25+, and `--require-sdk-compat` (or
+  `VCFCF_SDK_COMPAT_REQUIRED=1`) to fail instead of warn when that check
+  cannot run; the pak itself is still compiled against the 2.2 jar.
+- The default is a skip: with no 9.1.1.0100 jar, or no JDK 25+ (looked for
+  on PATH, `JAVA_HOME`, `JAVA_HOME_<N>_X64`, or set
+  `VCFCF_SDK_COMPAT_JAVAC=/path/to/javac`), a plain `build-sdk` prints a
+  warning box and checks nothing against 9.1.1. A `--release` build under
+  GitHub Actions also emits a `::warning::` annotation.
+- The primary compile takes exactly one SDK jar: a second
+  `vrops-adapters-sdk*.jar` beside it in `adapter_runtime/` now stops the
+  build.
+
+Version note: 1.0.13 is the defect-gate round (PR #246) and 1.0.14 the
+adapter-framework round (PR #248); this is 1.0.15.

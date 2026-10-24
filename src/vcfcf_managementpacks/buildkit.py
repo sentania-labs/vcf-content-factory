@@ -86,7 +86,7 @@ from typing import Optional
 # Version constant: bump when kit contents change in a meaningful way
 # ---------------------------------------------------------------------------
 
-BUILDKIT_VERSION = "1.0.14"
+BUILDKIT_VERSION = "1.0.15"
 
 # ---------------------------------------------------------------------------
 # Source paths (relative to this file's parent = vcfcf_managementpacks/)
@@ -391,6 +391,24 @@ In CI, store the JAR as a secret-gated artifact and expose its path via
 VCFCF_SDK_JAR.  The build fails with a clear actionable message when the
 JAR is absent from both adapter_runtime/ and the env var.
 
+### Second compile target: the 9.1.1.0100 SDK jar (kit 1.0.15+)
+
+VCF Ops 9.1.1 ships a rebuilt SDK jar with a slightly different class set.
+build-sdk and validate-sdk also compile the framework and adapter source
+against vrops-adapters-sdk-9.1.1.0100.jar (from a 9.1.1.0100 appliance,
+/usr/lib/vmware-vcops/common/lib/vrops-adapters-sdk.jar) and fail on
+anything that does not resolve there. Nothing from that pass ships: the
+pak is still compiled against the 2.2 jar. Its class files are Java 25, so
+the pass needs JDK 25+ (PATH, JAVA_HOME, JAVA_HOME_<N>_X64, or
+VCFCF_SDK_COMPAT_JAVAC); JDK 17 cannot read them.
+
+    export VCFCF_SDK_JAR=/path/to/vrops-adapters-sdk-2.2.jar
+    export VCFCF_SDK_COMPAT_JAR=/path/to/vrops-adapters-sdk-9.1.1.0100.jar
+    python3 -m sdk_buildkit build-sdk <adapter_dir> --require-sdk-compat
+
+Without the jar or a JDK 25 the pass is skipped with a loud warning;
+--require-sdk-compat (VCFCF_SDK_COMPAT_REQUIRED=1) turns that into a failure.
+
 ## Other requirements
 
 - Python 3.9+ with PyYAML
@@ -421,11 +439,29 @@ _SDK_JAR_HELP = (
 )
 
 
+_SDK_COMPAT_JAR_HELP = (
+    "Path to vrops-adapters-sdk-9.1.1.0100.jar (Broadcom; not shipped in this "
+    "kit), the second compile target: the source must also compile against "
+    "it, which needs JDK 25+ (found on PATH, JAVA_HOME, JAVA_HOME_<N>_X64 or "
+    "VCFCF_SDK_COMPAT_JAVAC). Alternatively set VCFCF_SDK_COMPAT_JAR. "
+    "Skipped with a warning when absent."
+)
+_REQUIRE_SDK_COMPAT_HELP = (
+    "Fail instead of warning when the 9.1.1.0100 compat compile cannot run "
+    "(jar or JDK 25+ missing). Equivalent to VCFCF_SDK_COMPAT_REQUIRED=1."
+)
+
+
 def _apply_sdk_jar(args) -> None:
-    """Set VCFCF_SDK_JAR env var from --sdk-jar flag if supplied."""
+    """Set VCFCF_SDK_JAR (and the compat-target vars) from the CLI flags."""
     sdk_jar = getattr(args, "sdk_jar", None)
     if sdk_jar:
         os.environ["VCFCF_SDK_JAR"] = str(sdk_jar)
+    compat_jar = getattr(args, "sdk_compat_jar", None)
+    if compat_jar:
+        os.environ["VCFCF_SDK_COMPAT_JAR"] = str(compat_jar)
+    if getattr(args, "require_sdk_compat", False):
+        os.environ["VCFCF_SDK_COMPAT_REQUIRED"] = "1"
 
 
 def _apply_release_flag(args) -> None:
@@ -493,6 +529,21 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
 
+    pbsdk.add_argument(
+        "--sdk-compat-jar",
+        dest="sdk_compat_jar",
+        default=None,
+        metavar="JAR_PATH",
+        help=_SDK_COMPAT_JAR_HELP,
+    )
+    pbsdk.add_argument(
+        "--require-sdk-compat",
+        dest="require_sdk_compat",
+        action="store_true",
+        default=False,
+        help=_REQUIRE_SDK_COMPAT_HELP,
+    )
+
     # ----- validate-sdk -----
     pvsdk = sub.add_parser(
         "validate-sdk",
@@ -509,6 +560,20 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="JAR_PATH",
         help=_SDK_JAR_HELP,
+    )
+    pvsdk.add_argument(
+        "--sdk-compat-jar",
+        dest="sdk_compat_jar",
+        default=None,
+        metavar="JAR_PATH",
+        help=_SDK_COMPAT_JAR_HELP,
+    )
+    pvsdk.add_argument(
+        "--require-sdk-compat",
+        dest="require_sdk_compat",
+        action="store_true",
+        default=False,
+        help=_REQUIRE_SDK_COMPAT_HELP,
     )
 
     # ----- pak-compare -----

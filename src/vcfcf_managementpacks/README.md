@@ -151,6 +151,20 @@ on 2026-05-15 by Navani):
 | `alive_platform.jar` | Layer 1 — platform API types | Yes (do NOT bundle in pak) |
 | `aria-ops-core-8.0.0.jar` | Layer 2 — UnlicensedAdapter | No (MUST bundle in pak) |
 
+A fifth, optional jar is a compile check only, never on the shipped
+classpath: `vrops-adapters-sdk-9.1.1.0100.jar` (VCF Ops 9.1.1.0100). It is
+not in this public repo and not yet in the private
+`sentania-labs/vcf-content-factory-sdk-runtime` repo (issue #250): it is
+parked on the lab holding share at
+`/mnt/holding/vendor/vcf-ops-9.1.1.0100/extracted-jars/` (local-only), or
+take a 9.1.1.0100 appliance's `common/lib/vrops-adapters-sdk.jar`. Put it in
+`adapter_runtime/` **renamed to `vrops-adapters-sdk-9.1.1.0100.jar`** (under
+any other name it is a second primary SDK jar and the build stops), check
+its sha256, and put JDK 25+ where the build can find it; build-sdk, validate-sdk and
+`build-framework.sh` then also compile against it and fail on anything
+9.1.1 lacks (issue #211). Both SDK jars' hashes and builds:
+`adapter_runtime/PROVENANCE.md`.
+
 A new cloning user would source these JARs the same way: from a VCF Ops
 devel/lab appliance using the same cleanroom extraction procedure. The
 JARs are NOT publicly downloadable — they ship as part of the VCF Ops

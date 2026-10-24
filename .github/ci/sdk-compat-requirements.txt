@@ -1,0 +1,26 @@
+# Python dependencies of the ci.yml sdk-compat job, hash-pinned (the pak
+# repos' CI7 pattern). Installed with:
+#   python3 -m pip install --require-hashes --only-binary :all: -r .github/ci/sdk-compat-requirements.txt
+# The compat pass imports vcfcf_managementpacks.sdk_builder, whose import chain
+# needs PyYAML (vcfcf_managementpacks/loader.py) and requests (via
+# vcfcf_supermetrics -> vcfcf_common/client.py); the rest are requests'
+# dependencies, which --require-hashes makes us pin too.
+# Hashes: PyPI's published sha256 (https://pypi.org/pypi/<name>/<version>/json),
+# read 2026-10-23, for the CPython 3.12 manylinux x86_64 and aarch64 wheels
+# (the job's setup-python is 3.12) or the py3-none-any wheel. Wheels only:
+# a listed sdist hash would let pip fall back to building it silently.
+pyyaml==6.0.3 \
+    --hash=sha256:9149cad251584d5fb4981be1ecde53a1ca46c891a79788c0df828d2f166bda28 \
+    --hash=sha256:ba1cc08a7ccde2d2ec775841541641e4548226580ab850948cbfda66a1befcdc
+requests==2.34.2 \
+    --hash=sha256:2a0d60c172f83ac6ab31e4554906c0f3b3588d37b5cb939b1c061f4907e278e0
+charset-normalizer==3.5.2 \
+    --hash=sha256:b91363207bd9dc966a691e959bb47f64b30f7ac4b072be9968b366982f7db77c \
+    --hash=sha256:3d31298449090ab8d47b7b1b2a555ff73cac7ed438a08b7ac160980c7ebed649 \
+    --hash=sha256:b6b751274acb69d77b3323d6b7dbaa3c7fdfc1eb829b7eb61d262f32e1af9685
+idna==3.20 \
+    --hash=sha256:ab7ae7122974553370f0bdb919e1a960b2cd1bc1ef0276416d896db81c14582c
+urllib3==2.8.0 \
+    --hash=sha256:0cf3cae568d36aa9576b28dfb35f11328f1cb974ca7647d9475ebb86c75ac6e3
+certifi==2026.10.23 \
+    --hash=sha256:e9b54de76e530bb6cf0ccd036787103acb58fd42ba930ea8bf948ddbaa2f61d1
