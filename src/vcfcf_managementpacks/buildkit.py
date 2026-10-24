@@ -391,7 +391,7 @@ In CI, store the JAR as a secret-gated artifact and expose its path via
 VCFCF_SDK_JAR.  The build fails with a clear actionable message when the
 JAR is absent from both adapter_runtime/ and the env var.
 
-### Second compile target: the 9.1.1.0100 SDK jar (kit 1.0.13+)
+### Second compile target: the 9.1.1.0100 SDK jar (kit 1.0.15+)
 
 VCF Ops 9.1.1 ships a rebuilt SDK jar with a slightly different class set.
 build-sdk and validate-sdk also compile the framework and adapter source
