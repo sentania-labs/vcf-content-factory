@@ -162,6 +162,49 @@ not yet run on 9.0.2 and parked (stake:
 which is scoped to the user and returns `{}` for every template. Evidence:
 `../investigations/2026-10-13-compliance-summary-clone-config-loss.md`.
 
+### The factory's pak install repairs it (issue #200)
+
+`python3 -m vcfcf_managementpacks install` now runs the binding step a
+second time, after the source has finished (`src/vcfcf_managementpacks/post_install.py`):
+
+1. When the pak carries `dashboards.properties`, the post-install
+   materialization wait polls `getDashboardList` every 30 s for up to
+   660 s (one 10-minute importer tick plus a margin; `--materialization-wait`
+   or `VCFCF_MATERIALIZATION_WAIT_S` override it, capped at 900 s).
+2. Per bound kind it reads `getSummaryTabId`, then
+   `getDashboardConfig` with `tabId=<clone>` and `isTemplate=true`. The clone is
+   complete only when the tab and every widget say `isLoading: false`.
+   A complete clone (the 9.1.1 case) is left alone (`SUMMARY OK`).
+3. An unfinished (or unreadable) clone of a finished source is bound again
+   with `associateResourceKindDashboards`, keyed by the **pak dashboard's
+   id** (never by name), and the new clone is read back
+   (`SUMMARY REBOUND`). An unfinished source is never bound
+   (`SUMMARY NOT REBOUND`, exit 3).
+
+It never binds a kind the installer did not bind (`SUMMARY NOT BOUND`),
+never touches a Summary tab showing anything other than a copy of the pak's
+dashboard (`<name>` or `<name> <n>`), and reads the properties file the way
+the installer does (Java `String.split`, no trimming, `GenericTemplates*`
+skipped, a bound directory with more than one dashboard skipped with a
+warning). `--skip-summary-rebind` turns the repair off.
+
+Read-only reads on devel 9.0.2 on 2026-10-24 (about 12:20 AM) confirmed the
+shapes: `getSummaryTabId(002016vcfcf_complianceComplianceWorld)` returned
+`{"tabId": "1680c6bc-..."}` with **no `isDashboard` key** on 9.0.2, and
+`getDashboardConfig` answered `{"dashboardConfig": {"tabConfigs": [...],
+"widgetInteractions": ...}, "interactionTypes": ...}`. The clone
+"[VCF Content Factory] Compliance World Summary 6" had `isLoading: true` on
+the tab and all seven widgets while its source `4e2c777e` was `false` on
+all seven, so the race still reproduces on devel.
+
+**Not yet seen working live.** No install has run through the repair. The
+open points from the 2026-10-13 review stand: whether the 9.0.2 UI bind
+deletes the installer's clone or leaves it as an orphan template, and the
+rendered Summary tab after a repair. Proof is one pak install on devel
+showing `SUMMARY REBOUND`, then `getDashboardConfig?isTemplate=true` on the
+new clone with `isLoading: false` throughout, then the rendered tab.
+`vcfcf_dashboards bind-summary` does not yet refuse a still-building source.
+
 ### 9.0.2 WidgetType keys (complete list)
 
 Read on 2026-10-12 from `WidgetDTONew$WidgetType` in

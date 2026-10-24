@@ -564,6 +564,7 @@ def cmd_install(args) -> int:
         profile=getattr(args, "profile", None),
         materialization_check=not getattr(args, "skip_materialization_check", False),
         materialization_wait=getattr(args, "materialization_wait", None),
+        summary_rebind=not getattr(args, "skip_summary_rebind", False),
     )
 
 
@@ -1272,9 +1273,22 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="SECONDS",
         help=(
-            "Seconds to wait before the one re-check of dashboards still "
-            "building after the install (default 180, or "
-            "VCFCF_MATERIALIZATION_WAIT_S; capped at 900; 0 reports them at once)."
+            "Seconds to wait for dashboards still building after the install "
+            "(default 180 with one re-check; 660, polled every 30 s, when the pak "
+            "binds a Summary dashboard; or VCFCF_MATERIALIZATION_WAIT_S; capped "
+            "at 900; 0 reports them at once)."
+        ),
+    )
+    pi.add_argument(
+        "--skip-summary-rebind",
+        action="store_true",
+        default=False,
+        help=(
+            "Do not check or repair the Summary tabs the pak binds in "
+            "dashboards.properties. Default: when the server cloned a bound "
+            "dashboard into its Summary tab before the dashboard finished "
+            "building (issue #200, seen on 9.0.2), bind it again once it has, "
+            "by the pak dashboard's id. A finished copy is left alone."
         ),
     )
     pi.epilog = (
@@ -1283,7 +1297,8 @@ def build_parser() -> argparse.ArgumentParser:
         "failed or was refused (nothing to retry blindly: read the ERROR); 2 "
         "usage error; 3 the pak installed but a post-install dashboard check "
         "failed (MATERIALIZATION STALLED: a dashboard waits on an adapter "
-        "that is not installed). Do not reinstall on 3."
+        "that is not installed; or SUMMARY NOT REBOUND: a Summary tab still "
+        "shows an unfinished copy). Do not reinstall on 3."
     )
     add_profile_arg(pi, default="devel")
     pi.set_defaults(func=cmd_install)

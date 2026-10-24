@@ -1037,6 +1037,7 @@ def install_pak(
     profile: Optional[str] = None,
     materialization_check: bool = True,
     materialization_wait: Optional[int] = None,
+    summary_rebind: bool = True,
 ) -> int:
     """Install a .pak file onto a VCF Ops instance via the /ui/ SPA Struts layer.
 
@@ -1057,7 +1058,9 @@ def install_pak(
       7:   _UISession.logout()
       8:   post_install.report_pak_dashboards(): did each dashboard the pak
            ships finish building (issue #244)? Only with ``wait`` and
-           ``materialization_check``.
+           ``materialization_check``. When the pak binds Summary dashboards
+           it waits for them and, with ``summary_rebind``, binds again any
+           Summary copy the server cloned before the source finished (#200).
 
     Returns 0, or ``post_install.POST_INSTALL_FAILED_RC`` (3) when the pak
     installed but a post-install dashboard check failed. A failed install
@@ -1207,13 +1210,15 @@ def install_pak(
 
     if not installed or not materialization_check:
         return 0
-    # Post-install (issue #244): the install finishing says nothing about
-    # whether the pak's dashboards finished building.
+    # Post-install (issues #244, #200): the install finishing says nothing
+    # about whether the pak's dashboards, or the Summary copies the server
+    # cloned from them, finished building.
     from .post_install import report_pak_dashboards
 
     return report_pak_dashboards(
         p, host=host, user=user, password=password,
         verify_ssl=effective_verify_ssl, wait_s=materialization_wait,
+        summary_rebind=summary_rebind,
     )
 
 
