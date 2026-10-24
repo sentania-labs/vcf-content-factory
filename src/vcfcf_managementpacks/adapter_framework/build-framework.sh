@@ -14,22 +14,25 @@
 # The resulting JAR is placed in adapter_runtime/vcfcf-adapter-base.jar
 # and used as compile-time dependency by all Tier 2 SDK adapters.
 #
-# Second compile target (issue #211): after the primary compile, the same
-# source is compiled again against the VCF Ops 9.1.1.0100 SDK jar
-# (adapter_runtime/vrops-adapters-sdk-9.1.1.0100.jar, or $VCFCF_SDK_COMPAT_JAR)
-# and the build fails on anything unresolved there. Nothing from that pass is
-# kept. Its class files are Java 25, so it needs JDK 25+ (PATH, JAVA_HOME,
-# JAVA_HOME_<N>_X64, or $VCFCF_SDK_COMPAT_JAVAC); without the jar or the JDK
-# it is skipped with a loud warning, or fails when VCFCF_SDK_COMPAT_REQUIRED=1.
-# The pass runs in python3 (sdk_builder.check_framework_sdk_compat), the same
-# code build-sdk and validate-sdk use. When no 9.1.1.0100 jar is present and
-# the pass is not required, it is skipped here in the shell, so a plain
-# framework build needs neither python3 nor PyYAML.
+# Compatibility legs (issues #211, #252): after the primary compile, the same
+# main source (never the tests) is compiled again against each other
+# platform's SDK jar, one leg per jar, and the build fails on anything
+# unresolved there. Nothing from a leg is kept. The legs are the jars in
+# $VCFCF_SDK_COMPAT_JARS (colon-separated) and $VCFCF_SDK_COMPAT_JAR (one jar)
+# together, or, when neither is set, every jar in adapter_runtime/ named in
+# COMPAT_JAR_NAMES below. Each leg finds a JDK new enough for its jar's class
+# files (PATH, JAVA_HOME, JAVA_HOME_<N>_X64, or $VCFCF_SDK_COMPAT_JAVAC): the
+# 9.1.1.0100 jar is Java 25 and needs JDK 25+. A leg without its jar or JDK is
+# skipped with a loud warning, or fails when VCFCF_SDK_COMPAT_REQUIRED=1.
+# The legs run in python3 (sdk_builder.check_framework_sdk_compat), the same
+# code build-sdk and validate-sdk use. When no compat jar is present and the
+# pass is not required, it is skipped here in the shell, so a plain framework
+# build needs neither python3 nor PyYAML.
 #
-# Exit codes: 0 built (pass passed or skipped), 1 the framework does not
-# compile (primary pass, or against the 9.1.1.0100 jar), 3 the compat pass
-# could not run (required but jar or JDK 25 missing, misconfigured, or
-# python3 cannot import vcfcf_managementpacks).
+# Exit codes: 0 built (every leg passed or skipped), 1 the framework does not
+# compile (primary pass, or against a compat jar), 3 a compat leg could not
+# run (required but jar or JDK missing, misconfigured, or python3 cannot
+# import vcfcf_managementpacks).
 #
 # Usage:
 #   cd vcfcf_managementpacks/
@@ -41,7 +44,8 @@
 #   - javac (JDK 11 or newer; JDK 17 recommended)
 #   - adapter_runtime/vrops-adapters-sdk-2.2.jar
 #   - python3 with PyYAML (only when the compat pass runs)
-#   - optional: adapter_runtime/vrops-adapters-sdk-9.1.1.0100.jar + JDK 25+
+#   - optional, one per compat leg: adapter_runtime/vrops-adapters-sdk-9.1.1.0100.jar
+#     + JDK 25+
 #
 # Output:
 #   adapter_runtime/vcfcf-adapter-base.jar
@@ -64,8 +68,9 @@ case "${1:-}" in
     *) echo "usage: $0 [--compat-only]" >&2; exit 2 ;;
 esac
 
-# Second compile target (issue #211); see the header.
-COMPAT_JAR_NAME="vrops-adapters-sdk-9.1.1.0100.jar"
+# Compatibility legs (issues #211, #252); see the header. Keep in step with
+# sdk_builder._SDK_COMPAT_JAR_NAMES.
+COMPAT_JAR_NAMES="vrops-adapters-sdk-9.1.1.0100.jar"
 COMPAT_COULD_NOT_RUN=3   # sdk_builder.COMPAT_COULD_NOT_RUN
 
 compat_required() {
@@ -77,18 +82,28 @@ compat_required() {
 
 # Returns 0 on pass or skip (skip prints a notice); 1 on a compile failure;
 # COMPAT_COULD_NOT_RUN when the pass could not run.
+any_compat_jar() {
+    [ -n "${VCFCF_SDK_COMPAT_JAR:-}" ] && return 0
+    [ -n "$(printf '%s' "${VCFCF_SDK_COMPAT_JARS:-}" | tr -d ':')" ] && return 0
+    local name
+    for name in $COMPAT_JAR_NAMES; do
+        [ -f "$RUNTIME_DIR/$name" ] && return 0
+    done
+    return 1
+}
+
 compat_pass() {
-    if [ -z "${VCFCF_SDK_COMPAT_JAR:-}" ] && [ ! -f "$RUNTIME_DIR/$COMPAT_JAR_NAME" ] \
-            && ! compat_required; then
+    if ! any_compat_jar && ! compat_required; then
         echo "  ========================================================================"
-        echo "  WARNING: SDK COMPAT CHECK SKIPPED: framework source vs the VCF Ops 9.1.1.0100 SDK jar"
-        echo "    reason: $COMPAT_JAR_NAME is not in adapter_runtime/ and VCFCF_SDK_COMPAT_JAR is not set"
-        echo "    This run did NOT check for classes or members missing from the 9.1.1.0100 jar."
+        echo "  WARNING: SDK COMPAT CHECK SKIPPED: framework source vs any compatibility SDK jar"
+        echo "    reason: none of $COMPAT_JAR_NAMES is in adapter_runtime/ and neither"
+        echo "    VCFCF_SDK_COMPAT_JARS nor VCFCF_SDK_COMPAT_JAR is set"
+        echo "    This run did NOT check for classes or members missing from any other platform's SDK jar."
         echo "    Set VCFCF_SDK_COMPAT_REQUIRED=1 to make a skipped check fail."
         echo "  ========================================================================"
         return 0
     fi
-    echo "Compat pass: framework source vs the VCF Ops 9.1.1.0100 SDK jar ..."
+    echo "Compat pass: framework source vs each compatibility SDK jar ..."
     local rc=0
     PYTHONPATH="$ROOT/..${PYTHONPATH:+:$PYTHONPATH}" python3 -c '
 import sys
@@ -107,11 +122,11 @@ sys.exit(check_framework_sdk_compat())
 compat_report_failure() {
     # $1: exit code from compat_pass
     if [ "$1" -eq 1 ]; then
-        echo "COMPAT PASS FAILED: framework source does not compile against the" >&2
-        echo "9.1.1.0100 SDK jar." >&2
+        echo "COMPAT PASS FAILED: framework source does not compile against a" >&2
+        echo "compatibility SDK jar (named in the ERROR above)." >&2
     else
-        echo "COMPAT PASS COULD NOT RUN (exit $1): see the ERROR above; nothing" >&2
-        echo "was checked against the 9.1.1.0100 SDK jar." >&2
+        echo "COMPAT PASS COULD NOT RUN (exit $1): see the ERROR above; at least" >&2
+        echo "one compatibility SDK jar was not checked." >&2
     fi
 }
 
@@ -200,7 +215,7 @@ fi
 
 echo "Compilation successful — no aria-ops-core symbols referenced."
 
-# ---- Second compile target (9.1.1.0100) -------------------------------------
+# ---- Compatibility legs (other platforms' SDK jars) -------------------------
 COMPAT_RC=0
 compat_pass || COMPAT_RC=$?
 if [ "$COMPAT_RC" -ne 0 ]; then
