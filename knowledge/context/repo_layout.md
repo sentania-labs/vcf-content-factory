@@ -50,7 +50,6 @@ src/
   vcfcf_packaging/          Bundle builder, releases, publish, install script templates
   vcfcf_managementpacks/    MP YAML loader, MPB render, .pak builder/installer (not in core)
   vcfcf_extractor/          Reverse flow: extract live dashboards into bundles
-  vcfops_*/                 Deprecated one-release import aliases for vcfcf_*
 ```
 
 The parsing, validation and rendering live in `vcfcf_core/<type>/`.
@@ -155,3 +154,5 @@ scripts/
   version_line_guard.sh      pre-push hook (.githooks/pre-push): version line consistency
   validate-content.py        Content validation entry point
 ```
+
+> `reference/README.md` line 14 still says the release builder is `vcfops_packaging`; it is `vcfcf_packaging` since the M1 rename and the alias was removed 2026-10-24 (#159). The file is under `reference/` and therefore immutable (RULE-016), so the correction lives here.

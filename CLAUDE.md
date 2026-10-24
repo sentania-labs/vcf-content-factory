@@ -70,7 +70,8 @@ via the Suite API / content-import zip.
   yet.
   `vcfcf_common` holds shared env/client plumbing, `vcfcf_extractor` the
   third-party-dashboard-to-YAML path, `vcfcf_packaging` bundles and
-  releases. `vcfops_*` are one-release import aliases only.
+  releases. The `vcfops_*` import aliases from the M1 rename were
+  removed 2026-10-24 (#159); only `vcfcf_*` names exist.
 
 ## You are the foreman
 

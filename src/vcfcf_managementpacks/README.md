@@ -52,6 +52,21 @@ poller defaults to 300 seconds (`POLL_TIMEOUT`).  If you invoke
 via `subprocess`, set your subprocess timeout to at least 400 seconds —
 a subprocess timeout of 300s or less will race the internal poller and
 kill the process while an install is still in progress on the server.
+After the install, `install` checks that each dashboard the pak ships
+finished building (issue #244); when one is still building it waits once
+(180 s by default, `--materialization-wait`, capped at 900 s) before the
+re-check, so allow that much more, or pass `--skip-materialization-check`.
+When the pak binds a Summary dashboard (`dashboards.properties`), `install`
+reads the Summary copy the server made and prints `SUMMARY OK` or
+`SUMMARY INCOMPLETE <kind> <copy id> (<n> of <m> widgets loading)` as
+information (no wait, no write, no exit-code change). The repair for issue
+#200 is opt-in (`--summary-rebind` or `VCFCF_SUMMARY_REBIND=1`): it polls
+for up to 660 s, then binds again any copy the server cloned before the
+dashboard finished. On 2026-10-24 the server refused that bind on 9.0.2 and
+8.18.7, so it is off by default. `--skip-summary-rebind` is a deprecated
+no-op. Exit code 3 means the pak installed but a dashboard check failed
+(`MATERIALIZATION STALLED`, or with the repair on `SUMMARY NOT REBOUND`,
+which quotes the server's HTTP status and answer); do not reinstall on it.
 
 **Credential env vars** (matches the rest of the factory):
 

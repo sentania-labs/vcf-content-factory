@@ -541,6 +541,60 @@ class Client:
             time.sleep(2)
         return {}  # unreachable; satisfies type checkers
 
+    def export_dashboards_zip(self, timeout_s: int = 180) -> bytes:
+        """One CUSTOM DASHBOARDS export (read-only: it creates no content).
+
+        Used only by the post-install materialization check, which is
+        advisory, so every failure raises RuntimeError instead of _die().
+        Same sequence as the factory's export_content_zip: wait for any
+        export in flight, snapshot startTime, POST, poll for a newer
+        FINISHED run.
+        """
+        deadline = time.monotonic() + timeout_s
+        while True:
+            g = self._req("GET", "/api/content/operations/export")
+            if g.status_code == 200:
+                if (g.json() or {}).get("state", "") not in ("RUNNING", "INITIALIZED"):
+                    break
+            if time.monotonic() > deadline:
+                raise RuntimeError("timed out waiting for a prior export to finish")
+            time.sleep(2)
+        prior_start = 0
+        g = self._req("GET", "/api/content/operations/export")
+        if g.status_code == 200:
+            prior_start = (g.json() or {}).get("startTime") or 0
+        r = self._req("POST", "/api/content/operations/export",
+                      json={"scope": "CUSTOM", "contentTypes": ["DASHBOARDS"]})
+        if r.status_code not in (200, 202):
+            raise RuntimeError(f"dashboard export failed ({r.status_code}): {r.text[:300]}")
+        deadline = time.monotonic() + timeout_s
+        while True:
+            g = self._req("GET", "/api/content/operations/export")
+            if g.status_code != 200:
+                raise RuntimeError(f"export status failed ({g.status_code})")
+            body = g.json() or {}
+            if (body.get("startTime") or 0) > prior_start and \
+                    str(body.get("state", "")).startswith("FINI"):
+                break
+            if time.monotonic() > deadline:
+                raise RuntimeError(f"dashboard export timed out; state={body.get('state')}")
+            time.sleep(2)
+        z = self._session.get(f"{self.base}/api/content/operations/export/zip")
+        if z.status_code != 200:
+            raise RuntimeError(f"export zip download failed ({z.status_code})")
+        return z.content
+
+    def list_adapter_kind_keys(self) -> set:
+        """Adapter-kind keys installed on the target (GET /api/adapterkinds)."""
+        r = self._req("GET", "/api/adapterkinds")
+        if r.status_code != 200:
+            raise RuntimeError(f"adapterkinds read failed ({r.status_code})")
+        return {
+            str(ak.get("key"))
+            for ak in ((r.json() or {}).get("adapter-kind") or [])
+            if isinstance(ak, dict) and ak.get("key")
+        }
+
     def get_default_policy_id(self) -> str:
         r = self._req("GET", "/api/policies")
         if r.status_code != 200:
@@ -1426,7 +1480,7 @@ def _extract_view_names(views_xml) -> list:
     """Titles of the views in a rendered views_content.xml, best effort.
 
     Parses with xml.etree.ElementTree (stdlib) exactly the way
-    vcfops_packaging/audit.py reads view titles: walk every ViewDef, take
+    vcfcf_packaging/audit.py reads view titles: walk every ViewDef, take
     its <Title> child text, fall back to a name attribute. The renderer
     emits <Title> once per ViewDef and nowhere else, so extraction is 1:1
     with views.
@@ -1481,6 +1535,286 @@ def _all_skipped_summaries(result: dict, content_types) -> dict:
         if imported == 0 and skipped > 0:
             flagged[ct] = (imported, skipped)
     return flagged
+
+
+# ---------------------------------------------------------------------------
+# Post-import dashboard materialization check (issue #244)
+#
+# A FINISHED dashboard import only covers phase 1: the record is written,
+# and each widget's settings are resolved later by a background pass. A
+# dashboard waiting on an adapter that is not installed never finishes.
+# This is the factory's vcfcf_core.dashboards.materialization classifier
+# and the export reader from vcfcf_core.extractor, deliberately re-stated
+# rather than imported: this template ships standalone inside every bundle
+# zip. tests/test_install_materialization.py pins that the two agree on
+# every state and every report sentence.
+# ---------------------------------------------------------------------------
+_MAT_COMPLETE = "complete"
+_MAT_SETTLING = "settling"
+_MAT_INCOMPLETE = "incomplete"
+_MAT_STALLED = "stalled"
+_MAT_ABSENT = "absent"
+
+#: Same default, cap and environment override as the factory CLI.
+_MAT_WAIT_DEFAULT_S = 180
+_MAT_WAIT_MAX_S = 900
+_MAT_WAIT_ENV = "VCFCF_MATERIALIZATION_WAIT_S"
+
+
+def _mat_wait(requested=None) -> int:
+    value = requested
+    if value is None:
+        raw = os.environ.get(_MAT_WAIT_ENV, "").strip()
+        if raw:
+            try:
+                value = int(raw)
+            except ValueError:
+                value = None
+    if value is None:
+        value = _MAT_WAIT_DEFAULT_S
+    return max(0, min(int(value), _MAT_WAIT_MAX_S))
+
+
+def _mat_dashboards_from_export_zip(outer_zip: bytes) -> list:
+    """Dashboard dicts from a DASHBOARDS export (one inner zip per owner)."""
+    result: list = []
+    try:
+        with zipfile.ZipFile(io.BytesIO(outer_zip)) as zf:
+            for name in zf.namelist():
+                if not name.startswith("dashboards/") or name.endswith("/"):
+                    continue
+                try:
+                    with zipfile.ZipFile(io.BytesIO(zf.read(name))) as inner:
+                        if "dashboard/dashboard.json" not in inner.namelist():
+                            continue
+                        dj = json.loads(inner.read("dashboard/dashboard.json"))
+                except Exception:  # noqa: BLE001
+                    continue
+                for dash in (dj.get("dashboards") or []):
+                    result.append(dict(dash))
+    except Exception as e:  # noqa: BLE001
+        raise ValueError(f"failed to parse dashboard export zip: {e}") from e
+    return result
+
+
+def _mat_pending_resources(dashboard: dict) -> list:
+    entry_keys = dashboard.get("entryKeys")
+    if not isinstance(entry_keys, dict):
+        return []
+    names: list = []
+    for item in entry_keys.get("resource") or []:
+        if isinstance(item, dict):
+            n = str(item.get("name") or "").strip()
+            if n and n not in names:
+                names.append(n)
+    return names
+
+
+def _mat_pending_kinds(dashboard: dict) -> list:
+    entry_keys = dashboard.get("entryKeys")
+    if not isinstance(entry_keys, dict):
+        return []
+    kinds = set()
+    for value in entry_keys.values():
+        if not isinstance(value, list):
+            continue
+        for item in value:
+            if isinstance(item, dict):
+                ak = str(item.get("adapterKindKey") or "").strip()
+                if ak:
+                    kinds.add(ak)
+    return sorted(kinds)
+
+
+def _mat_is_incomplete(dashboard: dict) -> bool:
+    return dashboard.get("entryKeys") is not None or dashboard.get("importComplete") is False
+
+
+def _mat_classify(exported, wanted: Dict[str, str], installed_kinds) -> list:
+    """One status dict per (id -> name) in ``wanted``; installed_kinds None
+    means the adapter kinds could not be read (never stalled on a guess)."""
+    by_id = {}
+    for d in exported:
+        did = str(d.get("id") or "").strip().lower()
+        if did:
+            by_id[did] = d
+    installed = {str(k) for k in installed_kinds} if installed_kinds is not None else None
+    out: list = []
+    for raw_id, name in wanted.items():
+        did = str(raw_id).strip().lower()
+        st = {"id": did, "name": name, "state": _MAT_COMPLETE, "pending": [],
+              "missing": [], "resources": [], "after": 0,
+              "kinds_known": installed is not None}
+        d = by_id.get(did)
+        if d is None:
+            st["state"] = _MAT_ABSENT
+        elif _mat_is_incomplete(d):
+            st["pending"] = _mat_pending_kinds(d)
+            st["missing"] = [k for k in st["pending"]
+                             if installed is not None and k not in installed]
+            st["resources"] = _mat_pending_resources(d)
+            st["state"] = _MAT_STALLED if st["missing"] else _MAT_SETTLING
+        out.append(st)
+    return out
+
+
+def _mat_finalize(statuses: list, after: int) -> list:
+    for st in statuses:
+        st["after"] = int(after)
+        if st["state"] == _MAT_SETTLING:
+            st["state"] = _MAT_INCOMPLETE
+    return statuses
+
+
+def _mat_quoted(names) -> str:
+    return ", ".join(f"'{n}'" for n in names)
+
+
+def _mat_describe(st: dict) -> str:
+    """Same sentences as vcfcf_core.dashboards.materialization.describe_status."""
+    resources = (
+        f" It also binds the resources {_mat_quoted(st['resources'])}."
+        if st["resources"] else ""
+    )
+    if st["state"] == _MAT_STALLED:
+        kinds = ", ".join(st["missing"])
+        verb = "is" if len(st["missing"]) == 1 else "are"
+        return (
+            f"dashboard '{st['name']}' is installed but cannot finish "
+            f"building: it is waiting on {kinds}, which {verb} not installed "
+            f"on this instance. Its widgets that use those resource kinds "
+            f"stay empty until the adapter is installed; re-importing does "
+            f"not help.{resources}"
+        )
+    if st["state"] in (_MAT_INCOMPLETE, _MAT_SETTLING):
+        kinds = ", ".join(st["pending"]) or "(none named)"
+        res = (
+            f" and the resources {_mat_quoted(st['resources'])}"
+            if st["resources"] else ""
+        )
+        installed = (
+            "Every adapter kind is installed, so it may still finish"
+            if st["kinds_known"] else
+            "The installed adapter kinds could not be read, so a missing "
+            "adapter is not ruled out; it may still finish"
+        )
+        return (
+            f"dashboard '{st['name']}' had not finished building "
+            f"{st['after']} s after the import. It waits on the "
+            f"adapter kinds {kinds}{res}. {installed} (the background pass "
+            f"can take about 20 minutes; opening it once in the UI is "
+            f"faster), but it does not always: a factory dashboard stayed "
+            f"incomplete for 19 days with every adapter installed. If it is "
+            f"still incomplete later, check that the named resources exist "
+            f"on this instance."
+        )
+    if st["state"] == _MAT_ABSENT:
+        return (
+            f"dashboard '{st['name']}' ({st['id']}) was in the import but is "
+            f"not on the instance afterwards. The importer can drop a whole "
+            f"dashboard silently (for example a widget type this Ops build "
+            f"lacks); check the instance."
+        )
+    return ""
+
+
+def _extract_dashboard_id_names(dashboard_json: str) -> List[Tuple[str, str]]:
+    """(id, name) per dashboard in a rendered dashboard.json, best effort.
+
+    The name drops the ``namePath`` folder prefix. Never raises: it runs
+    after the import, where an exception would leave a partial install.
+    """
+    try:
+        data = json.loads(dashboard_json)
+        if not isinstance(data, dict) or not isinstance(data.get("dashboards"), list):
+            return []
+        out: List[Tuple[str, str]] = []
+        for d in data["dashboards"]:
+            if not isinstance(d, dict) or not d.get("id"):
+                continue
+            name = str(d.get("name") or d["id"])
+            path = str(d.get("namePath") or "")
+            if path and name.startswith(path + "/"):
+                name = name[len(path) + 1:]
+            if len(name) > _ADVISORY_NAME_MAX_CHARS:
+                name = name[:_ADVISORY_NAME_MAX_CHARS] + "..."
+            out.append((str(d["id"]), name))
+        return out
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def _check_materialization(client: "Client", dashboards: List[Tuple[str, str]],
+                           wait_s: int, _sleep=time.sleep) -> List[dict]:
+    """Final status per imported dashboard: one export, at most one re-check.
+
+    Raises RuntimeError when the first export fails; a failed re-check or
+    adapter-kind read degrades (first read stands, or "not ruled out").
+    """
+    wanted = {i: n for i, n in dashboards}
+    ids = {str(i).lower() for i in wanted}
+    kinds_cache: Dict[str, Any] = {}
+
+    def _read() -> list:
+        try:
+            exported = _mat_dashboards_from_export_zip(client.export_dashboards_zip())
+        except ValueError as e:
+            raise RuntimeError(str(e)) from e
+        if "kinds" not in kinds_cache and any(
+            _mat_is_incomplete(d) for d in exported
+            if str(d.get("id") or "").lower() in ids
+        ):
+            try:
+                kinds_cache["kinds"] = client.list_adapter_kind_keys()
+            except Exception:  # noqa: BLE001
+                kinds_cache["kinds"] = None
+        return _mat_classify(exported, wanted, kinds_cache.get("kinds"))
+
+    statuses = _read()
+    settling = [s for s in statuses if s["state"] == _MAT_SETTLING]
+    if not settling or wait_s <= 0:
+        return _mat_finalize(statuses, 0)
+    print(f"MATERIALIZATION WAIT: {len(settling)} dashboard(s) still building; "
+          f"re-checking once in {wait_s} s", flush=True)
+    _sleep(wait_s)
+    try:
+        statuses = _read()
+    except Exception:  # noqa: BLE001  the re-check is best effort
+        return _mat_finalize(statuses, 0)
+    return _mat_finalize(statuses, wait_s)
+
+
+def _report_materialization(client: "Client", dashboards: List[Tuple[str, str]],
+                            args: argparse.Namespace) -> Tuple[List[str], List[str]]:
+    """Run the check and print its lines. Returns (warnings, notes).
+
+    ``warnings`` (STALLED: waiting on an adapter that is not installed)
+    fail the install (exit 2). ``notes`` (INCOMPLETE, ABSENT, UNCHECKED)
+    do not, but they print in the end-of-run attention list.
+    """
+    if getattr(args, "skip_materialization_check", False) or not dashboards:
+        return [], []
+    try:
+        statuses = _check_materialization(
+            client, dashboards, _mat_wait(getattr(args, "materialization_wait", None))
+        )
+    except Exception as e:  # noqa: BLE001  advisory check
+        line = (f"MATERIALIZATION UNCHECKED: could not check whether the "
+                f"imported dashboards finished building: {e}")
+        print(f"WARNING: {line}")
+        return [], [line]
+    warnings: List[str] = []
+    notes: List[str] = []
+    done = sum(1 for st in statuses if st["state"] == _MAT_COMPLETE)
+    if done:
+        print(f"MATERIALIZATION OK: {done} of {len(statuses)} dashboard(s) finished building")
+    for st in statuses:
+        if st["state"] == _MAT_COMPLETE:
+            continue
+        line = f"MATERIALIZATION {st['state'].upper()}: {_mat_describe(st)}"
+        print(f"WARNING: {line}")
+        (warnings if st["state"] == _MAT_STALLED else notes).append(line)
+    return warnings, notes
 
 
 # ---------------------------------------------------------------------------
@@ -1644,6 +1978,14 @@ def _install_dashboards(ctx: Dict) -> None:
         " Verify on the instance; deleting the existing object and "
         "re-installing is the reliable way to force an update."
     )
+
+    if "DASHBOARDS" not in flagged:
+        # Post-import materialization check (#244) runs once at the end of
+        # the run. A dashboard the import skipped is not what this run put
+        # on the instance, so it is not checked (same rule as the factory).
+        ctx.setdefault("imported_dashboards", []).extend(
+            _extract_dashboard_id_names(dash_json.replace("PLACEHOLDER_USER_ID", owner_id))
+        )
 
     if "DASHBOARDS" in flagged:
         imp, skp = flagged["DASHBOARDS"]
@@ -2577,6 +2919,8 @@ def _run_install(args: argparse.Namespace, host: str, user: str,
         "username": client._user,
         "args": args,
         "force": False,
+        # Shared by every bundle's ctx (a shallow copy keeps this list).
+        "imported_dashboards": [],
     }
 
     all_warnings: List[str] = []
@@ -2589,6 +2933,11 @@ def _run_install(args: argparse.Namespace, host: str, user: str,
         all_warnings.extend(warnings)
         all_advisories.extend(advisories)
 
+    mat_warnings, mat_notes = _report_materialization(
+        client, global_ctx["imported_dashboards"], args
+    )
+    all_warnings.extend(mat_warnings)
+
     def _print_advisories() -> None:
         """Trailer printed in BOTH summary branches.
 
@@ -2598,6 +2947,12 @@ def _run_install(args: argparse.Namespace, host: str, user: str,
         relocated to the summary. The last line is what an operator
         remembers. Advisories never touch the exit code.
         """
+        if mat_notes:
+            print()
+            print(f"{len(mat_notes)} dashboard(s) need a later look "
+                  f"(installed, but not confirmed finished building):")
+            for a in mat_notes:
+                print(f"  ATTENTION  {a}")
         if not all_advisories:
             return
         print()
@@ -2607,7 +2962,14 @@ def _run_install(args: argparse.Namespace, host: str, user: str,
             print(f"  ATTENTION  {a}")
 
     print()
-    enable_warnings = [w for w in all_warnings if "enable" in w.lower() or "resolve" in w.lower()]
+    # Materialization lines are classified by their prefix, never by the
+    # substring test below: a dashboard or resource name containing
+    # "enable" or "resolve" must not read as a super metric enable failure.
+    enable_warnings = [
+        w for w in all_warnings
+        if not w.startswith("MATERIALIZATION ")
+        and ("enable" in w.lower() or "resolve" in w.lower())
+    ]
     other_warnings = [w for w in all_warnings if w not in enable_warnings]
     if enable_warnings or other_warnings:
         total = len(enable_warnings) + len(other_warnings)
@@ -2626,7 +2988,7 @@ def _run_install(args: argparse.Namespace, host: str, user: str,
         _print_advisories()
         sys.exit(2)
     else:
-        if all_advisories:
+        if all_advisories or mat_notes:
             # N-18: not "below". The 5-minute NOTE block prints between
             # this line and the advisories, so the list is seven lines
             # away, not immediately under. The ordering is deliberate
@@ -2788,6 +3150,15 @@ def main() -> None:
                     help="Disable TLS certificate verification (lab use only)")
     ap.add_argument("--skip-enable", action="store_true",
                     help="(install mode) Skip enabling super metrics on Default Policy")
+    ap.add_argument("--skip-materialization-check", action="store_true",
+                    help="(install mode) Skip the post-import check that each dashboard "
+                         "finished building (one dashboard export plus an adapter-kind "
+                         "read). Default: check, and exit 2 when a dashboard waits on "
+                         "an adapter that is not installed.")
+    ap.add_argument("--materialization-wait", type=int, default=None, metavar="SECONDS",
+                    help="(install mode) Seconds to wait before the one re-check of "
+                         "dashboards still building (default 180, or "
+                         "VCFCF_MATERIALIZATION_WAIT_S; capped at 900; 0 reports at once)")
     args = ap.parse_args()
 
     if args.uninstall and args.install:

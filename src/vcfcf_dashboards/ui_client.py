@@ -37,7 +37,15 @@ from vcfcf_common.client import new_session
 
 
 class UIClientError(RuntimeError):
-    pass
+    """A UI action failed. ``status`` and ``body`` carry the server's HTTP
+    status and raw answer when the failure was the server's reply (None
+    otherwise), so a caller can report what the server said."""
+
+    def __init__(self, message: str = "", *, status: int | None = None,
+                 body: str | None = None):
+        super().__init__(message)
+        self.status = status
+        self.body = body
 
 
 # The Struts read actions (resourceKind.action and friends) answer the
@@ -325,10 +333,14 @@ class VCFOpsUIClient:
             },
             headers=_UI_XHR_HEADERS,
         )
-        resp.raise_for_status()
-        if resp.text.strip() != "ok":
+        if resp.status_code >= 400 or resp.text.strip() != "ok":
+            # On 9.0.2 and 8.18.7 a refused bind answers HTTP 200 with the
+            # generic Ext error panel ("Internal Server Error"), so the
+            # status alone does not say it failed; keep both for the caller.
             raise UIClientError(
-                f"associateResourceKindDashboards failed: {resp.text[:200]!r}"
+                f"associateResourceKindDashboards failed (HTTP {resp.status_code}): "
+                f"{resp.text[:200]!r}",
+                status=resp.status_code, body=resp.text,
             )
 
     def get_summary_tab_id(self, resource_kind_id: str) -> dict:
@@ -359,6 +371,36 @@ class VCFOpsUIClient:
         except ValueError as exc:
             raise UIClientError(
                 f"getSummaryTabId({resource_kind_id!r}) did not return JSON: {resp.text[:200]!r}"
+            ) from exc
+
+    def get_dashboard_config(self, tab_id: str, *, is_template: bool = False) -> dict:
+        """Return the raw ``getDashboardConfig`` answer for one tab.
+
+        ``{"dashboardConfig": {"tabConfigs": [{"id", "name", "isLoading",
+        "widgets": [{"key", "isLoading", ...}]}], "widgetInteractions"},
+        "interactionTypes"}``. A Summary template clone (the copy a
+        resource kind's Summary tab renders) is readable only with
+        ``is_template=True``; ``isLoading`` on the tab and on each widget is
+        the one signal that holds on 9.0.2 and 9.1.1 alike (read on devel
+        9.0.2, 2026-10-24; knowledge/context/api-surface/summary_dashboard_pak_binding.md).
+        """
+        s, csrf = self._require_auth()
+        resp = s.post(
+            f"https://{self._host}/ui/dashboard.action",
+            data={
+                "mainAction": "getDashboardConfig",
+                "tabId": tab_id,
+                "isTemplate": "true" if is_template else "false",
+                "secureToken": csrf,
+            },
+            headers=_UI_XHR_HEADERS,
+        )
+        resp.raise_for_status()
+        try:
+            return resp.json()
+        except ValueError as exc:
+            raise UIClientError(
+                f"getDashboardConfig({tab_id!r}) did not return JSON: {resp.text[:200]!r}"
             ) from exc
 
     # ------------------------------------------------------------------

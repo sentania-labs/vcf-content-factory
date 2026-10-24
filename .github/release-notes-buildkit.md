@@ -61,6 +61,18 @@ A workflow that ran the old kit and relied on grepping the compare output
 for "0 BLOCKING" now also fails on the exit code; under `set -o pipefail`
 that is the intended gate.
 
+## Behavior since 1.0.16
+
+- The adapter framework no longer references `java.lang.ThreadDeath`
+  (deprecated for removal on Java 25 collectors, factory #242): the
+  catch is `VirtualMachineError` plus a name-matched thread-kill check,
+  with the same Java 17 behaviour, and the thread's interrupt status is
+  restored when a certificate hook is interrupted. A pak rebuild on this
+  kit picks it up with no source change.
+- The framework compatibility pass (`check_framework_sdk_compat`) fails
+  on any `[removal]` warning; the framework-plus-adapter pass in
+  `build-sdk` and `validate-sdk` still only prints them.
+
 ## Behavior since 1.0.15
 
 - `build-sdk` and `validate-sdk` take `--sdk-compat-jar <path to

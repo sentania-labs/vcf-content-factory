@@ -162,6 +162,75 @@ not yet run on 9.0.2 and parked (stake:
 which is scoped to the user and returns `{}` for every template. Evidence:
 `../investigations/2026-10-13-compliance-summary-clone-config-loss.md`.
 
+### The factory's pak install: report by default, repair opt-in (issue #200)
+
+By default `python3 -m vcfcf_managementpacks install` only **reports** each
+bound kind's Summary copy after the pak lands: `getSummaryTabId`, then
+`getDashboardConfig` with `isTemplate=true`, printing
+`SUMMARY OK <kind> <copy id> (0 of <m> widgets loading)` or
+`SUMMARY INCOMPLETE <kind> <copy id> (<n> of <m> widgets loading)`. No wait,
+no write, no exit-code change. The repair below is **opt-in**
+(`--summary-rebind` or `VCFCF_SUMMARY_REBIND=1`; `--skip-summary-rebind` is
+a deprecated no-op), because the server refused it live (next subsection).
+With it on, the install runs the binding step a second time, after the
+source has finished (`src/vcfcf_managementpacks/post_install.py`):
+
+1. When the pak carries `dashboards.properties` and the repair is on, the
+   post-install materialization wait polls `getDashboardList` every 30 s for up to
+   660 s (one 10-minute importer tick plus a margin; `--materialization-wait`
+   or `VCFCF_MATERIALIZATION_WAIT_S` override it, capped at 900 s).
+2. Per bound kind it reads `getSummaryTabId`, then
+   `getDashboardConfig` with `tabId=<clone>` and `isTemplate=true`. The clone is
+   complete only when the tab and every widget say `isLoading: false`.
+   A complete clone (the 9.1.1 case) is left alone (`SUMMARY OK`).
+3. An unfinished (or unreadable) clone of a finished source is bound again
+   with `associateResourceKindDashboards`, keyed by the **pak dashboard's
+   id** (never by name), and the new clone is read back
+   (`SUMMARY REBOUND`). An unfinished source is never bound
+   (`SUMMARY NOT REBOUND`, exit 3).
+
+It never binds a kind the installer did not bind (`SUMMARY NOT BOUND`),
+rebinds a Summary tab only when its name reads as a copy of the pak's
+dashboard (`<name>` or `<name> <n>`; an unknown clone state is accepted
+only with such a name), leaves a tab whose name cannot be read alone
+(`SUMMARY UNCHECKED`, nothing written), and reads the properties file the way
+the installer does (Java `String.split`, no trimming, `GenericTemplates*`
+skipped, a bound directory with more than one dashboard skipped with a
+warning). With the repair off the check keeps the 180 s single re-check. A
+refused bind prints `SUMMARY NOT REBOUND` with the server's HTTP status and
+the first 200 characters of its answer (whitespace collapsed, session and
+credential values redacted), exit 3.
+
+Read-only reads on devel 9.0.2 on 2026-10-24 (about 12:20 AM) confirmed the
+shapes: `getSummaryTabId(002016vcfcf_complianceComplianceWorld)` returned
+`{"tabId": "1680c6bc-..."}` with **no `isDashboard` key** on 9.0.2, and
+`getDashboardConfig` answered `{"dashboardConfig": {"tabConfigs": [...],
+"widgetInteractions": ...}, "interactionTypes": ...}`. The clone
+"[VCF Content Factory] Compliance World Summary 6" had `isLoading: true` on
+the tab and all seven widgets while its source `4e2c777e` was `false` on
+all seven, so the race still reproduces on devel.
+
+#### Live result, 2026-10-24: the bind is refused before 9.1
+
+Compliance pak 0.0.0.98, installed with the repair on, 12:52 AM to 1:17 AM
+(`knowledge/context/reviews/compliance-build-98.md` on the main checkout):
+
+| Instance | Installer's copy after install | Repair |
+|---|---|---|
+| devel, 9.0.2 | "... Summary 7" `45dd9218`, 7 of 7 widgets loading | `associateResourceKindDashboards` answered HTTP 200 with the generic Ext error panel, "Internal Server Error"; `getSummaryTabId` unchanged, nothing written; exit 3. A repeat of the call by hand gave the same answer. |
+| devel_8_18, 8.18.7 | "... Summary 2" `2c51c9c6`, 7 of 7 loading | same refusal, nothing written, exit 3 |
+| devel_9_1, 9.1.1 | "... Summary 4" `a5078a7a`, finished | not needed, `SUMMARY OK`, exit 0 |
+
+The source dashboard (`4e2c777e`) was finished on all three when the bind
+ran, and every previous copy was left behind (orphan templates, as
+documented above). **Open question:** why the UI bind action fails on 9.0.2
+and 8.18.7 when the same call worked on qa 9.2 (2026-08-25). The server
+logs were not read (the Support Logs read failed, no SSH path for devel).
+Until that is answered the repair stays off by default, the default install
+reports the unfinished copy, and the next run with `--summary-rebind`
+records what the server says. `vcfcf_dashboards bind-summary` does not yet
+refuse a still-building source (#256).
+
 ### 9.0.2 WidgetType keys (complete list)
 
 Read on 2026-10-12 from `WidgetDTONew$WidgetType` in

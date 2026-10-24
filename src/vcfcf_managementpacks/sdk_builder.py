@@ -879,14 +879,20 @@ def _compat_skip(what: str, reason: str) -> bool:
     return False
 
 
-def _sdk_compat_check(sources: List[Path], other_jars: List[Path], what: str) -> bool:
+def _sdk_compat_check(
+    sources: List[Path], other_jars: List[Path], what: str,
+    fail_on_removal: bool = False,
+) -> bool:
     """Compile sources against the second-target SDK jar; nothing is kept.
 
     other_jars is the rest of the classpath (no primary SDK jar). Returns True
     when the pass ran and passed, False when it was skipped (jar or JDK
     absent; loud notice printed). Raises SdkBuildError when the source does
     not compile against the jar, or when a skip is not allowed
-    (VCFCF_SDK_COMPAT_REQUIRED=1).
+    (VCFCF_SDK_COMPAT_REQUIRED=1). With ``fail_on_removal`` a javac
+    ``[removal]`` warning (an API deprecated for removal on the newer JDK)
+    fails it too: the framework pass sets it, so the framework stays
+    warning-free on the Java 25 collectors (issue #242).
     """
     jar = _resolve_compat_sdk_jar()
     if jar is None:
@@ -931,6 +937,15 @@ def _sdk_compat_check(sources: List[Path], other_jars: List[Path], what: str) ->
             f"changed, so a pak built from it can fail to load on "
             f"{_SDK_COMPAT_LABEL}.{summary}\n{output}"
         )
+    removal = removal_warnings(result.stderr)
+    if fail_on_removal and removal:
+        raise SdkBuildError(
+            f"SDK compat check failed: {what} uses an API deprecated for "
+            f"removal on javac {major} (the {_SDK_COMPAT_LABEL} collectors run "
+            f"Java 25), so a future collector JDK can stop loading it:"
+            + "".join(f"\n    {w}" for w in removal)
+            + f"\n{result.stderr.strip()}"
+        )
     print(
         f"  sdk-compat: {what} compiles against the {_SDK_COMPAT_LABEL} SDK jar "
         f"({jar.name}, sha256 {sha12}, javac {major})",
@@ -941,6 +956,14 @@ def _sdk_compat_check(sources: List[Path], other_jars: List[Path], what: str) ->
         # runs Java 25.
         print(f"  sdk-compat javac warnings:\n{result.stderr}", file=sys.stderr)
     return True
+
+
+def removal_warnings(javac_output: str) -> List[str]:
+    """The ``<file>:<line>: warning: [removal] ...`` lines of javac output."""
+    return [
+        line.strip() for line in (javac_output or "").splitlines()
+        if "warning: [removal]" in line
+    ]
 
 
 def _adapter_compat_inputs(project_dir: Path, sources: List[Path]):
@@ -984,7 +1007,7 @@ def check_framework_sdk_compat() -> int:
         )
         return COMPAT_COULD_NOT_RUN
     try:
-        _sdk_compat_check(sources, [], "framework source")
+        _sdk_compat_check(sources, [], "framework source", fail_on_removal=True)
     except SdkCompatUnavailable as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return COMPAT_COULD_NOT_RUN
