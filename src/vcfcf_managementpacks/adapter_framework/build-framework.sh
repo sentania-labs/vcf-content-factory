@@ -22,6 +22,7 @@
 # together, or, when neither is set, every jar in adapter_runtime/ named in
 # COMPAT_JAR_NAMES below. Each leg finds a JDK new enough for its jar's class
 # files (PATH, JAVA_HOME, JAVA_HOME_<N>_X64, or $VCFCF_SDK_COMPAT_JAVAC): the
+# 8.18.7 jar is Java 11, so the JDK 17 that runs the primary compile does; the
 # 9.1.1.0100 jar is Java 25 and needs JDK 25+. A leg without its jar or JDK is
 # skipped with a loud warning, or fails when VCFCF_SDK_COMPAT_REQUIRED=1.
 # The legs run in python3 (sdk_builder.check_framework_sdk_compat), the same
@@ -44,8 +45,9 @@
 #   - javac (JDK 11 or newer; JDK 17 recommended)
 #   - adapter_runtime/vrops-adapters-sdk-2.2.jar
 #   - python3 with PyYAML (only when the compat pass runs)
-#   - optional, one per compat leg: adapter_runtime/vrops-adapters-sdk-9.1.1.0100.jar
-#     + JDK 25+
+#   - optional, one per compat leg: adapter_runtime/vrops-adapters-sdk-8.18.7.jar
+#     (Java 11 class files, any JDK 11+) and
+#     adapter_runtime/vrops-adapters-sdk-9.1.1.0100.jar (Java 25, JDK 25+)
 #
 # Output:
 #   adapter_runtime/vcfcf-adapter-base.jar
@@ -70,7 +72,7 @@ esac
 
 # Compatibility legs (issues #211, #252); see the header. Keep in step with
 # sdk_builder._SDK_COMPAT_JAR_NAMES.
-COMPAT_JAR_NAMES="vrops-adapters-sdk-9.1.1.0100.jar"
+COMPAT_JAR_NAMES="vrops-adapters-sdk-8.18.7.jar vrops-adapters-sdk-9.1.1.0100.jar"
 COMPAT_COULD_NOT_RUN=3   # sdk_builder.COMPAT_COULD_NOT_RUN
 
 compat_required() {

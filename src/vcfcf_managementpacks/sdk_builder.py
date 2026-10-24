@@ -416,8 +416,13 @@ _ARIA_OPS_CORE_PATTERN = "aria-ops-core-*.jar"
 # Provenance: adapter_runtime/PROVENANCE.md and
 # knowledge/context/tier2_architecture.md "SDK jar by platform version".
 _SDK_COMPAT_JAR_NAME = "vrops-adapters-sdk-9.1.1.0100.jar"
+# 8.18.7 (Aria Operations 8.18.7 build 25423534): Java 11 class files (major
+# 55), so any JDK 11+ reads it; it lacks members the 2.2 jar has, which is
+# what its leg catches (issue #252).
+_SDK_COMPAT_JAR_NAME_8_18 = "vrops-adapters-sdk-8.18.7.jar"
 # Compat jar names recognised in adapter_runtime/: never primary candidates.
-_SDK_COMPAT_JAR_NAMES = (_SDK_COMPAT_JAR_NAME,)
+# Keep in step with COMPAT_JAR_NAMES in adapter_framework/build-framework.sh.
+_SDK_COMPAT_JAR_NAMES = (_SDK_COMPAT_JAR_NAME_8_18, _SDK_COMPAT_JAR_NAME)
 _SDK_COMPAT_JAR_ENV = "VCFCF_SDK_COMPAT_JAR"        # one explicit jar (pre-#252 form)
 _SDK_COMPAT_JARS_ENV = "VCFCF_SDK_COMPAT_JARS"      # explicit jars, os.pathsep-separated
 _SDK_COMPAT_JAVAC_ENV = "VCFCF_SDK_COMPAT_JAVAC"    # explicit javac for every leg
