@@ -10,9 +10,9 @@ description: >
   filter below drops ghost/deleted-snapshot rows per-row. Instanced
   properties populate ~24h after snapshot creation; Age -1 = deleted or
   <24h old, so snapshots younger than 24h don't appear, a recall gap,
-  not a bug. Sort descending on Age (or Total Snapshot Space (GB) as a
-  proxy) at the consuming widget (sort_by_column/sort_by_dir); no
-  view-level default.
+  not a bug. Default sort is the VM's Total Snapshot Space (GB),
+  largest first, with each VM's snapshots grouped. Age ordering is not
+  available: Age is an instanced column the loader cannot sort on.
 
   Creator/Description render blank until
   diskspace|snapshot|{creator,description} are enabled on the Default
@@ -114,6 +114,7 @@ columns:
   - attribute: diskspace|snapshot
     display_name: "Total Snapshot Space (GB)"
     unit: "gb"
+    sort: desc
 
 released: false
 version: "1.0.0"

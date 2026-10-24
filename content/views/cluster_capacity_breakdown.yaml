@@ -38,6 +38,7 @@ columns:
     display_name: "Disk Time Remaining (days)"
   - attribute: OnlineCapacityAnalytics|capacityRemainingPercentage
     display_name: "Capacity Remaining %"
+    sort: asc
     yellow_bound: 30
     orange_bound: 20
     red_bound: 10

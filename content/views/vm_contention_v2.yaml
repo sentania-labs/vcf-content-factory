@@ -34,10 +34,11 @@ columns:
 
   # CPU Ready P95: catches bursty ready spikes that the average softens.
   # Same thresholds, a P95 ≥ 20% means at least 5% of samples are severe.
-  # Primary sort column for the consuming dashboard widget (worst-first).
+  # Primary sort column: the view's own default sort, worst-first.
   - attribute: cpu|readyPct
     display_name: "CPU Ready P95 (24h)"
     unit: percent
+    sort: desc
     transformation: PERCENTILE
     percentile: 95
     yellow_bound: 5.0
@@ -85,6 +86,6 @@ columns:
     display_name: "Write Latency Avg (24h)"
     transformation: AVG
 
-# Sort note: intended order is "CPU Ready P95 (24h)" descending (worst-first)
-# so the most-suffering VMs surface at the top. A view's default sort is the
-# per-column `sort: desc` key on exactly one list column (not set here yet).
+# Sort note: the view's default order is "CPU Ready P95 (24h)" descending
+# (worst-first) so the most-suffering VMs surface at the top. It is the
+# per-column `sort: desc` key on that one list column.
