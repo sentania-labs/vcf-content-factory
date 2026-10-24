@@ -1,0 +1,14 @@
+id: 7cfc0979-20c6-41fd-86ab-06040a90e0fd
+name: Fixture - VM Distribution by Time Remaining
+description: 'Synthetic fixture: VM Distribution by Time Remaining.'
+subject:
+  adapter_kind: VMWARE
+  resource_kind: VirtualMachine
+data_type: distribution
+columns:
+- attribute: OnlineCapacityAnalytics|timeRemaining
+  display_name: Time Remaining
+  unit: day
+time_window:
+  unit: DAYS
+  count: 1

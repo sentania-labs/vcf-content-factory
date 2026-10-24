@@ -429,3 +429,64 @@ class TestRealRegistryOnDisk:
         for retired in ("vcommunity", "vcommunity-vsphere", "vcommunity-os"):
             assert retired not in live, (retired, names)
             assert lookup_by_adapter_name(retired) is None, retired
+
+
+# ---------------------------------------------------------------------------
+# registered_pak_names: every section, retired included (#219)
+# ---------------------------------------------------------------------------
+
+from vcfcf_packaging.managed_paks import registered_pak_names  # noqa: E402
+
+_ALL_SECTIONS_REGISTRY = """\
+## Paks
+
+<!--
+### <name>
+- **Target:** `content/sdk-adapters/<name>/`
+-->
+
+### live
+
+- **Remote:** https://github.com/sentania-labs/vcf-content-factory-sdk-live
+- **Target:** `content/sdk-adapters/live/`
+- **adapter_kind:** vcfcf_live
+
+## Third-party Python Integration SDK paks (forks, contribute upstream)
+
+### pyfork (fork of someone/pyfork)
+
+- **Remote:** https://github.com/sentania-labs/pyfork
+- **Target:** `content/sdk-adapters/pyfork/`
+
+## Retired paks
+
+#### oldpak
+
+- **Remote:** https://github.com/sentania-labs/vcf-content-factory-sdk-oldpak
+- **Target:** `content/sdk-adapters/oldpak/`
+- **adapter_kind:** vcfcf_oldpak
+"""
+
+
+class TestRegisteredPakNames:
+
+    def test_every_section_is_read(self, tmp_path):
+        reg = _write_fixture(tmp_path, _ALL_SECTIONS_REGISTRY)
+        assert registered_pak_names(reg) == frozenset({"live", "pyfork", "oldpak"})
+
+    def test_load_registry_is_unchanged(self, tmp_path):
+        """The live-pak reader still skips forks and retired entries."""
+        reg = _write_fixture(tmp_path, _ALL_SECTIONS_REGISTRY)
+        assert [p.name for p in load_registry(reg)] == ["live"]
+
+    def test_missing_file_raises(self, tmp_path):
+        with pytest.raises(FileNotFoundError):
+            registered_pak_names(tmp_path / "absent.md")
+
+    def test_real_registry_names(self):
+        """Names present in the live registry, one per section; not a count."""
+        names = registered_pak_names()
+        for name in ("compliance", "unifi", "synology", "vsanhostmetrics",
+                     "cluster-perf-risk", "vcommunity", "vcommunity-vsphere",
+                     "vcommunity-os"):
+            assert name in names, name
