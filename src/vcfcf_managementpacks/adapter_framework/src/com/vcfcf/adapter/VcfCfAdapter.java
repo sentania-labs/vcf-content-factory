@@ -714,7 +714,9 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
      * failure anywhere in the cause chain), the raw TLS text (for example
      * {@code org.bouncycastle.tls.TlsFatalAlert: certificate_unknown(46)}) is
      * replaced with a readable message telling the admin how to proceed. See
-     * {@link #certificateTrustFailureMessage(Throwable, boolean)}.
+     * {@link #certificateTrustFailureMessage(Throwable, boolean, boolean)}.
+     * A pak can replace that text with
+     * {@link #certificateFailureMessage(Throwable, ResourceConfig, String)}.
      */
     @Override
     @SuppressWarnings("unchecked")
@@ -731,11 +733,14 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
             if (msg == null || msg.isEmpty()) {
                 msg = e.getClass().getSimpleName() + " (no message)";
             }
-            // Only consult the (pak-supplied) hook once the failure is known to
+            // Only consult the (pak-supplied) hooks once the failure is known to
             // be a certificate-trust failure.
             if (findCertificateTrustFailure(e) != null) {
+                ResourceConfig tested = testedResourceConfig(param);
                 String certMsg = certificateTrustFailureMessage(e,
-                        certificatePromptAvailable(param));
+                        certificatePromptAvailable(param),
+                        allowInsecureDescribedSafe(tested));
+                certMsg = certificateFailureMessageSafe(e, tested, certMsg);
                 if (certMsg != null) {
                     msg = certMsg;
                 }
@@ -2309,15 +2314,24 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
      * {@code certificate_unknown} alert with none of these is NOT matched: that
      * can be the server rejecting us, which accepting a certificate would not fix.
      *
-     * @param failure         the exception thrown by the tester
-     * @param promptAvailable whether review URLs were declared for the tested
+     * <p>The text points at the accept dialog (open the account, Validate
+     * Connection, accept the certificate; enter the host by the name on its
+     * certificate) and names Allow Insecure SSL only when
+     * {@code allowInsecureField} says the pak's describe carries that field
+     * (issue #205): a pak that removed it (compliance build 93) must not be
+     * told to set it.
+     *
+     * @param failure            the exception thrown by the tester
+     * @param promptAvailable    whether review URLs were declared for the tested
      *        config (so VCF Operations can offer the accept dialog). Not declared
      *        covers both a pack that does not implement the hook and an opted-in
      *        pack whose hook returned none (blank host, Allow Insecure true).
+     * @param allowInsecureField whether the account's describe declares the
+     *        {@link #ALLOW_INSECURE_IDENTIFIER} field
      * @return the readable message, or {@code null} if not a trust failure
      */
     static String certificateTrustFailureMessage(Throwable failure,
-            boolean promptAvailable) {
+            boolean promptAvailable, boolean allowInsecureField) {
         Throwable hit = findCertificateTrustFailure(failure);
         if (hit == null) {
             return null;
@@ -2326,32 +2340,155 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
         if (detail == null || detail.isEmpty()) {
             detail = hit.getClass().getName();
         }
-        String base = "The target's TLS certificate is not trusted by this adapter "
-                + "instance. ";
-        String advice;
+        StringBuilder m = new StringBuilder(
+                "The target's TLS certificate is not trusted by this adapter instance. ");
         if (promptAvailable) {
-            advice = "Click Validate Connection again and accept the certificate when "
-                    + "VCF Operations shows it for review. If you already accepted it, "
-                    + "check that the host and port match the endpoint the adapter "
-                    + "connects to. To skip certificate validation (lab use only), set "
-                    + "Allow Insecure SSL to true.";
+            m.append("Open the account and click Validate Connection to review and "
+                    + "accept the certificate when VCF Operations shows it. Enter the "
+                    + "host by the name on its certificate: accepting a certificate "
+                    + "does not fix a name mismatch.");
+            if (allowInsecureField) {
+                m.append(" To skip certificate validation (lab use only), set Allow "
+                        + "Insecure SSL to true.");
+            }
         } else {
-            advice = "No endpoint was offered for certificate review with these "
-                    + "settings, so VCF Operations could not show the certificate for "
-                    + "you to accept. Either this management pack version does not "
-                    + "support certificate review, or the settings rule it out (host "
-                    + "is blank, or Allow Insecure SSL is already true). Fill in the "
-                    + "host and check Allow Insecure SSL; to skip certificate "
-                    + "validation (lab use only) set it to true, otherwise update to "
-                    + "a pack version that supports certificate review.";
+            m.append("VCF Operations offered no certificate for review with these "
+                    + "settings. Check that the host is filled in and entered by the "
+                    + "name on its certificate, then open the account and click "
+                    + "Validate Connection to accept the certificate. If no "
+                    + "certificate is shown for review, this management pack version "
+                    + "does not support certificate review; update to one that does.");
+            if (allowInsecureField) {
+                m.append(" If Allow Insecure SSL is already true there is nothing to "
+                        + "review; set it to true only to skip certificate validation "
+                        + "(lab use only).");
+            }
         }
-        return base + advice + " Detail: " + detail;
+        return m.append(" Detail: ").append(detail).toString();
+    }
+
+    /**
+     * Test Connection message hook for a certificate-trust failure (issue
+     * #205). Called by {@link #onTest} only after the failure has been
+     * classified as a trust failure (see
+     * {@link #certificateTrustFailureMessage(Throwable, boolean, boolean)}),
+     * with the framework's default text. Return the text the admin should see
+     * in the Validate Connection error; {@code null} or blank keeps
+     * {@code defaultMessage}. Anything thrown (other than
+     * {@link VirtualMachineError}) is logged and the default is kept.
+     *
+     * <p>Default: returns {@code defaultMessage}. Override to give target
+     * specific advice, for example a name mismatch versus an untrusted chain
+     * ({@link com.vcfcf.adapter.http.CertificateNames#isNameMismatch}). The
+     * returned text goes to the UI as is: keep credentials, session ids and
+     * tokens out of it.
+     *
+     * @param failure        the exception the tester threw (full cause chain)
+     * @param config         the adapter-instance config under test (possibly
+     *                       unsaved), or {@code null} when the platform passed
+     *                       none; derive everything from it, not from instance
+     *                       state
+     * @param defaultMessage the framework's text for this failure
+     * @return the message to show, or {@code null} to keep the default
+     */
+    protected String certificateFailureMessage(Throwable failure, ResourceConfig config,
+            String defaultMessage) {
+        return defaultMessage;
+    }
+
+    /** {@link #certificateFailureMessage} with its failures contained. */
+    @SuppressWarnings("deprecation") // ThreadDeath: deprecated in newer JDKs, still thrown
+    final String certificateFailureMessageSafe(Throwable failure, ResourceConfig config,
+            String defaultMessage) {
+        String m;
+        try {
+            m = certificateFailureMessage(failure, config, defaultMessage);
+        } catch (VirtualMachineError | ThreadDeath fatal) {
+            throw fatal;
+        } catch (Throwable t) {
+            logWarnSafe("certificateFailureMessage threw; keeping the framework "
+                    + "message: " + t, t);
+            return defaultMessage;
+        }
+        return m == null || m.trim().isEmpty() ? defaultMessage : m;
+    }
+
+    /**
+     * Whether this pak's describe declares the {@link #ALLOW_INSECURE_IDENTIFIER}
+     * field on the adapter-instance kind of {@code config} (issue #205).
+     * Decides whether Test Connection advice may name Allow Insecure SSL. The
+     * describe, not the stored config, is the source: an account created
+     * before a pak removed the field still carries its stored value.
+     *
+     * <p>Default: reads {@link #onDescribe()} once per adapter instance (the
+     * result is cached) and looks for the identifier on the resource kind
+     * whose key matches {@code config}'s. {@code false} when {@code config}
+     * or its kind is missing, or the describe cannot be read. Override only
+     * when the describe on disk is not what the admin sees.
+     *
+     * @param config the adapter-instance config under test (may be null)
+     * @return {@code true} when the field is declared
+     */
+    protected boolean describesAllowInsecure(ResourceConfig config) {
+        if (config == null || config.getResourceKey() == null) {
+            return false;
+        }
+        String kind = config.getResourceKey().getResourceKind();
+        if (kind == null) {
+            return false;
+        }
+        AdapterDescribe d = describeForTestMessages;
+        if (d == null) {
+            d = onDescribe();
+            describeForTestMessages = d;
+        }
+        if (d.getResourceKinds() == null) {
+            return false;
+        }
+        for (com.integrien.alive.common.adapter3.describe.ResourceKindDescribe rk
+                : d.getResourceKinds()) {
+            if (rk == null || !kind.equals(rk.getKey())
+                    || rk.getResourceIdentifiers() == null) {
+                continue;
+            }
+            for (com.integrien.alive.common.adapter3.describe.ResourceIdentifierDescribe id
+                    : rk.getResourceIdentifiers()) {
+                if (id != null && ALLOW_INSECURE_IDENTIFIER.equals(id.getKey())) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /** Cache for {@link #describesAllowInsecure}; the describe does not change in an instance's life. */
+    private volatile AdapterDescribe describeForTestMessages;
+
+    /** {@link #describesAllowInsecure}; anything thrown (but a VirtualMachineError) means no. */
+    @SuppressWarnings("deprecation") // ThreadDeath: deprecated in newer JDKs, still thrown
+    final boolean allowInsecureDescribedSafe(ResourceConfig config) {
+        try {
+            return describesAllowInsecure(config);
+        } catch (VirtualMachineError | ThreadDeath fatal) {
+            throw fatal;
+        } catch (Throwable t) {
+            logWarnSafe("Test Connection: could not read the describe for the Allow "
+                    + "Insecure SSL field; the message will not mention it: " + t, t);
+            return false;
+        }
+    }
+
+    /** The adapter-instance config carried by {@code param}, or null. */
+    static ResourceConfig testedResourceConfig(TestParam param) {
+        if (param == null) return null;
+        AdapterConfig ac = param.getAdapterConfig();
+        return ac == null ? null : ac.getAdapterInstResource();
     }
 
     /**
      * Find the first trust-failure throwable in {@code t}'s cause and suppressed
      * graph, or {@code null}. See
-     * {@link #certificateTrustFailureMessage(Throwable, boolean)}.
+     * {@link #certificateTrustFailureMessage(Throwable, boolean, boolean)}.
      */
     static Throwable findCertificateTrustFailure(Throwable t) {
         java.util.Set<Throwable> seen = java.util.Collections.newSetFromMap(
