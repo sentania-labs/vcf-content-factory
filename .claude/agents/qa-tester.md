@@ -48,7 +48,9 @@ Also read:
 
 1. **Setup**: Extract zip to `/tmp/qa-test-<ts>/`
 2. **Python install**: Run `python3 install.py` with env credentials
-3. **Verify install**: Check all content exists via API
+3. **Verify install**: Check all content exists via API. Quote every
+   `MATERIALIZATION <STATE>` line install.py prints (since template
+   2026-10-24-1); INCOMPLETE and STALLED are findings, and STALLED exits 2.
 4. **Visual verification** (see below): browser pass over the
    installed dashboards/views/reports — or an explicit SKIP notice.
 5. **Python uninstall**: Run with `--uninstall`

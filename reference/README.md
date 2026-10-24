@@ -11,6 +11,6 @@ this material live in `context/` and cite the source here by path
 | `references/` | Local clones of external reference repos — known-good community content, grepped when authoring | gitignored; bootstrap via `scripts/bootstrap_references.sh` from `context/reference_sources.md` |
 
 `third_party/` is **not** here on purpose: it is redistributed content
-machine-routed by `vcfops_packaging` (release builder parses its path
+machine-routed by `vcfcf_packaging` (release builder parses its path
 shape), so it is content-adjacent, not reference material. See
 `STRUCTURE.md` for the full two-axis map.
