@@ -16,7 +16,7 @@ from __future__ import annotations
 import csv
 import re
 import sys
-from typing import Dict, Iterable, List, Optional
+from typing import Callable, Dict, Iterable, List, Optional
 
 CANONICAL_HEADER: List[str] = [
     "control_id",
@@ -600,11 +600,24 @@ _VIM_RECLASS_BY_CONTROL_ID: Dict[str, tuple] = {
         "config.policy.portConfigResetAtDisconnect",
         "true",   # SCG "Enabled" -> reset-at-disconnect must be ON
     ),
+    # Same read on the portgroup. SCG 9.1 files the control under
+    # Distributed Port Group (dvpg.network-reset-port), and the read is a
+    # portgroup-policy field, so this entry is the one every version that
+    # maps the control to DVPG needs (#169).
+    "dvpg.network-reset-port": (
+        "config.policy.portConfigResetAtDisconnect",
+        "bool",
+        "config.policy.portConfigResetAtDisconnect",
+        "true",   # SCG "Enabled" -> reset-at-disconnect must be ON
+    ),
     "vds.network-restrict-discovery-protocol": (
         "config.linkDiscoveryProtocolConfig.operation",
         "scalar",
         "config.linkDiscoveryProtocolConfig.operation",
-        None,     # SCG expected "none" compares directly to the enum string
+        # Pinned to the enum string the read returns. SCG 8.0 / 9.x write
+        # the baseline as "none"; SCG 7.0 writes the same requirement as
+        # the prose "Deactivated", which no switch ever reads back (#169).
+        "none",
     ),
     "vds.network-restrict-netflow-usage": (
         "config.defaultPortConfig.ipfixEnabled",
@@ -692,15 +705,15 @@ _VIM_RECLASS_BY_CONTROL_ID: Dict[str, tuple] = {
         "config.flags.enableLogging",
         "true",
     ),
-    # PARTIAL: scalar config.version returns "vmx-NN". The evaluator does
-    # exact string equality, so this scores compliant ONLY when the VM is
-    # at exactly the SCG baseline version string ("vmx-19"), not "19 or
-    # newer". Recorded as exact-match coverage in UNAUDITED_CONTROLS.md.
+    # scalar config.version returns "vmx-NN". The baseline is scored as a
+    # floor: _EXPECTED_REWRITE_BY_CONTROL_ID turns a bare "vmx-N" into
+    # "vmx-N or newer", the form the adapter compares as a minimum
+    # (ControlEvaluator.VMX_MINIMUM, adapter build 57; #170).
     "vm.virtual-hardware": (
         "config.version",
         "scalar",
         "config.version",
-        None,     # compares to SCG baseline ("vmx-19" / "vmx-21") verbatim
+        None,     # SCG baseline, rewritten to the minimum form below
     ),
 }
 
@@ -716,14 +729,49 @@ _VIM_RECLASS_DESCRIPTION_CAVEAT: Dict[str, str] = {
         "pass means the security-policy override is correctly disabled, "
         "not that the whole control is satisfied. See UNAUDITED_CONTROLS.md.]"
     ),
+    # Text identical to the compliance repo's VMX_MINIMUM_CAVEAT
+    # (scripts/normalize_scg_v91.py), so every SCG version carries the
+    # same caveat for this control (#170).
     "vm.virtual-hardware": (
-        " [PARTIAL COVERAGE: this adapter reads config.version (e.g. "
-        "\"vmx-21\") and compares it for exact equality to the SCG "
-        "baseline string. It does NOT evaluate \"version N or newer\"; a "
-        "VM at a higher-than-baseline hardware version will read as "
-        "non-compliant. See UNAUDITED_CONTROLS.md.]"
+        " [COVERAGE: this adapter reads config.version (e.g. \"vmx-21\") and "
+        "scores the VM compliant when its hardware version is at or above the "
+        "baseline minimum (the \"or newer\" / \"or higher\" floor), "
+        "non-compliant below it. See UNAUDITED_CONTROLS.md.]"
     ),
 }
+
+
+# Expected-value rewrites keyed by control_id. Applied by
+# normalize_scg_source AFTER every classifier override, to the final
+# expected_value, so one rule covers every SCG version whatever spelling
+# that version's baseline uses.
+_VMX_BARE_RE = re.compile(r"^\s*vmx-(\d+)\s*$", re.IGNORECASE)
+
+
+def vmx_minimum(expected: str) -> str:
+    """``vmx-N`` -> ``vmx-N or newer``; anything else unchanged.
+
+    ``vmx-N or newer`` / ``vmx-N or higher`` is the form the adapter scores
+    as a minimum hardware version (CANONICAL_SCHEMA.md, build 57). SCG 7.0
+    and 9.1 already phrase the baseline that way; SCG 8.0 and 9.0 write a
+    bare ``vmx-N`` while their titles say "version N or newer", so a VM on
+    newer hardware than the baseline failed an exact match (#170).
+    """
+    m = _VMX_BARE_RE.match(expected or "")
+    if not m:
+        return expected
+    return f"vmx-{m.group(1)} or newer"
+
+
+_EXPECTED_REWRITE_BY_CONTROL_ID: Dict[str, Callable[[str], str]] = {
+    "vm.virtual-hardware": vmx_minimum,
+}
+
+
+def rewrite_expected(control_id: str, expected: str) -> str:
+    """Apply the control_id-keyed expected-value rewrite, if any."""
+    fn = _EXPECTED_REWRITE_BY_CONTROL_ID.get(control_id)
+    return fn(expected) if fn is not None else expected
 
 
 # esxcli sprint (build 36) — esxcli recipe reclassifications keyed by
@@ -1067,47 +1115,100 @@ def classify_service_state_reclass(control_id: str):
     return entry  # (parameter, read_recipe, expected_override)
 
 
-# Build 38/39/40 — vim_property reclassifications keyed by SOURCE_ID.
+# Build 40, re-keyed in #169: vim_property reclassifications keyed by
+# control_id AND source product.
 #
 # Used only when a control_id is shared by two source rows and only ONE of
 # them should be reclassified (the other stays at its naturally-derived kind).
 # Currently covers:
 #
-#   dvpg.network-vgt — produced by BOTH the ESXi-sourced standard-switch row
-#   (esxi-8.network-vgt / esx-9.network-vgt, stays powercli_only) AND the
-#   vCenter-sourced distributed-switch row (vcenter-8.network-vgt /
-#   vcenter-9.network-vgt, promoted to vim_property). Control_id is identical
-#   for both; source_id distinguishes them.
+#   dvpg.network-vgt: produced by BOTH the ESX standard-switch row
+#   (esxi-7 / esxi-8 / esx-9 .network-vgt, stays powercli_only) AND the
+#   vCenter distributed-switch row (vcenter-7 / -8 / -9 .network-vgt,
+#   promoted to vim_property). The control_id is identical for both; the
+#   source product separates them.
 #
-# value: (parameter, read_recipe_style, vim_path, expected_override_or_None)
-# (same shape as _VIM_RECLASS_BY_CONTROL_ID so the same unpacking applies)
+# The source product is the canonical prefix the source-ID prefix maps to
+# in SOURCE_ID_PREFIX_MAP (vcenter -> vc, esxi / esx -> esx), so a rule
+# here names no SCG version and covers every one, including the next.
+#
+# value: (source_products, (parameter, read_recipe_style, vim_path,
+#         expected_override_or_None))
+# DVPG VGT check: the vlan_id_not recipe reads the vlan object's type/id
+# and returns true when VLAN 4095 (VGT) is NOT configured. One constant,
+# shared by this rule and the deprecated source-ID table below, so the two
+# cannot diverge.
+_VGT_DVPG_RECIPE: tuple = (
+    "config.defaultPortConfig.vlan.notVgt",
+    "vlan_id_not",
+    "config.defaultPortConfig.vlan",
+    "true",
+)
+
+_VIM_RECLASS_BY_CONTROL_ID_AND_PRODUCT: Dict[str, tuple] = {
+    "dvpg.network-vgt": (frozenset({"vc"}), _VGT_DVPG_RECIPE),
+}
+
+
+def source_product(source_id: str) -> str:
+    """Canonical product prefix of a versioned SCG source ID, or ''.
+
+    ``vcenter-8.network-vgt`` -> ``vc``; ``esx-9.network-vgt`` -> ``esx``.
+    Same parse as derive_resource_kind, so it follows SOURCE_ID_PREFIX_MAP
+    (including entries a driver adds at run time). A source ID with no
+    version-prefixed shape (SCG 6.7 Guideline IDs) returns ''.
+    """
+    if not source_id:
+        return ""
+    m = re.match(r"^([a-zA-Z]+)-?\d+(?:\.\d+)?\.", source_id.strip())
+    if not m:
+        return ""
+    mapped = SOURCE_ID_PREFIX_MAP.get(m.group(1).lower())
+    return mapped[0] if mapped is not None else ""
+
+
+def classify_scoped_vim_reclass(control_id: str, source_id: str):
+    """vim_property reclassification keyed by control_id, limited to the
+    source products listed for it. Returns
+    ``(parameter, read_recipe, expected_override_or_None, caveat_or_None)``
+    or ``None``.
+
+    Applied AFTER classify_vim_reclass so it can selectively override one
+    of two rows that share a control_id.
+    """
+    entry = _VIM_RECLASS_BY_CONTROL_ID_AND_PRODUCT.get(control_id)
+    if entry is None:
+        return None
+    products, (parameter, style, vim_path, expected_override) = entry
+    if source_product(source_id) not in products:
+        return None
+    return (parameter, f"{style}:{vim_path}", expected_override, None)
+
+
+# DEPRECATED (#169): the source-ID-keyed form of the rule above. The factory
+# SCG pipeline no longer reads it. It stays, with its build-40 entries,
+# only because the compliance repo's SCG 6.7 and 7.0 drivers call
+# classify_source_id_vim_reclass and guard on and extend this dict; their
+# output is unchanged because the control_id rule covers the same rows.
+# Remove both once those drivers use classify_scoped_vim_reclass.
+#
+# value: (parameter, read_recipe_style, vim_path, expected_override_or_None).
+# Built from _VGT_DVPG_RECIPE, the tuple the control_id rule uses, so an
+# edit to the recipe reaches both.
 _VIM_RECLASS_BY_SOURCE_ID: Dict[str, tuple] = {
-    # vcenter-8.network-vgt / vcenter-9.network-vgt
-    # Build 40: DVPG VGT check — vlan_id_not recipe reads the vlan object's
-    # type/id and returns true when VLAN 4095 (VGT) is NOT configured.
-    "vcenter-8.network-vgt": (
-        "config.defaultPortConfig.vlan.notVgt",
-        "vlan_id_not",
-        "config.defaultPortConfig.vlan",
-        "true",
-    ),
-    "vcenter-9.network-vgt": (
-        "config.defaultPortConfig.vlan.notVgt",
-        "vlan_id_not",
-        "config.defaultPortConfig.vlan",
-        "true",
-    ),
+    "vcenter-8.network-vgt": _VGT_DVPG_RECIPE,
+    "vcenter-9.network-vgt": _VGT_DVPG_RECIPE,
 }
 
 
 def classify_source_id_vim_reclass(source_id: str):
-    """If ``source_id`` is a vim_property reclassification keyed by source_id
+    """DEPRECATED (#169): use classify_scoped_vim_reclass. Kept for the
+    compliance repo's 6.7 / 7.0 drivers; see _VIM_RECLASS_BY_SOURCE_ID.
+
+    If ``source_id`` is a vim_property reclassification keyed by source_id
     (build 40 dvpg.network-vgt distributed-switch rows), return
     ``(parameter, read_recipe, expected_override_or_None, caveat_or_None)``.
     Otherwise return ``None``.
-
-    Applied AFTER classify_vim_reclass in the normalizer so it can
-    selectively override one of two rows that share a control_id.
     """
     entry = _VIM_RECLASS_BY_SOURCE_ID.get(source_id)
     if entry is None:
@@ -1501,6 +1602,31 @@ def clean_expected_value(text: str) -> str:
     return ""
 
 
+_UNDEFINED_DEFAULTS_RE = re.compile(
+    r"^\s*Undefined\s*\(\s*Defaults to\s+(.+?)\s*\)\s*$", re.IGNORECASE)
+
+
+def rewrite_undefined_baseline(text: str) -> str:
+    """``Undefined (Defaults to X)`` -> ``X or Undefined``; else unchanged.
+
+    SCG 7.0 writes a baseline whose platform default is the hardened state
+    as ``Undefined (Defaults to X)``; SCG 8.0 and later write the same
+    meaning as ``X or Undefined``, the form the adapter's evaluator
+    recognizes (an absent key is compliant, a present key is compared
+    against X). Untranslated, an absent key would be skipped instead of
+    passed and a hardened key would fail against the literal sentence.
+
+    Matches the whole cell (``.`` does not cross a newline), so a
+    multi-line cell is left for clean_expected_value exactly as before.
+    Applied by normalize_scg_source to every row, so any SCG version
+    that uses the phrasing gets it (#169).
+    """
+    m = _UNDEFINED_DEFAULTS_RE.match(text or "")
+    if not m:
+        return text
+    return f"{m.group(1)} or Undefined"
+
+
 def collapse_remediation(text: str) -> str:
     """Collapse a multi-line PowerCLI remediation into a single line."""
     if not text:
@@ -1526,3 +1652,223 @@ def write_canonical(out_path: str, rows: Iterable[Dict[str, str]]) -> int:
 
 def log(msg: str) -> None:
     print(msg, file=sys.stderr)
+
+
+# ---------------------------------------------------------------------------
+# Shared SCG row pipeline (#169).
+#
+# Every SCG version runs the same classifier chain; only the source column
+# names and the source_ref token differ. The per-version drivers
+# (normalize_scg_v8.py, normalize_scg_v9.py, and the compliance repo's
+# drivers built on them) pass those in and stay thin. Every scoring fix-up
+# in the chain is keyed by control_id (or control_id plus source product),
+# never by a versioned vendor ID, so one rule covers every SCG version.
+# ---------------------------------------------------------------------------
+
+# Logical column keys a driver maps to its source's header names.
+SCG_COLUMN_KEYS = (
+    "scg_id", "component", "priority", "title", "description", "parameter",
+    "expected", "assessment", "remediation", "setting_location",
+)
+
+
+def normalize_scg_source(input_path: str, output_path: str, *,
+                         columns: Dict[str, str],
+                         required_columns: List[str],
+                         source_token: str,
+                         label: str,
+                         classify_kind=None) -> int:
+    """Normalize one SCG source CSV to the canonical schema.
+
+    columns:          logical key (SCG_COLUMN_KEYS) -> source header name.
+    required_columns: header names that must be present.
+    source_token:     source_ref prefix, e.g. "SCG-8.0".
+    label:            log prefix, e.g. "normalize_scg_v8".
+    classify_kind:    parameter_kind classifier; defaults to
+                      classify_parameter_kind (a driver may wrap it).
+
+    Returns 0 on success, 2 on a bad input header.
+    """
+    if classify_kind is None:
+        classify_kind = classify_parameter_kind
+    absent = [k for k in SCG_COLUMN_KEYS if k not in columns]
+    if absent:
+        raise ValueError(f"{label}: columns map lacks {absent}")
+    col = columns
+    with open(input_path, encoding="utf-8-sig", newline="") as f:
+        reader = csv.DictReader(f)
+        if reader.fieldnames is None:
+            log(f"ERROR: {input_path} has no header row")
+            return 2
+        missing = [c for c in required_columns if c not in reader.fieldnames]
+        if missing:
+            shown = [m.replace("\n", "\\n") for m in missing]
+            log(f"ERROR: {input_path} missing required columns: {shown}")
+            return 2
+
+        in_count = 0
+        skipped: Dict[str, int] = {}
+        by_kind: Dict[str, int] = {}
+        unmapped_components: Dict[str, int] = {}
+        out_rows = []
+
+        def _bump(counter: Dict[str, int], key: str) -> None:
+            counter[key] = counter.get(key, 0) + 1
+
+        for src in reader:
+            in_count += 1
+            source_id = (src.get(col["scg_id"]) or "").strip()
+            if not source_id:
+                _bump(skipped, "empty_scg_id")
+                continue
+
+            component = (src.get(col["component"]) or "").strip()
+            mapped = map_component(component)
+            if mapped is None:
+                _bump(unmapped_components, component)
+                _bump(skipped, "unmapped_component")
+                continue
+            fallback_resource_kind, fallback_prefix = mapped
+
+            control_id = build_control_id(fallback_prefix, source_id)
+            if not control_id or "." not in control_id:
+                _bump(skipped, "empty_slug")
+                continue
+            resource_kind = derive_resource_kind(
+                source_id, fallback_resource_kind)
+
+            # Setting Location refinement: when the source-ID prefix
+            # didn't disambiguate to a sub-product (resource_kind ==
+            # Component fallback), let the Setting Location column narrow
+            # the resource_kind further. This catches network / port-group
+            # / virtual-switch controls that the Component column mis-tags
+            # as ESX. The control_id prefix is forced to match the new
+            # resource_kind (the schema says they must agree).
+            setting_location = (src.get(col["setting_location"]) or "").strip()
+            sl_override = map_setting_location(setting_location)
+            if sl_override and resource_kind == fallback_resource_kind:
+                resource_kind, sl_prefix = sl_override
+                _, slug = control_id.split(".", 1)
+                control_id = f"{sl_prefix}.{slug}"
+
+            parameter = (src.get(col["parameter"]) or "").strip()
+            if parameter == "N/A":
+                parameter = ""
+
+            assessment = (src.get(col["assessment"]) or "").strip()
+            parameter_kind = classify_kind(parameter, assessment)
+
+            # DVS + DVPG security policy override (Phase 3 / Batch 3b).
+            title = (src.get(col["title"]) or "").strip()
+            if resource_kind in (
+                "DistributedVirtualSwitch",
+                "DistributedVirtualPortgroup",
+            ):
+                secpol = classify_security_policy_param(
+                    assessment, source_id, title)
+                if secpol is not None:
+                    parameter = secpol
+                    parameter_kind = "vim_property"
+
+            # vSAN cluster-config override (Phase 3).
+            vsan_expected_override = None
+            if resource_kind == "ClusterComputeResource":
+                vsan_param = classify_vsan_cluster_param(source_id, title)
+                if vsan_param is not None:
+                    parameter = vsan_param
+                    parameter_kind = "vim_property"
+                    vsan_expected_override = (
+                        classify_vsan_cluster_expected(source_id))
+
+            # control_id-keyed reclassifiers, in order; a later one wins:
+            # build 35 vim_property, build 36/37 esxcli, build 38
+            # service_state, build 40 control_id + source product, and
+            # the build 39/40/41 generic override last.
+            reclass_recipe = ""
+            reclass_expected = None
+            reclass_caveat = None
+            reclass = classify_vim_reclass(control_id)
+            if reclass is not None:
+                parameter, reclass_recipe, reclass_expected, reclass_caveat = reclass
+                parameter_kind = "vim_property"
+
+            esxcli_reclass = classify_esxcli_reclass(control_id)
+            if esxcli_reclass is not None:
+                parameter, reclass_recipe, reclass_expected, reclass_caveat = esxcli_reclass
+                parameter_kind = "esxcli"
+
+            svc_reclass = classify_service_state_reclass(control_id)
+            if svc_reclass is not None:
+                parameter, reclass_recipe, reclass_expected = svc_reclass
+                parameter_kind = "vim_property"
+                reclass_caveat = None
+
+            scoped_reclass = classify_scoped_vim_reclass(control_id, source_id)
+            if scoped_reclass is not None:
+                parameter, reclass_recipe, reclass_expected, reclass_caveat = scoped_reclass
+                parameter_kind = "vim_property"
+
+            ctrl_override = classify_control_override(control_id)
+            if ctrl_override is not None:
+                parameter, parameter_kind, reclass_expected, co_recipe = ctrl_override
+                reclass_recipe = co_recipe or ""
+                reclass_caveat = None
+
+            _bump(by_kind, parameter_kind)
+
+            # Baseline: version phrasing normalized first, then a
+            # multi-line cell collapsed to its first non-empty line, then
+            # the classifier overrides.
+            expected = clean_expected_value(rewrite_undefined_baseline(
+                src.get(col["expected"]) or ""))
+            if vsan_expected_override is not None:
+                expected = vsan_expected_override
+            if reclass_expected is not None:
+                expected = reclass_expected
+            expected = rewrite_expected(control_id, expected)
+            value_type = infer_value_type(expected)
+
+            priority_raw = src.get(col["priority"]) or ""
+            priority = clean_priority(priority_raw)
+            if not priority_raw.strip():
+                log(f"WARN: missing priority for {source_id}, defaulting to P2")
+
+            description = (src.get(col["description"]) or "").strip()
+            if reclass_caveat:
+                description = description + reclass_caveat
+            remediation = collapse_remediation(src.get(col["remediation"]) or "")
+
+            out_rows.append({
+                "control_id": control_id,
+                "priority": priority,
+                "resource_kind": resource_kind,
+                "adapter_kind": ADAPTER_KIND,
+                "parameter": parameter,
+                "parameter_kind": parameter_kind,
+                "value_type": value_type,
+                "expected_value": expected,
+                "title": title,
+                "description": description,
+                "source_ref": f"{source_token}:{source_id}",
+                "remediation_text": remediation,
+                "read_recipe": (
+                    reclass_recipe
+                    if reclass_recipe
+                    else build_read_recipe(parameter, parameter_kind)
+                ),
+            })
+
+    written = write_canonical(output_path, out_rows)
+
+    log(f"[{label}] in={in_count}  out={written}  "
+        f"skipped={sum(skipped.values())}")
+    for k, v in sorted(skipped.items()):
+        log(f"  skipped {k}: {v}")
+    if unmapped_components:
+        log("  unmapped Component values (skipped):")
+        for k, v in sorted(unmapped_components.items()):
+            log(f"    {v:5d}  {k!r}")
+    log("  by parameter_kind:")
+    for k, v in sorted(by_kind.items()):
+        log(f"    {v:5d}  {k}")
+    return 0
