@@ -289,33 +289,7 @@ public final class ManagedHttpClient {
 			}
 
 			// Copy the original request and rewrite the URI to use the resolved IP.
-			// Do NOT set a Host header: java.net.http.HttpClient treats "Host" as a
-			// restricted header name and throws IllegalArgumentException if set
-			// explicitly. The JDK derives the correct Host value from the request URI.
-			// Copied field by field with Java 11 API only: the one-call
-			// HttpRequest.newBuilder(HttpRequest, BiPredicate) is Java 16, and the
-			// 8.18 collector runs Java 11 (NoSuchMethodError there; issue #252).
-			HttpRequest.Builder rb = HttpRequest.newBuilder(ipUri)
-					.expectContinue(originalReq.expectContinue());
-			String method = originalReq.method();
-			if (originalReq.bodyPublisher().isPresent()) {
-				rb.method(method, originalReq.bodyPublisher().get());
-			} else if ("GET".equals(method)) {
-				rb.GET();  // GET and DELETE carry no publisher; keep it that way
-			} else if ("DELETE".equals(method)) {
-				rb.DELETE();
-			} else {
-				rb.method(method, HttpRequest.BodyPublishers.noBody());
-			}
-			originalReq.timeout().ifPresent(rb::timeout);
-			originalReq.version().ifPresent(rb::version);
-			originalReq.headers().map().forEach((name, values) -> {
-				for (String value : values) {
-					rb.header(name, value);
-				}
-			});
-
-			HttpRequest ipReq = rb.build();
+			HttpRequest ipReq = copyWithUri(originalReq, ipUri);
 
 			try {
 				HttpResponse<T> resp = httpClient.send(ipReq, bodyHandler);
@@ -333,5 +307,50 @@ public final class ManagedHttpClient {
 		}
 
 		throw lastCe;
+	}
+
+	/**
+	 * Headers {@link HttpClient} derives itself and refuses to have set (the
+	 * JDK's restricted set, compared case-insensitively). Never copied: Host
+	 * comes from the request URI, Content-Length from the body publisher,
+	 * Expect from {@code expectContinue}.
+	 */
+	private static final java.util.Set<String> RESTRICTED_HEADERS = java.util.Set.of(
+			"connection", "content-length", "expect", "host", "upgrade");
+
+	/**
+	 * A copy of {@code original} aimed at {@code uri}: same method, body
+	 * publisher, headers (restricted ones skipped), timeout, version and
+	 * expect-continue.
+	 *
+	 * <p>Java 11 API only. {@code HttpRequest.newBuilder(HttpRequest,
+	 * BiPredicate)} would do this in one call but is Java 16, and the 8.18
+	 * collector and Cloud Proxy run OpenJDK 11, where it throws
+	 * NoSuchMethodError (issue #252). Package-private for the test.
+	 */
+	static HttpRequest copyWithUri(HttpRequest original, URI uri) {
+		HttpRequest.Builder rb = HttpRequest.newBuilder(uri)
+				.expectContinue(original.expectContinue());
+		String method = original.method();
+		if (original.bodyPublisher().isPresent()) {
+			rb.method(method, original.bodyPublisher().get());
+		} else if ("GET".equals(method)) {
+			rb.GET();  // GET and DELETE carry no publisher; keep it that way
+		} else if ("DELETE".equals(method)) {
+			rb.DELETE();
+		} else {
+			rb.method(method, HttpRequest.BodyPublishers.noBody());
+		}
+		original.timeout().ifPresent(rb::timeout);
+		original.version().ifPresent(rb::version);
+		original.headers().map().forEach((name, values) -> {
+			if (RESTRICTED_HEADERS.contains(name.toLowerCase(java.util.Locale.ROOT))) {
+				return;
+			}
+			for (String value : values) {
+				rb.header(name, value);
+			}
+		});
+		return rb.build();
 	}
 }
