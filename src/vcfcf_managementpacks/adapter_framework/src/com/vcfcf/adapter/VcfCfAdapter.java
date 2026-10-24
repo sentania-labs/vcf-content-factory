@@ -443,6 +443,27 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
     }
 
     /**
+     * Called once at the top of every collection cycle (issue #221), at the
+     * start of {@link #onCollect}, before {@link VcfCfCollector#needsRediscovery},
+     * {@link #discoverOnCollect()} discovery and any per-resource collect.
+     * Default: no-op.
+     *
+     * <p>Use it for per-cycle state: reset a snapshot cache so one snapshot
+     * is shared by every resource in the cycle, or clear a cached failure so
+     * a failed build is retried once per cycle and not once per resource.
+     * Before this hook adapters marked the cycle start inside
+     * {@code needsRediscovery}, which the framework still calls exactly once
+     * per cycle, so an adapter that does that keeps working; new code should
+     * use this hook.
+     *
+     * <p>Runs on the collection thread. Keep it cheap and free of I/O. A
+     * {@link RuntimeException} it throws is logged at WARN and the cycle
+     * continues.
+     */
+    protected void onCycleStart() {
+    }
+
+    /**
      * Enumerate all resources managed by this adapter and deliver each one to
      * {@code sink}.
      *
@@ -787,7 +808,10 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
      *
      * <p>Implements the full §1 collect sequence:
      * <ol>
-     *   <li>Optional top-of-cycle rediscovery (§1 step 1 + §2).</li>
+     *   <li>{@link #onCycleStart()}, once (issue #221).</li>
+     *   <li>Optional top-of-cycle rediscovery (§1 step 1 + §2):
+     *       {@link VcfCfCollector#needsRediscovery} is called exactly once per
+     *       cycle, then {@link #discoverOnCollect()}.</li>
      *   <li>Per-resource gather → cache metrics/properties → emit events →
      *       emit relationships.</li>
      *   <li>REQUIRED per-resource status set every cycle (§1).</li>
@@ -814,6 +838,14 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
             Collection<ResourceConfig> resources) {
         abortRequested.set(false);
         Exception discoveryFailure = null;
+
+        // Issue #221: the cycle-start hook, once per cycle, before discovery.
+        try {
+            onCycleStart();
+        } catch (RuntimeException e) {
+            logWarn("onCollect: onCycleStart failed (non-fatal, the cycle continues): "
+                    + e.getMessage(), e);
+        }
 
         VcfCfCollector<C> collector = getCollector();
         if (collector == null) {

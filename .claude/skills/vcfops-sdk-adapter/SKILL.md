@@ -184,6 +184,16 @@ to keep the default. Do not rethrow certificate failures stripped of their
 cause to dodge the framework text any more; that was compliance's
 pre-1.0.16 workaround.
 
+## Per-cycle state: onCycleStart
+
+Since buildkit 1.0.16 (#221) override `onCycleStart()` on the adapter for
+anything that must happen once per collection cycle (reset a per-cycle
+snapshot, clear a cached failure). It runs at the top of `onCollect`,
+before `needsRediscovery` and discovery; a `RuntimeException` from it is
+logged and the cycle continues. Do not mark the cycle start inside
+`needsRediscovery` in new code; the framework still calls it exactly once
+per cycle so older paks keep working.
+
 ## Environment-wide totals: ComputedMetrics on the pak singleton
 
 A number that spans every adapter instance (fleet counts, a weighted
