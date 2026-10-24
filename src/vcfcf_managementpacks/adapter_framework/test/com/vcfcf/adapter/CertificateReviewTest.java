@@ -84,6 +84,13 @@ public class CertificateReviewTest {
         testOnTestMessageHookNullOrBlankKeepsDefault();
         testOnTestMessageHookThrowsKeepsDefault();
         testOnTestMessageHookSkippedForOtherFailures();
+        testOnTestNameMismatchJdkShape();
+        testOnTestNameMismatchBouncyCastleShape();
+        testOnTestNoUsableHost();
+        testNameMessageAllowInsecureOnlyWhenDescribed();
+        testNameMessageIgnoresOtherFailures();
+        testWrappersRethrowThreadKillAndVmError();
+        testWrappersRestoreInterrupt();
         testParseAllowInsecureLegacyAndEnum();
         testParseAllowInsecureLegacyNotFalseMatchesSynology();
         testIsAllowInsecureReadsIdentifier();
@@ -245,7 +252,7 @@ public class CertificateReviewTest {
     /** Message hook (issue #205): returns {@code reply}, records what it saw. */
     static class MessageHookAdapter extends OptedInAdapter {
         String reply;
-        RuntimeException toThrow;
+        Throwable toThrow;
         int calls;
         String sawDefault;
         ResourceConfig sawConfig;
@@ -258,9 +265,50 @@ public class CertificateReviewTest {
             sawFailure = failure;
             sawConfig = config;
             sawDefault = defaultMessage;
-            if (toThrow != null) throw toThrow;
+            if (toThrow != null) throwUnchecked(toThrow);
             return reply;
         }
+    }
+
+    /** describesAllowInsecure throws {@code toThrow}. */
+    static class DescribeThrowsAdapter extends PlainAdapter {
+        Throwable toThrow;
+
+        @Override
+        protected boolean describesAllowInsecure(ResourceConfig config) {
+            throwUnchecked(toThrow);
+            return false;
+        }
+    }
+
+    /** Throw any throwable, checked or not, without declaring it. */
+    @SuppressWarnings("unchecked")
+    static <T extends Throwable> void throwUnchecked(Throwable t) throws T {
+        throw (T) t;
+    }
+
+    /** The error Thread.stop throws, made by name (the type is deprecated for removal). */
+    static Error threadKill() throws Exception {
+        return (Error) Class.forName("java.lang.ThreadDeath").getDeclaredConstructor().newInstance();
+    }
+
+    /** JDK shape: the handshake exception caused by the name check's CertificateException. */
+    static Exception jdkNameMismatch() {
+        Exception e = new javax.net.ssl.SSLHandshakeException(
+                "No subject alternative name matching vc02.lab.local in the target certificate");
+        e.initCause(new java.security.cert.CertificateException(
+                "No subject alternative name matching vc02.lab.local in the target certificate "
+                + "(subject CN=vc01.lab.local)"));
+        return e;
+    }
+
+    /** BouncyCastle JSSE shape (9.1.1 collectors): a fatal alert wrapping the name check. */
+    static Exception bcNameMismatch() {
+        return new javax.net.ssl.SSLException("org.bouncycastle.tls.TlsFatalAlert: certificate_unknown(46)",
+                new java.io.IOException("org.bouncycastle.tls.TlsFatalAlert: certificate_unknown(46)",
+                        new java.security.cert.CertificateException(
+                                "No subject alternative name matching vc02.lab.local in the "
+                                + "target certificate (subject CN=vc01.lab.local)")));
     }
 
     /** A describe whose adapter-instance kind declares the given identifiers. */
@@ -711,6 +759,134 @@ public class CertificateReviewTest {
         assertEquals("non-certificate failure: hook not called", 0, a.calls);
         assertEquals("non-certificate failure: raw message kept", "HTTP 401 Unauthorized",
                 p.getErrorMsg());
+    }
+
+    // -----------------------------------------------------------------------
+    // Review B1: a certificate NAME failure reaches the default text and hook
+    // -----------------------------------------------------------------------
+
+    private static void assertNameFailureHandled(String what, Exception failure) throws Exception {
+        MessageHookAdapter a = allocate(MessageHookAdapter.class);
+        a.describe = describeWith("host");
+        a.tester = (cfg, http, param) -> { throw failure; };
+        TestParam p = new TestParam(cfg("host", "vc02.lab.local"));
+        assertFalse(what + ": onTest returns false", a.onTest(p));
+        assertEquals(what + ": hook called once", 1, a.calls);
+        assertTrue(what + ": hook gets the tester's exception", a.sawFailure == failure);
+        assertTrue(what + ": the hook can tell it is a name mismatch",
+                com.vcfcf.adapter.http.CertificateNames.isNameMismatch(a.sawFailure));
+        String msg = p.getErrorMsg();
+        assertTrue(what + ": name-specific default text; got " + msg, msg != null
+                && msg.startsWith("The target's TLS certificate does not name vc02.lab.local.")
+                && msg.contains("enter the host by a name on the certificate")
+                && msg.contains("Accepting the certificate does not fix a name mismatch"));
+        assertTrue(what + ": the default is what the hook saw", msg.equals(a.sawDefault));
+        assertTrue(what + ": detail is the name check's text",
+                msg.contains("Detail: No subject alternative name matching vc02.lab.local"));
+        assertFalse(what + ": no Allow Insecure without the field", msg.contains("Insecure"));
+        assertTrue(what + ": no em-dash", msg.indexOf('\u2014') < 0);
+    }
+
+    private static void testOnTestNameMismatchJdkShape() throws Exception {
+        assertNameFailureHandled("name mismatch, JDK shape", jdkNameMismatch());
+    }
+
+    private static void testOnTestNameMismatchBouncyCastleShape() throws Exception {
+        assertNameFailureHandled("name mismatch, BouncyCastle shape", bcNameMismatch());
+    }
+
+    private static void testOnTestNoUsableHost() throws Exception {
+        MessageHookAdapter a = allocate(MessageHookAdapter.class);
+        a.describe = describeWith("host");
+        Exception failure = new javax.net.ssl.SSLHandshakeException("handshake failed");
+        failure.initCause(new java.security.cert.CertificateException(
+                com.vcfcf.adapter.http.CertificateNames.NO_HOST_MESSAGE));
+        a.tester = (cfg, http, param) -> { throw failure; };
+        a.reply = "Pak text: set NAS Host to the name on the certificate.";
+        TestParam p = new TestParam(cfg("host", ""));
+        a.onTest(p);
+        assertEquals("no usable host: hook called once", 1, a.calls);
+        assertTrue("no usable host: the hook can tell",
+                com.vcfcf.adapter.http.CertificateNames.isNoUsableHost(a.sawFailure));
+        assertTrue("no usable host: default names the punycode form; got " + a.sawDefault,
+                a.sawDefault != null
+                        && a.sawDefault.startsWith("The target's TLS certificate name cannot be checked")
+                        && a.sawDefault.contains("punycode xn-- form"));
+        assertEquals("no usable host: hook text replaces the default",
+                "Pak text: set NAS Host to the name on the certificate.", p.getErrorMsg());
+    }
+
+    private static void testNameMessageAllowInsecureOnlyWhenDescribed() {
+        String with = VcfCfAdapter.certificateNameFailureMessage(jdkNameMismatch(), true);
+        String without = VcfCfAdapter.certificateNameFailureMessage(jdkNameMismatch(), false);
+        assertTrue("name text + field: names Allow Insecure SSL",
+                with != null && with.contains("set Allow Insecure SSL to true"));
+        assertTrue("name text, no field: no Allow Insecure",
+                without != null && !without.contains("Insecure"));
+        String unnamed = VcfCfAdapter.certificateNameFailureMessage(
+                new java.io.IOException("x", new java.security.cert.CertificateException(
+                        "No subject alternative names present")), false);
+        assertTrue("name text, host not in the failure: generic wording; got " + unnamed,
+                unnamed != null && unnamed.startsWith(
+                        "The target's TLS certificate does not name the host this account connects to."));
+    }
+
+    private static void testNameMessageIgnoresOtherFailures() {
+        assertTrue("name text: an untrusted chain is not a name failure",
+                VcfCfAdapter.certificateNameFailureMessage(prodStack(), true) == null);
+        assertTrue("name text: connection refused is not a name failure",
+                VcfCfAdapter.certificateNameFailureMessage(
+                        new java.net.ConnectException("Connection refused"), true) == null);
+    }
+
+    private static void testWrappersRethrowThreadKillAndVmError() throws Exception {
+        for (Throwable fatal : new Throwable[] {threadKill(), new StackOverflowError("sim")}) {
+            String kind = fatal.getClass().getSimpleName();
+            MessageHookAdapter a = allocate(MessageHookAdapter.class);
+            a.toThrow = fatal;
+            Throwable seen = null;
+            try {
+                a.certificateFailureMessageSafe(prodStack(), null, "default");
+            } catch (Throwable t) {
+                seen = t;
+            }
+            assertTrue("message hook: " + kind + " rethrown; got " + seen, seen == fatal);
+
+            DescribeThrowsAdapter d = allocate(DescribeThrowsAdapter.class);
+            d.toThrow = fatal;
+            seen = null;
+            try {
+                d.allowInsecureDescribedSafe(null);
+            } catch (Throwable t) {
+                seen = t;
+            }
+            assertTrue("describe check: " + kind + " rethrown; got " + seen, seen == fatal);
+        }
+        MessageHookAdapter a = allocate(MessageHookAdapter.class);
+        a.toThrow = new LinkageError("missing class");
+        assertEquals("message hook: a LinkageError keeps the default", "default",
+                a.certificateFailureMessageSafe(prodStack(), null, "default"));
+    }
+
+    private static void testWrappersRestoreInterrupt() throws Exception {
+        try {
+            MessageHookAdapter a = allocate(MessageHookAdapter.class);
+            a.toThrow = new InterruptedException("stop");
+            Thread.interrupted();
+            assertEquals("message hook interrupted: default kept", "default",
+                    a.certificateFailureMessageSafe(prodStack(), null, "default"));
+            assertTrue("message hook interrupted: interrupt status restored",
+                    Thread.interrupted());
+
+            DescribeThrowsAdapter d = allocate(DescribeThrowsAdapter.class);
+            d.toThrow = new InterruptedException("stop");
+            assertFalse("describe check interrupted: answers no",
+                    d.allowInsecureDescribedSafe(null));
+            assertTrue("describe check interrupted: interrupt status restored",
+                    Thread.interrupted());
+        } finally {
+            Thread.interrupted();
+        }
     }
 
     private static void testPromptAvailableRethrowsVirtualMachineError() throws Exception {

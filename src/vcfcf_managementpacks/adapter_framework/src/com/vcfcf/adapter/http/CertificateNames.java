@@ -92,7 +92,8 @@ public final class CertificateNames {
     public static final String NO_HOST_MESSAGE = "The target certificate name "
             + "cannot be checked: no usable host was given for this connection. "
             + "Set the account's host to the name or address on the target's "
-            + "certificate (no https://, no path).";
+            + "certificate (no https://, no path; enter a Unicode name in its "
+            + "punycode xn-- form).";
 
     /** The prefix of the name-mismatch text {@link #checkName} throws. */
     static final String MISMATCH_PREFIX = "No subject alternative name matching ";
@@ -197,6 +198,69 @@ public final class CertificateNames {
             }
         }
         return false;
+    }
+
+    /**
+     * Whether {@code t}'s cause or suppressed graph (cycle safe) carries the
+     * fail-closed refusal {@link #NO_HOST_MESSAGE}: the name could not be
+     * checked because the context was built with no usable host. Not a name
+     * mismatch and not an untrusted chain.
+     */
+    public static boolean isNoUsableHost(Throwable t) {
+        return firstMessage(t, m -> m.contains(NO_HOST_MESSAGE) ? m : null) != null;
+    }
+
+    /**
+     * The host a name-mismatch failure says the certificate does not carry,
+     * read from the failure text, or null when the text does not name one.
+     * Reads this class's own refusal, the JDK hostname checker's ("No subject
+     * alternative DNS name matching h found", "No subject alternative names
+     * matching IP address h found", "No name matching h found") and
+     * {@code HttpsURLConnection}'s ("... should be &lt;h&gt;"). For messages
+     * shown to the admin; never for a security decision.
+     */
+    public static String mismatchedHost(Throwable t) {
+        return firstMessage(t, m -> {
+            for (Pattern p : MISMATCH_HOST_PATTERNS) {
+                Matcher mm = p.matcher(m);
+                if (mm.find()) {
+                    String h = mm.group(1).trim();
+                    while (h.endsWith(".")) h = h.substring(0, h.length() - 1);
+                    if (!h.isEmpty()) return h;
+                }
+            }
+            return null;
+        });
+    }
+
+    private static final Pattern[] MISMATCH_HOST_PATTERNS = {
+        Pattern.compile("No subject alternative name matching (\\S+) in the "),
+        Pattern.compile("No subject alternative (?:DNS )?names? matching (?:IP address )?(\\S+) found"),
+        Pattern.compile("No name matching (\\S+) found"),
+        Pattern.compile("(?i)https hostname.*should be <([^>]+)>"),
+    };
+
+    /** First non-null {@code f(message)} over {@code t}'s cause and suppressed graph. */
+    private static String firstMessage(Throwable t,
+            java.util.function.Function<String, String> f) {
+        Set<Throwable> seen = Collections.newSetFromMap(
+                new IdentityHashMap<Throwable, Boolean>());
+        java.util.ArrayDeque<Throwable> todo = new java.util.ArrayDeque<>();
+        if (t != null) todo.add(t);
+        while (!todo.isEmpty()) {
+            Throwable cur = todo.poll();
+            if (!seen.add(cur)) continue;
+            String m = cur.getMessage();
+            if (m != null) {
+                String r = f.apply(m);
+                if (r != null) return r;
+            }
+            if (cur.getCause() != null) todo.add(cur.getCause());
+            for (Throwable s : cur.getSuppressed()) {
+                if (s != null) todo.add(s);
+            }
+        }
+        return null;
     }
 
     /**

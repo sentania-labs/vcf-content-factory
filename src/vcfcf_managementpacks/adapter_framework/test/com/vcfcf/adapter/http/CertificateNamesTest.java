@@ -87,6 +87,7 @@ public class CertificateNamesTest {
             noPeerHostHandshake(dir);
             wrongNameHttps(dir);
             frameworkWiring(dir);
+            onTestRealNameFailures(dir);
         } finally {
             deleteTree(dir.toFile());
         }
@@ -134,6 +135,34 @@ public class CertificateNamesTest {
         a.addSuppressed(b);
         check("cyclic cause graph terminates", !CertificateNames.isNameMismatch(a));
         check("null is not a name mismatch", !CertificateNames.isNameMismatch(null));
+
+        // Issue #185 review B1: the host named by a mismatch, and the no-host refusal.
+        eq("mismatchedHost: framework text", "vc02.lab.local", CertificateNames.mismatchedHost(
+                new javax.net.ssl.SSLHandshakeException("x").initCause(new CertificateException(
+                        "No subject alternative name matching vc02.lab.local in the target "
+                        + "certificate (subject CN=vc01)"))));
+        eq("mismatchedHost: BouncyCastle wrapper", "vc02.lab.local", CertificateNames.mismatchedHost(
+                new java.io.IOException("org.bouncycastle.tls.TlsFatalAlert: certificate_unknown(46)",
+                        new CertificateException("No subject alternative name matching "
+                                + "vc02.lab.local in the target certificate (subject CN=vc01)"))));
+        eq("mismatchedHost: JDK DNS checker", "localhost", CertificateNames.mismatchedHost(
+                new CertificateException("No subject alternative DNS name matching localhost found.")));
+        eq("mismatchedHost: JDK IP checker", "10.0.0.6", CertificateNames.mismatchedHost(
+                new CertificateException(
+                        "No subject alternative names matching IP address 10.0.0.6 found")));
+        eq("mismatchedHost: JDK CN checker", "vc", CertificateNames.mismatchedHost(
+                new CertificateException("No name matching vc found")));
+        eq("mismatchedHost: HttpsURLConnection", "10.0.0.5", CertificateNames.mismatchedHost(
+                new java.io.IOException("HTTPS hostname wrong:  should be <10.0.0.5>")));
+        eq("mismatchedHost: none", null, CertificateNames.mismatchedHost(
+                new java.io.IOException("Connection refused")));
+        check("isNoUsableHost: nested refusal", CertificateNames.isNoUsableHost(
+                new RuntimeException("x", new CertificateException(CertificateNames.NO_HOST_MESSAGE))));
+        check("isNoUsableHost: a mismatch is not", !CertificateNames.isNoUsableHost(
+                new CertificateException("No name matching vc found")));
+        check("isNoUsableHost: null", !CertificateNames.isNoUsableHost(null));
+        check("no-host text names the punycode form",
+                CertificateNames.NO_HOST_MESSAGE.contains("punycode xn-- form"));
     }
 
     // ----- the matcher -------------------------------------------------------
@@ -488,6 +517,76 @@ public class CertificateNamesTest {
         }
     }
 
+    /**
+     * Review B1: Validate Connection on a pak that opted in to name checking,
+     * against a real local HTTPS server presenting a trusted chain under the
+     * wrong name. The failure reaches the framework's name text and the
+     * #205 hook, not raw TLS text. Same for a blank host (fail closed).
+     */
+    static void onTestRealNameFailures(Path dir) throws Exception {
+        KeyStore wrongKs = keystore(dir, "ontestwrong", "CN=othername.example",
+                "dns:othername.example");
+        X509Certificate wrongCert = (X509Certificate) wrongKs.getCertificate("vc");
+        HttpsServer wrong = server(wrongKs);
+        try {
+            String wu = "https://localhost:" + wrong.getAddress().getPort();
+            for (String entered : new String[] {"localhost", "  "}) {
+                boolean noHost = entered.trim().isEmpty();
+                WiringAdapter a = allocate(WiringAdapter.class);
+                a.platform = new ChainOnly(wrongCert);
+                a.warnings = new ArrayList<>();
+                a.tester = (cfg, http, param) -> HttpClientBuilder.builder().baseUrl(wu)
+                        .platformSsl(a, entered).retryPolicy(noRetry()).build()
+                        .get("/", HttpResponse.BodyHandlers.ofString());
+                com.integrien.alive.common.adapter3.TestParam p =
+                        new com.integrien.alive.common.adapter3.TestParam(testConfig());
+                String what = noHost ? "blank host" : "wrong name";
+                check("onTest, " + what + ": returns false", !a.onTest(p));
+                String msg = p.getErrorMsg();
+                check("onTest, " + what + ": hook called once (" + a.hookCalls + ")",
+                        a.hookCalls == 1);
+                check("onTest, " + what + ": hook got the framework default",
+                        a.sawDefault != null && a.sawDefault.equals(msg));
+                if (noHost) {
+                    check("onTest, blank host: no-host text; got " + msg,
+                            msg != null && msg.startsWith(
+                                    "The target's TLS certificate name cannot be checked")
+                                    && msg.contains("punycode xn-- form"));
+                    check("onTest, blank host: the hook can tell",
+                            CertificateNames.isNoUsableHost(a.sawFailure));
+                } else {
+                    check("onTest, wrong name: names the host; got " + msg,
+                            msg != null && msg.startsWith(
+                                    "The target's TLS certificate does not name localhost.")
+                                    && msg.contains("enter the host by a name on the certificate")
+                                    && msg.contains("Accepting the certificate does not fix"));
+                    check("onTest, wrong name: the hook can tell",
+                            CertificateNames.isNameMismatch(a.sawFailure));
+                }
+                check("onTest, " + what + ": no Allow Insecure without the field",
+                        msg != null && !msg.contains("Insecure"));
+                check("onTest, " + what + ": no raw handshake text up front",
+                        msg != null && !msg.startsWith("javax.net.ssl")
+                                && !msg.startsWith("No subject"));
+            }
+        } finally {
+            wrong.stop(0);
+        }
+    }
+
+    /** AdapterConfig whose adapter-instance resource has a host identifier. */
+    private static com.integrien.alive.common.adapter3.config.AdapterConfig testConfig() {
+        com.integrien.alive.common.adapter3.ResourceKey key =
+                new com.integrien.alive.common.adapter3.ResourceKey("inst", "test_kind_instance",
+                        "test_kind");
+        key.addIdentifier(new com.integrien.alive.common.adapter3.config.ResourceIdentifierConfig(
+                "host", "localhost", true));
+        com.integrien.alive.common.adapter3.config.AdapterConfig c =
+                new com.integrien.alive.common.adapter3.config.AdapterConfig("test_kind", 1);
+        c.setAdapterInstResource(new ResourceConfig(key));
+        return c;
+    }
+
     private static RetryPolicy noRetry() {
         return RetryPolicy.builder().maxAttempts(1).build();
     }
@@ -495,6 +594,35 @@ public class CertificateNamesTest {
     /** Adapter whose platform trust manager is a test stand-in. */
     static class WiringAdapter extends VcfCfAdapter<Object> {
         TrustManager platform;
+        VcfCfTester<Object> tester;
+        List<String> warnings;
+        int hookCalls;
+        String sawDefault;
+        Throwable sawFailure;
+
+        @Override
+        protected String certificateFailureMessage(Throwable failure, ResourceConfig config,
+                String defaultMessage) {
+            hookCalls++;
+            sawFailure = failure;
+            sawDefault = defaultMessage;
+            return null;
+        }
+
+        @Override
+        public com.integrien.alive.common.adapter3.describe.AdapterDescribe onDescribe() {
+            throw new IllegalStateException("no describe.xml in this test");
+        }
+
+        @Override
+        protected void logWarn(String message) {
+            if (warnings != null) warnings.add(message);
+        }
+
+        @Override
+        protected void logWarn(String message, Throwable t) {
+            if (warnings != null) warnings.add(message);
+        }
 
         @Override
         protected void configureAdapter(ResourceStatus s, ResourceConfig rc) {
@@ -503,7 +631,7 @@ public class CertificateNamesTest {
         @Override
         @SuppressWarnings("rawtypes")
         protected VcfCfTester getTester() {
-            return null;
+            return tester;
         }
 
         @Override

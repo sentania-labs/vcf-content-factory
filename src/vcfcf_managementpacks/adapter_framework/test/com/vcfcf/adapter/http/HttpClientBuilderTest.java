@@ -86,6 +86,17 @@ public class HttpClientBuilderTest {
                 .build();
         eq("connectTimeout(null): back to the timeout", Optional.of(Duration.ofSeconds(20)),
                 n.underlyingClient().connectTimeout());
+
+        for (Duration bad : new Duration[] {Duration.ZERO, Duration.ofSeconds(-1)}) {
+            try {
+                HttpClientBuilder.builder().connectTimeout(bad);
+                check("connectTimeout(" + bad + ") rejected in the setter", false);
+            } catch (IllegalArgumentException e) {
+                check("connectTimeout(" + bad + ") rejected with the framework message: "
+                        + e.getMessage(), e.getMessage() != null
+                                && e.getMessage().startsWith("HttpClientBuilder.connectTimeout must be positive"));
+            }
+        }
     }
 
     /**
