@@ -419,7 +419,7 @@ public final class AmbientCredential {
      * {@code Exception | LinkageError} here honors "any failure reading a
      * source falls to the next; nothing throws out of construction" for
      * exactly that documented case, while letting genuinely-fatal JVM errors
-     * ({@link VirtualMachineError}, {@link ThreadDeath}) propagate rather
+     * ({@link VirtualMachineError}, {@code ThreadDeath}) propagate rather
      * than be silently swallowed. See {@code knowledge/context/api-surface/
      * per-instance-suiteapi-credential-contract.md} §7 for the live evidence.
      *

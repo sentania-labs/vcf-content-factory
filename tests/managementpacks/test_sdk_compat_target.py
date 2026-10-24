@@ -575,3 +575,82 @@ def test_cli_flag_helpers_do_not_leak_env_past_a_test():
     real guarantee is _isolate_compat_env.)"""
     leaked = [n for n in _COMPAT_ENV if n != "VCFCF_SDK_JAR" and os.environ.get(n)]
     assert not leaked, leaked
+
+
+# ---------------------------------------------------------------------------
+# Issue #242: the framework stays free of APIs deprecated for removal
+# ---------------------------------------------------------------------------
+
+
+def test_removal_warnings_are_picked_out():
+    out = (
+        "A.java:3: warning: [removal] Integer(int) in Integer has been deprecated and marked for removal\n"
+        "A.java:9: warning: [deprecation] foo() in Bar has been deprecated\n"
+        "2 warnings\n"
+    )
+    assert sdk_builder.removal_warnings(out) == [
+        "A.java:3: warning: [removal] Integer(int) in Integer has been deprecated and marked for removal"
+    ]
+    assert sdk_builder.removal_warnings("") == []
+
+
+def _removal_source(tmp_path: Path) -> Path:
+    # Integer(int) is deprecated for removal since JDK 16, so JDK 17 already
+    # emits the [removal] warning the JDK 25 compile gave for ThreadDeath.
+    return _write_java(
+        tmp_path / "usersrc", "user/Old.java",
+        "package user;\nclass Old { sdkstub.Present p; Integer i = new Integer(1); }\n",
+    )
+
+
+@needs_javac
+def test_framework_pass_fails_on_a_removal_warning(runtime, tmp_path):
+    _stub_sdk_jar(tmp_path, runtime / sdk_builder._SDK_COMPAT_JAR_NAME, ["Present"])
+    src = _removal_source(tmp_path)
+    with pytest.raises(SdkBuildError) as exc:
+        sdk_builder._sdk_compat_check([src], [], "framework source", fail_on_removal=True)
+    assert "deprecated for removal" in str(exc.value)
+    assert "[removal] Integer(int)" in str(exc.value)
+
+
+@needs_javac
+def test_adapter_pass_still_only_prints_a_removal_warning(runtime, tmp_path, capsys):
+    _stub_sdk_jar(tmp_path, runtime / sdk_builder._SDK_COMPAT_JAR_NAME, ["Present"])
+    src = _removal_source(tmp_path)
+    assert sdk_builder._sdk_compat_check([src], [], "framework + adapter source") is True
+    assert "[removal]" in capsys.readouterr().err
+
+
+def test_check_framework_sdk_compat_asks_for_the_removal_gate(runtime, monkeypatch):
+    _write_java(sdk_builder._ADAPTER_FRAMEWORK_SRC_DIR, "x/A.java", "package x; class A {}\n")
+    seen = {}
+
+    def fake_check(sources, other_jars, what, fail_on_removal=False):
+        seen["fail_on_removal"] = fail_on_removal
+        return True
+
+    monkeypatch.setattr(sdk_builder, "_sdk_compat_check", fake_check)
+    assert sdk_builder.check_framework_sdk_compat() == 0
+    assert seen["fail_on_removal"] is True
+
+
+def _java_code_only(text: str) -> str:
+    """Java source with comments and string/char literals blanked."""
+    import re as _re
+
+    pattern = _re.compile(
+        r'//[^\n]*|/\*.*?\*/|"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'', _re.S)
+    return pattern.sub(" ", text)
+
+
+def test_framework_source_never_names_threaddeath():
+    """Issue #242: java.lang.ThreadDeath is deprecated for removal on the
+    JDK 25 collectors. Comments and the class-name string are fine; code
+    that references the type is not. Runs without JDK 25."""
+    src = Path(__file__).resolve().parents[2] / "src" / "vcfcf_managementpacks" / "adapter_framework"
+    hits = [
+        str(p.relative_to(src))
+        for p in sorted(src.rglob("*.java"))
+        if "ThreadDeath" in _java_code_only(p.read_text(encoding="utf-8"))
+    ]
+    assert hits == []
