@@ -87,15 +87,30 @@ def _write_java(root: Path, rel: str, body: str) -> Path:
     return path
 
 
+# Fixed zip entry timestamps: a stub jar's bytes depend only on its content,
+# never on the wall-clock second it was written in. With writestr(str, ...)
+# two stubs of equal content got equal sha256 only when written in the same
+# second, which a fast CI runner hit and a workstation did not (PR #258).
+_ZIP_EPOCH = (1980, 1, 1, 0, 0, 0)
+
+
+def _entry(name: str) -> zipfile.ZipInfo:
+    return zipfile.ZipInfo(name, date_time=_ZIP_EPOCH)
+
+
 def _jar_of(classes_dir: Path, jar_path: Path, major: int = 0) -> Path:
     """Zip classes_dir into jar_path; optionally rewrite each class-file major."""
     with zipfile.ZipFile(jar_path, "w") as zf:
-        zf.writestr("META-INF/MANIFEST.MF", "Manifest-Version: 1.0\n")
+        # The jar's own name in the manifest: two stubs standing for two
+        # different platform jars must not share a sha256, since a supplied
+        # jar is matched to its line by sha256.
+        zf.writestr(_entry("META-INF/MANIFEST.MF"),
+                    f"Manifest-Version: 1.0\nX-Stub-Jar: {jar_path.name}\n")
         for cls in sorted(classes_dir.rglob("*.class")):
             data = cls.read_bytes()
             if major:
                 data = data[:6] + major.to_bytes(2, "big") + data[8:]
-            zf.writestr(str(cls.relative_to(classes_dir)), data)
+            zf.writestr(_entry(str(cls.relative_to(classes_dir))), data)
     return jar_path
 
 
@@ -138,7 +153,7 @@ def _user_source(tmp_path: Path, class_name: str) -> Path:
 
 def _touch_jar(path: Path) -> Path:
     with zipfile.ZipFile(path, "w") as zf:
-        zf.writestr("META-INF/MANIFEST.MF", "Manifest-Version: 1.0\n")
+        zf.writestr(_entry("META-INF/MANIFEST.MF"), "Manifest-Version: 1.0\n")
     return path
 
 
@@ -1037,3 +1052,38 @@ def test_a_jar_with_a_known_name_but_another_hash_does_not_cover_the_line(
     err = capsys.readouterr().err
     assert "sha256 matches no known line" in err
     assert "vrops-adapters-sdk-8.18.7.jar was supplied but its sha256" in err
+
+
+@needs_javac
+def test_stub_jars_are_deterministic_and_distinct_per_name(tmp_path):
+    """PR #258 CI: equal-content stubs written in the same second had equal
+    sha256, so two 'lines' collapsed into one on a fast runner. Stub bytes
+    now depend only on content and name, the same on every machine."""
+    (tmp_path / "a").mkdir()
+    (tmp_path / "b").mkdir()
+    a = _stub_sdk_jar(tmp_path / "a", tmp_path / "vrops-adapters-sdk-8.18.7.jar", ["Present"])
+    b = _stub_sdk_jar(tmp_path / "b", tmp_path / "vrops-adapters-sdk-9.1.1.0100.jar", ["Present"])
+    assert sdk_builder._sha256_of(a) != sdk_builder._sha256_of(b)
+    again = tmp_path / "again"
+    again.mkdir()
+    (again / "x").mkdir()
+    c = _stub_sdk_jar(again / "x", again / "vrops-adapters-sdk-8.18.7.jar", ["Present"])
+    assert sdk_builder._sha256_of(c) == sdk_builder._sha256_of(a)
+
+
+def test_identical_jar_bytes_cover_one_line_only(runtime, tmp_path, monkeypatch, capsys):
+    """Two files with the same bytes are the same jar: they cover one line,
+    and the other line is reported as not covered (what CI saw)."""
+    (tmp_path / "x").mkdir()
+    (tmp_path / "y").mkdir()
+    a = _touch_jar(tmp_path / "x" / "vrops-adapters-sdk-8.18.7.jar")
+    b = _touch_jar(tmp_path / "y" / "vrops-adapters-sdk-9.1.1.0100.jar")
+    assert sdk_builder._sha256_of(a) == sdk_builder._sha256_of(b)
+    monkeypatch.setattr(sdk_builder, "_SDK_COMPAT_LINES", (
+        sdk_builder._CompatLine("8.18.7", a.name, sdk_builder._sha256_of(a)),
+        sdk_builder._CompatLine("9.1.1.0100", b.name, "0" * 64),
+    ))
+    monkeypatch.setenv("VCFCF_SDK_COMPAT_JARS", os.pathsep.join([str(a), str(b)]))
+    monkeypatch.setattr(sdk_builder, "_sdk_compat_leg", lambda *a_, **k: True)
+    assert sdk_builder._sdk_compat_check([], [], "test source") is False
+    assert "SKIPPED: test source vs the VCF Ops 9.1.1.0100 SDK jar" in capsys.readouterr().err
