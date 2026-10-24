@@ -194,9 +194,12 @@ echo "Found $SRC_COUNT source files"
 rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR"
 
-echo "Compiling (source/target 11) ..."
+# --release 11, not -source/-target: it also limits the JDK library API to
+# Java 11, the 8.18 collector's runtime (issue #252, RULE-019), so a Java 12+
+# call fails here instead of on that collector. Same as sdk_builder._JAVA_RELEASE.
+echo "Compiling (--release 11) ..."
 # shellcheck disable=SC2086
-javac -source 11 -target 11 \
+javac --release 11 \
     -cp "$CP" \
     -d "$BUILD_DIR" \
     $SOURCES 2>&1

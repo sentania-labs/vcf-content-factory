@@ -418,7 +418,10 @@ failure.
 ## Other requirements
 
 - Python 3.9+ with PyYAML
-- JDK 11+ on PATH (javac, jar) — used both to compile the framework and the adapter
+- JDK 11+ on PATH (javac, jar), used to compile both the framework and the
+  adapter with javac --release 11: Java 11 bytecode and the Java 11 library
+  API only, because the 8.18 collector runs Java 11 (a Java 12+ call fails
+  the build)
 - No factory checkout, no LLM, no other network access required.
 """
 '''

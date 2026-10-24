@@ -338,7 +338,7 @@ def _ensure_framework_jar() -> None:
 
         cmd = [
             javac,
-            "-source", "11", "-target", "11",
+            "--release", str(_JAVA_RELEASE),  # Java 11 API only (issue #252)
             "-proc:none",  # no classpath annotation processors (sdk-runtime#1)
             "-cp", fw_classpath,
             "-d", str(build_dir),
@@ -576,6 +576,17 @@ def _stamp_build_version(project: SdkProjectDef, release_build: bool) -> str:
     return declared_version
 
 
+# Every compile (framework, adapter, each compat leg) uses javac --release 11,
+# not -source 11 -target 11 (issue #252): --release also limits the JDK
+# library API to Java 11, so a call to a Java 12+ method fails the build
+# instead of failing with NoSuchMethodError on the 8.18 collector and Cloud
+# Proxy, which run OpenJDK 11. It stays 11 while 8.18 is supported (RULE-019).
+# --release does not change which class-file versions javac can read on the
+# classpath (that is the javac's own limit), so a JDK 17 javac still reads
+# the 2.2 jar (Java 17) and a JDK 25 javac the 9.1.1.0100 jar (Java 25).
+_JAVA_RELEASE = 11
+
+
 def _find_jars(directory: Path, pattern: str) -> List[Path]:
     """Return all JARs in directory matching the glob pattern."""
     return sorted(directory.glob(pattern))
@@ -723,7 +734,9 @@ def _compile(javac: str, classpath: str, sources: List[Path],
     build_dir.mkdir(parents=True, exist_ok=True)
     cmd = [
         javac,
-        "-source", "11", "-target", "11",
+        # Java 11 bytecode AND Java 11 library API (issue #252); see
+        # _JAVA_RELEASE.
+        "--release", str(_JAVA_RELEASE),
         # -proc:none: never auto-run annotation processors discovered in
         # classpath jars (sdk-runtime#1). Adapters use none; a processor in
         # a third-party jar would otherwise execute code at compile time.
@@ -732,7 +745,11 @@ def _compile(javac: str, classpath: str, sources: List[Path],
         "-d", str(build_dir),
     ] + [str(s) for s in sources]
 
-    print(f"  javac: compiling {len(sources)} source file(s)...", file=sys.stderr)
+    print(
+        f"  javac: compiling {len(sources)} source file(s) "
+        f"(--release {_JAVA_RELEASE})...",
+        file=sys.stderr,
+    )
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
         raise SdkBuildError(
@@ -969,12 +986,14 @@ def _sdk_compat_leg(jar: Path, sources: List[Path], other_jars: List[Path],
     """
     label = _sdk_jar_label(jar)
     target = f"the VCF Ops {label} SDK jar"
-    need = _jar_required_java_major(jar)
+    jar_java = _jar_required_java_major(jar)
+    # A javac must read the jar's class files and know --release 11.
+    need = max(jar_java, _JAVA_RELEASE)
     javac, major, tried = _find_compat_javac(need, label)
     if javac is None:
         return _compat_skip(
             what,
-            f"{jar.name} has Java {need} class files and needs JDK {need} or "
+            f"{jar.name} has Java {jar_java} class files and needs JDK {need} or "
             f"newer to read; found {', '.join(tried) or 'no javac'}",
             target,
         )
@@ -984,10 +1003,12 @@ def _sdk_compat_leg(jar: Path, sources: List[Path], other_jars: List[Path],
     with tempfile.TemporaryDirectory(prefix="vcfcf-sdk-compat-") as tmpdir:
         cmd = [
             javac,
-            "-source", "11", "-target", "11",
+            # Same release as the shipped compile: a leg on JDK 25 still
+            # checks against the Java 11 library API, not JDK 25's.
+            "--release", str(_JAVA_RELEASE),
             "-proc:none",
-            # Newer javac warns that -source 11 has no system-module path;
-            # the primary pass sets the release, this pass only resolves.
+            # A newer javac may call an older --release obsolete; that note
+            # is not a finding of this pass.
             "-Xlint:-options",
             "-cp", classpath,
             "-d", tmpdir,
@@ -1007,7 +1028,7 @@ def _sdk_compat_leg(jar: Path, sources: List[Path], other_jars: List[Path],
         )
     print(
         f"  sdk-compat: {what} compiles against {target} "
-        f"({jar.name}, sha256 {sha12}, javac {major})",
+        f"({jar.name}, sha256 {sha12}, javac {major}, --release {_JAVA_RELEASE})",
         file=sys.stderr,
     )
     if result.stderr.strip():
