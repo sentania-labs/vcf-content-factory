@@ -411,6 +411,18 @@ registers new resources via `adapter.registerNewResource()`. For new
 resources discovered during collect, call `adapter.registerNewResource(key)`
 from within `collect()`.
 
+### Cycle start hook (issue #221, buildkit 1.0.16)
+
+`VcfCfAdapter.onCycleStart()` (protected, default no-op) runs once at the
+top of every `onCollect`, before `needsRediscovery`, `discoverOnCollect`
+discovery and any per-resource `collect`. Use it for per-cycle state: one
+snapshot shared by every resource in the cycle, a failed build cached for
+the rest of the cycle. A `RuntimeException` from it is logged at WARN and
+the cycle continues. `VcfCfCollector.needsRediscovery` is still called
+exactly once per cycle (pinned by `AdapterInstanceStatusTest`), so paks
+that mark the cycle start there (UniFi build 14, Synology build 31) keep
+working until they move to the hook.
+
 ### Logging — UPDATED (componentLogger added)
 
 Use `logInfo()` / `logWarn()` / `logError()` helpers on `VcfCfAdapter`
