@@ -168,33 +168,33 @@ jobs:
           bash scripts/immutability_guard.sh --range "origin/${{ github.event.pull_request.base.ref }}...HEAD"
 
   sdk-compat:
-    # Second SDK compile target (issue #211). The framework ships compiled
-    # against the 9.0.2 jar (vrops-adapters-sdk-2.2.jar); this job proves the
-    # same source also compiles against each newer platform's jar, so a class
-    # a newer Ops build dropped fails CI instead of failing on a collector.
+    # Compile matrix (issues #211, #252, RULE-019: every Tier 2 pak works on
+    # 8.18, 9.0 and 9.1). The framework ships compiled against the 9.0.2 jar
+    # (vrops-adapters-sdk-2.2.jar) with --release 11; this job compiles the
+    # same framework main source once per supported line, against that
+    # line's SDK jar and at that line's collector Java (--release 11 for
+    # 8.18.7, 17 for 9.0, 25 for 9.1.1.0100, read from the jar's class
+    # files), so a class or member a line lacks, or a Java API its collector
+    # removed, fails CI instead of failing on a collector. Main sources only:
+    # CertificateReviewTest uses a member the 8.18 jar lacks.
     #
     # The Broadcom jars never enter this public repo (2026-06-09
     # redistribution survey). The job clones the private
     # sentania-labs/vcf-content-factory-sdk-runtime repo with the
-    # SDK_RUNTIME_SSH_KEY deploy key, the same way the pak repos'
-    # build-pak-on-tag.yml does, and checks the jar's sha256 against
-    # src/vcfcf_managementpacks/adapter_runtime/PROVENANCE.md before use.
-    # Without the secret (fork PRs never receive it; this repo until issue
-    # #250 uploads the 9.1.1.0100 jar to that repo and adds the key) the job
-    # skips with a visible notice and passes, checking nothing. With the
-    # secret, a jar missing from that repo or a hash mismatch fails (the
-    # 8.18.7 jar lands there with sdk-runtime PR 7, issue #252).
+    # SDK_RUNTIME_SSH_KEY deploy key (set on this repo), the same way the pak
+    # repos' build-pak-on-tag.yml does, and checks the jar's sha256 against
+    # src/vcfcf_managementpacks/adapter_runtime/PROVENANCE.md before use. All
+    # three jars are in that repo, so every row runs, required. A fork PR
+    # never receives the secret: there the job skips with a visible notice
+    # and passes, checking nothing. A jar missing from that repo or a hash
+    # mismatch fails.
     #
-    # One leg per extra target (RULE-019: 8.18, 9.0 and 9.1). No 9.0.2 leg
-    # yet: nothing in factory CI compiles against a real 2.2 jar today; with
-    # the key in place that is one more leg running the primary
-    # build-framework.sh. Each leg compiles framework main sources only:
-    # CertificateReviewTest uses a member the 8.18 jar lacks.
-    #
-    # Each leg's JDK reads its jar's class files: the 8.18.7 jar is Java 11
-    # (major 55), so JDK 17, the primary build's JDK; the 9.1.1.0100 jar is
-    # Java 25 (major 69), which JDK 17 javac rejects ("class file has wrong
-    # version 69.0"), hence JDK 25. Both compile with --release 11.
+    # One row per line, one jar each. VCFCF_SDK_COMPAT_LEGS narrows each
+    # row's expected set to its own line, so a required row does not fail
+    # for the lines the other rows cover. Each row's JDK must read its jar
+    # and know its release: JDK 17 for 8.18.7 (Java 11 class files) and 9.0
+    # (Java 17); JDK 25 for 9.1.1.0100 (Java 25, major 69, which JDK 17
+    # rejects with "class file has wrong version 69.0").
     # VCFCF_SDK_COMPAT_REQUIRED=1: once the jar is fetched, a missing JDK is
     # a failure, not the local-build warning.
     #
@@ -212,6 +212,9 @@ jobs:
           - sdk: "8.18.7"
             jdk: "17"
             jar: vrops-adapters-sdk-8.18.7.jar
+          - sdk: "9.0"
+            jdk: "17"
+            jar: vrops-adapters-sdk-2.2.jar
           - sdk: "9.1.1.0100"
             jdk: "25"
             jar: vrops-adapters-sdk-9.1.1.0100.jar
@@ -315,6 +318,7 @@ jobs:
         env:
           JAR_NAME: ${{ matrix.jar }}
           VCFCF_SDK_COMPAT_REQUIRED: "1"
+          VCFCF_SDK_COMPAT_LEGS: ${{ matrix.sdk }}
         run: |
           export VCFCF_SDK_COMPAT_JAR="$RUNNER_TEMP/sdk_runtime/$JAR_NAME"
           bash src/vcfcf_managementpacks/adapter_framework/build-framework.sh --compat-only

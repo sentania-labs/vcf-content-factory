@@ -65,7 +65,7 @@ import tempfile
 import xml.etree.ElementTree as ET
 import zipfile
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, NamedTuple, Optional, Tuple
 
 try:
     import yaml as _yaml
@@ -407,12 +407,20 @@ _ARIA_OPS_CORE_PATTERN = "aria-ops-core-*.jar"
 # vrops-adapters-sdk.jar), is an error, not a silent classpath entry.
 # Its class files are Java 25 (major 69), so the pass needs JDK 25+; a JDK 17
 # javac rejects them with "class file has wrong version 69.0".
-# Several compatibility legs (issue #252): every jar named in
-# _SDK_COMPAT_JAR_NAMES that sits in adapter_runtime/ is one leg, or, when any
-# jar is given explicitly (--sdk-compat-jar, repeatable, VCFCF_SDK_COMPAT_JARS
-# or the one-jar VCFCF_SDK_COMPAT_JAR; they add up), exactly those jars. Each
-# leg finds its own JDK from its jar's class-file version, and report lines
-# name the SDK version parsed from the jar's file name.
+# Several compatibility legs (issue #252, RULE-019): one per supported line.
+# The legs are the primary SDK jar (the 9.0 line, compiled again at
+# --release 17, nothing kept) plus every jar named in _SDK_COMPAT_JAR_NAMES
+# that sits in adapter_runtime/, or, when any jar is given explicitly
+# (--sdk-compat-jar, repeatable, VCFCF_SDK_COMPAT_JARS or the one-jar
+# VCFCF_SDK_COMPAT_JAR; they add up), the primary jar plus exactly those.
+# A jar is matched to its line by sha256 (_SDK_COMPAT_LINES, the
+# PROVENANCE.md values). Each leg compiles with --release <its line's
+# collector Java>, read from the jar's class-file version (8.18.7: 55 -> 11,
+# 2.2: 61 -> 17, 9.1.1.0100: 69 -> 25), on a JDK at least that new, so each
+# line's own class library is checked. Every known line is expected: a line
+# no supplied jar covers prints the SKIPPED box, and fails a required run,
+# unless VCFCF_SDK_COMPAT_LEGS narrows the expected set (factory CI's
+# one-jar matrix rows).
 # Provenance: adapter_runtime/PROVENANCE.md and
 # knowledge/context/tier2_architecture.md "SDK jar by platform version".
 _SDK_COMPAT_JAR_NAME = "vrops-adapters-sdk-9.1.1.0100.jar"
@@ -426,6 +434,27 @@ _SDK_COMPAT_JAR_NAMES = (_SDK_COMPAT_JAR_NAME_8_18, _SDK_COMPAT_JAR_NAME)
 _SDK_COMPAT_JAR_ENV = "VCFCF_SDK_COMPAT_JAR"        # one explicit jar (pre-#252 form)
 _SDK_COMPAT_JARS_ENV = "VCFCF_SDK_COMPAT_JARS"      # explicit jars, os.pathsep-separated
 _SDK_COMPAT_JAVAC_ENV = "VCFCF_SDK_COMPAT_JAVAC"    # explicit javac for every leg
+_SDK_COMPAT_LEGS_ENV = "VCFCF_SDK_COMPAT_LEGS"      # comma list of line keys expected
+
+
+class _CompatLine(NamedTuple):
+    """One supported platform line's SDK jar, as recorded in PROVENANCE.md."""
+    key: str        # what VCFCF_SDK_COMPAT_LEGS and report lines call it
+    jar_name: str   # its factory file name in adapter_runtime/
+    sha256: str     # identifies a supplied jar as this line's
+
+
+# Keep the hashes equal to the adapter_runtime/PROVENANCE.md table (a test
+# checks). 9.0 is the primary jar; its leg is the non-shipping --release 17
+# pass.
+_SDK_COMPAT_LINES: Tuple[_CompatLine, ...] = (
+    _CompatLine("8.18.7", "vrops-adapters-sdk-8.18.7.jar",
+                "45d54c6403acf535c982a85d658b422f534c36c90ceab78a224dde67b2a640ea"),
+    _CompatLine("9.0", "vrops-adapters-sdk-2.2.jar",
+                "2d53a91fc2b9a99d9b685ed10c1e37a471c2f71f04e7ae0fb2c53fdaa14b4f54"),
+    _CompatLine("9.1.1.0100", "vrops-adapters-sdk-9.1.1.0100.jar",
+                "79f7b12340906359e04f3619dd87c7e67a9493b3fa5d86bdffe9242da67f46f7"),
+)
 _SDK_COMPAT_REQUIRED_ENV = "VCFCF_SDK_COMPAT_REQUIRED"  # 1: a skipped pass fails
 # Where to look for a new-enough JDK when javac on PATH is too old. Globs,
 # checked after PATH, JAVA_HOME and the JAVA_HOME_<N>_<ARCH> variables that
@@ -581,14 +610,15 @@ def _stamp_build_version(project: SdkProjectDef, release_build: bool) -> str:
     return declared_version
 
 
-# Every compile (framework, adapter, each compat leg) uses javac --release 11,
-# not -source 11 -target 11 (issue #252): --release also limits the JDK
-# library API to Java 11, so a call to a Java 12+ method fails the build
-# instead of failing with NoSuchMethodError on the 8.18 collector and Cloud
-# Proxy, which run OpenJDK 11. It stays 11 while 8.18 is supported (RULE-019).
-# --release does not change which class-file versions javac can read on the
-# classpath (that is the javac's own limit), so a JDK 17 javac still reads
-# the 2.2 jar (Java 17) and a JDK 25 javac the 9.1.1.0100 jar (Java 25).
+# The shipped compile (framework, adapter) uses javac --release 11, not
+# -source 11 -target 11 (issue #252): --release also limits the JDK library
+# API to Java 11, so a call to a Java 12+ method fails the build instead of
+# failing with NoSuchMethodError on the 8.18 collector and Cloud Proxy, which
+# run OpenJDK 11. It stays 11 while 8.18 is supported (RULE-019). Each compat
+# leg uses its own line's release instead (_compat_leg_release), so an API
+# that Java 17 or 25 removed fails the 9.0 or 9.1 leg. --release does not
+# change which class-file versions javac can read on the classpath (that is
+# the javac's own limit), so a JDK 17 javac reads the 2.2 jar (Java 17).
 _JAVA_RELEASE = 11
 
 
@@ -770,7 +800,7 @@ def _compile(javac: str, classpath: str, sources: List[Path],
 
 
 def _resolve_compat_sdk_jars() -> List[Path]:
-    """The compat-leg SDK jars, one leg each.
+    """The compat-leg SDK jars other than the primary one.
 
     Explicit jars (VCFCF_SDK_COMPAT_JARS, os.pathsep-separated, plus the
     one-jar VCFCF_SDK_COMPAT_JAR; --sdk-compat-jar feeds the first) add up,
@@ -806,6 +836,61 @@ def _resolve_compat_sdk_jars() -> List[Path]:
         _ADAPTER_RUNTIME_DIR / name for name in _SDK_COMPAT_JAR_NAMES
         if (_ADAPTER_RUNTIME_DIR / name).is_file()
     ]
+
+
+def _primary_leg_jar() -> Optional[Path]:
+    """The primary SDK jar, for its non-shipping leg (the 9.0 line): the
+    VCFCF_SDK_JAR file, else the one in adapter_runtime/. None when absent."""
+    env = os.environ.get("VCFCF_SDK_JAR", "").strip()
+    if env:
+        return Path(env) if Path(env).is_file() else None
+    return _primary_sdk_jar()
+
+
+def _compat_leg_jars() -> List[Path]:
+    """Every leg's jar: the primary jar first, then the compat jars, deduped."""
+    jars: List[Path] = []
+    seen = set()
+    primary = _primary_leg_jar()
+    for jar in ([primary] if primary is not None else []) + _resolve_compat_sdk_jars():
+        key = os.path.realpath(jar)
+        if key not in seen:
+            seen.add(key)
+            jars.append(jar)
+    return jars
+
+
+def _sha256_of(jar: Path) -> str:
+    return hashlib.sha256(jar.read_bytes()).hexdigest()
+
+
+def _line_for_sha(sha: str) -> Optional[_CompatLine]:
+    for line in _SDK_COMPAT_LINES:
+        if line.sha256 == sha:
+            return line
+    return None
+
+
+def _expected_compat_lines() -> List[_CompatLine]:
+    """The lines a run must cover: all of them, or VCFCF_SDK_COMPAT_LEGS."""
+    raw = os.environ.get(_SDK_COMPAT_LEGS_ENV, "").strip()
+    if not raw:
+        return list(_SDK_COMPAT_LINES)
+    by_key = {line.key: line for line in _SDK_COMPAT_LINES}
+    wanted = [k.strip() for k in raw.split(",") if k.strip()]
+    unknown = [k for k in wanted if k not in by_key]
+    if unknown:
+        raise SdkCompatUnavailable(
+            f"{_SDK_COMPAT_LEGS_ENV}={raw!r} names unknown line(s) "
+            f"{', '.join(unknown)}; known: {', '.join(by_key)}."
+        )
+    return [by_key[k] for k in wanted]
+
+
+def _compat_leg_release(jar_java: int) -> int:
+    """The --release for a leg: its line's collector Java, read from the jar's
+    class files (55 -> 11, 61 -> 17, 69 -> 25), never below the shipped 11."""
+    return max(jar_java, _JAVA_RELEASE)
 
 
 def _jar_required_java_major(jar: Path) -> int:
@@ -949,33 +1034,56 @@ def _compat_skip(what: str, reason: str, target: str = _ANY_COMPAT_TARGET) -> bo
 
 
 def _sdk_compat_check(sources: List[Path], other_jars: List[Path], what: str) -> bool:
-    """Compile sources against every compat-leg SDK jar; nothing is kept.
+    """Compile sources once per supported line's SDK jar; nothing is kept.
 
-    other_jars is the rest of the classpath (no primary SDK jar). Every leg
-    runs even when an earlier one fails, so one report names every platform
-    the source breaks on. Returns True when every leg ran and passed, False
-    when any was skipped (jar or JDK absent; loud notice printed per leg).
-    Raises SdkBuildError when the source does not compile against a leg's
-    jar, or SdkCompatUnavailable when a skip is not allowed
+    other_jars is the rest of the classpath (no SDK jar). The legs are the
+    primary SDK jar (9.0, at --release 17) and the compat jars
+    (_compat_leg_jars). Every leg runs even when an earlier one fails, so one
+    report names every line the source breaks on; then every expected line
+    (_expected_compat_lines) no supplied jar matched by sha256 is reported
+    as skipped. Returns True when every expected line ran and passed, False
+    when anything was skipped (loud notice printed per line). Raises
+    SdkBuildError when the source does not compile on a leg, or
+    SdkCompatUnavailable when a skip is not allowed
     (VCFCF_SDK_COMPAT_REQUIRED=1).
     """
-    jars = _resolve_compat_sdk_jars()
-    if not jars:
-        return _compat_skip(
-            what,
-            f"{' / '.join(_SDK_COMPAT_JAR_NAMES)} is not in adapter_runtime/ "
-            f"and neither {_SDK_COMPAT_JARS_ENV} nor {_SDK_COMPAT_JAR_ENV} is set",
-        )
+    expected = _expected_compat_lines()
     all_ran = True
     failures: List[str] = []
     unavailable: List[str] = []
-    for jar in jars:
+    supplied: Dict[str, Path] = {}
+    unmatched: List[Tuple[Path, str]] = []
+    for jar in _compat_leg_jars():
+        sha = _sha256_of(jar)
+        line = _line_for_sha(sha)
+        if line is not None:
+            supplied[line.key] = jar
+        else:
+            unmatched.append((jar, sha))
         try:
-            all_ran = _sdk_compat_leg(jar, sources, other_jars, what) and all_ran
+            all_ran = _sdk_compat_leg(jar, line, sources, other_jars, what) and all_ran
         except SdkCompatUnavailable as exc:
             unavailable.append(str(exc))
         except SdkBuildError as exc:
             failures.append(str(exc))
+    for line in expected:
+        if line.key in supplied:
+            continue
+        near = [f"{j.name} was supplied but its sha256 {sha[:12]} is not this "
+                f"line's" for j, sha in unmatched if j.name == line.jar_name]
+        how = ("it is the primary SDK jar: put it in adapter_runtime/ or set "
+               "VCFCF_SDK_JAR" if line.key == "9.0" else
+               "put it in adapter_runtime/ or pass --sdk-compat-jar")
+        reason = (
+            f"{line.jar_name} is not in adapter_runtime/ and no supplied jar "
+            f"has its sha256 ({line.sha256[:12]}, adapter_runtime/PROVENANCE.md); "
+            f"{how}" + "".join(f"; {n}" for n in near)
+        )
+        try:
+            _compat_skip(what, reason, f"the VCF Ops {line.key} SDK jar")
+        except SdkCompatUnavailable as exc:
+            unavailable.append(str(exc))
+        all_ran = False
     if failures:
         raise SdkBuildError("\n\n".join(failures + unavailable))
     if unavailable:
@@ -983,62 +1091,133 @@ def _sdk_compat_check(sources: List[Path], other_jars: List[Path], what: str) ->
     return all_ran
 
 
-def _sdk_compat_leg(jar: Path, sources: List[Path], other_jars: List[Path],
-                    what: str) -> bool:
-    """One compat leg: compile sources against jar with a JDK that can read it.
+_JDK_PACKAGE_RE = re.compile(r"^(java|javax|jdk)\.")
 
-    Returns True when it ran and passed, False when skipped.
+
+def _classify_compile_misses(raw_stderr: str) -> Tuple[List[str], List[str]]:
+    """Split javac -XDrawDiagnostics errors into (JDK library, everything else).
+
+    Raw diagnostics name the qualified type or package each unresolved
+    symbol was looked up in; java.*, javax.* and jdk.* mean the leg's Java
+    class library lacks it, anything else the SDK jar (or the code).
     """
-    label = _sdk_jar_label(jar)
-    target = f"the VCF Ops {label} SDK jar"
+    jdk: List[str] = []
+    other: List[str] = []
+    for line in raw_stderr.splitlines():
+        m = re.search(r"compiler\.err\.doesnt\.exist: (\S+)", line)
+        if m:
+            desc = f"package {m.group(1)}"
+            (jdk if _JDK_PACKAGE_RE.match(m.group(1)) else other).append(desc)
+            continue
+        m = re.search(
+            r"compiler\.err\.cant\.resolve\.location(?:\.args)?: kindname\.(\w+), "
+            r"([^,]*), [^,]*, ([^(]*?), \(compiler\.misc\.location(\.1)?: (.*)\)\s*$",
+            line,
+        )
+        if m:
+            kind, name, args, one, loc = m.groups()
+            parts = [p.strip() for p in loc.split(",")]
+            where = parts[2] if one and len(parts) > 2 else (parts[1] if len(parts) > 1 else "")
+            where = re.sub(r"<.*>", "", where)
+            sig = f"{name}({args.strip()})" if kind == "method" else name
+            desc = f"{kind} {sig} in {where}"
+            (jdk if _JDK_PACKAGE_RE.match(where) else other).append(desc)
+            continue
+        if "compiler.err." in line:
+            other.append(line.split("compiler.err.", 1)[1].strip())
+    return jdk, other
+
+
+def _sdk_compat_leg(jar: Path, line: Optional[_CompatLine], sources: List[Path],
+                    other_jars: List[Path], what: str) -> bool:
+    """One leg: compile sources against jar at its line's --release.
+
+    line is the supported line the jar's sha256 matched, or None. Returns
+    True when it ran and passed, False when skipped.
+    """
+    if line is not None:
+        label = line.key
+        target = f"the VCF Ops {label} SDK jar"
+    else:
+        label = _sdk_jar_label(jar)
+        target = f"the VCF Ops {label} SDK jar (sha256 matches no known line)"
     jar_java = _jar_required_java_major(jar)
-    # A javac must read the jar's class files and know --release 11.
-    need = max(jar_java, _JAVA_RELEASE)
-    javac, major, tried = _find_compat_javac(need, label)
+    release = _compat_leg_release(jar_java)
+    # A javac must read the jar's class files and know --release <release>.
+    javac, major, tried = _find_compat_javac(release, label)
     if javac is None:
         return _compat_skip(
             what,
-            f"{jar.name} has Java {jar_java} class files and needs JDK {need} or "
-            f"newer to read; found {', '.join(tried) or 'no javac'}",
+            f"{jar.name} has Java {jar_java} class files and needs JDK {release} "
+            f"or newer to read; found {', '.join(tried) or 'no javac'}",
             target,
         )
 
-    sha12 = hashlib.sha256(jar.read_bytes()).hexdigest()[:12]
+    sha12 = _sha256_of(jar)[:12]
     classpath = os.pathsep.join(str(j) for j in [jar] + list(other_jars))
     with tempfile.TemporaryDirectory(prefix="vcfcf-sdk-compat-") as tmpdir:
-        cmd = [
+        base = [
             javac,
-            # Same release as the shipped compile: a leg on JDK 25 still
-            # checks against the Java 11 library API, not JDK 25's.
-            "--release", str(_JAVA_RELEASE),
+            # The line's own collector Java: the leg checks that Java's class
+            # library (removals and [removal] deprecations included), not the
+            # shipped release 11 (issue #252 review B1).
+            "--release", str(release),
             "-proc:none",
             # A newer javac may call an older --release obsolete; that note
             # is not a finding of this pass.
             "-Xlint:-options",
             "-cp", classpath,
-            "-d", tmpdir,
-        ] + [str(s) for s in sources]
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        ]
+        files = [str(s) for s in sources]
+        out_dir = Path(tmpdir) / "classes"
+        out_dir.mkdir()
+        result = subprocess.run(base + ["-d", str(out_dir)] + files,
+                                capture_output=True, text=True)
+        raw = None
+        if result.returncode != 0:
+            # Again with raw diagnostics: they name the qualified owner of
+            # each unresolved symbol, so a JDK-library miss is not blamed on
+            # the SDK jar.
+            raw_dir = Path(tmpdir) / "raw"
+            raw_dir.mkdir()
+            raw = subprocess.run(base + ["-XDrawDiagnostics", "-d", str(raw_dir)] + files,
+                                 capture_output=True, text=True)
     if result.returncode != 0:
         output = (result.stderr + result.stdout).strip()
-        symbols = sorted(set(re.findall(r"symbol:\s+(.+)", output)))
-        packages = sorted(set(re.findall(r"package (\S+) does not exist", output)))
-        summary = "".join(f"\n    missing {s.strip()}" for s in symbols)
-        summary += "".join(f"\n    missing package {p}" for p in packages)
+        jdk_misses, other_misses = _classify_compile_misses(
+            (raw.stderr + raw.stdout) if raw is not None else "")
+        if not jdk_misses and not other_misses:
+            # Raw diagnostics unparsed: fall back to the plain output.
+            symbols = sorted(set(re.findall(r"symbol:\s+(.+)", output)))
+            packages = sorted(set(re.findall(r"package (\S+) does not exist", output)))
+            other_misses = [s.strip() for s in symbols] + [f"package {p}" for p in packages]
+        parts = []
+        if other_misses:
+            parts.append(
+                f"It references something {target} lacks or has changed, so a "
+                f"pak built from it can fail to load on {label}:"
+                + "".join(f"\n    missing {m}" for m in sorted(set(other_misses)))
+            )
+        if jdk_misses:
+            parts.append(
+                f"It uses Java API that is not in the Java {release} class "
+                f"library, the Java the {label} collector runs, so it fails "
+                f"there with NoSuchMethodError or NoClassDefFoundError:"
+                + "".join(f"\n    missing {m}" for m in sorted(set(jdk_misses)))
+            )
         raise SdkBuildError(
             f"SDK compat check failed: {what} does not compile against "
-            f"{target} ({jar}, sha256 {sha12}, javac {major}). It references "
-            f"something that jar lacks or has changed, so a pak built from it "
-            f"can fail to load on {label}.{summary}\n{output}"
+            f"{target} ({jar}, sha256 {sha12}, javac {major}, --release "
+            f"{release}).\n" + "\n".join(parts) + f"\n{output}"
         )
     print(
         f"  sdk-compat: {what} compiles against {target} "
-        f"({jar.name}, sha256 {sha12}, javac {major}, --release {_JAVA_RELEASE})",
+        f"({jar.name}, sha256 {sha12}, javac {major}, --release {release})",
         file=sys.stderr,
     )
     if result.stderr.strip():
-        # Newer-JDK warnings (e.g. [removal]) matter: the 9.1.1 collector
-        # runs Java 25.
+        # Leg warnings matter: [removal] here is against the line's own Java
+        # (the 9.1.1 collector runs Java 25).
         print(f"  sdk-compat javac warnings ({label}):\n{result.stderr}", file=sys.stderr)
     return True
 

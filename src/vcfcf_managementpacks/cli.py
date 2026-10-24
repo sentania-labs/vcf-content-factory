@@ -1026,8 +1026,9 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "a compatibility SDK jar (repeatable, one per platform, e.g. "
             "vrops-adapters-sdk-9.1.1.0100.jar): the framework and adapter "
-            "main source must also compile against each, with a JDK new "
-            "enough for that jar's class files (9.1.1.0100 needs JDK 25+). "
+            "main source must also compile against each, at that line's "
+            "collector Java (--release from the jar's class files) on a JDK "
+            "at least that new (9.1.1.0100 needs JDK 25+). "
             "Alternatively set VCFCF_SDK_COMPAT_JARS (colon-separated) or "
             "VCFCF_SDK_COMPAT_JAR (one jar); they add up. Without any, the "
             "known compat jars in adapter_runtime/ are used. Skipped with a "
@@ -1040,9 +1041,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         default=False,
         help=(
-            "fail instead of warning when a compat compile cannot run "
-            "(its jar, or a JDK new enough to read it, missing). Equivalent "
-            "to setting VCFCF_SDK_COMPAT_REQUIRED=1."
+            "fail instead of warning when a supported line's compat compile "
+            "cannot run (8.18.7, 9.0 or 9.1.1.0100: its jar, or a JDK new "
+            "enough for it, missing). VCFCF_SDK_COMPAT_LEGS (comma list of "
+            "those keys) narrows the lines expected. Equivalent to setting "
+            "VCFCF_SDK_COMPAT_REQUIRED=1."
         ),
     )
     pbsdk.set_defaults(func=cmd_build_sdk)
@@ -1075,8 +1078,9 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "a compatibility SDK jar (repeatable, one per platform, e.g. "
             "vrops-adapters-sdk-9.1.1.0100.jar): the framework and adapter "
-            "main source must also compile against each, with a JDK new "
-            "enough for that jar's class files (9.1.1.0100 needs JDK 25+). "
+            "main source must also compile against each, at that line's "
+            "collector Java (--release from the jar's class files) on a JDK "
+            "at least that new (9.1.1.0100 needs JDK 25+). "
             "Alternatively set VCFCF_SDK_COMPAT_JARS (colon-separated) or "
             "VCFCF_SDK_COMPAT_JAR (one jar); they add up. Without any, the "
             "known compat jars in adapter_runtime/ are used. Skipped with a "
@@ -1089,9 +1093,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         default=False,
         help=(
-            "fail instead of warning when a compat compile cannot run "
-            "(its jar, or a JDK new enough to read it, missing). Equivalent "
-            "to setting VCFCF_SDK_COMPAT_REQUIRED=1."
+            "fail instead of warning when a supported line's compat compile "
+            "cannot run (8.18.7, 9.0 or 9.1.1.0100: its jar, or a JDK new "
+            "enough for it, missing). VCFCF_SDK_COMPAT_LEGS (comma list of "
+            "those keys) narrows the lines expected. Equivalent to setting "
+            "VCFCF_SDK_COMPAT_REQUIRED=1."
         ),
     )
     pvsdk.set_defaults(func=cmd_validate_sdk)
