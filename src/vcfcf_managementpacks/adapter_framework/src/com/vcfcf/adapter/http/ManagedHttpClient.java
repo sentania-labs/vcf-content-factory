@@ -302,8 +302,28 @@ public final class ManagedHttpClient {
 			// Do NOT set a Host header: java.net.http.HttpClient treats "Host" as a
 			// restricted header name and throws IllegalArgumentException if set
 			// explicitly. The JDK derives the correct Host value from the request URI.
-			HttpRequest.Builder rb = HttpRequest.newBuilder(originalReq, (n, v) -> true)
-					.uri(ipUri);
+			// Copied field by field with Java 11 API only: the one-call
+			// HttpRequest.newBuilder(HttpRequest, BiPredicate) is Java 16, and the
+			// 8.18 collector runs Java 11 (NoSuchMethodError there; issue #252).
+			HttpRequest.Builder rb = HttpRequest.newBuilder(ipUri)
+					.expectContinue(originalReq.expectContinue());
+			String method = originalReq.method();
+			if (originalReq.bodyPublisher().isPresent()) {
+				rb.method(method, originalReq.bodyPublisher().get());
+			} else if ("GET".equals(method)) {
+				rb.GET();  // GET and DELETE carry no publisher; keep it that way
+			} else if ("DELETE".equals(method)) {
+				rb.DELETE();
+			} else {
+				rb.method(method, HttpRequest.BodyPublishers.noBody());
+			}
+			originalReq.timeout().ifPresent(rb::timeout);
+			originalReq.version().ifPresent(rb::version);
+			originalReq.headers().map().forEach((name, values) -> {
+				for (String value : values) {
+					rb.header(name, value);
+				}
+			});
 
 			HttpRequest ipReq = rb.build();
 
