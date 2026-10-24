@@ -1587,7 +1587,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--profile",
         metavar="NAME",
         default=None,
-        help="credential profile to use (prod / qa / devel; default: 'prod')",
+        help=("credential profile to use (prod or devel; any further profile is named "
+              "from its VCFOPS_<NAME>_* prefix, lowercased, e.g. devel_9_1; default: 'prod')"),
     )
     prd.add_argument(
         "--prune",
@@ -1617,7 +1618,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--profile",
         metavar="NAME",
         default=None,
-        help="credential profile to use (prod / qa / devel; default: 'prod')",
+        help=("credential profile to use (prod or devel; any further profile is named "
+              "from its VCFOPS_<NAME>_* prefix, lowercased, e.g. devel_9_1; default: 'prod')"),
     )
     pa.set_defaults(func=cmd_analyze)
 
@@ -1660,7 +1662,9 @@ def build_parser() -> argparse.ArgumentParser:
         "--profile",
         metavar="NAME",
         default=None,
-        help="credential profile to use (prod / qa / devel; default: 'devel' for sync/uninstall)",
+        help=("credential profile to use (prod or devel; any further profile is named "
+              "from its VCFOPS_<NAME>_* prefix, lowercased, e.g. devel_9_1; "
+              "default: 'devel' for sync/uninstall)"),
     )
     ps.set_defaults(func=cmd_sync)
 

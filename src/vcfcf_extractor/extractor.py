@@ -42,13 +42,13 @@ from typing import Optional
 from vcfcf_core.extractor import extractor as _core
 from vcfcf_core.extractor.extractor import (
     _collect_enablement_entries,
-    _dashboards_from_export_zip,
+    dashboards_from_export_zip,
     _info,
     _parse_view_xml,
     _resource_kinds_from_formula,
     _rewrite_formula,
     _safe_filename,
-    _supermetrics_from_export_zip,
+    supermetrics_from_export_zip,
     _warn,
     _write_dashboard_yaml,
     _write_manifest,
@@ -475,7 +475,7 @@ def _export_supermetrics_full(sm_client) -> dict[str, dict]:
     The content-zip SUPER_METRICS export carries the full wire shape for each
     SM including ``unitId``, ``resourceKinds``, and ``modifiedBy``: fields
     that the public REST ``GET /api/supermetrics/{id}`` endpoint strips.
-    The parse is ``vcfcf_core.extractor.extractor._supermetrics_from_export_zip``
+    The parse is ``vcfcf_core.extractor.supermetrics_from_export_zip``
     (wire format documented there); this function only runs the export.
 
     Returns a mapping of uuid_lower -> full SM dict (with ``id`` injected).
@@ -485,7 +485,7 @@ def _export_supermetrics_full(sm_client) -> dict[str, dict]:
 
     outer_zip = _run_content_export(sm_client, ["SUPER_METRICS"])
     try:
-        return _supermetrics_from_export_zip(outer_zip)
+        return supermetrics_from_export_zip(outer_zip)
     except ValueError as e:
         raise VCFOpsError(str(e)) from e
 
@@ -496,7 +496,7 @@ def _export_dashboard_json(
     """Export all dashboards via content-zip and return the dict for dashboard_uuid.
 
     The walk over ``dashboards/<owner>`` inner zips and the ``entries`` merge
-    is ``vcfcf_core.extractor.extractor._dashboards_from_export_zip`` (wire
+    is ``vcfcf_core.extractor.dashboards_from_export_zip`` (wire
     format documented there); this function runs the export and picks the
     target. The getDashboardConfig UI endpoint returns a completely different
     format (tabConfigs[], no widget config) and should not be used for parsing.
@@ -511,7 +511,7 @@ def _export_dashboard_json(
 
     outer_zip = _run_content_export(sm_client, ["DASHBOARDS"])
     try:
-        dashboards = _dashboards_from_export_zip(outer_zip)
+        dashboards = dashboards_from_export_zip(outer_zip)
     except ValueError as e:
         raise VCFOpsError(str(e)) from e
     if names_out is not None:

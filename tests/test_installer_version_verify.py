@@ -29,8 +29,10 @@ class _FakeUI:
     def __init__(self, *replies):
         self._replies = list(replies)
         self.calls = 0
+        self.timeouts = []
 
-    def get_integrations(self):
+    def get_integrations(self, timeout=None):
+        self.timeouts.append(timeout)
         self.calls += 1
         reply = self._replies[min(self.calls - 1, len(self._replies) - 1)]
         if isinstance(reply, Exception):

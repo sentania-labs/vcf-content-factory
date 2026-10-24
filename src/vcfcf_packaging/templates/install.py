@@ -414,10 +414,12 @@ class Client:
         return r.json()
 
     def discover_marker_filename(self, timeout_s: int = 120) -> str:
-        """Discover the per-instance *L.v1 marker filename via a throwaway export.
+        """Discover the target's *L.v1 marker filename via a throwaway export.
 
         The importer rejects bundles whose marker filename does not match
-        the server's own value. Snapshot startTime before POST so a stale
+        the server's own value. The value has been identical on every
+        instance examined (8.18.7 to 9.1.1), but is read from the target
+        as insurance. Snapshot startTime before POST so a stale
         FINISHED state from a prior export isn't mistaken for our new one.
         """
         deadline = time.monotonic() + timeout_s

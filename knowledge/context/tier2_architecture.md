@@ -558,8 +558,9 @@ framework no longer compiles against any TVS or Suite-API artifact.
 ## Pak signing roadmap
 
 **Current (Phase 2):** paks ship unsigned via the VCF Content Factory
-bundle pipeline. The appliance installs unsigned paks **only when the
-cluster-wide "Allow unsigned PAK installation" toggle is on** (Admin UI
+bundle pipeline. On 9.0.x and 9.1.x the appliance installs unsigned paks
+**only when the cluster-wide "Allow unsigned PAK installation" toggle is
+on**; 8.18 has no such toggle (`investigations/2026-10-23-compliance-8-18-feature-check.md` row 1) (Admin UI
 `/admin`, Administrator Settings, Security Settings; CaSA marker file
 `/storage/db/casa/unsigned_pak_allowed`). With the toggle off, every
 upload fails with `unsigned_pak_installation.not.allowed`, whatever
