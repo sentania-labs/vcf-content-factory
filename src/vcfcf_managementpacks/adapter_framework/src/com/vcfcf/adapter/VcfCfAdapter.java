@@ -1121,7 +1121,9 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
      * platform's own review probe does check the name (it uses
      * {@code getVerifier()}, a {@code CustomHostnameVerifier}). Chain
      * validation stays strict; only {@link #insecureSslContext()} (the
-     * explicit Allow Insecure opt-out) relaxes it.
+     * explicit Allow Insecure opt-out) relaxes it. To have the name checked
+     * too, opt in with {@link #getPlatformSslContext(String)} (issue #185);
+     * this no-argument form is unchanged.
      *
      * @return an {@link javax.net.ssl.SSLContext} built from {@code getAdapterTrustManager()}
      *         and {@code getKeyManagers()} — suitable for use with {@code HttpClientBuilder}
@@ -1138,6 +1140,48 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
         } catch (Exception e) {
             throw new RuntimeException(
                     "VcfCfAdapter: failed to build platform SSL context", e);
+        }
+    }
+
+    /**
+     * Opt-in (issues #185, #206): {@link #getPlatformSslContext()} plus a
+     * check that the target certificate carries the host the client dials.
+     * The platform chain check runs first, unchanged, so an untrusted chain
+     * still fails as the platform threw it and the Validate Connection accept
+     * dialog still applies; then the leaf certificate must name
+     * {@code dialledHost} (a DNS or IP subject alternative name, or the CN
+     * when there is no DNS name), during the handshake, before any credential
+     * is sent. See {@link com.vcfcf.adapter.http.CertificateNames}.
+     *
+     * <p>{@code dialledHost} is the host this context's clients connect to,
+     * as the account entered it ({@code host}, {@code host:port},
+     * {@code [v6]}, {@code [v6]:port}); not a URL. It is fixed here, not read
+     * from the connection, because the BouncyCastle JSSE provider on 9.1.1
+     * collectors reports no peer host. A blank or unusable value refuses
+     * every handshake (fail closed). One context per dialled host.
+     *
+     * <p>An {@code HttpsURLConnection} built on this context should also get
+     * {@link com.vcfcf.adapter.http.CertificateNames#secure} (strict
+     * always-false {@code HostnameVerifier}); {@code java.net.http.HttpClient}
+     * has no verifier, so the trust manager's check is the one that counts
+     * there. The Suite API hop ({@link #openPlatformConnection(String)}) is
+     * not affected: it keeps trust-all and ignore-hostname, so a loopback
+     * {@code localhost} call still works against an appliance certificate
+     * with no {@code localhost} name. An account entered by IP passes only
+     * when the certificate lists that IP; accepting a certificate does not
+     * fix a name mismatch.
+     *
+     * @param dialledHost the host the clients using this context connect to
+     * @return the name-checking platform context
+     * @throws RuntimeException if context construction fails
+     */
+    public javax.net.ssl.SSLContext getPlatformSslContext(String dialledHost) {
+        try {
+            return com.vcfcf.adapter.http.CertificateNames.nameCheckingContext(
+                    getAdapterTrustManager(), getKeyManagers(), dialledHost);
+        } catch (RuntimeException e) {
+            throw new RuntimeException(
+                    "VcfCfAdapter: failed to build the name-checking platform SSL context", e);
         }
     }
 
