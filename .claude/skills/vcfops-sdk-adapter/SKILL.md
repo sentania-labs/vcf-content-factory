@@ -162,8 +162,9 @@ certificate's name to the host dialled, and neither JDK client adds that
 check for it. Since buildkit 1.0.16 (#185, #206) a pak opts in with one
 call: `platformSsl(this, dialledHost)` on the builder, or
 `getPlatformSslContext(dialledHost)` for a context of its own. Pass the
-host as the account entered it (`host` or `host:port`), not the URL; a
-blank or unusable host refuses every handshake. On an
+host as the account entered it (`host` or `host:port`, a Unicode name in
+its punycode xn-- form), not the URL; a blank or unusable host refuses
+every handshake. On an
 `HttpsURLConnection` path (JAX-WS, raw SOAP) also call
 `CertificateNames.secure(conn, ctx.getSocketFactory())` for the strict
 always-false hostname verifier. `CertificateNames.isNameMismatch(e)` tells
@@ -175,21 +176,26 @@ entered by IP needs that IP in the certificate's SANs. The Suite API hop
 behaves exactly as before. Reference: compliance (`VCenterCertificates`,
 from which the framework class was ported).
 
-Validate Connection text for an untrusted certificate (#205, 1.0.16): the
-framework's default points at the accept dialog and mentions Allow Insecure
-SSL only when the pak's describe declares the `allowInsecure` identifier.
-For target-specific advice override
-`certificateFailureMessage(failure, config, defaultMessage)`; return `null`
-to keep the default. Do not rethrow certificate failures stripped of their
-cause to dodge the framework text any more; that was compliance's
-pre-1.0.16 workaround.
+Validate Connection text for a certificate failure (#205, 1.0.16): an
+untrusted chain gets text pointing at the accept dialog; a certificate that
+does not name the host (`CertificateNames.isNameMismatch(e)`) or a name
+check with no usable host (`isNoUsableHost(e)`) gets name-specific text
+("does not name <host>; enter the host by a name on the certificate").
+Allow Insecure SSL is mentioned only when the pak's describe declares the
+`allowInsecure` identifier. For target-specific advice override
+`certificateFailureMessage(failure, config, defaultMessage)`, which sees
+all three; return `null` to keep the default. Once a pak checks names
+through the framework, it no longer needs to rethrow certificate failures
+stripped of their cause to dodge the framework text (compliance's
+pre-1.0.16 workaround).
 
 ## HTTP client timeouts
 
 `HttpClientBuilder.timeout(d)` is the per-request budget, send to response
 headers (default 30 s). Since buildkit 1.0.16 (#222)
 `connectTimeout(d)` sets the connect timeout on its own; it defaults to
-`timeout`, so nothing changes until a pak sets it. Typical: a few seconds
+`timeout`, so nothing changes until a pak sets it (it must be positive;
+`null` means "same as `timeout`"). Typical: a few seconds
 of connect so an unreachable target fails fast, 30 s of `timeout` for a
 slow API call. Keep `timeout` at least as long as `connectTimeout`.
 
@@ -198,8 +204,8 @@ slow API call. Keep `timeout` at least as long as `connectTimeout`.
 Since buildkit 1.0.16 (#221) override `onCycleStart()` on the adapter for
 anything that must happen once per collection cycle (reset a per-cycle
 snapshot, clear a cached failure). It runs at the top of `onCollect`,
-before `needsRediscovery` and discovery; a `RuntimeException` from it is
-logged and the cycle continues. Do not mark the cycle start inside
+before `needsRediscovery` and discovery; anything it throws is logged and
+the cycle continues, except a `VirtualMachineError` or a thread kill. Do not mark the cycle start inside
 `needsRediscovery` in new code; the framework still calls it exactly once
 per cycle so older paks keep working.
 

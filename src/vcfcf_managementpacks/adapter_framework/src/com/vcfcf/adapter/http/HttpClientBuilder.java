@@ -167,8 +167,15 @@ public final class HttpClientBuilder {
      * call keeps the full read budget. Order of the two calls does not
      * matter. The per-request {@code timeout} still runs from send, so it
      * should not be shorter than this.
+     *
+     * @param d a positive duration, or {@code null} to use {@code timeout}
+     * @throws IllegalArgumentException if {@code d} is zero or negative
      */
     public HttpClientBuilder connectTimeout(Duration d) {
+        if (d != null && (d.isZero() || d.isNegative())) {
+            throw new IllegalArgumentException("HttpClientBuilder.connectTimeout must be "
+                    + "positive, got " + d + " (pass null to use the request timeout)");
+        }
         this.connectTimeout = d;
         return this;
     }

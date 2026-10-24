@@ -62,6 +62,8 @@ public class AdapterInstanceStatusTest {
             testNeedsRediscoveryExactlyOncePerCycle();
             testCycleStartFailureDoesNotStopCycle();
             testDefaultCycleStartIsNoOp();
+            testCycleStartErrorDoesNotStopCycle();
+            testCycleStartFatalEndsCycle();
         }
         report();
     }
@@ -284,6 +286,57 @@ public class AdapterInstanceStatusTest {
         assertTrue("a WARN names the hook", a.log.contains("onCycleStart failed"));
     }
 
+    /** Review N2: an Error such as a LinkageError from the hook does not end the cycle. */
+    private static void testCycleStartErrorDoesNotStopCycle() throws Exception {
+        for (Throwable t : new Throwable[] {new NoClassDefFoundError("com/x/Missing"),
+                new AssertionError("pak assert")}) {
+            TestAdapter a = adapter();
+            a.cycleStartFailure = t;
+            a.onCollect(a.instance, resources(1));
+            String kind = t.getClass().getSimpleName();
+            assertEquals(kind + ": needsRediscovery still called", 1,
+                    a.collector.needsRediscoveryCalls);
+            assertEquals(kind + ": resource still collected",
+                    ResourceStatusEnum.RESOURCE_STATUS_DATA_RECEIVING, a.statusOf(lastResources.get(0)));
+            assertTrue(kind + ": WARN names the hook", a.log.contains("onCycleStart failed"));
+        }
+        TestAdapter a = adapter();
+        a.cycleStartFailure = new InterruptedException("stop");
+        try {
+            Thread.interrupted();
+            a.onCollect(a.instance, resources());
+            assertTrue("InterruptedException from the hook: interrupt status restored",
+                    Thread.currentThread().isInterrupted());
+        } finally {
+            Thread.interrupted();
+        }
+    }
+
+    /** A VirtualMachineError or a thread kill from the hook ends the cycle. */
+    private static void testCycleStartFatalEndsCycle() throws Exception {
+        Throwable kill = (Throwable) Class.forName("java.lang.ThreadDeath")
+                .getDeclaredConstructor().newInstance();
+        for (Throwable fatal : new Throwable[] {new StackOverflowError("sim"), kill}) {
+            TestAdapter a = adapter();
+            a.cycleStartFailure = fatal;
+            Throwable seen = null;
+            try {
+                a.onCollect(a.instance, resources(1));
+            } catch (Throwable t) {
+                seen = t;
+            }
+            String kind = fatal.getClass().getSimpleName();
+            assertTrue(kind + ": rethrown from onCollect; got " + seen, seen == fatal);
+            assertEquals(kind + ": nothing collected after it", 0,
+                    a.collector.needsRediscoveryCalls);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    static <T extends Throwable> void sneaky(Throwable t) throws T {
+        throw (T) t;
+    }
+
     private static void testDefaultCycleStartIsNoOp() throws Exception {
         TestAdapter a = adapter();
         a.onCollect(a.instance, resources(1));
@@ -352,13 +405,13 @@ public class AdapterInstanceStatusTest {
         boolean discover;
         Exception discoveryFailure;
         boolean recordCycleStart;
-        RuntimeException cycleStartFailure;
+        Throwable cycleStartFailure;
         int cycleStarts;
         List<String> events;
 
         @Override
         protected void onCycleStart() {
-            if (cycleStartFailure != null) throw cycleStartFailure;
+            if (cycleStartFailure != null) AdapterInstanceStatusTest.<RuntimeException>sneaky(cycleStartFailure);
             if (!recordCycleStart) {
                 super.onCycleStart();
                 return;

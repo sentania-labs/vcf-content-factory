@@ -456,9 +456,10 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
      * per cycle, so an adapter that does that keeps working; new code should
      * use this hook.
      *
-     * <p>Runs on the collection thread. Keep it cheap and free of I/O. A
-     * {@link RuntimeException} it throws is logged at WARN and the cycle
-     * continues.
+     * <p>Runs on the collection thread. Keep it cheap and free of I/O.
+     * Anything it throws is logged at WARN and the cycle continues, except
+     * {@link VirtualMachineError} and a thread kill
+     * ({@link #isThreadKill(Throwable)}), which end the cycle.
      */
     protected void onCycleStart() {
     }
@@ -736,7 +737,11 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
      * {@code org.bouncycastle.tls.TlsFatalAlert: certificate_unknown(46)}) is
      * replaced with a readable message telling the admin how to proceed. See
      * {@link #certificateTrustFailureMessage(Throwable, boolean, boolean)}.
-     * A pak can replace that text with
+     * A certificate that does not carry the host dialled (the opt-in name
+     * check, {@link #getPlatformSslContext(String)}), or a name check with no
+     * usable host, gets
+     * {@link #certificateNameFailureMessage(Throwable, boolean)} instead.
+     * A pak can replace either text with
      * {@link #certificateFailureMessage(Throwable, ResourceConfig, String)}.
      */
     @Override
@@ -755,16 +760,23 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
                 msg = e.getClass().getSimpleName() + " (no message)";
             }
             // Only consult the (pak-supplied) hooks once the failure is known to
-            // be a certificate-trust failure.
+            // be a certificate failure: an untrusted chain, or (issue #185 name
+            // checking, which runs only after the chain passed) a certificate
+            // that does not name the host, or no usable host to check against.
+            String certMsg = null;
+            ResourceConfig tested = null;
             if (findCertificateTrustFailure(e) != null) {
-                ResourceConfig tested = testedResourceConfig(param);
-                String certMsg = certificateTrustFailureMessage(e,
+                tested = testedResourceConfig(param);
+                certMsg = certificateTrustFailureMessage(e,
                         certificatePromptAvailable(param),
                         allowInsecureDescribedSafe(tested));
-                certMsg = certificateFailureMessageSafe(e, tested, certMsg);
-                if (certMsg != null) {
-                    msg = certMsg;
-                }
+            } else if (com.vcfcf.adapter.http.CertificateNames.isNoUsableHost(e)
+                    || com.vcfcf.adapter.http.CertificateNames.isNameMismatch(e)) {
+                tested = testedResourceConfig(param);
+                certMsg = certificateNameFailureMessage(e, allowInsecureDescribedSafe(tested));
+            }
+            if (certMsg != null) {
+                msg = certificateFailureMessageSafe(e, tested, certMsg);
             }
             // §5: populate TestParam — returning false alone gives a blank error.
             param.setErrorMsg(msg);
@@ -842,9 +854,17 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
         // Issue #221: the cycle-start hook, once per cycle, before discovery.
         try {
             onCycleStart();
-        } catch (RuntimeException e) {
+        } catch (VirtualMachineError fatal) {
+            throw fatal;
+        } catch (Throwable t) {
+            if (isThreadKill(t)) {
+                throw (Error) t;
+            }
+            if (t instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
             logWarn("onCollect: onCycleStart failed (non-fatal, the cycle continues): "
-                    + e.getMessage(), e);
+                    + t, t);
         }
 
         VcfCfCollector<C> collector = getCollector();
@@ -2400,20 +2420,86 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
     }
 
     /**
-     * Test Connection message hook for a certificate-trust failure (issue
-     * #205). Called by {@link #onTest} only after the failure has been
-     * classified as a trust failure (see
-     * {@link #certificateTrustFailureMessage(Throwable, boolean, boolean)}),
-     * with the framework's default text. Return the text the admin should see
-     * in the Validate Connection error; {@code null} or blank keeps
-     * {@code defaultMessage}. Anything thrown (other than
-     * {@link VirtualMachineError}) is logged and the default is kept.
+     * Default Test Connection text for a certificate NAME failure (issues
+     * #185, #205): the certificate does not carry the host the adapter
+     * dialled ({@link com.vcfcf.adapter.http.CertificateNames#isNameMismatch}),
+     * or the name could not be checked because no usable host was given
+     * ({@link com.vcfcf.adapter.http.CertificateNames#isNoUsableHost}).
+     * Returns {@code null} for any other failure. Accepting the certificate
+     * does not fix either, so the text never points at the accept dialog as
+     * the fix; it names Allow Insecure SSL only when {@code allowInsecureField}.
+     *
+     * @param failure            the exception thrown by the tester
+     * @param allowInsecureField whether the account's describe declares the
+     *        {@link #ALLOW_INSECURE_IDENTIFIER} field
+     * @return the readable message, or {@code null}
+     */
+    static String certificateNameFailureMessage(Throwable failure, boolean allowInsecureField) {
+        StringBuilder m = new StringBuilder();
+        if (com.vcfcf.adapter.http.CertificateNames.isNoUsableHost(failure)) {
+            m.append("The target's TLS certificate name cannot be checked: no usable "
+                    + "host was given for this connection. Set the account's host to "
+                    + "the name or address on the target's certificate (no https://, "
+                    + "no path; enter a Unicode name in its punycode xn-- form), then "
+                    + "click Validate Connection.");
+        } else if (com.vcfcf.adapter.http.CertificateNames.isNameMismatch(failure)) {
+            String host = com.vcfcf.adapter.http.CertificateNames.mismatchedHost(failure);
+            m.append("The target's TLS certificate does not name ")
+                    .append(host != null ? host : "the host this account connects to")
+                    .append(". Open the account and enter the host by a name on the "
+                            + "certificate (a DNS name it lists, or an IP address it "
+                            + "lists), then click Validate Connection. Accepting the "
+                            + "certificate does not fix a name mismatch.");
+        } else {
+            return null;
+        }
+        if (allowInsecureField) {
+            m.append(" To skip certificate validation (lab use only), set Allow "
+                    + "Insecure SSL to true.");
+        }
+        Throwable cause = failure;
+        String detail = failure.getMessage();
+        for (Throwable c = failure; c != null; c = c.getCause()) {
+            if (c instanceof java.security.cert.CertificateException) {
+                cause = c;
+                detail = c.getMessage();
+                break;
+            }
+            if (c.getCause() == c) break;
+        }
+        if (detail == null || detail.isEmpty()) {
+            detail = cause.getClass().getName();
+        }
+        return m.append(" Detail: ").append(detail).toString();
+    }
+
+    /**
+     * Test Connection message hook for a certificate failure (issue #205).
+     * Called by {@link #onTest} only after the failure has been classified as
+     * a certificate failure, with the framework's default text:
+     * <ul>
+     *   <li>an untrusted chain
+     *       ({@link #certificateTrustFailureMessage(Throwable, boolean, boolean)});</li>
+     *   <li>a certificate that does not name the host dialled
+     *       ({@link com.vcfcf.adapter.http.CertificateNames#isNameMismatch} is
+     *       true; {@link com.vcfcf.adapter.http.CertificateNames#mismatchedHost}
+     *       reads the host from the text), from the opt-in name check or the
+     *       JDK's own;</li>
+     *   <li>a name check with no usable host
+     *       ({@link com.vcfcf.adapter.http.CertificateNames#isNoUsableHost}).</li>
+     * </ul>
+     * The last two use
+     * {@link #certificateNameFailureMessage(Throwable, boolean)}. The name is
+     * checked only after the chain passed, so a failure is one of the three,
+     * never two at once. Return the text the admin should see in the Validate
+     * Connection error; {@code null} or blank keeps {@code defaultMessage}.
+     * Anything thrown is logged and the default is kept, except
+     * {@link VirtualMachineError} and a thread kill.
      *
      * <p>Default: returns {@code defaultMessage}. Override to give target
-     * specific advice, for example a name mismatch versus an untrusted chain
-     * ({@link com.vcfcf.adapter.http.CertificateNames#isNameMismatch}). The
-     * returned text goes to the UI as is: keep credentials, session ids and
-     * tokens out of it.
+     * specific advice, for example naming the account field the host lives
+     * in. The returned text goes to the UI as is: keep credentials, session
+     * ids and tokens out of it.
      *
      * @param failure        the exception the tester threw (full cause chain)
      * @param config         the adapter-instance config under test (possibly
@@ -2428,16 +2514,26 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
         return defaultMessage;
     }
 
-    /** {@link #certificateFailureMessage} with its failures contained. */
-    @SuppressWarnings("deprecation") // ThreadDeath: deprecated in newer JDKs, still thrown
+    /**
+     * {@link #certificateFailureMessage} with its failures contained: anything
+     * it throws keeps the default, except {@link VirtualMachineError} and a
+     * thread kill ({@link #isThreadKill(Throwable)}), which are rethrown; an
+     * interrupt has the thread's interrupt status restored.
+     */
     final String certificateFailureMessageSafe(Throwable failure, ResourceConfig config,
             String defaultMessage) {
         String m;
         try {
             m = certificateFailureMessage(failure, config, defaultMessage);
-        } catch (VirtualMachineError | ThreadDeath fatal) {
+        } catch (VirtualMachineError fatal) {
             throw fatal;
         } catch (Throwable t) {
+            if (isThreadKill(t)) {
+                throw (Error) t;
+            }
+            if (t instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
             logWarnSafe("certificateFailureMessage threw; keeping the framework "
                     + "message: " + t, t);
             return defaultMessage;
@@ -2496,14 +2592,24 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
     /** Cache for {@link #describesAllowInsecure}; the describe does not change in an instance's life. */
     private volatile AdapterDescribe describeForTestMessages;
 
-    /** {@link #describesAllowInsecure}; anything thrown (but a VirtualMachineError) means no. */
-    @SuppressWarnings("deprecation") // ThreadDeath: deprecated in newer JDKs, still thrown
+    /**
+     * {@link #describesAllowInsecure}; anything thrown means no, except
+     * {@link VirtualMachineError} and a thread kill
+     * ({@link #isThreadKill(Throwable)}), which are rethrown; an interrupt has
+     * the thread's interrupt status restored.
+     */
     final boolean allowInsecureDescribedSafe(ResourceConfig config) {
         try {
             return describesAllowInsecure(config);
-        } catch (VirtualMachineError | ThreadDeath fatal) {
+        } catch (VirtualMachineError fatal) {
             throw fatal;
         } catch (Throwable t) {
+            if (isThreadKill(t)) {
+                throw (Error) t;
+            }
+            if (t instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
             logWarnSafe("Test Connection: could not read the describe for the Allow "
                     + "Insecure SSL field; the message will not mention it: " + t, t);
             return false;
@@ -2554,20 +2660,40 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
      * Whether review URLs are declared for the config under test. Anything the
      * pak's hook throws means "no prompt", so a broken hook cannot replace the
      * tester's own failure, except {@link VirtualMachineError} (out of memory,
-     * stack overflow) and {@link ThreadDeath}, which are rethrown: the JVM or
-     * thread is in no state to continue as if nothing happened.
+     * stack overflow) and a thread kill ({@link #isThreadKill(Throwable)}),
+     * which are rethrown: the JVM or thread is in no state to continue as if
+     * nothing happened. An interrupt is not swallowed either: the thread's
+     * interrupt status is restored before answering "no prompt".
      */
-    @SuppressWarnings("deprecation") // ThreadDeath: deprecated in newer JDKs, still thrown
     final boolean certificatePromptAvailable(TestParam param) {
         try {
             return param != null
                     && !declaredCertificateUrls(param.getAdapterConfig()).isEmpty();
-        } catch (VirtualMachineError | ThreadDeath fatal) {
+        } catch (VirtualMachineError fatal) {
             throw fatal;
         } catch (Throwable t) {
+            if (isThreadKill(t)) {
+                throw (Error) t;
+            }
+            if (t instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
             logWarnSafe("certificateCheckUrls failed during Test Connection: " + t, t);
             return false;
         }
+    }
+
+    /**
+     * True for the error {@code Thread.stop} throws on JDKs that still have it
+     * ({@code java.lang.ThreadDeath}, deprecated for removal, issue #242). It
+     * is matched by class name so the framework never references the
+     * deprecated type: the JDK 25 compile stays warning-free, Java 17
+     * collectors keep rethrowing it, and a JDK without the class simply never
+     * matches (its {@code Thread.stop} throws
+     * {@code UnsupportedOperationException} instead).
+     */
+    static boolean isThreadKill(Throwable t) {
+        return t instanceof Error && "java.lang.ThreadDeath".equals(t.getClass().getName());
     }
 
     /** {@link #logWarn(String, Throwable)} that never throws (logger may be unavailable). */
