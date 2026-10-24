@@ -140,8 +140,8 @@ All components compile against `vrops-adapters-sdk-2.2.jar` only.
 | `DescribeBuilder` | `com.vcfcf.adapter.describe` | describe.xml XML generator. No SDK dependency. |
 | `SimpleJson` | `com.vcfcf.adapter.json` | Zero-dep recursive-descent JSON parser. |
 | `AmbientCredential` | `com.vcfcf.adapter.stitch` | Reads `/usr/lib/vmware-vcops/user/conf/maintenanceuser.properties`; decrypts via SDK `Crypt.getDefaultCrypt().decrypt()` — the only FIPS-safe path under `-Dorg.bouncycastle.fips.approved_only=true` (9.1+). Path resolution order: (1) system property `vcfcf.suiteapi.credential.path` if set; (2) hard-wired default `/usr/lib/vmware-vcops/user/conf/maintenanceuser.properties`. **`CommonConstants.VCOPS` is NOT used** — it is a product display-name string (`"VCF Ops"`), not a filesystem path. See `knowledge/lessons/sdk-constants-are-display-names.md`. Never hand-roll the cipher. |
-| `SuiteApiStitchClient` | `com.vcfcf.adapter.stitch` | Framework REST transport for Suite API stitching. Token cached per instance; re-acquired on 401; released on `discard()`. Credential resolution: explicit adapter-config fields > ambient `maintenanceuser.properties` > fail with actionable message. **Unified transport:** ALL calls go through `VcfCfAdapter.openPlatformConnection` (`HttpsURLConnection` mirroring the vendor `SuiteAPIClient`: trust-all + ignore-hostname, or cluster truststore + ignore-hostname when `IS_FIPS=true`; see "SSL / hostname verification" below). No `java.net.http.HttpClient` path. source-11 baseline. |
-| `SuiteApiStitcher` | `com.vcfcf.adapter.stitch` | Thin facade adapter authors hold as a field. Factory methods: `SuiteApiStitcher.create(adapter, logger)` (ambient) and `SuiteApiStitcher.createExplicit(adapter, logger, host, user, pass)` (remote-collector fallback). No transport code required in the adapter. Surface: `pushProperties`, `pushStats`, `addChild` / `addChildren` (additive Suite API relationship POST, never PUT), `findSingletonResourceId`, `get`, `discard`. |
+| `SuiteApiStitchClient` | `com.vcfcf.adapter.stitch` | Framework REST transport for Suite API stitching. Token cached per instance; re-acquired on 401; released on `close()` / `discard()`, after which the client refuses every call. Credential resolution: explicit adapter-config fields > ambient `maintenanceuser.properties` > fail with actionable message. **Unified transport:** ALL calls go through `VcfCfAdapter.openPlatformConnection` (`HttpsURLConnection` mirroring the vendor `SuiteAPIClient`: trust-all + ignore-hostname, or cluster truststore + ignore-hostname when `IS_FIPS=true`; see "SSL / hostname verification" below). No `java.net.http.HttpClient` path. source-11 baseline. |
+| `SuiteApiStitcher` | `com.vcfcf.adapter.stitch` | Thin facade adapter authors hold as a field. Factory methods: `SuiteApiStitcher.create(adapter, logger)` (ambient) and `SuiteApiStitcher.createExplicit(adapter, logger, host, user, pass)` (remote-collector fallback). No transport code required in the adapter. Surface: `pushProperties`, `pushStats`, `addChild` / `addChildren` (additive Suite API relationship POST, never PUT), `findSingletonResourceId`, `get` (and `get(path, accept)`), `discard`. A non-2xx GET throws `SuiteApiHttpException` (status, `apiErrorCode`, body excerpt). |
 
 ## Pak format — hard-won lessons (2026-05-19)
 
@@ -341,6 +341,35 @@ The orchestrator calls `setResourceStatus()` automatically based on
 whether `collect()` succeeds or throws. For custom status semantics,
 override `VcfCfCollector.mapCollectException(Exception)`.
 
+**Adapter instance status (issue #223, buildkit 1.0.14).** SDK 2.2 bytecode
+(`AdapterBase.setResourceStatus` / `isValidStatusForResource`): ERROR and DOWN
+are accepted only on the adapter instance resource, the account row in
+Integrations > Accounts. A child resource accepts only NONE, DATA_RECEIVING
+and NO_DATA_RECEIVING; anything else is refused (`setResourceStatus` returns
+false and the SDK logs a WARN). The SDK's own helpers for a failed instance
+are `setAdapterError(LocalizedMsg)` and `setAdapterDown(...)`. So the
+framework now sets the adapter instance at the end of a completed cycle: ERROR
+(or DOWN when every failure mapped to DOWN) when every resource the cycle
+collected failed with ERROR or DOWN, and ERROR when there was nothing to
+collect and the discovery step (`rediscover` or `discoverOnCollect`) failed,
+with a one-line reason naming the first failure. That reason, the first
+failing resource's exception class and message, is shown on the account row
+to any user with Integrations access, so `collect()` must throw messages free
+of credentials, session ids and tokens; the framework redacts Bearer / Basic /
+OpsToken values, `password=`-style pairs and `user:password@` URL userinfo as a
+best-effort backstop only (review W1). A partial failure, a
+NO_DATA_RECEIVING mapping, or a cycle cut short by a stop or interrupt (also
+an interrupt the collector wrapped, seen through the thread's interrupt flag) sets
+nothing, and the next cycle starts from the SDK default again. Before this a
+cached login failure left the account showing "Collecting" (UniFi build 14
+devel_9_1 proof). Not yet seen on a live account row: what the UI shows for an
+instance in ERROR is unproven.
+
+Consequence for paks (not changed here): `mapCollectException` returning
+ERROR or DOWN for a child resource never reached the platform; the framework's
+`setStatusSafe` checks the adapter-instance list (`isAdapterAllowedStatus`),
+not the child list (`isResourceAllowedStatus`). Recorded for a follow-up issue.
+
 ### Relationship API changed — v2
 
 v1: `resource.addChild()` / `resource.addParent()` (aria-ops-core Resource).
@@ -391,6 +420,42 @@ shadow the base's private `adapterLogger()`. See §15 in
 `knowledge/context/framework_v2_migration.md` for the full rule and migration
 steps.
 
+**Level (issue #224, buildkit 1.0.14):** `componentLogger` and the adapter's
+own logger raise a logger to INFO only when INFO is not already enabled. A
+DEBUG or TRACE level that the operator or the pak's `conf/logging.properties`
+set is kept however often the logger is looked up. Before 1.0.14 every
+lookup called `setLevel(INFO)`, so a per-call lookup (UniFi build 14's
+failure hook) silently discarded DEBUG. Fetching once in `configureAdapter()`
+is still the pattern.
+
+**What reaches the per-instance log (bytecode, SDK 2.2; issue #228):** the
+SDK's `AdapterLoggerFactoryImpl` names each logger `(<instanceId>) <name>` and
+attaches the instance file appender (`<adapter>_<id>.log`) at the level of the
+entry governing the *bare* `<name>`: an entry from the adapter's
+`<ADAPTER_HOME>/<adapter jar name>/conf/logging.properties` (vendor paks ship
+`<package> = INFO` there, for example `com.vmware.adapter3.nsxt=INFO`), else
+the collector root (WARN). `Logger.setLevel` changes only the logger's own
+level, never that appender filter. So a framework helper named after its own
+class (`com.vcfcf.adapter.stitch.SuiteApiStitcher`) sat outside the pak's
+package entry and its INFO never reached the instance log, while the pak's
+own classes did. Field evidence that fits only this: on the devel_9_1 Cloud
+Proxy, Synology build 32's `SynologyApiClient` INFO line
+(`com.vcfcf.adapters.synology`) is in `SynologyAdapter_1505.log` while the
+`SuiteApiStitchClient` configure lines from the same configure call are in
+neither that log nor `collector.log`; UniFi build 15 the same
+(`knowledge/context/investigations/2026-10-16-unifi-15-devel-9-1-proof.md`).
+Since buildkit 1.0.14 `componentLogger(cls)` keeps `cls`'s name when it is in
+the adapter's package (or a subpackage) and otherwise names the logger as a
+child of the adapter class, `<adapter class>.<simple name>` (for example
+`com.vcfcf.adapters.unifi.UniFiAdapter.SuiteApiStitcher`), so framework helper
+lines follow exactly the adapter's own level. Reproduced locally against the
+real SDK factory and log4j-core (`ComponentLoggerTest`); a live Cloud Proxy
+check is still owed. Where the Cloud Proxy's package-scoped entry comes from
+(our paks ship no `logging.properties`) is not established; the platform's
+per-adapter log-level setting is the likely writer. A pak that wants INFO
+visible by default could ship `conf/logging.properties` with
+`<its package> = INFO` like vendor paks; the builder does not do that today.
+
 **Per-adapter log file appender — classloader behavior on hot-reload
 (proven empirically, synology build 16, devel 9.0.2, 2026-06-10):**
 
@@ -433,6 +498,26 @@ cd src/vcfcf_managementpacks/
 v2 builds with SDK jar only. If you see `cannot find symbol` for
 `com.vmware.tvs.*`, that is a clean-room wall violation — do not add
 `aria-ops-core` back; report it as a TOOLSET GAP.
+
+**Which framework a pak carries (issue #214, buildkit 1.0.14).** Each pak
+bundles its own `vcfcf-adapter-base.jar` in `<adapter>/lib/`, loaded by that
+adapter's own class loader, so paks built on different buildkits run side by
+side on one collector. Both build paths (`build-framework.sh` and
+`sdk_builder._ensure_framework_jar()`, the one the buildkit uses in pak CI)
+stamp the jar manifest: `Implementation-Title: vcfcf-adapter-base`,
+`Implementation-Version: <buildkit version>`, `Implementation-Vendor`, and
+`X-Vcfcf-Source-Commit: <factory commit>` (`-dirty` when the framework source
+had uncommitted changes, `unknown` without git). In the factory the version is
+`BUILDKIT_VERSION` and the commit comes from git; in the kit both come from
+the kit's `VERSION` and `SOURCE_COMMIT` files, never from git, which inside a
+pak repo would name the pak's commit. `build-sdk` prints the stamp
+(`framework: vcfcf-adapter-base 1.0.14 (source <sha>)`), and each adapter
+instance logs it once at its first configure (`VcfCfAdapter: framework
+vcfcf-adapter-base 1.0.14 (source <sha>)`). A jar built before the stamp is
+reported as unversioned. Side-by-side versions are safe only while the
+framework changes no JVM-wide state; `tests/test_adapter_framework_no_jvm_wide_state.py`
+greps the framework source for those setters. Not done: pak-compare does not
+report a framework version change between two paks.
 
 ### SSL — CHANGED in v2
 
@@ -613,6 +698,26 @@ Added in the same session as v2, under `com.vcfcf.adapter.stitch`:
 2. Ambient — read `maintenanceuser.properties` via `AmbientCredential.load()` (path resolution: system property `vcfcf.suiteapi.credential.path` → hard-wired default `/usr/lib/vmware-vcops/user/conf/maintenanceuser.properties`), decrypt via SDK `Crypt`. Targets `https://localhost/suite-api/`. **Do not derive path from `CommonConstants.VCOPS`** — that field is the display name `"VCF Ops"`, not a filesystem path (live bug: build 43, 2026-06-10; see `knowledge/lessons/sdk-constants-are-display-names.md`).
 3. Neither resolves — `IllegalStateException` with actionable message.
 
+**GET failures and Accept (issue #201):** `get(path)` sends
+`Accept: application/json`; `get(path, accept)` sends the caller's value
+(`null` or blank means JSON; a value with a control character is refused
+before anything is sent). Use `*/*` for endpoints that return a raw body,
+such as `GET /api/configurations/files?path=SolutionConfig/<name>.xml`. A
+non-2xx answer throws `SuiteApiHttpException`, an `IOException` subclass, with
+`getStatusCode()`, `getApiErrorCode()` (the JSON body's numeric
+`apiErrorCode`, or `null`) and `getBodyExcerpt()` (at most 512 characters,
+control characters replaced). The message keeps its shape (`Suite API GET
+<url> HTTP <status>`) plus ` apiErrorCode <n>` when present; the body is not in
+the message. Example: the configuration-file store answers a missing file with
+HTTP 400 and `apiErrorCode` 1501, so a pak can now tell it from any other bad
+request (compliance and vcommunity treat every 400 and 404 as absent today).
+
+**What the client logs (issue #227):** the credential mechanism
+(`explicit` or `ambient`), the ambient source label and the endpoint, never
+the principal (the Suite API account name) and never a credential value. The
+401 and no-token exception messages carry the mechanism only. Paks no longer
+need a `principal=` redaction rule for framework output.
+
 **FIPS constraint (hard rule):** The 9.1 collector JVM runs
 `-Dorg.bouncycastle.fips.approved_only=true`. Never hand-roll the cipher.
 Always use `Crypt.getDefaultCrypt().decrypt(encryptedPassword)` from
@@ -628,6 +733,17 @@ is re-acquired and the failed request is retried exactly once (per
 released in `discard()` — failures are logged WARN and swallowed (the platform's
 token TTL is the safety net, per §3). Release is always attempted even on the
 cancellation path.
+
+**Closed state (issue #217):** `close()` (and `discard()`, now the same call)
+also marks the client closed. A closed client never acquires a token again:
+`get` throws an `IOException` saying the client is closed, and `pushStats`,
+`pushProperties`, `addChild` / `addChildren` and `findSingletonResourceId`
+send nothing and log one WARN for the first refused call (DEBUG after that).
+`isClosed()` reports it; the `SuiteApiStitcher` facade has `close()` and
+`isClosed()` too. Before buildkit 1.0.14, a cycle still running on a client
+its adapter had replaced on reconfigure logged in again and left a token
+behind. Every shipped pak already retires a stitcher after discarding it, so
+none changes behaviour beyond losing that stray login.
 
 **SSL / hostname verification: vendor-mirror transport (DEF-005, issue #215):**
 
@@ -735,13 +851,15 @@ posture matches `pushStats`: one 401 retry, every failure logged at WARN and
 swallowed, the call returns `false`. Blank or non-UUID ids are skipped with a
 WARN before anything is sent (logged truncated, control characters stripped);
 ids are trimmed and lowercased before duplicates collapse, and a child equal
-to its parent is skipped with a WARN. Because both calls repeat every
-cycle, an expected failure of `addChild` / `addChildren` or
-`findSingletonResourceId` (an `IOException` such as a non-2xx status, timeout
-or refused connection, or an interrupt) is logged as one WARN line with the
-exception class and message and its stack trace only at DEBUG, while any
-other exception (a malformed response included) keeps its stack trace at
-WARN.
+to its parent is skipped with a WARN. Because `pushProperties`, `pushStats`,
+`addChild` / `addChildren` and `findSingletonResourceId` repeat every cycle,
+a failure of any of them is logged as one WARN line with the exception class
+and message and its stack trace only at DEBUG. The one exception: the first
+time a client sees an unexpected exception class (anything but the
+`IOException` family and interrupts, a malformed response included) for an
+operation, that line carries the stack trace at WARN; later ones are one line
+(issue #192; until buildkit 1.0.14 the push methods logged a full trace every
+cycle). An interrupt during a push restores the thread's interrupt flag.
 
 **Known limitation: nothing removes these edges.** An edge added through
 `addChild` / `addChildren` persists until something deletes it with
@@ -792,7 +910,8 @@ Empirical basis: `knowledge/context/investigations/suiteapi_ambient_auth_devel_2
 
 | Date | Change |
 |---|---|
-| 2026-10-23 | **The kit ships the RULE-012 defect gate (issue #226).** New `sdk_buildkit/defect_gate.py`: `src/vcfcf_packaging/defects.py` verbatim behind a generated comment header (`kit_defect_gate_source()` in `buildkit.py`), runnable as `python3 sdk_buildkit/defect_gate.py --pak <name> --registry <defects.md> [--require-registry]`, exit 0 clean, 1 unusable registry, 2 refused. It replaces the drifted fork the sdk-template vendors as `ci/defect_gate.py`: the factory module adopted that fork's fail-closed parsing (disguised, code-indented and fenced DEF headings open a malformed entry instead of bleeding fields into the previous one; fenced lines are description; nested, code-indented, blockquoted and repeated fields are malformed; comma, backtick and edge-punctuated `Affects:` are malformed and fail closed for every pak they name; trailing text after a well-formed id is tolerated, as in the fork; BOM ignored; matching case-insensitive) inside RULE-012's per-entry isolation, and `--require-registry` (required in CI, the generated header says so) restores the fork's refusal on an absent registry or one with no valid entry, for CI that fetched it on purpose. The two looser divergences from the fork are both RULE-012: without the flag an absent, empty or unreadable registry warns and passes, and a malformed entry does not block a pak it does not name. One is stricter: an edge-punctuated `Affects:` (`synology.`) refuses the pak it names, where the fork matched nothing. `tests/test_defect_gate_parity.py` runs one fixture matrix, ported from the template's `tests/ci/test_defect_gate.py`, against the module and the defect_gate.py extracted from an assembled tarball. **Versioning:** `BUILDKIT_VERSION` bumped to `1.0.13` (not yet tagged); `feat/211-sdk-jar-9-1-1-compile-target` also claims `1.0.13`, so whichever merges second rebases to `1.0.14` and rewords its row. **Adapter adoption:** none forced; pak CI keeps its vendored copy until each pak repo switches its gate step, which is a separate decision (issue #226). |
+| 2026-10-23 | **Adapter framework round: logging, Suite API client, account status, version stamp (issues #192, #201, #214, #217, #223, #224, #227, #228).** `SuiteApiStitchClient` no longer logs the principal or puts it in exception messages (#227); `pushStats` / `pushProperties` failures are one WARN line per call with the trace at DEBUG, an unexpected exception class shows its trace at WARN only the first time per client and operation, and an interrupt restores the thread flag (#192); a non-2xx GET throws `SuiteApiHttpException` with the status, the `apiErrorCode` and a body excerpt, and `get(path, accept)` sets the Accept header per call (#201); `close()` / `discard()` mark the client closed so it never acquires a token again (#217). `componentLogger` raises a logger to INFO only when INFO is not enabled, so an operator's DEBUG survives repeat lookups (#224), and names a class outside the adapter's package as a child of the adapter class (`<adapter class>.SuiteApiStitcher`), so framework helper lines reach the per-instance log at the adapter's level (#228; cause read from SDK bytecode and reproduced against the real SDK logger factory, live Cloud Proxy check owed). A completed cycle in which every collected resource failed, or there was nothing to collect and discovery failed, sets the adapter instance (the account row) to ERROR or DOWN with a one-line reason (#223). `vcfcf-adapter-base.jar` carries `Implementation-Title`, `Implementation-Version` and `X-Vcfcf-Source-Commit` from both build paths (the kit gains a `SOURCE_COMMIT` file), `build-sdk` prints them and each instance logs them once at first configure (#214); new guard test against JVM-wide setters. New tests: `SuiteApiStitchClientTransportTest`, `ComponentLoggerTest`, `AdapterInstanceStatusTest` (all SKIP without log4j on the runtime classpath; add `adapter_runtime/lib/*`), `LogCapture` helper, `VcfCfAdapterTest` manifest cases, `tests/test_adapter_framework_no_jvm_wide_state.py`, stamp cases in `tests/test_sdk_builder_framework_jar.py`. Found and recorded, not changed: the framework validates child statuses against the adapter-instance list, so ERROR or DOWN on a child never reaches the platform. **Versioning:** `BUILDKIT_VERSION` `1.0.14` (1.0.13 went to the defect-gate round, PR #246); reaches paks once `sdk-buildkit-v1.0.14` is tagged and `sdk-buildkit-v1` moves to it. **Adapter adoption:** every Tier 2 pak needs a rebuild on buildkit 1.0.14; no source change is required. Visible after the rebuild: framework helper lines appear in the instance log under the adapter class's name (update any log grep that keys on `com.vcfcf.adapter.stitch`), an account whose every resource fails shows ERROR instead of Collecting, and the instance log names the framework version at configure. Optional pak follow-ups: Synology can drop its `principal=` redaction rule; compliance and vcommunity can read `SuiteApiHttpException.getApiErrorCode()` (1501) instead of treating every 400 or 404 as an absent configuration file, and use `get(path, "*/*")` for it. |
+| 2026-10-23 | **The kit ships the RULE-012 defect gate (issue #226).** New `sdk_buildkit/defect_gate.py`: `src/vcfcf_packaging/defects.py` verbatim behind a generated comment header (`kit_defect_gate_source()` in `buildkit.py`), runnable as `python3 sdk_buildkit/defect_gate.py --pak <name> --registry <defects.md> [--require-registry]`, exit 0 clean, 1 unusable registry, 2 refused. It replaces the drifted fork the sdk-template vendors as `ci/defect_gate.py`: the factory module adopted that fork's fail-closed parsing (disguised, code-indented and fenced DEF headings open a malformed entry instead of bleeding fields into the previous one; fenced lines are description; nested, code-indented, blockquoted and repeated fields are malformed; comma, backtick and edge-punctuated `Affects:` are malformed and fail closed for every pak they name; trailing text after a well-formed id is tolerated, as in the fork; BOM ignored; matching case-insensitive) inside RULE-012's per-entry isolation, and `--require-registry` (required in CI, the generated header says so) restores the fork's refusal on an absent registry or one with no valid entry, for CI that fetched it on purpose. The two looser divergences from the fork are both RULE-012: without the flag an absent, empty or unreadable registry warns and passes, and a malformed entry does not block a pak it does not name. One is stricter: an edge-punctuated `Affects:` (`synology.`) refuses the pak it names, where the fork matched nothing. `tests/test_defect_gate_parity.py` runs one fixture matrix, ported from the template's `tests/ci/test_defect_gate.py`, against the module and the defect_gate.py extracted from an assembled tarball. **Versioning:** `BUILDKIT_VERSION` bumped to `1.0.13` (not yet tagged); the adapter-framework round (PR #248) took `1.0.14` and the 9.1.1 compile target (PR #251) `1.0.15`. **Adapter adoption:** none forced; pak CI keeps its vendored copy until each pak repo switches its gate step, which is a separate decision (issue #226). |
 | 2026-10-23 | **Docs include, `content_naming`, SCG normalizer fix-ups by `control_id` (#171, #229, #169, #170).** `docs_gen` merges an adapter's optional `docs/_index_extra.md` into the generated index (see "Generated docset" above). `adapter.yaml` gains `content_naming` (`factory_prefixed` default, or `unprefixed`), enforced by `validate-sdk` and `build-sdk` when declared and a warning when absent (see "Bundled content naming" above). The factory SCG normalizers (`scripts/normalize_scg_v8.py`, `normalize_scg_v9.py`) share one pipeline whose scoring fix-ups are keyed by `control_id`, and `vm.virtual-hardware` is emitted in the `vmx-N or newer` minimum form for SCG 8.0 and 9.0. That floor comes from the ingested source's Baseline Suggested Value column (`vmx-21` for 8.0, `vmx-19` for 9.0, from vendor revisions 803-20260107-01 and its 9.0 counterpart); newer vendor revisions (803-20260612-01, 902-20260612-01) lower it to `vmx-17 or higher`, which arrives unchanged once the compliance repo re-ingests them. **Versioning:** `BUILDKIT_VERSION` not bumped here; the `content_naming` check reaches paks with the next buildkit tag. **Adapter adoption:** the three vCommunity paks should declare `content_naming: unprefixed`; the compliance repo regenerates its 8.0 and 9.0 canonical profiles. |
 | 2026-10-18 | **FIPS Suite API transport mirrors the vendor `useClusterTruststore` (issue #215).** `openPlatformConnection` detects FIPS by `IS_FIPS` only (vendor `Constants.FIPS_MODE_ENABLED`; `-Dorg.bouncycastle.fips.approved_only` is a diagnostic, not a signal) and in FIPS mode builds the socket factory the vendor `vcops-suiteapi-client` builds for `SSLOptions(VROPS_CLUSTER)`: `$STORAGE/vcops/user/conf/ssl/secure-communications.properties`, keys under `inter_cluster.` then `default.`, `store_type`/`protocol`/`algorithm` from the file, encrypted-first passwords with the `%truststore_password%` redirect to `storePass.properties` (`.encrypted` first), `%VAR%`/`$VAR` path substitution, optional client keystore, `TLS_RSA*` filtered and every socket restricted to the configured protocols and cipher suites; hostname ignored. This replaces the stopgap that fell through to trust-all. Any unreadable or incomplete input fails the connection loud (one WARN per instance, path and key named, exception class only), never trust-all. The factory is cached per instance and rebuilt when an input file's modification time or size changes. Non-FIPS branch unchanged and reads no cluster file. New package-private `applySuiteApiTransport` (the dispatch), `applyClusterTruststoreTransport`, `resolveClusterSslOptions`, `buildClusterSocketFactory`, `ClusterSocketFactoryCache`, `RestrictedSslSocketFactory`, `isFipsModeEnabled`, `clusterSslDirectory`, `describeTransportMode`; `isFipsApprovedOnly` removed. `VcfCfAdapterTest` (69 checks) covers the dispatch both ways, resolution order, sentinels, substitution, cipher filter, protocol restriction, client keystore, the cache and every failure input, with real TLS handshakes; mutation-checked (trust-all fallback, ignored flag, `approved_only` detection, plain-first passwords, nested prefixes, no cache refresh, no socket restriction, no cipher filter all fail the suite). Vendor bytecode and jar provenance: `knowledge/context/api-surface/casa-injected-vs-raw-client.md` §3. **Versioning:** `BUILDKIT_VERSION` bumped to `1.0.12`; paks build from the floating `sdk-buildkit-v1` tag, so the fix reached paks from `sdk-buildkit-v1.0.12` (tagged 2026-10-19 at `4ce6d2b`). **Adapter adoption:** every Tier 2 pak needs a rebuild on buildkit 1.0.12. |
 | 2026-10-18 | **build-sdk rejects a one-child composite SymptomSets; dashboard advisories in the kit.** `build_sdk_pak` (and so `sdk_buildkit build-sdk --release`) and `validate-sdk` now fail on any describe.xml `<SymptomSets>` with fewer than two children, naming the AlertDefinition id: VCF Operations rejects the whole describe at install and the controller rolls back (compliance build 90, issue #203). The kit ships `dashboard_widget_versions.py` for the per-widget minimum Ops version warning (issue #199), and bundled dashboards now warn on names over 50 characters (issue #198) and on a Section widget; both are warnings, printed once per dashboard. **Versioning:** `BUILDKIT_VERSION` 1.0.12. The #203 guard reaches tagged pak releases from `sdk-buildkit-v1.0.12` (tagged 2026-10-19 at `4ce6d2b`, with `sdk-buildkit-v1` moved to it). **Adapter adoption:** none needed; no shipped describe.xml trips the check. |

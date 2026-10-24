@@ -111,11 +111,30 @@ discover, so stitching onto foreign resources goes through the Suite
 API. Hold a `SuiteApiStitcher` (`SuiteApiStitcher.create(this, logger)`
 in `configureAdapter`, `discard()` in `onDiscard`). Surface:
 `pushProperties`, `pushStats`, `addChild` / `addChildren`,
-`findSingletonResourceId`, `get`. The push, relationship and lookup
-calls log and swallow failures and never throw into the collect cycle.
-`get` is the exception: it throws `IOException` /
-`InterruptedException`, so catch them at the call site or an outage
-escapes `collect()`.
+`findSingletonResourceId`, `get`, `close` / `isClosed`. The push,
+relationship and lookup calls log and swallow failures and never throw
+into the collect cycle: a failed push is one WARN line per cycle, with
+the stack trace at DEBUG, except that the first time a client sees an
+unexpected exception type for an operation it logs that trace once at
+WARN (#192). `get` is the exception: it throws
+`IOException` / `InterruptedException`, and since buildkit 1.0.14 a
+non-2xx response throws `SuiteApiHttpException` (an `IOException`
+carrying the status, the `apiErrorCode` and a body excerpt, #201), so
+catch them at the call site or an outage escapes `collect()`.
+`get(path, accept)` sets the Accept header per call. `discard()` (and
+`close()`) marks the client closed: it never re-acquires a token and
+refuses further calls (#217), so create a fresh stitcher after a
+reconfigure. A logger obtained with
+`componentLogger(SuiteApiStitcher.class)` (or any class outside the
+adapter's package) is named under the fully qualified adapter class, for
+example `com.vcfcf.adapters.unifi.UniFiAdapter.SuiteApiStitcher`, so grep
+the per-instance log for that, not for `com.vcfcf.adapter.stitch`; the
+client itself logs through whatever logger the pak passes to `create`
+(#228). When every resource fails in a cycle, the first failure's
+exception message is shown on the account row (Integrations > Accounts),
+so `collect()` must throw messages free of credentials, session ids and
+tokens; the framework's redaction is only a backstop (#223). Configure lines never carry
+the Suite API principal (#227).
 
 **Relationships: POST adds, PUT replaces.** `addChild(parentId,
 childId)` is the additive `POST

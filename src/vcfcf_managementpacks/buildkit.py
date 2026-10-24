@@ -31,6 +31,7 @@ Kit contents (assembled under a temp dir, then tarballed):
     reference_paks/            : one reference .pak for pak-compare
     LICENSE
     VERSION
+    SOURCE_COMMIT              : factory commit the kit was cut from (issue #214)
 
 Path relocation in the kit's sdk_builder.py:
   _HERE                    = Path(__file__).parent
@@ -85,7 +86,7 @@ from typing import Optional
 # Version constant: bump when kit contents change in a meaningful way
 # ---------------------------------------------------------------------------
 
-BUILDKIT_VERSION = "1.0.13"
+BUILDKIT_VERSION = "1.0.14"
 
 # ---------------------------------------------------------------------------
 # Source paths (relative to this file's parent = vcfcf_managementpacks/)
@@ -909,6 +910,14 @@ def assemble_buildkit(
         (kit_dir / "VERSION").write_text(f"{version}\n", encoding="utf-8")
         _log(f"  wrote VERSION ({version})")
 
+        # 7b. SOURCE_COMMIT: the factory commit this kit was cut from. The
+        # kit's sdk_builder stamps it into vcfcf-adapter-base.jar's manifest
+        # (issue #214); it cannot ask git, which inside a pak repo would
+        # answer with the pak's commit.
+        source_commit = _factory_source_commit()
+        (kit_dir / "SOURCE_COMMIT").write_text(f"{source_commit}\n", encoding="utf-8")
+        _log(f"  wrote SOURCE_COMMIT ({source_commit})")
+
         # -----------------------------------------------------------------
         # 8. Pack into tarball
         # -----------------------------------------------------------------
@@ -931,6 +940,14 @@ def assemble_buildkit(
     size_kb = tarball_path.stat().st_size // 1024
     _log(f"Done: {tarball_path}  ({size_kb:,} KB)")
     return tarball_path
+
+
+def _factory_source_commit() -> str:
+    """Factory commit for the kit's SOURCE_COMMIT: the same helper the jar
+    stamp uses (sdk_builder._git_source_commit), over the framework source."""
+    from .sdk_builder import _git_source_commit
+
+    return _git_source_commit(_REPO_ROOT, _HERE / "adapter_framework" / "src")
 
 
 def _sha256_file(path: Path) -> str:

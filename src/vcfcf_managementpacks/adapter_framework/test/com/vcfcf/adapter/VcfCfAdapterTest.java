@@ -117,7 +117,55 @@ public class VcfCfAdapterTest {
         run("testFipsDecryptFailureFailsLoud", VcfCfAdapterTest::testFipsDecryptFailureFailsLoud);
         run("testFipsWrongPasswordFailsLoud", VcfCfAdapterTest::testFipsWrongPasswordFailsLoud);
         run("testFipsBcfksUnavailableFailsLoud", VcfCfAdapterTest::testFipsBcfksUnavailableFailsLoud);
+        run("testDescribeFrameworkBuild", VcfCfAdapterTest::testDescribeFrameworkBuild);
+        run("testFrameworkJarManifestIsStamped", VcfCfAdapterTest::testFrameworkJarManifestIsStamped);
         report();
+    }
+
+    // -----------------------------------------------------------------------
+    // Framework version in the jar manifest (issue #214)
+    // -----------------------------------------------------------------------
+
+    private static void testDescribeFrameworkBuild() {
+        assertTrue("no manifest: says unknown",
+                VcfCfAdapter.describeFrameworkBuild(null).contains("version unknown"));
+        java.util.jar.Manifest bare = new java.util.jar.Manifest();
+        assertTrue("manifest without the stamp: says unknown",
+                VcfCfAdapter.describeFrameworkBuild(bare).contains("version unknown"));
+        java.util.jar.Manifest mf = new java.util.jar.Manifest();
+        java.util.jar.Attributes a = mf.getMainAttributes();
+        a.putValue("Implementation-Title", "vcfcf-adapter-base");
+        a.putValue("Implementation-Version", "1.0.14");
+        a.putValue("X-Vcfcf-Source-Commit", "abc123\r\nforged");
+        String label = VcfCfAdapter.describeFrameworkBuild(mf);
+        assertTrue("label carries title and version: " + label,
+                label.startsWith("vcfcf-adapter-base 1.0.14 (source abc123"));
+        assertFalse("label has no line break", label.contains("\n") || label.contains("\r"));
+        java.util.jar.Manifest noCommit = new java.util.jar.Manifest();
+        noCommit.getMainAttributes().putValue("Implementation-Version", "1.0.14");
+        assertTrue("missing commit and title fall back",
+                VcfCfAdapter.describeFrameworkBuild(noCommit)
+                        .equals("vcfcf-adapter-base 1.0.14 (source unknown)"));
+    }
+
+    /**
+     * The jar under test (built by build-framework.sh or
+     * sdk_builder._ensure_framework_jar) carries the stamp, and the label is
+     * read from that jar, not from another manifest on the class path.
+     */
+    private static void testFrameworkJarManifestIsStamped() {
+        java.util.jar.Manifest mf = VcfCfAdapter.frameworkManifest();
+        assertTrue("framework classes load from a jar with a manifest", mf != null);
+        if (mf == null) return;
+        java.util.jar.Attributes a = mf.getMainAttributes();
+        assertTrue("Implementation-Title is vcfcf-adapter-base",
+                "vcfcf-adapter-base".equals(a.getValue("Implementation-Title")));
+        String v = a.getValue("Implementation-Version");
+        assertTrue("Implementation-Version is set (" + v + ")", v != null && !v.isEmpty());
+        assertTrue("X-Vcfcf-Source-Commit is set",
+                a.getValue("X-Vcfcf-Source-Commit") != null);
+        assertTrue("frameworkBuildLabel names the version: " + VcfCfAdapter.frameworkBuildLabel(),
+                VcfCfAdapter.frameworkBuildLabel().startsWith("vcfcf-adapter-base " + v + " "));
     }
 
     // -----------------------------------------------------------------------
