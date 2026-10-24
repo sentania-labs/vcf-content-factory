@@ -67,6 +67,9 @@ def test_properties_parser_and_generic_templates(tmp_path):
              "World : vcfcf_compliance:\\\n  ComplianceWorld\n")
     p = _pak(tmp_path, props=props, extra_dir="GenericTemplatesWorld")
     dashes = pi.read_pak_dashboards(p, warn=print)
+    # Template directories never reach the materialization check either:
+    # the dashboard list does not show them, so they would read as ABSENT.
+    assert [d.directory for d in dashes] == ["World"]
     got = pi.read_pak_bindings(p, dashes, warn=print)
     assert [(b.directory, b.kinds) for b in got] == [
         ("World", [("vcfcf_compliance", "ComplianceWorld")])]
@@ -200,11 +203,30 @@ def test_unfinished_source_is_never_bound(state):
 
 def test_source_missing_isloading_fails_closed():
     """W1: a source whose list entry had no isLoading never reaches COMPLETE
-    (check_pak_dashboards leaves it out), so it is never bound."""
+    (check_pak_dashboards leaves it out), so it is never bound, and the
+    line says its state could not be checked rather than unfinished."""
     out, err = [], []
     ui = _UI([{"tabId": OLD_CLONE}], {OLD_CLONE: _config(OLD_CLONE, True, [True])})
     rc = pi.repair_summary_bindings(ui, [_binding()], [], out=out.append, err=err.append)
     assert ui.assoc == [] and rc == pi.POST_INSTALL_FAILED_RC
+    assert "could not be checked" in err[0]
+    assert "had not finished building" not in err[0]
+
+
+@pytest.mark.parametrize("config", [
+    {},                                                    # no dashboardConfig at all
+    _config("some-other-tab", True, [True]),               # answer lacks the bound tab
+    _config(OLD_CLONE, True, [True], name=""),             # bound tab, empty name
+    _config(OLD_CLONE, None, [None], name=""),             # unknown state, empty name
+])
+def test_unidentifiable_summary_tab_is_never_written(config):
+    """Review B2: a Summary tab whose name cannot be read is not known to be
+    a copy of the pak dashboard, so nothing is written, whatever its state."""
+    ui = _UI([{"tabId": "user-own-tab"}], {"user-own-tab": config})
+    rc, out, err = _repair(ui)
+    assert ui.assoc == [] and rc == 0 and out == []
+    assert err[0].startswith("WARNING: SUMMARY UNCHECKED: vcfcf_compliance:ComplianceWorld")
+    assert "left as it is" in err[0]
 
 
 def test_not_bound_by_installer_is_left_alone():
@@ -349,14 +371,26 @@ def test_report_waits_660_polled_then_rebinds(tmp_path, monkeypatch, capsys):
     assert ui.logged_out
 
 
-def test_report_env_wait_wins_and_skip_flag(tmp_path, monkeypatch, capsys):
+def test_report_env_wait_wins_with_rebind(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("VCFCF_MATERIALIZATION_WAIT_S", "45")
+    ui = _FullUI([[{"id": ID_WORLD, "isLoading": True}]],
+                 tab_answers=[{"tabId": OLD_CLONE}],
+                 configs={OLD_CLONE: _config(OLD_CLONE, True, [True])})
+    rc, slept = _report(tmp_path, ui, monkeypatch)
+    assert slept == [30, 15]
+
+
+@pytest.mark.parametrize("env,expected", [("", [180]), ("45", [45])])
+def test_skip_summary_rebind_keeps_the_single_recheck(tmp_path, monkeypatch, capsys, env, expected):
+    """Review W2: the 660 s polled wait exists only for the rebind."""
+    monkeypatch.setenv("VCFCF_MATERIALIZATION_WAIT_S", env)
     ui = _FullUI([[{"id": ID_WORLD, "isLoading": True}]],
                  tab_answers=[{"tabId": OLD_CLONE}],
                  configs={OLD_CLONE: _config(OLD_CLONE, True, [True])})
     rc, slept = _report(tmp_path, ui, monkeypatch, summary_rebind=False)
     out = capsys.readouterr().out
-    assert slept == [30, 15]
+    assert slept == expected
+    assert f"re-checking once in {expected[0]} s" in out
     assert "SUMMARY SKIPPED" in out and ui.assoc == []
     assert rc == 0  # INCOMPLETE source alone does not fail the install
 

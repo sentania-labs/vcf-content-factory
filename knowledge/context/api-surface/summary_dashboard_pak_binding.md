@@ -167,8 +167,8 @@ which is scoped to the user and returns `{}` for every template. Evidence:
 `python3 -m vcfcf_managementpacks install` now runs the binding step a
 second time, after the source has finished (`src/vcfcf_managementpacks/post_install.py`):
 
-1. When the pak carries `dashboards.properties`, the post-install
-   materialization wait polls `getDashboardList` every 30 s for up to
+1. When the pak carries `dashboards.properties` and the repair is on, the
+   post-install materialization wait polls `getDashboardList` every 30 s for up to
    660 s (one 10-minute importer tick plus a margin; `--materialization-wait`
    or `VCFCF_MATERIALIZATION_WAIT_S` override it, capped at 900 s).
 2. Per bound kind it reads `getSummaryTabId`, then
@@ -182,11 +182,13 @@ second time, after the source has finished (`src/vcfcf_managementpacks/post_inst
    (`SUMMARY NOT REBOUND`, exit 3).
 
 It never binds a kind the installer did not bind (`SUMMARY NOT BOUND`),
-never touches a Summary tab showing anything other than a copy of the pak's
-dashboard (`<name>` or `<name> <n>`), and reads the properties file the way
+rebinds a Summary tab only when its name reads as a copy of the pak's
+dashboard (`<name>` or `<name> <n>`; an unknown clone state is accepted
+only with such a name), leaves a tab whose name cannot be read alone
+(`SUMMARY UNCHECKED`, nothing written), and reads the properties file the way
 the installer does (Java `String.split`, no trimming, `GenericTemplates*`
 skipped, a bound directory with more than one dashboard skipped with a
-warning). `--skip-summary-rebind` turns the repair off.
+warning). `--skip-summary-rebind` turns the repair off, and with it the long wait: the check falls back to the 180 s single re-check.
 
 Read-only reads on devel 9.0.2 on 2026-10-24 (about 12:20 AM) confirmed the
 shapes: `getSummaryTabId(002016vcfcf_complianceComplianceWorld)` returned

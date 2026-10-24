@@ -47,7 +47,9 @@ binding step again, after the source has materialized:
    and the new clone is read back.
 
 Nothing is ever bound that the installer did not bind first, and a Summary
-tab showing anything but a copy of the pak's dashboard is left alone.
+tab is rebound only when its name reads as a copy of the pak's dashboard
+(``<name>`` or ``<name> <n>``); a tab whose name cannot be read is left
+alone (``SUMMARY UNCHECKED``).
 
 The pak read is offline. The live half takes injected clients, so the flow
 is unit-testable with fakes.
@@ -101,7 +103,9 @@ def _strip_name_path(name: str, name_path: str) -> str:
 def read_pak_dashboards(pak_path, *, warn: Callable[[str], None]) -> List[PakDashboard]:
     """Every dashboard a pak ships, read from ``content/dashboards/*/dashboard.json``.
 
-    Offline. A directory whose JSON is unreadable, not an object, or holds no
+    Offline. ``GenericTemplates*`` directories are skipped (the installer
+    imports them as templates, which the dashboard list never shows). A
+    directory whose JSON is unreadable, not an object, or holds no
     dashboard with an id is skipped with a ``warn`` line; the install itself
     is not affected.
     """
@@ -112,6 +116,11 @@ def read_pak_dashboards(pak_path, *, warn: Callable[[str], None]) -> List[PakDas
                 continue
             directory = member[len(DASHBOARDS_DIR):-len("/dashboard.json")]
             if not directory or "/" in directory:
+                continue
+            if directory.startswith("GenericTemplates"):
+                # Imported as templates where the installer honours the
+                # prefix, so never in getDashboardList: checking them would
+                # report a false ABSENT. Factory paks ship none.
                 continue
             try:
                 doc = json.loads(zf.read(member).decode("utf-8"))
@@ -429,7 +438,15 @@ def repair_summary_bindings(
                     continue
                 state, clone_name = template_state(
                     ui.get_dashboard_config(old, is_template=True), old)
-                if clone_name and not _is_copy_of(clone_name, d.name):
+                if not clone_name:
+                    # Cannot tell whose tab this is: the config answer did not
+                    # carry the bound tab, or carried it without a name. Never
+                    # write over a binding that cannot be identified.
+                    err(f"WARNING: SUMMARY UNCHECKED: {label}: could not read the name of "
+                        f"the Summary tab {old}, so whether it is a copy of '{d.name}' is "
+                        f"unknown; left as it is.")
+                    continue
+                if not _is_copy_of(clone_name, d.name):
                     err(f"WARNING: SUMMARY NOT REBOUND: {label}: the Summary tab shows "
                         f"'{clone_name}' ({old}), not a copy of '{d.name}'; left as it is.")
                     continue
@@ -438,11 +455,15 @@ def repair_summary_bindings(
                     continue
                 needs_fix = state == CLONE_INCOMPLETE
                 if source_state != COMPLETE:
+                    why = (
+                        "whether it finished building could not be checked (the "
+                        "dashboard list carried no isLoading flag for it)"
+                        if source_state is None else "had not finished building"
+                    )
                     err(f"WARNING: SUMMARY NOT REBOUND: {label}: the Summary tab copy {old} "
-                        f"is {state} and '{d.name}' had not finished building, so it was "
-                        f"not bound again. Once the dashboard has finished building "
-                        f"(open it once in the UI), assign it again under Manage Summary "
-                        f"Dashboards.")
+                        f"is {state} and '{d.name}' {why}, so it was not bound again. "
+                        f"Once the dashboard has finished building (open it once in the "
+                        f"UI), assign it again under Manage Summary Dashboards.")
                     if needs_fix:
                         rc = POST_INSTALL_FAILED_RC
                     continue
@@ -540,7 +561,9 @@ def report_pak_dashboards(
     from vcfcf_dashboards.client import MATERIALIZATION_RECHECK_ENV
 
     poll = None
-    if bindings:
+    if bindings and summary_rebind:
+        # The long polled wait exists only for the rebind; without it the
+        # check keeps the 180 s single re-check.
         poll = BOUND_SOURCE_POLL_S
         if wait_s is None and not os.environ.get(MATERIALIZATION_RECHECK_ENV, "").strip():
             # The binding step needs the source finished; one importer tick.

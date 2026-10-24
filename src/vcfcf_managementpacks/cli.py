@@ -1275,7 +1275,8 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Seconds to wait for dashboards still building after the install "
             "(default 180 with one re-check; 660, polled every 30 s, when the pak "
-            "binds a Summary dashboard; or VCFCF_MATERIALIZATION_WAIT_S; capped "
+            "binds a Summary dashboard and --skip-summary-rebind is not set; or "
+            "VCFCF_MATERIALIZATION_WAIT_S; capped "
             "at 900; 0 reports them at once)."
         ),
     )
