@@ -1353,6 +1353,24 @@ def is_first_run(
 # Main report
 # ---------------------------------------------------------------------------
 
+def leftover_shim_dirs(root: Path) -> List[str]:
+    """``src/vcfops_*`` directories still on disk (issue #159).
+
+    The ten ``vcfops_*`` compatibility shims were removed from git, but a
+    pull deletes only tracked files: an upgraded clone keeps the ignored
+    ``__pycache__/`` (and any other untracked file) under each, and Python
+    then imports ``vcfops_x`` as an empty namespace package instead of
+    failing. Reported, never deleted: what is left is the operator's.
+    Never raises.
+    """
+    try:
+        return sorted(
+            f"src/{d.name}" for d in (root / "src").glob("vcfops_*") if d.is_dir()
+        )
+    except OSError:
+        return []
+
+
 def run_doctor(
     root: Optional[Path] = None,
     *,
@@ -1481,6 +1499,16 @@ def run_doctor(
             "pak (an ADAPTER_JAR_GAP or LIB_GAP placeholder, or, when lib/ "
             "exists but is empty, silently no library JARs at all). See "
             "Getting_Started.md for how to obtain them (warn only)."
+        )
+
+    leftovers = leftover_shim_dirs(root)
+    if leftovers:
+        attention.append(
+            "leftover directories from the removed vcfops_* shims (issue "
+            "#159): " + _clip(", ".join(leftovers), 300) + "; they hold only "
+            "untracked files (e.g. __pycache__), but make `import vcfops_*` "
+            "succeed as an empty package instead of failing. Remove them "
+            "when you are ready (the doctor never deletes them)."
         )
 
     # --- Bootstrap health -------------------------------------------------
