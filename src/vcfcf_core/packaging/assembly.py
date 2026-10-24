@@ -94,7 +94,9 @@ def _render_supermetrics_dict(bundle: Bundle) -> dict:
     Ops cannot parse the authoring-time token, so an unresolvable name is a hard
     build error rather than a silently corrupt super metric.
     """
-    name_to_uuid = sm_name_to_uuid_map(bundle.supermetrics)
+    name_to_uuid = sm_name_to_uuid_map(
+        bundle.supermetrics, error_cls=BundleValidationError
+    )
     result = {}
     for sm in bundle.supermetrics:
         formula = " ".join(sm.formula.split())

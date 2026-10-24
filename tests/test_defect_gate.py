@@ -633,14 +633,13 @@ class TestMalformedHeadingIsolation:
         assert len(registry.unscoped_errors) == 1, (
             f"an unreadable scope must be unscoped; got {registry.errors}"
         )
-        # No confirmed scope, so it gates no real artifact.  Since #153 its
-        # first word is a pak-name candidate: `--pak all` would refuse, and
-        # `--all` lists it under that label so the two agree.
+        # No confirmed scope, so it gates no real artifact.  Since #226 every
+        # word is a pak-name candidate (`--pak all` or `--pak dashboards`
+        # would refuse), and `--all` lists each so the two agree.
         from vcfcf_packaging.defects import gate_pak
-        assert [e.affects for e in gate_all(reg)] == ["all"], (
-            "a malformed heading with no readable scope is listed only under "
-            "its first-word candidate"
-        )
+        assert [e.affects for e in gate_all(reg)] == [
+            "all", "of", "the", "dashboards", "probably",
+        ], "a malformed heading with no readable scope is listed under its candidates"
         assert gate_pak("synology", reg) == [], (
             "a malformed heading with no readable scope must not gate a real pak"
         )
@@ -697,10 +696,10 @@ More prose, and a heading that is not DEF-prefixed.
         branch is ever reached.  Stated explicitly because the previous
         version of this test relied on it without saying so.
         """
-        from vcfcf_packaging.defects import _BAD_SECTION_RE, parse_registry
-        assert _BAD_SECTION_RE.match("## Defects") is None
-        assert _BAD_SECTION_RE.match("### Definitions") is None
-        assert _BAD_SECTION_RE.match("## Schema") is None
+        from vcfcf_packaging.defects import _LOOSE_DEF_HEADING_RE, parse_registry
+        assert _LOOSE_DEF_HEADING_RE.match("## Defects") is None
+        assert _LOOSE_DEF_HEADING_RE.match("### Definitions") is None
+        assert _LOOSE_DEF_HEADING_RE.match("## Schema") is None
 
         reg = _write_registry(
             tmp_path,
@@ -722,9 +721,9 @@ More prose, and a heading that is not DEF-prefixed.
         ``defects.local.md`` a stranger writes from scratch, where
         ``### DEFECTS`` is a natural first-draft heading.
         """
-        from vcfcf_packaging.defects import _BAD_SECTION_RE, parse_registry
+        from vcfcf_packaging.defects import _LOOSE_DEF_HEADING_RE, parse_registry
         for heading in ("### DEFECTS", "### DEFECT LOG", "### DEFINITIONS"):
-            assert _BAD_SECTION_RE.match(heading) is not None, (
+            assert _LOOSE_DEF_HEADING_RE.match(heading) is not None, (
                 f"{heading!r} is DEF-prefixed and must match the regex"
             )
 

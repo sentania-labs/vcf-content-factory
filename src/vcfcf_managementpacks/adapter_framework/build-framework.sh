@@ -221,11 +221,35 @@ if [ -n "$TVS_REFS" ]; then
 fi
 
 # ---- Package ----------------------------------------------------------------
+# The manifest carries the framework version (the buildkit version) and the
+# factory commit, so a collector or a pak shows which framework it runs
+# (issue #214). Same attributes as sdk_builder._ensure_framework_jar().
+#   VCFCF_FRAMEWORK_VERSION overrides the version (default: BUILDKIT_VERSION
+#   in buildkit.py); the commit gets "-dirty" when adapter_framework/src has
+#   uncommitted changes.
+
+FW_VERSION="${VCFCF_FRAMEWORK_VERSION:-}"
+if [ -z "$FW_VERSION" ]; then
+    FW_VERSION=$(sed -n 's/^BUILDKIT_VERSION *= *"\([^"]*\)".*/\1/p' "$ROOT/buildkit.py" 2>/dev/null | head -1)
+fi
+FW_VERSION="${FW_VERSION:-unknown}"
+FW_COMMIT="unknown"
+if command -v git &>/dev/null && FW_HEAD=$(git -C "$SCRIPT_DIR" rev-parse HEAD 2>/dev/null); then
+    FW_COMMIT="$FW_HEAD"
+    if [ -n "$(git -C "$SCRIPT_DIR" status --porcelain -- "$SRC_DIR" 2>/dev/null)" ]; then
+        FW_COMMIT="$FW_COMMIT-dirty"
+    fi
+fi
+MANIFEST_FILE="$BUILD_DIR.manifest"
+printf 'Implementation-Title: vcfcf-adapter-base\nImplementation-Version: %s\nImplementation-Vendor: VCF Content Factory\nX-Vcfcf-Source-Commit: %s\n' \
+    "$FW_VERSION" "$FW_COMMIT" > "$MANIFEST_FILE"
 
 echo "Packaging JAR ..."
-jar cf "$OUTPUT_JAR" -C "$BUILD_DIR" .
+jar cfm "$OUTPUT_JAR" "$MANIFEST_FILE" -C "$BUILD_DIR" .
+rm -f "$MANIFEST_FILE"
 
 echo "Built: $OUTPUT_JAR ($(du -h "$OUTPUT_JAR" | cut -f1))"
+echo "Stamped: vcfcf-adapter-base $FW_VERSION (source $FW_COMMIT)"
 
 # ---- Cleanup ----------------------------------------------------------------
 rm -rf "$BUILD_DIR"

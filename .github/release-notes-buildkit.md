@@ -61,7 +61,7 @@ A workflow that ran the old kit and relied on grepping the compare output
 for "0 BLOCKING" now also fails on the exit code; under `set -o pipefail`
 that is the intended gate.
 
-## Behavior since 1.0.13
+## Behavior since 1.0.15
 
 - `build-sdk` and `validate-sdk` take `--sdk-compat-jar <path to
   vrops-adapters-sdk-9.1.1.0100.jar>` (or `VCFCF_SDK_COMPAT_JAR`) to compile
@@ -78,5 +78,5 @@ that is the intended gate.
   `vrops-adapters-sdk*.jar` beside it in `adapter_runtime/` now stops the
   build.
 
-Version note: PR #246 and PR #248 also claim 1.0.13; whichever merges later
-takes the next number and moves its heading here.
+Version note: 1.0.13 is the defect-gate round (PR #246) and 1.0.14 the
+adapter-framework round (PR #248); this is 1.0.15.

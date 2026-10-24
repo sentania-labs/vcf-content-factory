@@ -68,14 +68,15 @@ For other content types the flat root members change:
 - `supermetrics.json` — flat JSON
 - `customgroup.json` / `customgroups.json` — flat JSON
 
-### Marker filename = per-instance fingerprint (!)
+### Marker filename must match the server's value (!)
 
-**This is the #1 gotcha.** The marker filename is the 19-digit
-timestamp (nanoseconds) followed by `L.v1`. The VCF Ops importer
-stores a fingerprint value per cluster and **rejects any import
-whose marker filename doesn't match** — returns `INVALID_FILE_FORMAT`
-with no details. Observed: on this lab instance the valid marker is
-`6844548499441080431L.v1`. Using `time.time_ns() + "L.v1"` or any
+**This is the #1 gotcha.** The marker filename is 19 digits followed
+by `L.v1`. The VCF Ops importer **rejects any import whose marker
+filename doesn't match** its own value, returning `INVALID_FILE_FORMAT`
+with no details. Correction (issue #166): it is not a per-instance
+fingerprint. `6844548499441080431L.v1` was byte-identical in five
+exports from four instances (8.18.7, 9.0.2, 9.1.1); only the file's
+content, the owner user UUID, varies. Using `time.time_ns() + "L.v1"` or any
 other value makes every import fail. The `vcfcf_dashboards.client`
 module already handles this via `discover_marker_filename()` — it
 triggers a throwaway `SUPER_METRICS` export, downloads the zip, and

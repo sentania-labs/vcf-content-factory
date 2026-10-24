@@ -108,13 +108,15 @@ class TestMultiTokenIsMalformed:
 
     def test_unknown_first_token_is_unscoped_and_loud(self, tmp_path, capsys):
         """Prose must not be guessed into a scope: unscoped, loud, and it
-        blocks only a pak gated by exactly its first word."""
+        blocks only a pak gated by exactly one of its words."""
         reg = _write(tmp_path, _entry("all of the dashboards, probably"))
         registry = parse_registry(reg)
         assert len(registry.unscoped_errors) == 1
-        # Listed by --all only under its first-word candidate, which matches
-        # what --pak all would do; no real pak is gated.
-        assert [e.affects for e in gate_all(reg)] == ["all"]
+        # Listed by --all under each candidate word, which matches what
+        # --pak <word> would do (#226 review B1); no real pak is gated.
+        assert [e.affects for e in gate_all(reg)] == [
+            "all", "of", "the", "dashboards", "probably",
+        ]
         assert gate_pak("fixturepak", reg) == []
         err = capsys.readouterr().err
         assert "WARNING" in err and "DEF-001" in err and "could not be confirmed" in err
@@ -137,9 +139,11 @@ class TestMultiTokenIsMalformed:
         assert len(gate_pak("unlisted-pak", reg)) == 1
 
     def test_the_original_def020_value_is_reported(self, tmp_path, capsys):
-        """`pak:` prefix plus a note: unattributable, but never silent."""
+        """`pak:` prefix plus a note: malformed, loud, and since #226 it fails
+        closed for the known pak it names (it used to block nothing)."""
         reg = _write(tmp_path, _entry("pak:vcommunity-vsphere (VM Details.yaml line ~606)"))
-        assert gate_pak("vcommunity-vsphere", reg) == []
+        assert [e.affects for e in gate_pak("vcommunity-vsphere", reg)] == ["vcommunity-vsphere"]
+        assert gate_pak("synology", reg) == []
         err = capsys.readouterr().err
         assert "DEF-001" in err and "WARNING" in err
 
@@ -163,13 +167,15 @@ class TestSingleToken:
         assert parse_registry(reg).errors == []
 
     def test_unrecognised_prefix_is_malformed_and_fails_closed(self, tmp_path, capsys):
-        """`pak:fixturepak`: malformed and warned, but gating fixturepak refuses."""
+        """`pak:fixturepak`: malformed and warned, but gating fixturepak refuses.
+
+        fixturepak is a known pak here, so the error is scoped to it; an
+        unknown name after the prefix stays a candidate (next test)."""
         reg = _write(tmp_path, _entry("pak:fixturepak"))
         registry = parse_registry(reg)
         assert registry.entries == []
-        assert len(registry.unscoped_errors) == 1
+        assert [e.affects for e in registry.errors] == ["fixturepak"]
         assert "not a recognised scope" in registry.errors[0].reason
-        assert registry.errors[0].candidate == "fixturepak"
         blockers = gate_pak("fixturepak", reg)
         assert len(blockers) == 1 and blockers[0].synthetic is True
         assert gate_pak("other-pak", reg) == []
@@ -192,7 +198,7 @@ def test_known_pak_names_survives_unreadable_managed_paks(monkeypatch):
     def _boom(*_a, **_k):
         raise OSError("synthetic")
 
-    monkeypatch.setattr(mp, "load_registry", _boom)
+    monkeypatch.setattr(mp, "registered_pak_names", _boom)
     reset_warning_state()
     assert defects._known_pak_names() == frozenset()
     assert defects._known_pak_names() == frozenset()
@@ -206,7 +212,7 @@ def test_known_pak_names_failure_warns_once(monkeypatch, capsys):
     def _boom(*_a, **_k):
         raise OSError("synthetic")
 
-    monkeypatch.setattr(mp, "load_registry", _boom)
+    monkeypatch.setattr(mp, "registered_pak_names", _boom)
     reset_warning_state()
     defects._known_pak_names()
     defects._known_pak_names()
@@ -309,3 +315,49 @@ def test_shipped_registry_has_no_parse_errors():
     """Regression guard: DEF-013/014/018/019 carried multi-token Affects."""
     registry = parse_registry(REGISTRY_PATH)
     assert registry.errors == [], [str(e) for e in registry.errors]
+
+
+# ---------------------------------------------------------------------------
+# #219: the known-name set covers every registered pak, every section
+# ---------------------------------------------------------------------------
+
+#: Read from the live knowledge/context/managed_paks.md, one group per
+#: section: factory SDK paks, the third-party Python forks (no adapter_kind:
+#: line), and the retired vcommunity family.  Names, never counts, so
+#: registering a new pak cannot turn this red; retiring or renaming one of
+#: these is a registry edit that should come with a look at this list.
+_REGISTERED_NAMES = {
+    "compliance", "unifi", "synology",
+    "vsanhostmetrics", "cluster-perf-risk",
+    "vcommunity", "vcommunity-vsphere", "vcommunity-os",
+}
+
+
+def test_known_pak_names_covers_every_registry_section(monkeypatch):
+    monkeypatch.undo()  # drop the autouse stub so the real lookup runs
+    reset_warning_state()
+    known = defects._known_pak_names()
+    missing = _REGISTERED_NAMES - known
+    assert not missing, f"registered paks unknown to the defect gate: {sorted(missing)}"
+    # The entry template inside the HTML comment is never a pak.
+    assert "<name>" not in known
+
+
+@pytest.mark.parametrize("pak", ["vsanhostmetrics", "cluster-perf-risk", "vcommunity-os"])
+def test_multi_token_affects_naming_a_fork_or_retired_pak_fails_closed(
+    tmp_path, monkeypatch, pak,
+):
+    """The #219 hole: a fork's first token was unknown, so the entry was
+    unscoped and only a gate run for exactly that name saw it."""
+    monkeypatch.undo()
+    reset_warning_state()
+    reg = _write(tmp_path, _entry(f"{pak} (the container image)"))
+    registry = parse_registry(reg)
+    assert [e.affects for e in registry.errors] == [pak], (
+        "the malformed entry must be attributed to the pak it names"
+    )
+    assert [e.affects for e in gate_pak(pak, reg)] == [pak]
+    # The note's words are exact-name candidates too (#226 review B1), so
+    # --all lists them after the scope; none is a real pak.
+    assert [e.affects for e in gate_all(reg)] == [pak, "the", "container", "image"]
+    assert gate_pak("unifi", reg) == []

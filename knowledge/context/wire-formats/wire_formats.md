@@ -7,10 +7,12 @@ attempt. These are the exact shapes that work.
 
 ## Common import gotchas
 
-1. **The marker filename is a per-instance fingerprint.** Every
-   export from one Ops cluster uses the same `<19-digit>L.v1`
-   filename. The importer rejects any other value — even an off-by-one
-   is `INVALID_FILE_FORMAT`. Discover it via throwaway export:
+1. **The marker filename must be the server's own value.** It is
+   *not* a per-instance fingerprint: `6844548499441080431L.v1` was
+   byte-identical in five exports from four instances on 8.18.7, 9.0.2
+   and 9.1.1 (issue #166). The importer rejects any other value, even
+   an off-by-one is `INVALID_FILE_FORMAT`. Not proven constant on every
+   build, so the factory still reads it via throwaway export:
    `vcfcf_dashboards.client.discover_marker_filename`.
 2. **The marker file contents are the owner user UUID**, not
    arbitrary. Same across all exports from the same instance.

@@ -118,6 +118,113 @@ def _find_stale_framework_sources(output_jar: Path, sources: List[Path]) -> List
     return [s for s in sources if s.stat().st_mtime > jar_mtime]
 
 
+# Manifest attributes stamped into vcfcf-adapter-base.jar (issue #214), read
+# back by VcfCfAdapter at configure and printed by build-sdk.
+_FRAMEWORK_TITLE = "vcfcf-adapter-base"
+_FRAMEWORK_COMMIT_ATTR = "X-Vcfcf-Source-Commit"
+
+
+def _framework_version() -> str:
+    """The framework version to stamp: the buildkit version.
+
+    In the sdk-buildkit the kit's VERSION file (written by assemble_buildkit);
+    in the factory the BUILDKIT_VERSION constant, read as text from
+    buildkit.py beside this module (not imported: the kit ships no
+    buildkit.py). "unknown" when neither is readable.
+    """
+    kit_version = _HERE / "VERSION"
+    if kit_version.is_file():
+        v = kit_version.read_text(encoding="utf-8").strip()
+        return v or "unknown"
+    bk = _HERE / "buildkit.py"
+    if bk.is_file():
+        m = re.search(r'^BUILDKIT_VERSION\s*=\s*"([^"]+)"',
+                      bk.read_text(encoding="utf-8"), re.MULTILINE)
+        if m:
+            return m.group(1)
+    return "unknown"
+
+
+def _framework_source_commit() -> str:
+    """The factory commit the framework source came from.
+
+    In the sdk-buildkit the kit's SOURCE_COMMIT file (written by
+    assemble_buildkit from the factory checkout it was cut from); never git
+    here, because the kit runs inside a pak repo whose HEAD is the pak's
+    commit, not the framework's. In the factory, ``git rev-parse HEAD`` with
+    ``-dirty`` appended when the framework source has uncommitted changes.
+    "unknown" when neither is available.
+    """
+    if (_HERE / "VERSION").is_file():
+        sc = _HERE / "SOURCE_COMMIT"
+        if sc.is_file():
+            v = sc.read_text(encoding="utf-8").strip()
+            return v or "unknown"
+        return "unknown"
+    return _git_source_commit(_REPO_ROOT, _ADAPTER_FRAMEWORK_SRC_DIR)
+
+
+def _git_source_commit(repo_root: Path, source_dir: Path) -> str:
+    """``git rev-parse HEAD`` of ``repo_root``, ``-dirty`` appended when
+    ``source_dir`` has uncommitted changes, ``unknown`` without git or on any
+    git failure. Shared by the jar stamp and buildkit's SOURCE_COMMIT."""
+    git = shutil.which("git")
+    if git is None:
+        return "unknown"
+    try:
+        head = subprocess.run(
+            [git, "-C", str(repo_root), "rev-parse", "HEAD"],
+            capture_output=True, text=True, timeout=30,
+        )
+        if head.returncode != 0 or not head.stdout.strip():
+            return "unknown"
+        commit = head.stdout.strip()
+        dirty = subprocess.run(
+            [git, "-C", str(repo_root), "status", "--porcelain", "--",
+             str(source_dir)],
+            capture_output=True, text=True, timeout=30,
+        )
+        if dirty.returncode == 0 and dirty.stdout.strip():
+            commit += "-dirty"
+        return commit
+    except (OSError, subprocess.SubprocessError):
+        return "unknown"
+
+
+def _framework_manifest_text() -> str:
+    """Manifest lines for ``jar cfm`` (the tool adds Manifest-Version)."""
+    return (
+        f"Implementation-Title: {_FRAMEWORK_TITLE}\n"
+        f"Implementation-Version: {_framework_version()}\n"
+        "Implementation-Vendor: VCF Content Factory\n"
+        f"{_FRAMEWORK_COMMIT_ATTR}: {_framework_source_commit()}\n"
+    )
+
+
+def _framework_jar_label(jar: Path) -> str:
+    """``vcfcf-adapter-base <version> (source <commit>)`` from a built jar.
+
+    Reads the jar's manifest; a jar built before issue #214 carries none of
+    the attributes and is reported as such.
+    """
+    try:
+        with zipfile.ZipFile(jar) as zf:
+            raw = zf.read("META-INF/MANIFEST.MF").decode("utf-8", "replace")
+    except (OSError, KeyError, zipfile.BadZipFile):
+        return f"{jar.name} (no readable manifest)"
+    attrs = {}
+    for line in raw.replace("\r\n", "\n").replace("\n ", "").splitlines():
+        if ": " in line:
+            k, v = line.split(": ", 1)
+            attrs[k.strip()] = v.strip()
+    version = attrs.get("Implementation-Version")
+    if version is None:
+        return f"{jar.name} (unversioned: built before the framework manifest stamp)"
+    title = attrs.get("Implementation-Title", _FRAMEWORK_TITLE)
+    commit = attrs.get(_FRAMEWORK_COMMIT_ATTR, "unknown")
+    return f"{title} {version} (source {commit})"
+
+
 def _ensure_framework_jar() -> None:
     """Compile the framework source into vcfcf-adapter-base.jar if needed.
 
@@ -244,9 +351,13 @@ def _ensure_framework_jar() -> None:
                 "clean-room wall violation — report as a TOOLSET GAP."
             )
 
-        # Package the compiled classes into vcfcf-adapter-base.jar
+        # Package the compiled classes into vcfcf-adapter-base.jar, with the
+        # framework version and source commit in the manifest (issue #214).
         _ADAPTER_RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
-        cmd_jar = [jar_tool, "cf", str(output_jar), "-C", str(build_dir), "."]
+        manifest = Path(tmpdir) / "MANIFEST.txt"
+        manifest.write_text(_framework_manifest_text(), encoding="utf-8")
+        cmd_jar = [jar_tool, "cfm", str(output_jar), str(manifest),
+                   "-C", str(build_dir), "."]
         result_jar = subprocess.run(cmd_jar, capture_output=True, text=True)
         if result_jar.returncode != 0:
             raise SdkBuildError(
@@ -255,7 +366,8 @@ def _ensure_framework_jar() -> None:
 
     sz = output_jar.stat().st_size
     print(
-        f"  framework: built {output_jar.name} ({sz // 1024} KB)",
+        f"  framework: built {output_jar.name} ({sz // 1024} KB), "
+        f"{_framework_jar_label(output_jar)}",
         file=sys.stderr,
     )
 
@@ -2296,7 +2408,11 @@ def _write_outer_pak(
             zf.writestr("content/supermetrics/", "")
             # Build name→uuid lookup from the full bundled SM list so that every
             # @supermetric:"<name>" token in any formula can be resolved.
-            _sm_name_to_uuid: Dict[str, str] = {sm.name: sm.id for sm in supermetrics}
+            # Two bundled SMs sharing a display name (different ids) are a
+            # build error naming both files, not last-wins (#158 review W3).
+            _sm_name_to_uuid = _crossref.sm_name_to_uuid_map(
+                supermetrics, error_cls=SdkBuildError
+            )
             _sm_seen_names: set[str] = set()
             for sm in supermetrics:
                 resolved_formula = _resolve_sm_formula(
@@ -3222,10 +3338,35 @@ def _changelog_first_entry(current_version: str, current_build: int,
     )
 
 
+def _git_toplevel(project_dir: Path) -> Optional[Path]:
+    """Root of the git work tree containing ``project_dir``, or None.
+
+    None when git is missing, the directory is not inside a repository, or
+    the call fails. Resolved, so it compares cleanly with a resolved
+    ``project_dir``.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            capture_output=True, text=True, timeout=10,
+            cwd=str(project_dir),
+        )
+    except Exception:
+        return None
+    top = result.stdout.strip()
+    if result.returncode != 0 or not top:
+        return None
+    return Path(top).resolve()
+
+
 def _generate_changelog_md(project_dir: Path, current_version: str,
                             current_build: int, *,
                             release_build: bool = False) -> str:
     """Generate CHANGELOG.md from git history of the adapter project directory.
+
+    The history comes from the git repository that contains ``project_dir``
+    (normally the pak's own repo), never from the factory checkout around
+    it (#233).
 
     Groups commits by build number by reading the adapter.yaml at each commit
     that touched the project directory.  Falls back to date-grouped listing
@@ -3241,20 +3382,36 @@ def _generate_changelog_md(project_dir: Path, current_version: str,
     """
     import datetime
 
+    # The history source is the git repository that contains the pak
+    # directory. A pak is normally its own repo (cloned gitignored into the
+    # factory's content/sdk-adapters/<name>/), so this reads the pak's
+    # history, not the factory checkout's (#233).
+    repo_root = _git_toplevel(project_dir)
+    if repo_root is None:
+        return _changelog_first_entry(current_version, current_build, release_build)
+    try:
+        project_rel = project_dir.resolve().relative_to(repo_root).as_posix()
+    except ValueError:
+        return _changelog_first_entry(current_version, current_build, release_build)
+    if project_rel in ("", "."):
+        project_rel = "."
+        adapter_yaml_rel = "adapter.yaml"
+    else:
+        adapter_yaml_rel = f"{project_rel}/adapter.yaml"
+
     # Collect git log for the project directory
     try:
         result = subprocess.run(
             [
                 "git", "log",
                 "--format=%H\t%ai\t%s",
-                "--follow",
                 "--",
-                str(project_dir),
+                project_rel,
             ],
             capture_output=True,
             text=True,
             timeout=30,
-            cwd=str(project_dir.parent.parent.parent),  # repo root
+            cwd=str(repo_root),
         )
         if result.returncode != 0 or not result.stdout.strip():
             # No git history for this directory
@@ -3284,12 +3441,6 @@ def _generate_changelog_md(project_dir: Path, current_version: str,
     # Read adapter.yaml build_number at each commit to detect build transitions.
     # We read it only when the adapter.yaml changed (to keep git calls minimal).
     # Build a list: for each commit, determine which build it belongs to.
-    adapter_yaml_rel = str(
-        (project_dir / "adapter.yaml").relative_to(
-            project_dir.parent.parent.parent
-        )
-    )
-
     build_at_commit: Dict[str, Optional[int]] = {}
     version_at_commit: Dict[str, Optional[str]] = {}
 
@@ -3299,7 +3450,7 @@ def _generate_changelog_md(project_dir: Path, current_version: str,
             show = subprocess.run(
                 ["git", "show", f"{sha}:{adapter_yaml_rel}"],
                 capture_output=True, text=True, timeout=10,
-                cwd=str(project_dir.parent.parent.parent),
+                cwd=str(repo_root),
             )
             if show.returncode == 0:
                 # Simple key=value parse (YAML may not be available without safe_load)
@@ -3733,6 +3884,11 @@ def build_sdk_pak(project_dir: Path, output_dir: Optional[Path] = None,
     # Step 2b: ensure vcfcf-adapter-base.jar exists (compile from source if
     # running from the sdk-buildkit tarball where no pre-built jar ships)
     _ensure_framework_jar()
+    print(
+        "  framework: "
+        + _framework_jar_label(_ADAPTER_RUNTIME_DIR / "vcfcf-adapter-base.jar"),
+        file=sys.stderr,
+    )
 
     # Step 3: build classpath
     classpath = _build_classpath(project_dir)

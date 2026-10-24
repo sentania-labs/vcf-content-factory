@@ -1,0 +1,14 @@
+id: 80c3ffcc-3fa0-4fbb-9605-a895c6b603c9
+name: Fixture - Datastore Throughput List
+description: 'Synthetic fixture: Datastore Throughput List.'
+subject:
+  adapter_kind: VMWARE
+  resource_kind: Datastore
+columns:
+- attribute: devices:Aggregate of all instances|usage_average
+  display_name: Max Throughput
+  unit: mbps
+  transformation: MAX
+time_window:
+  unit: DAYS
+  count: 7

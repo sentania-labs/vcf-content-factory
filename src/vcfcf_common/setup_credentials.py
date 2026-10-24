@@ -344,7 +344,7 @@ def write_env_file(path: Path, lines: Sequence[str]) -> None:
     failure in between (a full disk, a permissions change mid-run, a
     value the UTF-8 encoder rejects) would leave a zero-byte `.env`:
     the operator adding a `devel` profile silently loses their working
-    `prod` and `qa` ones. So: write a sibling temp file, then
+    `prod` one. So: write a sibling temp file, then
     ``os.replace`` it onto the target, which is atomic on POSIX.
     Either the old file survives intact or the new one is
     complete; there is no in-between state.

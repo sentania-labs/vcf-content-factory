@@ -221,7 +221,7 @@ condition for the fix). Both APIX dashboards deleted afterward (verified).
 
 Outer zip:
 ```
-<marker>L.v1                      # per-instance fingerprint; devel = 6844548499441080431L.v1
+<marker>L.v1                      # 6844548499441080431L.v1 on every instance seen (not per-instance, #166)
 dashboards/                       # dir entry
 dashboardsharings/                # dir entry
 dashboards/<ownerUserId>          # NESTED zip (see below)

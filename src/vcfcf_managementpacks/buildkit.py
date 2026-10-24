@@ -22,12 +22,16 @@ Kit contents (assembled under a temp dir, then tarballed):
     alerts_render.py            : copy of vcfcf_core/alerts/render.py (imports patched)
     reports_loader.py          : copy of vcfcf_core/reports/loader.py
     reports_render.py          : copy of vcfcf_core/reports/render.py (imports patched)
+    defect_gate.py             : vcfcf_packaging/defects.py verbatim behind a
+                                 generated header; the standalone RULE-012 gate
+                                 for pak CI (#226)
     adapter_framework/src/      : framework Java source (compiled at build-sdk time)
     adapter_runtime/            : empty directory (jar compiled into here on first use)
     templates/icons/            : SVG icon assets
     reference_paks/            : one reference .pak for pak-compare
     LICENSE
     VERSION
+    SOURCE_COMMIT              : factory commit the kit was cut from (issue #214)
 
 Path relocation in the kit's sdk_builder.py:
   _HERE                    = Path(__file__).parent
@@ -82,7 +86,7 @@ from typing import Optional
 # Version constant: bump when kit contents change in a meaningful way
 # ---------------------------------------------------------------------------
 
-BUILDKIT_VERSION = "1.0.13"
+BUILDKIT_VERSION = "1.0.15"
 
 # ---------------------------------------------------------------------------
 # Source paths (relative to this file's parent = vcfcf_managementpacks/)
@@ -118,6 +122,37 @@ _FACTORY_SOURCES = {
     "reports_render.py": _CORE_ROOT / "reports" / "render.py",
     "docs_gen.py": _HERE / "docs_gen.py",
 }
+
+# The RULE-012 defect gate, shipped as a standalone script so pak CI can run
+# the factory's one implementation instead of a vendored fork of it (#226).
+# Not in _FACTORY_SOURCES: it is not imported by the kit package, and it
+# carries a generated header (see kit_defect_gate_source).
+_DEFECT_GATE_SOURCE = _SRC_ROOT / "vcfcf_packaging" / "defects.py"
+_DEFECT_GATE_KIT_NAME = "defect_gate.py"
+
+
+def kit_defect_gate_source(version: str = None) -> str:
+    """Text of the kit's ``sdk_buildkit/defect_gate.py``.
+
+    The factory module ``vcfcf_packaging/defects.py`` byte for byte, behind
+    a comment header naming its source.  The module is written to run as a
+    bare script (no package-relative import outside a guarded try), so no
+    rewrite is applied: what the kit ships is exactly what the factory runs.
+    """
+    version = version or BUILDKIT_VERSION
+    header = (
+        "# GENERATED FILE, do not edit. sdk-buildkit " + version + " copies\n"
+        "# src/vcfcf_packaging/defects.py from sentania-labs/vcf-content-factory\n"
+        "# verbatim below this header (vcfcf_managementpacks/buildkit.py). Fix\n"
+        "# the factory module, never this copy: one implementation (#226).\n"
+        "#\n"
+        "#   python3 defect_gate.py --pak <name> --registry <defects.md> "
+        "--require-registry\n"
+        "#\n"
+        "# --require-registry is required in CI: without it an absent, empty or\n"
+        "# unreadable registry (a failed fetch) warns and passes (RULE-012).\n"
+    )
+    return header + _DEFECT_GATE_SOURCE.read_text(encoding="utf-8")
 
 # ---------------------------------------------------------------------------
 # Import-rewrite rules
@@ -316,6 +351,10 @@ Run as:
     python3 -m sdk_buildkit build-sdk <adapter_dir>
     python3 -m sdk_buildkit validate-sdk <adapter_dir>
     python3 -m sdk_buildkit pak-compare <factory.pak> <reference.pak>
+
+The RULE-012 defect gate ships beside them as a standalone script, the
+factory's own implementation (exit 0 clean, 1 unusable registry, 2 refused):
+    python3 sdk_buildkit/defect_gate.py --pak <name> --registry <defects.md> --require-registry
 
 ## Consumer contract
 
@@ -792,7 +831,9 @@ def assemble_buildkit(
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Validate source files exist
-    for dest_name, src_path in _FACTORY_SOURCES.items():
+    for dest_name, src_path in list(_FACTORY_SOURCES.items()) + [
+        (_DEFECT_GATE_KIT_NAME, _DEFECT_GATE_SOURCE)
+    ]:
         if not src_path.is_file():
             raise FileNotFoundError(
                 f"buildkit source file not found: {src_path} (for {dest_name})"
@@ -841,6 +882,12 @@ def assemble_buildkit(
             else:
                 (kit_dir / dest_name).write_bytes(src_path.read_bytes())
                 _log(f"  wrote {dest_name}")
+
+        # 2b. The standalone RULE-012 defect gate (#226).
+        (kit_dir / _DEFECT_GATE_KIT_NAME).write_text(
+            kit_defect_gate_source(version), encoding="utf-8"
+        )
+        _log(f"  wrote {_DEFECT_GATE_KIT_NAME} (generated from vcfcf_packaging/defects.py)")
 
         # -----------------------------------------------------------------
         # 3a. adapter_runtime/ — empty stub; NO jars of any kind.
@@ -928,6 +975,14 @@ def assemble_buildkit(
         (kit_dir / "VERSION").write_text(f"{version}\n", encoding="utf-8")
         _log(f"  wrote VERSION ({version})")
 
+        # 7b. SOURCE_COMMIT: the factory commit this kit was cut from. The
+        # kit's sdk_builder stamps it into vcfcf-adapter-base.jar's manifest
+        # (issue #214); it cannot ask git, which inside a pak repo would
+        # answer with the pak's commit.
+        source_commit = _factory_source_commit()
+        (kit_dir / "SOURCE_COMMIT").write_text(f"{source_commit}\n", encoding="utf-8")
+        _log(f"  wrote SOURCE_COMMIT ({source_commit})")
+
         # -----------------------------------------------------------------
         # 8. Pack into tarball
         # -----------------------------------------------------------------
@@ -950,6 +1005,14 @@ def assemble_buildkit(
     size_kb = tarball_path.stat().st_size // 1024
     _log(f"Done: {tarball_path}  ({size_kb:,} KB)")
     return tarball_path
+
+
+def _factory_source_commit() -> str:
+    """Factory commit for the kit's SOURCE_COMMIT: the same helper the jar
+    stamp uses (sdk_builder._git_source_commit), over the framework source."""
+    from .sdk_builder import _git_source_commit
+
+    return _git_source_commit(_REPO_ROOT, _HERE / "adapter_framework" / "src")
 
 
 def _sha256_file(path: Path) -> str:

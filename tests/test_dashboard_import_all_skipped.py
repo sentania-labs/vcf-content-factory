@@ -205,6 +205,28 @@ class TestCmdSync:
         assert "WARNING" not in captured.err
         assert rc == 0
 
+    def test_materialization_check_skipped_on_all_skipped_import(
+        self, monkeypatch, tmp_path, capsys
+    ):
+        """#167 review N3: same rule as the bundle-sync handler. An import
+        that changed no dashboard does not run the check, so a pre-existing
+        stuck dashboard cannot fail this sync."""
+        calls = []
+        _stub_cli_io(monkeypatch, _result(0, 3), [_StubDashboard()])
+        monkeypatch.setattr(dash_cli, "_report_materialization",
+                            lambda *a, **k: calls.append(1) or 1)
+        rc = dash_cli.cmd_sync(_sync_args(tmp_path))
+        assert calls == [] and rc == 0
+        assert "MATERIALIZATION SKIPPED" in capsys.readouterr().out
+
+    def test_materialization_check_runs_on_clean_import(self, monkeypatch, tmp_path):
+        calls = []
+        _stub_cli_io(monkeypatch, _result(3, 0), [_StubDashboard()])
+        monkeypatch.setattr(dash_cli, "_report_materialization",
+                            lambda *a, **k: calls.append(k.get("recheck_wait_s")) or 1)
+        rc = dash_cli.cmd_sync(_sync_args(tmp_path))
+        assert calls == [None] and rc == 1
+
 
 # ---------------------------------------------------------------------------
 # Packaged installer template (src/vcfcf_packaging/templates/install.py)

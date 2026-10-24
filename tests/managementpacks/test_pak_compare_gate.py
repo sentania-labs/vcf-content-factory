@@ -411,7 +411,7 @@ def test_framework_compile_disables_annotation_processing(tmp_path, monkeypatch)
 
     def _fake_run(cmd, **_kw):
         seen.append(list(cmd))
-        if cmd and cmd[0].endswith("jar") and "cf" in cmd:
+        if cmd and cmd[0].endswith("jar") and ("cf" in cmd or "cfm" in cmd):
             Path(cmd[2]).write_bytes(b"jar")
         return _Done()
 

@@ -19,7 +19,9 @@ the need for agents to shell-source `.env` before invoking Python
 
 ## Profile system
 
-Credentials are grouped into named profiles (prod / qa / devel).
+Credentials are grouped into named profiles. The convention is ``prod``
+and ``devel``; any further profile is named from its ``VCFOPS_<NAME>_*``
+prefix, lowercased (``VCFOPS_DEVEL_9_1_HOST`` is profile ``devel_9_1``).
 Each profile is a set of env vars prefixed ``VCFOPS_<PROFILE>_``:
 
     VCFOPS_PROD_HOST      VCFOPS_PROD_USER      VCFOPS_PROD_PASSWORD

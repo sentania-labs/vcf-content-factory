@@ -1,0 +1,19 @@
+id: d24cf772-fa6b-4618-9513-f26b0884f4f3
+name: Fixture - Cluster DRS Migration Threshold
+description: 'Synthetic fixture: Cluster DRS Migration Threshold.'
+subject:
+  adapter_kind: VMWARE
+  resource_kind: ClusterComputeResource
+data_type: distribution
+presentation: donut-chart
+columns:
+- attribute: configuration|drsconfig|vmotionRate
+  display_name: Threshold
+  is_property: true
+  is_string_attribute: false
+buckets:
+  dynamic: true
+  calc_function: DISCRETE
+time_window:
+  unit: DAYS
+  count: 7

@@ -202,6 +202,12 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
     private final AtomicBoolean fipsTruststoreFailureWarnLogged = new AtomicBoolean(false);
 
     /**
+     * Guards the framework version line in {@link #onConfigure}: logged once
+     * per adapter instance (issue #214).
+     */
+    private final AtomicBoolean frameworkVersionLogged = new AtomicBoolean(false);
+
+    /**
      * FIPS-mode Suite API socket factory, cached per adapter instance and
      * rebuilt when its input files change (issue #215 review W1).
      */
@@ -210,8 +216,9 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
 
     /**
      * Adapter-instance-scoped logger obtained lazily from the platform's
-     * {@code AdapterLoggerFactory}. Named after the concrete class; pinned
-     * to INFO level so messages are not swallowed by the WARN root logger.
+     * {@code AdapterLoggerFactory}. Named after the concrete class; raised
+     * to INFO when created below INFO (a DEBUG level set by the operator is
+     * kept; issue #224).
      */
     private volatile com.integrien.alive.common.adapter3.Logger adapterLogger;
 
@@ -610,6 +617,63 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
     }
 
     /**
+     * {@code "vcfcf-adapter-base <version> (source <commit>)"} from the
+     * manifest of the jar this class was loaded from (issue #214), or a label
+     * saying the version is unknown (classes not loaded from a jar, or a jar
+     * built before the manifest stamp). Never throws. Reads this pak's own
+     * copy through the class's code source, never the class loader's first
+     * {@code META-INF/MANIFEST.MF}, which could belong to another jar.
+     */
+    static String frameworkBuildLabel() {
+        return describeFrameworkBuild(frameworkManifest());
+    }
+
+    /** The framework jar's manifest, or {@code null}. Never throws. */
+    static java.util.jar.Manifest frameworkManifest() {
+        try {
+            java.security.CodeSource cs =
+                    VcfCfAdapter.class.getProtectionDomain().getCodeSource();
+            if (cs == null || cs.getLocation() == null) return null;
+            java.nio.file.Path jar = java.nio.file.Paths.get(cs.getLocation().toURI());
+            if (!java.nio.file.Files.isRegularFile(jar)) return null;
+            try (java.util.jar.JarFile jf = new java.util.jar.JarFile(jar.toFile(), false)) {
+                return jf.getManifest();
+            }
+        } catch (Exception | LinkageError e) {
+            return null;
+        }
+    }
+
+    /**
+     * Label for a framework manifest; see {@link #frameworkBuildLabel()}.
+     * Attribute values are stripped of control characters and capped.
+     * Visible to tests.
+     */
+    static String describeFrameworkBuild(java.util.jar.Manifest mf) {
+        java.util.jar.Attributes a = mf == null ? null : mf.getMainAttributes();
+        String version = a == null ? null : a.getValue("Implementation-Version");
+        if (version == null || version.trim().isEmpty()) {
+            return "vcfcf-adapter-base (version unknown: no Implementation-Version in"
+                    + " the jar manifest)";
+        }
+        String title = a.getValue("Implementation-Title");
+        String commit = a.getValue("X-Vcfcf-Source-Commit");
+        return manifestValue(title, "vcfcf-adapter-base") + " " + manifestValue(version, "?")
+                + " (source " + manifestValue(commit, "unknown") + ")";
+    }
+
+    private static String manifestValue(String v, String fallback) {
+        if (v == null || v.trim().isEmpty()) return fallback;
+        StringBuilder sb = new StringBuilder();
+        String t = v.trim();
+        for (int i = 0; i < t.length() && sb.length() < 64; i++) {
+            char c = t.charAt(i);
+            sb.append(Character.isISOControl(c) ? '?' : c);
+        }
+        return sb.toString();
+    }
+
+    /**
      * {@inheritDoc}
      *
      * <p>Delegates to {@link #configureAdapter(ResourceStatus, ResourceConfig)}.
@@ -620,6 +684,12 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
     public final void onConfigure(ResourceStatus resourceStatus,
             ResourceConfig resourceConfig) {
         abortRequested.set(false);
+        if (frameworkVersionLogged.compareAndSet(false, true)) {
+            // Issue #214: which framework this pak carries. Each pak bundles
+            // its own vcfcf-adapter-base.jar, so paks on one collector can run
+            // different framework versions side by side.
+            logInfo("VcfCfAdapter: framework " + frameworkBuildLabel());
+        }
         config = null;
         ManagedHttpClient old = this.httpClient;
         this.httpClient = null;
@@ -721,12 +791,24 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
      *
      * <p>Cooperative cancellation: loops check {@link #isAbortRequested()}
      * and honor {@link InterruptedException} (§9).
+     *
+     * <p><strong>Adapter instance status (issue #223).</strong> The SDK
+     * accepts ERROR and DOWN only on the adapter instance resource (the
+     * account row in Integrations > Accounts); child resources take only
+     * data-receiving states. So when a whole cycle fails, the framework sets
+     * the adapter instance itself: if every resource the cycle collected
+     * failed with ERROR or DOWN (DOWN only when every one mapped to DOWN), or
+     * there was no resource to collect and the discovery step failed, the
+     * adapter instance gets that status with a one-line reason (for example
+     * a cached login failure). A cycle cut short by a stop or an interrupt
+     * sets nothing. Before this, the account kept showing "Collecting".
      */
     @Override
     @SuppressWarnings("unchecked")
     public final void onCollect(ResourceConfig adapterInstance,
             Collection<ResourceConfig> resources) {
         abortRequested.set(false);
+        Exception discoveryFailure = null;
 
         VcfCfCollector<C> collector = getCollector();
         if (collector == null) {
@@ -748,6 +830,7 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
             } catch (Exception e) {
                 logWarn("onCollect: rediscovery failed (non-fatal): "
                         + e.getMessage(), e);
+                discoveryFailure = e;
                 // Not fatal — continue with existing resource set.
             }
         }
@@ -771,6 +854,7 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
             } catch (Exception e) {
                 logWarn("onCollect: collect-path discovery (discoverOnCollect) "
                         + "failed (non-fatal): " + e.getMessage(), e);
+                if (discoveryFailure == null) discoveryFailure = e;
                 // Not fatal — continue with existing resource set.
             }
         }
@@ -779,13 +863,16 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
 
         // §1 step 2: per-resource gather.
         MetricDataCache cache = this.metricCache;
+        CycleOutcome outcome = new CycleOutcome();
 
         for (ResourceConfig rc : resources) {
             if (isAbortRequested() || Thread.currentThread().isInterrupted()) {
                 Thread.currentThread().interrupt();
+                outcome.cut = true;
                 break;
             }
 
+            outcome.attempted++;
             try {
                 List<MetricData> samples = new ArrayList<>();
                 collector.collect(config, httpClient, rc, samples, this);
@@ -829,15 +916,27 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
                 logWarn("onCollect: interrupted collecting " + rcLabel(rc)
                         + " — aborting cycle");
                 setStatusSafe(rc, ResourceStatusEnum.RESOURCE_STATUS_ERROR);
+                outcome.cut = true;
                 break;
             } catch (Exception e) {
                 String msg = e.getMessage() != null ? e.getMessage()
                         : e.getClass().getSimpleName();
                 logWarn("onCollect: error collecting " + rcLabel(rc) + ": " + msg, e);
                 ResourceStatusEnum status = collector.mapCollectException(e);
-                setStatusSafe(rc,
-                        status != null ? status : ResourceStatusEnum.RESOURCE_STATUS_ERROR);
+                ResourceStatusEnum effective =
+                        status != null ? status : ResourceStatusEnum.RESOURCE_STATUS_ERROR;
+                setStatusSafe(rc, effective);
+                outcome.recordFailure(effective, e);
             }
+        }
+
+        // Issue #223: a cycle in which nothing could be collected shows on
+        // the adapter instance (the account row), not only on its objects.
+        // An interrupt the collector wrapped (no InterruptedException, no
+        // stop) still means the cycle was cut short: set nothing.
+        if (!outcome.cut && !isAbortRequested()
+                && !Thread.currentThread().isInterrupted()) {
+            reportAdapterInstanceFailure(adapterInstance, outcome, discoveryFailure);
         }
 
         // §8: flush deduplicated data into the CollectResult at end of cycle.
@@ -2377,8 +2476,9 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
     /**
      * Return the adapter-specific logger, lazily created on first call.
      *
-     * <p>Named after the concrete class; pinned to INFO level so messages
-     * are not swallowed by the WARN root logger.
+     * <p>Named after the concrete class; raised to INFO at creation when
+     * INFO is not already enabled (see {@link #raiseToInfo}), so a DEBUG
+     * level set by the operator is kept (issue #224).
      *
      * <h4>Visibility rule (bytecode-determined)</h4>
      * <p>The platform file appender that writes to
@@ -2391,18 +2491,23 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
      * is logged there, so this is acceptable.
      *
      * <p>When an appender is present the factory creates a per-logger
-     * {@code LoggerConfig} whose name is {@code "(instanceId) className"}.
-     * That logger config is wired to the instance file appender with an
-     * effective level of {@code max(sdkLoggerConfig.levelForAdapterLog,
-     * rootLevel)} — where {@code levelForAdapterLog} is the level written by
-     * {@code logging.properties} (typically {@code INFO} or {@code WARN}).
-     * The {@link com.integrien.alive.common.adapter3.Logger#setLevel} call
-     * translates the {@code CustomLevel} to a Log4j level and invokes
-     * {@code Configurator.setLevel(loggerName, level)} — which patches the
-     * live {@code LoggerConfig} in the running Log4j context, overriding the
-     * {@code logging.properties} floor. <strong>Without the {@code setLevel}
-     * call, a WARN root threshold silently drops INFO messages even when the
-     * adapter appender is correctly attached.</strong>
+     * {@code LoggerConfig} whose name is {@code "(instanceId) className"}
+     * (corrected 2026-10-23 from bytecode, issue #228). It looks up the
+     * config that governs the <em>bare</em> {@code className}: an entry the
+     * adapter's {@code <ADAPTER_HOME>/<adapter jar>/conf/logging.properties}
+     * created (an {@code AdapterLoggerConfig}; vendor paks ship
+     * {@code <package>=INFO}) or else the collector's own config (root WARN).
+     * The instance file appender is attached at that entry's
+     * {@code levelForAdapterLog} (else the plain level), and the collector's
+     * appenders at the plain level. The new logger's own level is the more
+     * verbose of the two. The
+     * {@link com.integrien.alive.common.adapter3.Logger#setLevel} call
+     * ({@code Configurator.setLevel}) changes only that logger level, never
+     * the appender filters: it lets a message past the logger's level gate,
+     * but a line below the instance appender's level still never reaches the
+     * instance log. So what reaches the instance log is decided by the entry
+     * covering the bare class name, which is why {@link #componentLogger}
+     * names framework classes under the adapter class.
      *
      * <p>The root logger threshold (typically WARN in the 9.1 collector JVM)
      * is irrelevant once a per-instance logger config is registered — Log4j
@@ -2417,10 +2522,10 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
      * tail {@code collector.log} while triggering a reload (save
      * {@code logging.properties} on the appliance) and observe whether the
      * INFO lines reappear after ~30 s — if they do, the race is confirmed.
-     * The {@link #componentLogger(Class)} method is not susceptible to this
-     * race because it calls {@code setLevel} <em>every time it is invoked by
-     * the adapter</em>, which is at configure time (after any reload that
-     * would have occurred during a previous cycle).
+     * {@link #componentLogger(Class)} re-applies the INFO floor each time it
+     * is invoked (normally at configure time, after any reload that occurred
+     * during a previous cycle), but only when INFO is not already enabled, so
+     * it never lowers a DEBUG level (issue #224).
      *
      * <p><strong>Do not shadow this method in adapter subclasses.</strong>
      * Use {@link #componentLogger(Class)} to obtain leveled loggers for
@@ -2433,8 +2538,7 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
                 l = adapterLogger;
                 if (l == null) {
                     l = getAdapterLoggerFactory().getLogger(getClass());
-                    l.setLevel(
-                        com.integrien.alive.common.adapter3.Logger.CustomLevel.INFO);
+                    raiseToInfo(l);
                     adapterLogger = l;
                 }
             }
@@ -2465,12 +2569,19 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
      * <p>The returned handle is obtained from the same
      * {@link com.integrien.alive.common.adapter3.AdapterLoggerFactoryImpl} as
      * the base's own logger. The factory names the logger config
-     * {@code "(instanceId) com.example.HelperClass"} — the same pattern as
-     * the adapter's own {@code "(instanceId) com.example.MyAdapter"} — and
-     * wires it to the same rolling file appender
-     * ({@code <adapterName>_<instanceId>.log}). The {@code setLevel(INFO)}
-     * call overrides the {@code logging.properties} floor so INFO messages
-     * are not silently filtered by the WARN root threshold.
+     * {@code "(instanceId) <name>"} and wires it to the same rolling file
+     * appender ({@code <adapterName>_<instanceId>.log}), filtered at the
+     * level the adapter's logging configuration gives {@code <name>}.
+     * {@code <name>} is the component's class name when the class is in the
+     * adapter's package, otherwise a child of the adapter class (see
+     * {@link #componentLoggerName(Class, Class)}; issue #228: framework
+     * helper lines never reached the instance log on a Cloud Proxy).
+     *
+     * <h4>Level (issue #224)</h4>
+     * <p>The logger is raised to INFO only when INFO is not already enabled;
+     * a DEBUG or TRACE level set by the operator or the pak's
+     * {@code logging.properties} is kept, however often the logger is looked
+     * up. Fetching once in {@code configureAdapter()} is still the pattern.
      *
      * <h4>Migration note</h4>
      * <p>Any adapter that was shadowing {@code adapterLogger()} (i.e.,
@@ -2492,10 +2603,64 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
      */
     protected com.integrien.alive.common.adapter3.Logger componentLogger(
             Class<?> component) {
-        com.integrien.alive.common.adapter3.Logger l =
-                getAdapterLoggerFactory().getLogger(component);
-        l.setLevel(com.integrien.alive.common.adapter3.Logger.CustomLevel.INFO);
+        java.util.Objects.requireNonNull(component, "componentLogger: component class");
+        com.integrien.alive.common.adapter3.Logger l = getAdapterLoggerFactory()
+                .getLogger(componentLoggerName(getClass(), component));
+        raiseToInfo(l);
         return l;
+    }
+
+    /**
+     * Logger name {@link #componentLogger(Class)} asks the SDK factory for
+     * (issue #228). A class in the adapter's own package, or a subpackage of
+     * it, keeps its own name. Any other class (the framework's own helpers
+     * such as {@code SuiteApiStitcher}, a JDK or vendor class) is named as a
+     * child of the adapter class: {@code <adapter class>.<simple name>}, for
+     * example {@code com.vcfcf.adapters.unifi.UniFiAdapter.SuiteApiStitcher}.
+     *
+     * <p>Why: the SDK gives each logger its instance-log appender at the
+     * level the adapter's {@code conf/logging.properties} (or the platform's
+     * per-adapter setting) assigns to the bare name, and that entry is keyed
+     * by the pak's package. A framework class name
+     * ({@code com.vcfcf.adapter.stitch...}) sits outside it, falls back to
+     * the collector root level (WARN), and its INFO never reaches the
+     * instance log. As a child of the adapter class it inherits exactly the
+     * adapter's own level. Visible to tests.
+     */
+    static String componentLoggerName(Class<?> adapterClass, Class<?> component) {
+        return componentLoggerName(adapterClass.getName(), packageOf(adapterClass),
+                packageOf(component), component.getName());
+    }
+
+    /** {@link #componentLoggerName(Class, Class)} on names. Visible to tests. */
+    static String componentLoggerName(String adapterClassName, String adapterPackage,
+            String componentPackage, String componentClassName) {
+        boolean inPak = componentPackage.equals(adapterPackage)
+                || (!adapterPackage.isEmpty()
+                        && componentPackage.startsWith(adapterPackage + "."));
+        if (inPak) return componentClassName;
+        String simple = componentClassName.substring(componentClassName.lastIndexOf('.') + 1);
+        return adapterClassName + "." + simple;
+    }
+
+    private static String packageOf(Class<?> c) {
+        String n = c.getName();
+        int dot = n.lastIndexOf('.');
+        return dot < 0 ? "" : n.substring(0, dot);
+    }
+
+    /**
+     * Lift {@code l} to INFO only when INFO is not already enabled (issue
+     * #224). A level an operator or the pak's {@code logging.properties} set
+     * at INFO or below (DEBUG, TRACE) is left alone, so a repeat lookup can
+     * no longer discard DEBUG. A level above INFO (the collector's WARN root)
+     * is still raised, which keeps INFO messages from being dropped at the
+     * logger.
+     */
+    static void raiseToInfo(com.integrien.alive.common.adapter3.Logger l) {
+        if (!l.isInfoEnabled()) {
+            l.setLevel(com.integrien.alive.common.adapter3.Logger.CustomLevel.INFO);
+        }
     }
 
     /** Log at INFO level to the adapter-specific log file. */
@@ -2521,6 +2686,122 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
     // -----------------------------------------------------------------------
     // Internal helpers
     // -----------------------------------------------------------------------
+
+    /** What one {@link #onCollect} cycle saw, for the adapter instance status. */
+    static final class CycleOutcome {
+        int attempted;
+        int failed;
+        boolean everyFailureDown = true;
+        boolean cut;
+        Exception firstFailure;
+
+        /**
+         * Count a resource failure that left it ERROR or DOWN. Other mapped
+         * statuses (for example NO_DATA_RECEIVING) are not a failure of the
+         * instance.
+         */
+        void recordFailure(ResourceStatusEnum effective, Exception e) {
+            if (effective != ResourceStatusEnum.RESOURCE_STATUS_ERROR
+                    && effective != ResourceStatusEnum.RESOURCE_STATUS_DOWN) {
+                return;
+            }
+            failed++;
+            if (effective != ResourceStatusEnum.RESOURCE_STATUS_DOWN) everyFailureDown = false;
+            if (firstFailure == null) firstFailure = e;
+        }
+    }
+
+    /**
+     * The adapter instance status a completed cycle calls for, or
+     * {@code null} for none (issue #223): ERROR or DOWN when every collected
+     * resource failed (DOWN only if all mapped to DOWN), ERROR when there was
+     * nothing to collect and discovery failed. Visible to tests.
+     */
+    static ResourceStatusEnum adapterInstanceStatus(CycleOutcome o, Exception discoveryFailure) {
+        if (o.attempted > 0 && o.failed == o.attempted) {
+            return o.everyFailureDown ? ResourceStatusEnum.RESOURCE_STATUS_DOWN
+                    : ResourceStatusEnum.RESOURCE_STATUS_ERROR;
+        }
+        if (o.attempted == 0 && discoveryFailure != null) {
+            return ResourceStatusEnum.RESOURCE_STATUS_ERROR;
+        }
+        return null;
+    }
+
+    /**
+     * One-line reason shown on the adapter instance: what failed and the
+     * first failure's class and message (credential-looking fragments
+     * redacted by {@link #redactCredentials}, control characters replaced,
+     * capped). The account row is readable by any user with Integrations
+     * access, so paks must still throw credential-free messages from
+     * {@code collect()}; the redaction is a best-effort backstop. Visible to
+     * tests.
+     */
+    static String adapterInstanceFailureMessage(CycleOutcome o, Exception discoveryFailure) {
+        Exception cause = o.attempted > 0 ? o.firstFailure : discoveryFailure;
+        String what = o.attempted > 0
+                ? "Collection failed for all " + o.attempted + " resource(s)"
+                : "Resource discovery failed and there was nothing to collect";
+        if (cause == null) return what;
+        String m = cause.getMessage();
+        StringBuilder sb = new StringBuilder(what).append(": ")
+                .append(cause.getClass().getSimpleName()).append(": ");
+        String text = m == null ? "(no message)" : redactCredentials(m);
+        int max = 300;
+        for (int i = 0; i < text.length() && i < max; i++) {
+            char c = text.charAt(i);
+            sb.append(Character.isISOControl(c) ? ' ' : c);
+        }
+        if (text.length() > max) sb.append("...");
+        return sb.toString();
+    }
+
+    /** Bearer, Basic and OpsToken authorization values. */
+    private static final java.util.regex.Pattern AUTH_SCHEME_VALUE = java.util.regex.Pattern.compile(
+            "(?i)\\b(bearer|basic|opstoken)(\\s+)[A-Za-z0-9._~+/=:-]{4,}");
+
+    /**
+     * {@code key=value}, {@code key: value} and JSON {@code "key":"value"}
+     * pairs whose key names a secret.
+     */
+    private static final java.util.regex.Pattern SECRET_PAIR = java.util.regex.Pattern.compile(
+            "(?i)([\"']?\\b(?:password|passwd|pwd|passphrase|secret|client_secret|token|"
+            + "access_token|refresh_token|api[_-]?key|apikey|session[_-]?id|sessionid|_?sid)"
+            + "\\b[\"']?\\s*[:=]\\s*)(\"[^\"]*\"|'[^']*'|[^\\s&,;\"'}\\]]+)");
+
+    /** {@code scheme://user:password@host} userinfo. */
+    private static final java.util.regex.Pattern URL_USERINFO = java.util.regex.Pattern.compile(
+            "(?i)(\\b[a-z][a-z0-9+.-]*://)[^/\\s@:]+:[^/\\s@]+@");
+
+    /**
+     * Best-effort removal of credential-looking fragments from text bound for
+     * the account row (review W1, issue #223): Bearer / Basic / OpsToken
+     * values, {@code password=}-style pairs (also {@code token}, {@code sid},
+     * {@code api_key} and similar, in {@code =}, {@code :} and JSON forms),
+     * and {@code user:password@} in URLs. Each becomes {@code <redacted>}.
+     * Not a guarantee: a pak must not put secrets in exception messages.
+     * Visible to tests.
+     */
+    static String redactCredentials(String text) {
+        if (text == null || text.isEmpty()) return text;
+        String t = AUTH_SCHEME_VALUE.matcher(text).replaceAll("$1$2<redacted>");
+        t = SECRET_PAIR.matcher(t).replaceAll("$1<redacted>");
+        return URL_USERINFO.matcher(t).replaceAll("$1<redacted>@");
+    }
+
+    private void reportAdapterInstanceFailure(ResourceConfig adapterInstance,
+            CycleOutcome outcome, Exception discoveryFailure) {
+        ResourceStatusEnum status = adapterInstanceStatus(outcome, discoveryFailure);
+        if (status == null || adapterInstance == null) return;
+        String msg = adapterInstanceFailureMessage(outcome, discoveryFailure);
+        try {
+            setResourceStatus(adapterInstance, status, msg);
+        } catch (RuntimeException e) {
+            logWarn("onCollect: could not set the adapter instance status: " + e);
+            return;
+        }
+        logWarn("onCollect: adapter instance set to " + status.name() + ": " + msg);
+    }
 
     /**
      * Set per-resource status, validating with

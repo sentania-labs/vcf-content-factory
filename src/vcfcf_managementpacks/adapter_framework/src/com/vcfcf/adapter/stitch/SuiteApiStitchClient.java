@@ -111,11 +111,15 @@ import java.util.regex.Pattern;
  * {@link #discard()} — errors during release are swallowed and logged (the
  * platform's token TTL is the safety net). This matches the
  * {@code RestClientProxy} ({@code SuiteAPIClient}) behavioral contract:
- * per-instance caching, single 401 retry, close-time release.
+ * per-instance caching, single 401 retry, close-time release. A closed
+ * client ({@link #close()} / {@link #discard()}) refuses every later call and
+ * never acquires a new token (issue #217).
  *
  * <h3>Logging</h3>
- * <p>Credential values are never logged. Only the mechanism chosen
- * ({@code explicit} or {@code ambient}) and the principal name are logged.
+ * <p>Credential values are never logged, and neither is the principal (the
+ * Suite API account name; issue #227): log lines and exception messages name
+ * only the mechanism chosen ({@code explicit} or {@code ambient}), the
+ * credential source and the endpoint.
  *
  * <h3>Usage</h3>
  * <pre>{@code
@@ -195,13 +199,65 @@ public final class SuiteApiStitchClient {
     /** Guard for token acquire / invalidate operations. */
     private final Object tokenLock = new Object();
 
+    /**
+     * Set by {@link #close()} (issue #217). Once set, no new token is ever
+     * acquired: every call fails fast with {@link ClientClosedException}.
+     * Written under {@link #tokenLock}; volatile for the lock-free fast path.
+     */
+    private volatile boolean closed = false;
+
+    /** Guards the one WARN logged for calls refused after close. */
+    private final java.util.concurrent.atomic.AtomicBoolean closedRefusalWarned =
+            new java.util.concurrent.atomic.AtomicBoolean(false);
+
+    /**
+     * Operation and exception class pairs whose unexpected failure has
+     * already been logged with its stack trace by this client (issue #192):
+     * a repeat logs one line and keeps the trace at DEBUG. Per instance, never
+     * static.
+     */
+    private final Set<String> tracedFailures =
+            java.util.concurrent.ConcurrentHashMap.newKeySet();
+
     // -----------------------------------------------------------------------
     // Private exception — distinguishes 401 for the single-retry path
     // -----------------------------------------------------------------------
 
-    /** Thrown by {@code rawPost}/{@code rawGet} on HTTP 401 only. */
-    private static final class Suite401Exception extends IOException {
-        Suite401Exception(String message) { super(message); }
+    /**
+     * Thrown by {@code rawPost}/{@code rawGet} on HTTP 401 only. A
+     * {@link SuiteApiHttpException}, so a 401 that survives the single retry
+     * reaches {@link #get} callers with its status and body like any other.
+     */
+    private static final class Suite401Exception extends SuiteApiHttpException {
+        private static final long serialVersionUID = 1L;
+
+        Suite401Exception(String message, Integer apiErrorCode, String bodyExcerpt) {
+            super(message, 401, apiErrorCode, bodyExcerpt);
+        }
+    }
+
+    /** Accept header sent when the caller names none. */
+    static final String DEFAULT_ACCEPT = "application/json";
+
+    /** Most bytes of an error body read from the server (issue #201). */
+    static final int ERROR_BODY_READ_MAX = 8192;
+
+    /** Longest error body excerpt kept on a {@link SuiteApiHttpException}. */
+    public static final int ERROR_BODY_EXCERPT_MAX = 512;
+
+    /**
+     * Thrown by every call on a closed client (issue #217). An
+     * {@link IOException}, so {@link #get} callers that already catch
+     * {@code IOException} treat it like an outage.
+     */
+    private static final class ClientClosedException extends IOException {
+        private static final long serialVersionUID = 1L;
+
+        ClientClosedException() {
+            super("SuiteApiStitchClient is closed (discarded); a closed client never"
+                    + " acquires a new token. Use the client built by the current"
+                    + " configuration.");
+        }
     }
 
     // -----------------------------------------------------------------------
@@ -284,8 +340,9 @@ public final class SuiteApiStitchClient {
         }
 
         /**
-         * Logger for operational messages. Never logs credential values —
-         * only the principal name and mechanism are logged.
+         * Logger for operational messages. Never logs credential values or
+         * the principal (account name): only the mechanism, the credential
+         * source and the endpoint are logged.
          *
          * @param logger the adapter-specific logger
          */
@@ -332,7 +389,6 @@ public final class SuiteApiStitchClient {
                         : DEFAULT_SUITE_API_BASE;
                 mechanism = "explicit";
                 logger.info("SuiteApiStitchClient: credential mechanism=explicit"
-                        + " principal=" + username
                         + " endpoint=" + suiteApiBase);
 
             } else {
@@ -359,7 +415,6 @@ public final class SuiteApiStitchClient {
                 mechanism = "ambient";
                 logger.info("SuiteApiStitchClient: credential mechanism=ambient"
                         + " file=" + cred.getSourceLabel()
-                        + " principal=" + username
                         + " endpoint=" + suiteApiBase);
 
                 // WARNING-1 breadcrumb (ambient-credential-v3-instance-first
@@ -390,8 +445,7 @@ public final class SuiteApiStitchClient {
             logger.info("SuiteApiStitchClient: transport=openPlatformConnection"
                     + (loopback ? " loopback" : " remote")
                     + " (BC-mirror; FIPS or non-FIPS mode logged by openPlatformConnection)"
-                    + " mechanism=" + mechanism
-                    + " principal=" + username);
+                    + " mechanism=" + mechanism);
 
             return new SuiteApiStitchClient(
                     adapter,
@@ -465,8 +519,12 @@ public final class SuiteApiStitchClient {
      *
      * <p>The cached bearer token is used. If the Suite API returns HTTP 401,
      * the token is re-acquired and the push is retried exactly once. Failures
-     * are logged at WARN and swallowed — a stitching failure must not abort
-     * the adapter's primary collect cycle.
+     * are logged at WARN and swallowed, because a stitching failure must not
+     * abort the adapter's primary collect cycle. The push repeats every
+     * cycle, so a failure is one WARN line per call with the stack trace at
+     * DEBUG (an unexpected exception class shows its trace at WARN the first
+     * time only; see {@link #logFailure}). An interrupt restores the thread's
+     * interrupt flag.
      *
      * @param resourceId VCF Ops resource UUID (from {@link ForeignResourceResolver})
      * @param properties map of statKey → string value; no-op if empty
@@ -488,8 +546,11 @@ public final class SuiteApiStitchClient {
                 rawPost(path, body, tok);
             }
         } catch (Exception e) {
-            logger.warn("SuiteApiStitchClient: pushProperties failed for resource="
-                    + resourceId + ": " + e.getMessage(), e);
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
+            logFailure("pushProperties", "SuiteApiStitchClient: pushProperties failed for"
+                    + " resource=" + loggable(resourceId), e);
         }
     }
 
@@ -519,8 +580,11 @@ public final class SuiteApiStitchClient {
                 rawPost(path, body, tok);
             }
         } catch (Exception e) {
-            logger.warn("SuiteApiStitchClient: pushStats failed for resource="
-                    + resourceId + ": " + e.getMessage(), e);
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
+            logFailure("pushStats", "SuiteApiStitchClient: pushStats failed for"
+                    + " resource=" + loggable(resourceId), e);
         }
     }
 
@@ -583,8 +647,10 @@ public final class SuiteApiStitchClient {
      * every failure logged at WARN and swallowed so the collect cycle never
      * sees an exception. An expected failure (an {@link IOException} such as
      * a non-2xx status, timeout or refused connection, or an interrupt) is
-     * one WARN line without a stack trace, with the trace at DEBUG; anything
-     * else keeps its stack trace at WARN (see {@link #isExpectedFailure}).
+     * one WARN line without a stack trace, with the trace at DEBUG; any other
+     * exception class shows its stack trace at WARN the first time this
+     * client sees it for this operation, then logs like an expected one (see
+     * {@link #logFailure}).
      * Blank or non-UUID ids are skipped with a WARN (the ids go into the
      * request path and body, so they are validated rather than escaped; a
      * rejected id is logged truncated and with control characters
@@ -659,7 +725,7 @@ public final class SuiteApiStitchClient {
             if (e instanceof InterruptedException) {
                 Thread.currentThread().interrupt();
             }
-            logFailure("SuiteApiStitchClient: addChildren failed for parent="
+            logFailure("addChildren", "SuiteApiStitchClient: addChildren failed for parent="
                     + parent + " children=" + children, e);
             return false;
         }
@@ -696,8 +762,9 @@ public final class SuiteApiStitchClient {
      *   <li>Query or parse failure: logs at WARN and returns {@code null};
      *       never throws. An expected failure (HTTP status, timeout, refused
      *       connection, interrupt) is one WARN line without a stack trace,
-     *       with the trace at DEBUG; anything else, a malformed response
-     *       included, keeps its stack trace at WARN.</li>
+     *       with the trace at DEBUG; any other exception class, a malformed
+     *       response included, shows its stack trace at WARN the first time
+     *       this client sees it here, then one line per call.</li>
      * </ul>
      *
      * <p><strong>Look up every cycle; do not cache across cycles.</strong> A
@@ -738,8 +805,8 @@ public final class SuiteApiStitchClient {
             if (e instanceof InterruptedException) {
                 Thread.currentThread().interrupt();
             }
-            logFailure("SuiteApiStitchClient: findSingletonResourceId query failed for "
-                    + what, e);
+            logFailure("findSingletonResourceId",
+                    "SuiteApiStitchClient: findSingletonResourceId query failed for " + what, e);
             return null;
         }
         if (totalCount > onPage) {
@@ -764,27 +831,44 @@ public final class SuiteApiStitchClient {
     }
 
     /**
-     * Log a swallowed failure of {@link #addChildren} or
-     * {@link #findSingletonResourceId} without flooding the collector log.
+     * Log a swallowed failure of {@link #pushProperties}, {@link #pushStats},
+     * {@link #addChildren} or {@link #findSingletonResourceId} without
+     * flooding the collector log.
      *
      * <p>These calls repeat every collect cycle, per adapter instance, so a
-     * persistent expected failure (the principal lacks relationship
-     * permission, the parent is gone, the Suite API is down) would otherwise
-     * write a full stack trace every cycle. Expected failures get one WARN
-     * line naming the exception class and message (the transport puts the
-     * HTTP status at the end of the message, which {@link #failureSummary}
-     * keeps when it caps a long one) and the stack trace only at DEBUG;
-     * unexpected ones keep the stack trace at WARN.
+     * persistent failure (the principal lacks permission, the parent is gone,
+     * the Suite API is down, a proxy answers with HTML) would otherwise write
+     * a full stack trace every cycle. Every failure gets one WARN line naming
+     * the exception class and message (the transport puts the HTTP status at
+     * the end of the message, which {@link #failureSummary} keeps when it caps
+     * a long one). The stack trace goes to DEBUG, except the first time this
+     * client sees an unexpected exception class (anything but
+     * {@link #isExpectedFailure}, a malformed response included) for an
+     * operation: that one keeps its trace at WARN so a new kind of fault is
+     * diagnosable from a default-level log (issue #192).
+     *
+     * @param operation the public method name, keying the first-trace memory
      */
-    private void logFailure(String context, Exception e) {
+    private void logFailure(String operation, String context, Exception e) {
         String line = context + ": " + failureSummary(e);
-        if (isExpectedFailure(e)) {
-            logger.warn(line);
-            if (logger.isDebugEnabled()) {
-                logger.debug(line + " (stack trace)", e);
+        if (e instanceof ClientClosedException) {
+            // A cycle still running on a client its adapter has replaced:
+            // say so once per client, then quietly refuse (issue #217).
+            if (closedRefusalWarned.compareAndSet(false, true)) {
+                logger.warn(line);
+            } else if (logger.isDebugEnabled()) {
+                logger.debug(line);
             }
-        } else {
+            return;
+        }
+        if (!isExpectedFailure(e)
+                && tracedFailures.add(operation + ":" + e.getClass().getName())) {
             logger.warn(line, e);
+            return;
+        }
+        logger.warn(line);
+        if (logger.isDebugEnabled()) {
+            logger.debug(line + " (stack trace)", e);
         }
     }
 
@@ -842,7 +926,8 @@ public final class SuiteApiStitchClient {
     }
 
     /**
-     * Perform an authenticated GET against the Suite API.
+     * Perform an authenticated GET against the Suite API with
+     * {@code Accept: application/json}.
      *
      * <p>The cached bearer token is used. If the Suite API returns HTTP 401,
      * the token is re-acquired and the GET is retried exactly once.
@@ -850,35 +935,107 @@ public final class SuiteApiStitchClient {
      * @param path path relative to the Suite API base (e.g.
      *             {@code "/api/resources?adapterKind=VMWARE"})
      * @return the response body as a string
-     * @throws IOException          on HTTP or network error
+     * @throws SuiteApiHttpException on a non-2xx answer: carries the status,
+     *                               the {@code apiErrorCode} when the body has
+     *                               one, and a body excerpt (issue #201)
+     * @throws IOException          on any other HTTP or network error
      * @throws InterruptedException if the calling thread is interrupted
      */
     public String get(String path) throws IOException, InterruptedException {
+        return get(path, null);
+    }
+
+    /**
+     * Perform an authenticated GET with a caller-chosen {@code Accept} header
+     * (issue #201). Use it for endpoints that do not answer JSON, for example
+     * the configuration-file store ({@code /api/configurations/files}), which
+     * returns the raw file body ({@code "*}{@code /*"}).
+     *
+     * <p>Token handling, the single 401 retry and the failure contract match
+     * {@link #get(String)}.
+     *
+     * @param path   path relative to the Suite API base
+     * @param accept the {@code Accept} header value; {@code null} or blank
+     *               means {@code application/json}
+     * @return the response body as a string
+     * @throws IllegalArgumentException if {@code accept} contains a control
+     *                                  character (a header must stay one line)
+     * @throws SuiteApiHttpException    on a non-2xx answer
+     * @throws IOException              on any other HTTP or network error
+     * @throws InterruptedException     if the calling thread is interrupted
+     */
+    public String get(String path, String accept) throws IOException, InterruptedException {
+        String acceptHeader = acceptHeader(accept);
         String tok = ensureToken();
         try {
-            return rawGet(path, tok);
+            return rawGet(path, tok, acceptHeader);
         } catch (Suite401Exception e) {
             tok = reAcquireToken(tok);
-            return rawGet(path, tok);
+            return rawGet(path, tok, acceptHeader);
         }
     }
 
     /**
-     * Release the cached bearer token and underlying HTTP resources.
+     * The {@code Accept} value to send: {@link #DEFAULT_ACCEPT} for
+     * {@code null} or blank, else the trimmed value. Visible to tests.
      *
-     * <p>Call from the adapter's {@code onDiscard()} method, alongside
-     * releasing the {@link com.vcfcf.adapter.http.ManagedHttpClient}.
-     * Token release failure is swallowed and logged at WARN — the platform's
-     * token TTL is the safety net (per spec §3 cancellation contract).
+     * @throws IllegalArgumentException if the value holds a control character
      */
-    public void discard() {
+    static String acceptHeader(String accept) {
+        if (accept == null || accept.trim().isEmpty()) return DEFAULT_ACCEPT;
+        String a = accept.trim();
+        for (int i = 0; i < a.length(); i++) {
+            if (Character.isISOControl(a.charAt(i))) {
+                throw new IllegalArgumentException(
+                        "SuiteApiStitchClient: Accept header value contains a control"
+                        + " character: " + loggable(a));
+            }
+        }
+        return a;
+    }
+
+    /**
+     * Close the client: mark it closed and release the cached bearer token
+     * (issue #217).
+     *
+     * <p>After this returns, no call on this client acquires a token again.
+     * {@link #get} throws an {@link IOException} saying the client is closed;
+     * {@link #pushProperties}, {@link #pushStats}, {@link #addChildren} and
+     * {@link #findSingletonResourceId} send nothing and log one WARN for the
+     * first refused call (DEBUG after that). This matters when an adapter
+     * swaps clients on reconfigure while a cycle is still running on the old
+     * one: before, that cycle logged in again and left a token behind.
+     *
+     * <p>Call from the adapter's {@code onDiscard()} method (or when replacing
+     * the client), alongside releasing the
+     * {@link com.vcfcf.adapter.http.ManagedHttpClient}. Idempotent. Token
+     * release failure is swallowed and logged at WARN; the platform's token
+     * TTL is the safety net (per spec §3 cancellation contract). A request
+     * already in flight with the old token is not interrupted; it fails or
+     * completes on its own.
+     */
+    public void close() {
         String tok;
         synchronized (tokenLock) {
+            this.closed = true;
             tok = this.cachedToken;
             this.cachedToken = null;
         }
         releaseToken(tok); // null-safe, swallows all exceptions
         // URLConnection connections are per-request; nothing else to close here.
+    }
+
+    /**
+     * Same as {@link #close()}: kept for existing callers. Marks the client
+     * closed, so it is no longer reusable after this call (issue #217).
+     */
+    public void discard() {
+        close();
+    }
+
+    /** True once {@link #close()} or {@link #discard()} has run. */
+    public boolean isClosed() {
+        return closed;
     }
 
     // -----------------------------------------------------------------------
@@ -890,9 +1047,11 @@ public final class SuiteApiStitchClient {
      * Thread-safe: double-checked with {@link #tokenLock}.
      */
     private String ensureToken() throws IOException, InterruptedException {
+        if (closed) throw new ClientClosedException();
         String tok = this.cachedToken;
         if (tok != null) return tok;
         synchronized (tokenLock) {
+            if (closed) throw new ClientClosedException();
             tok = this.cachedToken;
             if (tok == null) {
                 tok = acquireToken();
@@ -909,6 +1068,7 @@ public final class SuiteApiStitchClient {
      */
     private String reAcquireToken(String oldToken) throws IOException, InterruptedException {
         synchronized (tokenLock) {
+            if (closed) throw new ClientClosedException();
             if (oldToken != null && oldToken.equals(this.cachedToken)) {
                 this.cachedToken = null;
             }
@@ -930,15 +1090,14 @@ public final class SuiteApiStitchClient {
                 + ",\"authSource\":" + jsonStr(AUTH_SOURCE) + "}";
 
         String responseBody = urlConnRequest("POST",
-                suiteApiBase + "/api/auth/token/acquire", body, null);
+                suiteApiBase + "/api/auth/token/acquire", body, null, DEFAULT_ACCEPT);
 
         SimpleJson parsed = SimpleJson.parse(responseBody);
         String token = parsed.get("token").asString(null);
         if (token == null || token.isEmpty()) {
             throw new IOException(
                     "Suite API token/acquire: no 'token' field in response"
-                    + " mechanism=" + mechanism
-                    + " principal=" + resolvedUsername);
+                    + " mechanism=" + mechanism);
         }
         return token;
     }
@@ -955,7 +1114,7 @@ public final class SuiteApiStitchClient {
         try {
             String body = "{\"token\":" + jsonStr(token) + "}";
             urlConnRequest("POST",
-                    suiteApiBase + "/api/auth/token/release", body, null);
+                    suiteApiBase + "/api/auth/token/release", body, null, DEFAULT_ACCEPT);
         } catch (Exception e) {
             logger.warn("SuiteApiStitchClient: token release failed (non-fatal): "
                     + e.getMessage());
@@ -974,18 +1133,19 @@ public final class SuiteApiStitchClient {
      */
     private void rawPost(String apiPath, String body, String opsToken)
             throws IOException, InterruptedException {
-        urlConnRequest("POST", suiteApiBase + apiPath, body, opsToken);
+        urlConnRequest("POST", suiteApiBase + apiPath, body, opsToken, DEFAULT_ACCEPT);
     }
 
     /**
-     * GET {@code apiPath} with the given {@code opsToken} and return the body.
+     * GET {@code apiPath} with the given {@code opsToken} and {@code Accept}
+     * value, and return the body.
      *
      * @throws Suite401Exception on HTTP 401 (caller must single-retry)
      * @throws IOException       on other HTTP or network error
      */
-    private String rawGet(String apiPath, String opsToken)
+    private String rawGet(String apiPath, String opsToken, String accept)
             throws IOException, InterruptedException {
-        return urlConnRequest("GET", suiteApiBase + apiPath, null, opsToken);
+        return urlConnRequest("GET", suiteApiBase + apiPath, null, opsToken, accept);
     }
 
     // -----------------------------------------------------------------------
@@ -1010,13 +1170,16 @@ public final class SuiteApiStitchClient {
      * @param body     request body for POST, or {@code null} for GET
      * @param opsToken {@code OpsToken} header value, or {@code null} to omit
      *                 the {@code Authorization} header (used for token acquire/release)
+     * @param accept   {@code Accept} header value
      * @return response body as String (empty string if the server sends no body)
-     * @throws Suite401Exception on HTTP 401
-     * @throws IOException       on other HTTP or connection error
-     * @throws InterruptedException if the thread is interrupted before the call
+     * @throws Suite401Exception     on HTTP 401
+     * @throws SuiteApiHttpException on any other non-2xx status, with the
+     *                               {@code apiErrorCode} and a body excerpt
+     * @throws IOException           on a connection error
+     * @throws InterruptedException  if the thread is interrupted before the call
      */
-    private String urlConnRequest(String method, String fullUrl, String body, String opsToken)
-            throws IOException, InterruptedException {
+    private String urlConnRequest(String method, String fullUrl, String body, String opsToken,
+            String accept) throws IOException, InterruptedException {
         if (Thread.currentThread().isInterrupted()) {
             throw new InterruptedException(
                     "SuiteApiStitchClient: thread interrupted before "
@@ -1028,7 +1191,7 @@ public final class SuiteApiStitchClient {
             conn.setRequestMethod(method);
             conn.setConnectTimeout((int) REQUEST_TIMEOUT.toMillis());
             conn.setReadTimeout((int) REQUEST_TIMEOUT.toMillis());
-            conn.setRequestProperty("Accept", "application/json");
+            conn.setRequestProperty("Accept", accept);
             if (body != null) {
                 conn.setDoOutput(true);
                 conn.setRequestProperty("Content-Type", "application/json");
@@ -1043,16 +1206,26 @@ public final class SuiteApiStitchClient {
                 }
             }
             int status = conn.getResponseCode();
-            if (status == 401) {
-                throw new Suite401Exception(
-                        "Suite API " + method + " " + fullUrl
-                        + " returned 401 — token expired or credential invalid"
-                        + " mechanism=" + mechanism
-                        + " principal=" + resolvedUsername);
-            }
             if (status < 200 || status >= 300) {
-                throw new IOException(
-                        "Suite API " + method + " " + fullUrl + " HTTP " + status);
+                String errorBody = readErrorBody(conn);
+                Integer apiErrorCode = parseApiErrorCode(errorBody);
+                String excerpt = errorBodyExcerpt(errorBody);
+                // Exact shape " apiErrorCode <n>" (space separated) is a
+                // contract: compliance's OverridesStore.isAbsent matches the
+                // message with its own 1501 regex, so changing the separator
+                // would flip its missing-overrides-file handling on a rebuild.
+                // Pinned by SuiteApiStitchClientTransportTest.
+                String code = apiErrorCode == null ? "" : " apiErrorCode " + apiErrorCode;
+                if (status == 401) {
+                    throw new Suite401Exception(
+                            "Suite API " + method + " " + fullUrl
+                            + " returned 401 (token expired or credential invalid)"
+                            + " mechanism=" + mechanism + code,
+                            apiErrorCode, excerpt);
+                }
+                throw new SuiteApiHttpException(
+                        "Suite API " + method + " " + fullUrl + " HTTP " + status + code,
+                        status, apiErrorCode, excerpt);
             }
             // Read response body. Callers that do not need it ignore the return value.
             InputStream is = conn.getInputStream();
@@ -1068,6 +1241,58 @@ public final class SuiteApiStitchClient {
         } finally {
             conn.disconnect();
         }
+    }
+
+    /**
+     * Read at most {@link #ERROR_BODY_READ_MAX} bytes of a non-2xx answer's
+     * body (UTF-8). Returns {@code ""} when the server sent none or the
+     * stream fails: a missing body must never hide the status.
+     */
+    private static String readErrorBody(HttpURLConnection conn) {
+        try (InputStream es = conn.getErrorStream()) {
+            if (es == null) return "";
+            byte[] buf = new byte[ERROR_BODY_READ_MAX];
+            int total = 0;
+            int n;
+            while (total < buf.length && (n = es.read(buf, total, buf.length - total)) != -1) {
+                total += n;
+            }
+            return new String(buf, 0, total, StandardCharsets.UTF_8);
+        } catch (IOException | RuntimeException e) {
+            return "";
+        }
+    }
+
+    /**
+     * The numeric {@code apiErrorCode} of a Suite API JSON error body, or
+     * {@code null} when the body is empty, not a JSON object, or has no
+     * numeric {@code apiErrorCode} in int range. Never throws. Visible to tests.
+     */
+    static Integer parseApiErrorCode(String body) {
+        if (body == null || body.trim().isEmpty()) return null;
+        try {
+            SimpleJson root = SimpleJson.parse(body);
+            if (!root.isObject()) return null;
+            SimpleJson code = root.get("apiErrorCode");
+            if (code.isNull()) return null;
+            String raw = code.asString("").trim();
+            if (!raw.matches("-?\\d{1,10}")) return null;
+            long v = Long.parseLong(raw);
+            if (v < Integer.MIN_VALUE || v > Integer.MAX_VALUE) return null;
+            return (int) v;
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+
+    /**
+     * Log-safe start of an error body: unsafe characters replaced as in
+     * {@link #loggable}, at most {@link #ERROR_BODY_EXCERPT_MAX} characters
+     * plus a {@code ...} marker when cut. Visible to tests.
+     */
+    static String errorBodyExcerpt(String body) {
+        if (body == null || body.isEmpty()) return "";
+        return loggable(body, ERROR_BODY_EXCERPT_MAX);
     }
 
     // -----------------------------------------------------------------------

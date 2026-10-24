@@ -1,0 +1,13 @@
+id: 7ee1e0fb-68fc-4432-aa58-f821dfdfa90c
+name: Fixture - ESXi Distribution by CPU Socket
+description: 'Synthetic fixture: ESXi Distribution by CPU Socket.'
+subject:
+  adapter_kind: VMWARE
+  resource_kind: HostSystem
+data_type: distribution
+columns:
+- attribute: hardware|cpuInfo|numCpuPackages
+  display_name: Sockets
+time_window:
+  unit: DAYS
+  count: 7

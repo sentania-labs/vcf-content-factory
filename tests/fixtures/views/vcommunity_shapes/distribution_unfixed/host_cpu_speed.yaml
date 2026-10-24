@@ -1,0 +1,14 @@
+id: 998705bf-7729-49e5-91d4-9959c7cddad2
+name: Fixture - ESXi CPU Speed (unfixed)
+description: 'Synthetic fixture: ESXi CPU Speed (unfixed).'
+subject:
+  adapter_kind: VMWARE
+  resource_kind: HostSystem
+data_type: distribution
+columns:
+- attribute: hardware|cpuInfo|hz
+  display_name: CPU Speed
+  unit: ghz
+time_window:
+  unit: DAYS
+  count: 7
