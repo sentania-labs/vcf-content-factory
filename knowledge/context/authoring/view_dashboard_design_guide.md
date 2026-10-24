@@ -19,7 +19,26 @@ Flat tabular views. One row per resource, columns show metrics or
 properties. Two presentations:
 
 - `list` — sortable table (default)
-- `summary` — table with footer aggregation row (SUM/AVG/MIN/MAX/COUNT)
+- `summary`: table with footer aggregation rows (SUM/AVG/MIN/MAX/DEVIATION)
+
+Summary (totals) rows: `summary:` takes `true` (one `SUM` row over every
+column), one mapping, or a list of mappings for several rows, each with
+its own label, aggregation (`SUM`, `AVG`, `MIN`, `MAX`, `DEVIATION`,
+all seen in vendor exports; `COUNT` is rejected, no export carries it)
+and columns (0-based indexes, omitted = all).
+Rows render in authored order; on `presentation: summary` each row
+becomes a column instead (issue #168, wire format in
+`wire-formats/dashboard_sort_color_default_summary_rows.md`):
+
+```yaml
+summary:
+  - display_name: Average score
+    aggregation: AVG
+    columns: [1]
+  - display_name: Lowest score
+    aggregation: MIN
+    columns: [1]
+```
 
 ### Distribution views (`data_type: distribution`)
 
@@ -176,6 +195,31 @@ columns:
   `red_bound: "Powered Off"`)
 - Thresholds are static literals, not symptom-driven
 - Color method defaults to "no color" when no bounds set
+- Dashboard widget metrics (Scoreboard, MetricChart, PropertyList with
+  `color_method: 0`) have no `ascending_range`: the bound order is the
+  direction. Descending bounds (`yellow_bound: 90`, `orange_bound: 80`,
+  `red_bound: 70`) color lower values worse; a mixed-order triple is
+  rejected (issue #176)
+
+### Default sort
+
+A view opens sorted by the one column that sets `sort: asc` or
+`sort: desc` (list views only). The product stores this on the view
+column (`sortCriteria`), not on the dashboard widget, so every dashboard
+embedding the view opens in that order; two dashboards wanting different
+orders need two views. Widget keys `sort_by_column` / `sort_by_dir` are
+rejected (HealthChart keeps its own `sort_by_dir`). The loader rejects
+`sort:` on more than one column (which one wins is unverified), on
+time_segment and instanced_group columns, and on a view that has a
+time_segment column (that column is always sorted). Issue #175, wire
+format in `wire-formats/dashboard_sort_color_default_summary_rows.md`.
+
+```yaml
+columns:
+  - attribute: "VCF-CF Compliance|score"
+    display_name: Score
+    sort: asc            # worst first
+```
 
 ### Unit handling
 
@@ -362,7 +406,7 @@ a backstop, but do not rely on it: author 1-based coordinates.
 | Bucket interval / rollup period | Not exposed | Server uses ~5-min buckets |
 | Group-by / pivot rows | Not supported | Use Distribution view for grouping |
 | Dynamic / symptom coloring | Not supported | Use HealthChart widget |
-| Initial sort order in YAML | Not configurable | User sets in UI |
+| Initial sort order per dashboard | Not supported (sort lives on the view) | `sort:` on one view column; a second view for a different order |
 | Force chart type (bar vs line) | UI-persisted only | Default is line/area |
 | Per-instance breakdown rows | Partial | Requires uniform instance layout |
 

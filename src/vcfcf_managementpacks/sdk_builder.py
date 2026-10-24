@@ -65,7 +65,7 @@ import tempfile
 import xml.etree.ElementTree as ET
 import zipfile
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 try:
     import yaml as _yaml
@@ -76,6 +76,8 @@ except ImportError:
 from vcfcf_supermetrics import crossref as _crossref
 
 from .sdk_project import (
+    CONTENT_NAMING_DEFAULT,
+    CONTENT_NAMING_UNPREFIXED,
     SdkProjectDef,
     SdkProjectError,
     adapter_class_name,
@@ -3434,6 +3436,16 @@ def build_sdk_pak(project_dir: Path, output_dir: Optional[Path] = None,
             f"{len(bundled_recommendations)} recommendation(s)",
             file=sys.stderr,
         )
+    # Naming contract (#229). Same reason as the SymptomSets check above:
+    # release CI runs build-sdk only, so a declared contract is enforced here.
+    _naming_errors, _naming_warnings = check_content_naming(project, (
+        bundled_views, bundled_dashboards, bundled_supermetrics, bundled_symptoms,
+        bundled_alerts, bundled_reports, bundled_recommendations,
+    ))
+    if _naming_errors:
+        raise SdkBuildError("\n".join(_naming_errors))
+    for _w in _naming_warnings:
+        print(f"  build-sdk: warning: {_w}", file=sys.stderr)
 
     # Resolve owning-adapter binding info for content renderers.
     # owning_adapter_kind — the pak's adapter_kind key (e.g. "vcfcf_compliance").
@@ -3705,6 +3717,69 @@ def _xml_local_name(tag) -> str:
     return tag.rsplit("}", 1)[-1]
 
 
+_FACTORY_CONTENT_PREFIX = "[VCF Content Factory] "
+
+
+def check_content_naming(
+    project: SdkProjectDef, bundled: Tuple[list, ...]
+) -> Tuple[List[str], List[str]]:
+    """Check bundled content names against adapter.yaml ``content_naming`` (#229).
+
+    ``bundled`` is the tuple ``_load_bundled_content`` returns (views,
+    dashboards, supermetrics, symptoms, alerts, reports, recommendations).
+
+    ``factory_prefixed``: every name must start with ``[VCF Content Factory] ``.
+    ``unprefixed``: no name may start with ``[VCF Content Factory]`` (with or
+    without the trailing space, so a near-miss is caught too).
+
+    Returns ``(errors, warnings)``. When adapter.yaml declares the key, each
+    mismatch is an error. When the key is absent, the default
+    (``factory_prefixed``) is applied but mismatches come back as one
+    warning, so a pak that predates the key keeps validating until it
+    declares its contract.
+    """
+    labels = ("view", "dashboard", "supermetric", "symptom", "alert",
+              "report", "recommendation")
+    # getattr: test doubles for SdkProjectDef may predate these fields.
+    content_naming = getattr(project, "content_naming", CONTENT_NAMING_DEFAULT)
+    declared = bool(getattr(project, "content_naming_declared", False))
+    unprefixed = content_naming == CONTENT_NAMING_UNPREFIXED
+    mismatches: List[str] = []
+    for label, objs in zip(labels, bundled):
+        for obj in objs or []:
+            name = str(getattr(obj, "name", "") or "")
+            if unprefixed:
+                bad = name.startswith(_FACTORY_CONTENT_PREFIX.rstrip())
+            else:
+                bad = not name.startswith(_FACTORY_CONTENT_PREFIX)
+            if bad:
+                mismatches.append(f"{label} {name!r}")
+
+    if not mismatches:
+        return [], []
+
+    if unprefixed:
+        rule = "must not carry the '[VCF Content Factory]' prefix"
+    else:
+        rule = "must start with '[VCF Content Factory] '"
+
+    if declared:
+        return [
+            f"content_naming: {content_naming}: bundled {m} {rule}"
+            for m in mismatches
+        ], []
+
+    sample = ", ".join(mismatches[:3])
+    more = f" and {len(mismatches) - 3} more" if len(mismatches) > 3 else ""
+    return [], [
+        f"content_naming not declared in adapter.yaml, so the default "
+        f"factory_prefixed applies, and {len(mismatches)} bundled name(s) "
+        f"lack the '[VCF Content Factory] ' prefix ({sample}{more}). "
+        f"Declare 'content_naming: unprefixed' if this pak keeps its upstream "
+        f"names, or rename the content. This becomes an error once declared."
+    ]
+
+
 def _validate_describe_symptom_sets(describe_xml: Path) -> List[str]:
     """Reject any composite ``<SymptomSets>`` with fewer than two children.
 
@@ -3797,7 +3872,13 @@ def validate_sdk_project(project_dir: Path) -> List[str]:
         _raw_adapter_yaml = {}
         if _YAML_AVAILABLE:
             _raw_adapter_yaml = _yaml.safe_load(adapter_yaml.read_text(encoding="utf-8")) or {}
-        bundled_views, _bdc_dash, _bdc_sms, _bdc_syms, _bdc_alerts, _bdc_reports, _bdc_recs = _load_bundled_content(_raw_adapter_yaml, project_dir, project_dir)
+        _bundled = _load_bundled_content(_raw_adapter_yaml, project_dir, project_dir)
+        bundled_views, _bdc_dash, _bdc_sms, _bdc_syms, _bdc_alerts, _bdc_reports, _bdc_recs = _bundled
+        # Naming contract (#229): adapter.yaml content_naming.
+        _naming_errors, _naming_warnings = check_content_naming(project, _bundled)
+        errors.extend(_naming_errors)
+        for _w in _naming_warnings:
+            print(f"  validate-sdk: warning: {_w}", file=sys.stderr)
         if bundled_views:
             # Build sm_scope from bundled SM source paths so that view columns
             # using supermetric:"<name>" resolve against adapter-local SMs, not

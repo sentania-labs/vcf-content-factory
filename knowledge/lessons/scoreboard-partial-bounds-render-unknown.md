@@ -22,8 +22,12 @@ same response carries the populated `doubleValue`. Proven by replaying
 the widget's `.action` calls with single-field variants: the identical
 entry with `(1, 1, 1)` returns the value and Normal.
 
-Thresholds are ascending and inclusive: `>= yellow` Warning, `>= orange`
-Immediate, `>= red` Critical. "Red at anything above zero" is `(1, 1, 1)`,
+Thresholds are inclusive: `>= yellow` Warning, `>= orange` Immediate,
+`>= red` Critical when written ascending (higher is worse). Written
+descending (yellow > orange > red, the vendor's Free Memory tile uses
+512 / 256 / 128) the same three bounds color lower-is-worse metrics, with
+no flag needed; replayed on devel 9.0.2 on 2026-10-23, see
+`knowledge/context/wire-formats/dashboard_sort_color_default_summary_rows.md`. "Red at anything above zero" is `(1, 1, 1)`,
 which is what the vendor's own dashboards use for flag metrics.
 `colorMethod: 3` means percent-of-`maxValue` thresholds in vendor
 exports; the factory does not emit bounds for it (only for 0), and the
