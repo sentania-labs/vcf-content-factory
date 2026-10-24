@@ -79,9 +79,12 @@ class VCFOpsClient:
             {"Accept": "application/json", "Content-Type": "application/json"}
         )
         self._token: Optional[str] = None
-        # Cached per-instance content marker filename (discovered via a
-        # throwaway export). Re-probing it triggers export<->import task
-        # contention, so discover once per client lifetime.
+        # Cached content marker filename (discovered via a throwaway
+        # export). Not a per-instance value: it has been identical on
+        # every instance examined, only the file's content (owner uuid)
+        # varies (issue #166); it is read from the target as insurance.
+        # Re-probing it triggers export<->import task contention, so
+        # discover once per client lifetime.
         self._marker_filename: Optional[str] = None
 
     # ---- env constructor ------------------------------------------------

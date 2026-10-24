@@ -1,0 +1,18 @@
+id: 35d9c8db-3bba-45a7-bbad-fc93aada29cc
+name: Fixture - Guest OS Service Inventory
+description: 'Synthetic fixture: needs the Service Discovery adapter on the target.'
+subject:
+  adapter_kind: APPLICATIONDISCOVERY
+  resource_kind: Services
+columns:
+- attribute: summary|incomingConnectionCount
+  display_name: Incoming Connections
+- attribute: Port
+  display_name: Port
+- attribute: Status
+  display_name: Status
+- attribute: summary|Pid
+  display_name: Process ID
+time_window:
+  unit: DAYS
+  count: 7

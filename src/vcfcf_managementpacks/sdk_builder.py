@@ -2039,7 +2039,11 @@ def _write_outer_pak(
             zf.writestr("content/supermetrics/", "")
             # Build name→uuid lookup from the full bundled SM list so that every
             # @supermetric:"<name>" token in any formula can be resolved.
-            _sm_name_to_uuid: Dict[str, str] = {sm.name: sm.id for sm in supermetrics}
+            # Two bundled SMs sharing a display name (different ids) are a
+            # build error naming both files, not last-wins (#158 review W3).
+            _sm_name_to_uuid = _crossref.sm_name_to_uuid_map(
+                supermetrics, error_cls=SdkBuildError
+            )
             _sm_seen_names: set[str] = set()
             for sm in supermetrics:
                 resolved_formula = _resolve_sm_formula(
@@ -2965,10 +2969,35 @@ def _changelog_first_entry(current_version: str, current_build: int,
     )
 
 
+def _git_toplevel(project_dir: Path) -> Optional[Path]:
+    """Root of the git work tree containing ``project_dir``, or None.
+
+    None when git is missing, the directory is not inside a repository, or
+    the call fails. Resolved, so it compares cleanly with a resolved
+    ``project_dir``.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            capture_output=True, text=True, timeout=10,
+            cwd=str(project_dir),
+        )
+    except Exception:
+        return None
+    top = result.stdout.strip()
+    if result.returncode != 0 or not top:
+        return None
+    return Path(top).resolve()
+
+
 def _generate_changelog_md(project_dir: Path, current_version: str,
                             current_build: int, *,
                             release_build: bool = False) -> str:
     """Generate CHANGELOG.md from git history of the adapter project directory.
+
+    The history comes from the git repository that contains ``project_dir``
+    (normally the pak's own repo), never from the factory checkout around
+    it (#233).
 
     Groups commits by build number by reading the adapter.yaml at each commit
     that touched the project directory.  Falls back to date-grouped listing
@@ -2984,20 +3013,36 @@ def _generate_changelog_md(project_dir: Path, current_version: str,
     """
     import datetime
 
+    # The history source is the git repository that contains the pak
+    # directory. A pak is normally its own repo (cloned gitignored into the
+    # factory's content/sdk-adapters/<name>/), so this reads the pak's
+    # history, not the factory checkout's (#233).
+    repo_root = _git_toplevel(project_dir)
+    if repo_root is None:
+        return _changelog_first_entry(current_version, current_build, release_build)
+    try:
+        project_rel = project_dir.resolve().relative_to(repo_root).as_posix()
+    except ValueError:
+        return _changelog_first_entry(current_version, current_build, release_build)
+    if project_rel in ("", "."):
+        project_rel = "."
+        adapter_yaml_rel = "adapter.yaml"
+    else:
+        adapter_yaml_rel = f"{project_rel}/adapter.yaml"
+
     # Collect git log for the project directory
     try:
         result = subprocess.run(
             [
                 "git", "log",
                 "--format=%H\t%ai\t%s",
-                "--follow",
                 "--",
-                str(project_dir),
+                project_rel,
             ],
             capture_output=True,
             text=True,
             timeout=30,
-            cwd=str(project_dir.parent.parent.parent),  # repo root
+            cwd=str(repo_root),
         )
         if result.returncode != 0 or not result.stdout.strip():
             # No git history for this directory
@@ -3027,12 +3072,6 @@ def _generate_changelog_md(project_dir: Path, current_version: str,
     # Read adapter.yaml build_number at each commit to detect build transitions.
     # We read it only when the adapter.yaml changed (to keep git calls minimal).
     # Build a list: for each commit, determine which build it belongs to.
-    adapter_yaml_rel = str(
-        (project_dir / "adapter.yaml").relative_to(
-            project_dir.parent.parent.parent
-        )
-    )
-
     build_at_commit: Dict[str, Optional[int]] = {}
     version_at_commit: Dict[str, Optional[str]] = {}
 
@@ -3042,7 +3081,7 @@ def _generate_changelog_md(project_dir: Path, current_version: str,
             show = subprocess.run(
                 ["git", "show", f"{sha}:{adapter_yaml_rel}"],
                 capture_output=True, text=True, timeout=10,
-                cwd=str(project_dir.parent.parent.parent),
+                cwd=str(repo_root),
             )
             if show.returncode == 0:
                 # Simple key=value parse (YAML may not be available without safe_load)

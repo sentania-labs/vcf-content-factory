@@ -1,0 +1,21 @@
+id: 67123465-7565-4012-8ed1-2b3e67451080
+name: Fixture - ESXi Host Performance List
+description: 'Synthetic fixture: ESXi Host Performance List.'
+subject:
+  adapter_kind: VMWARE
+  resource_kind: HostSystem
+columns:
+- attribute: performance|kpi_pct
+  display_name: Worst Performance
+  unit: percent
+  transformation: MIN
+  yellow_bound: 99.0
+  orange_bound: 97.0
+  red_bound: 95.0
+  ascending_range: true
+- attribute: hardware|memorySize
+  display_name: Memory
+  unit: tb
+time_window:
+  unit: DAYS
+  count: 7

@@ -1,0 +1,25 @@
+id: f2ffc26f-f002-4ab4-8a36-9f5ccc04ffe7
+name: Fixture - VM Inventory List
+description: 'Synthetic fixture: VM Inventory List.'
+subject:
+  adapter_kind: VMWARE
+  resource_kind: VirtualMachine
+columns:
+- attribute: config|hardware|num_Cpu
+  display_name: vCPU
+  unit: '7004'
+- attribute: config|hardware|memoryKB
+  display_name: Memory
+  unit: auto
+  ascending_range: true
+- attribute: config|createDate
+  display_name: Creation Date
+  unit: week
+  transformation: TIMESTAMP
+- attribute: virtualDisk|20_sec_peak_totalLatency_average
+  display_name: Peak Disk Latency
+  unit: msec
+  transformation: MAX
+time_window:
+  unit: WEEKS
+  count: 1

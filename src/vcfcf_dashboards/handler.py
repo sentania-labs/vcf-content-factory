@@ -33,6 +33,7 @@ from vcfcf_supermetrics.loader import sm_id_map
 
 from .client import (
     all_skipped_content_types,
+    check_dashboard_materialization,
     discover_marker_filename,
     get_current_user,
     import_content_zip,
@@ -66,6 +67,50 @@ def _all_skipped_message(api_result: dict, content_type: str) -> str:
         f"the instance was NOT updated. Verify on the instance, or delete "
         f"and re-sync to force an update."
     )
+
+
+def _materialization_by_id(session, dashboards) -> dict:
+    """``{dashboard id: MaterializationStatus}`` after a FINISHED import (#167).
+
+    ``{"__error__": message}`` when the check itself failed, so every
+    dashboard says it is unverified instead of a bare ok.
+    """
+    def _on_wait(count: int, seconds: int) -> None:
+        print(
+            f"  WAIT  MATERIALIZATION WAIT: {count} dashboard(s) still building; "
+            f"re-checking once in {seconds} s",
+            flush=True,
+        )
+
+    try:
+        statuses = check_dashboard_materialization(
+            session, dashboards, on_wait=_on_wait
+        )
+    except Exception as exc:  # noqa: BLE001  advisory check; never fail the import over it
+        return {"__error__": str(exc)}
+    return {st.id: st for st in statuses}
+
+
+def _materialization_item(d, status) -> ItemResult:
+    """ItemResult for one dashboard from its phase-2 status.
+
+    Waiting on an adapter kind the target lacks is a failure (it never
+    completes on its own). Still building after the re-check, or absent
+    from the instance, is a warn with the reason, so bundle sync counts it
+    in its "need attention" trailer. Only complete is a bare ok.
+    """
+    from vcfcf_core.dashboards.materialization import (
+        COMPLETE,
+        STALLED,
+        describe_status,
+    )
+
+    if status is None or status.state == COMPLETE:
+        return ItemResult(name=d.name, status="ok")
+    message = f"MATERIALIZATION {status.state.upper()}: {describe_status(status)}"
+    if status.state == STALLED:
+        return ItemResult(name=d.name, status="failed", message=message)
+    return ItemResult(name=d.name, status="warn", message=message)
 
 
 class ViewsHandler(ContentHandler):
@@ -293,13 +338,28 @@ class DashboardsHandler(ContentHandler):
 
         state = api_result.get("state", "")
         all_skipped = _all_skipped_message(api_result, "DASHBOARDS")
+        materialization = {}
+        if state == "FINISHED" and not all_skipped:
+            materialization = _materialization_by_id(session, dashboards)
         for d in dashboards:
             if state == "FINISHED" and all_skipped:
                 result.items.append(
                     ItemResult(name=d.name, status="warn", message=all_skipped)
                 )
+            elif state == "FINISHED" and "__error__" in materialization:
+                result.items.append(ItemResult(
+                    name=d.name, status="warn",
+                    message=(
+                        "MATERIALIZATION UNCHECKED: imported, but could not check whether it finished "
+                        f"building: {materialization['__error__']}"
+                    ),
+                ))
             elif state == "FINISHED":
-                result.items.append(ItemResult(name=d.name, status="ok"))
+                result.items.append(
+                    _materialization_item(
+                        d, materialization.get(str(getattr(d, "id", "") or "").lower())
+                    )
+                )
             else:
                 result.items.append(
                     ItemResult(name=d.name, status="warn",

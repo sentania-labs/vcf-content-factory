@@ -117,7 +117,7 @@ into the collect cycle: a failed push is one WARN line per cycle, with
 the stack trace at DEBUG, except that the first time a client sees an
 unexpected exception type for an operation it logs that trace once at
 WARN (#192). `get` is the exception: it throws
-`IOException` / `InterruptedException`, and since buildkit 1.0.13 a
+`IOException` / `InterruptedException`, and since buildkit 1.0.14 a
 non-2xx response throws `SuiteApiHttpException` (an `IOException`
 carrying the status, the `apiErrorCode` and a body excerpt, #201), so
 catch them at the call site or an outage escapes `collect()`.

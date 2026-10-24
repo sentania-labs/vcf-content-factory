@@ -162,7 +162,10 @@ an `upstream` remote and fast-forward from it); do work on branches.
 Kept for the record. The bootstrap script and the Python registry reader
 (`src/vcfcf_packaging/managed_paks.py`) both stop reading at this heading
 (exact text `## Retired paks`, level 2, parsed by both), so nothing below is
-cloned, refreshed, reported or published. Local clones under
+cloned, refreshed, reported or published. The one reader that does look
+below it is the defect gate's name check (`registered_pak_names()`, issue
+#219): it recognises every `Target:` name in every section, forks and retired
+paks included, so a defect naming one is attributed to it. Local clones under
 `content/sdk-adapters/` may remain; they are gitignored, and
 `scripts/path_reference_audit.sh` still counts their paths as known roots on
 purpose, because older docs cite them. Retiring a pak is the orchestrator's edit on Scott's word, and

@@ -203,6 +203,32 @@ def _write_yaml(path: Path, content: str) -> None:
 class TestSuperMetricEmit:
     """content/supermetrics/<name>.json is written with the correct UUID key."""
 
+    def test_duplicate_bundled_sm_name_is_build_error(self, tmp_path: Path) -> None:
+        """Two bundled SMs with one display name and different ids fail the
+        build naming both files, instead of resolving last-wins (#158 W3)."""
+        from types import SimpleNamespace
+
+        def _sm(sm_id: str, src: str):
+            return SimpleNamespace(
+                id=sm_id, name="Dup SM", formula="${this, metric=cpu|usage_average}",
+                resource_kinds=[], description="d", unit_id="",
+                source_path=Path(src),
+            )
+
+        with pytest.raises(SdkBuildError) as exc:
+            _write_outer_pak(
+                _make_project(),
+                _minimal_adapters_zip(),
+                tmp_path / "out",
+                project_dir=tmp_path / "adapter",
+                supermetrics=[
+                    _sm("11111111-1111-4111-8111-111111111111", "supermetrics/a.yaml"),
+                    _sm("22222222-2222-4222-8222-222222222222", "supermetrics/b.yaml"),
+                ],
+            )
+        msg = str(exc.value)
+        assert "Dup SM" in msg and "a.yaml" in msg and "b.yaml" in msg
+
     def test_sm_json_written_to_pak(self, tmp_path: Path) -> None:
         """SM JSON appears at content/supermetrics/<name>.json."""
         project_dir = tmp_path / "adapter"
@@ -992,7 +1018,7 @@ def _write_yaml_to(path: Path, content: str) -> Path:
 _SM_YAML_COLL_A = textwrap.dedent(
     """\
     id: 11110000-0000-0000-0000-000000000001
-    name: "My SM"
+    name: "My SM!"
     formula: "avg(${{adaptertype=VMWARE, objecttype=VirtualMachine, metric=cpu|usage_average, depth=1}})"
     description: "First SM"
     resource_kinds:
@@ -1005,7 +1031,7 @@ _SM_YAML_COLL_A = textwrap.dedent(
 _SM_YAML_COLL_B = textwrap.dedent(
     """\
     id: 11110000-0000-0000-0000-000000000002
-    name: "My SM"
+    name: "My SM?"
     formula: "avg(${{adaptertype=VMWARE, objecttype=VirtualMachine, metric=cpu|usage_average, depth=1}})"
     description: "Second SM — same display name, different uuid"
     resource_kinds:
@@ -1099,7 +1125,9 @@ class TestSafeNameCollisionDedup:
     appear in the pak with distinct filenames (suffix -2)."""
 
     def test_sm_collision_both_files_present(self, tmp_path: Path) -> None:
-        """Two SMs with identical display names → <name>.json and <name>-2.json."""
+        """Two SMs whose distinct names sanitize to one filename get <name>.json
+        and <name>-2.json. (Identical names with different ids are a build
+        error since #158 review W3; see test_duplicate_bundled_sm_name_is_build_error.)"""
         from vcfcf_supermetrics.loader import load_file
 
         project_dir = tmp_path / "adapter"

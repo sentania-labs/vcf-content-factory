@@ -18,8 +18,10 @@ Bug 3 — one view short (95 of 96)
   which is the optional Service Discovery adapter.  When that adapter is absent from
   the target instance the importer silently skips the view — this is a source-content
   edge case, not a format bug.  The view renders without error and the pak carries
-  all 96 view XMLs.  Test confirms: (a) the view renders cleanly, (b) the pak
-  contains exactly 96 content/reports/ entries.
+  all 96 view XMLs.  Test confirms: (a) an APPLICATIONDISCOVERY view renders
+  cleanly, (b) every view in each always-present corpus renders to well-formed
+  XML.  Since #218 both run on tests/fixtures/views/vcommunity_shapes/ and the
+  tracked corpora instead of the retired vcommunity clone.
 """
 from __future__ import annotations
 
@@ -434,21 +436,60 @@ class TestSMJsonIncludesModificationTime:
             )
 
 
+
 # ---------------------------------------------------------------------------
-# Bug 3 tests — all 96 views render; APPLICATIONDISCOVERY view is a source-content edge case
+# Bug 3 tests: a whole view corpus renders; APPLICATIONDISCOVERY is a source-content edge case
 # ---------------------------------------------------------------------------
+
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+_SHAPES = _REPO_ROOT / "tests" / "fixtures" / "views" / "vcommunity_shapes"
+
+
+def _view_corpora() -> list[tuple[str, list[Path], list[Path]]]:
+    """(label, view YAML files, super metric YAML files) per scoped corpus.
+
+    Before #218 this read the retired vcommunity clone, which CI no longer
+    has, so both tests skipped there.  Retargeted to corpora that are always
+    present: the factory's tracked views, each third_party project, the
+    vcommunity shape fixtures (the render shapes that corpus carried and the
+    tracked views do not; provenance in the fixture README), plus any live
+    managed pak clone that bootstrap fetched.  Each corpus resolves super
+    metrics against its own scope, as the SDK and bundle builders do.
+    """
+    def yamls(*dirs: Path) -> list[Path]:
+        return [p for d in dirs if d.is_dir() for p in sorted(d.rglob("*.yaml"))]
+
+    content_sms = yamls(_REPO_ROOT / "content" / "supermetrics")
+    corpora = [
+        ("content", yamls(_REPO_ROOT / "content" / "views"), content_sms),
+        ("vcommunity_shapes", yamls(_SHAPES), content_sms),
+    ]
+    for project in sorted((_REPO_ROOT / "third_party").glob("*/views")):
+        corpora.append((
+            f"third_party/{project.parent.name}",
+            yamls(project), yamls(project.parent / "supermetrics"),
+        ))
+    # Registered live paks only, so a workstation that still holds retired
+    # clones tests the same corpus CI does (#226 review N3).
+    from vcfcf_packaging.managed_paks import load_registry
+
+    for name in sorted(p.name for p in load_registry()):
+        pak = _REPO_ROOT / "content" / "sdk-adapters" / name
+        if (pak / "views").is_dir():
+            corpora.append((
+                f"sdk-adapters/{name}",
+                yamls(pak / "views"), yamls(pak / "supermetrics"),
+            ))
+    return corpora
 
 
 class TestViewCountAndEdgeCase:
-    """The 96th view (Guest OS List of Services) targets APPLICATIONDISCOVERY.
+    """The 96th vcommunity view (Guest OS List of Services) targets APPLICATIONDISCOVERY.
 
     The importer silently drops views whose adapter kind is not installed.
     This is a source-content edge case: the view is correctly formed and the
-    pak carries all 96 view XMLs.  The fix is documentation, not code.
+    pak carries every view XML.  The fix is documentation, not code.
     """
-
-    _VIEWS_DIR = Path("content/sdk-adapters/vcommunity/views")
-    _SM_DIR = Path("content/sdk-adapters/vcommunity/supermetrics")
 
     @staticmethod
     def _parse_view_xml(xml_text: str) -> ET.Element:
@@ -459,61 +500,64 @@ class TestViewCountAndEdgeCase:
             stripped = stripped[end:].lstrip()
         return ET.fromstring(stripped)
 
-    @pytest.mark.skipif(
-        not Path("content/sdk-adapters/vcommunity/views").exists(),
-        reason="vcommunity adapter not checked out",
-    )
-    def test_96_views_render_without_error(self):
-        """All 96 vcommunity views must render to well-formed XML."""
+    def test_view_corpus_renders_without_error(self):
+        """Every view in every scoped corpus renders to well-formed XML."""
         from vcfcf_dashboards.loader import load_view
         from vcfcf_dashboards.render import render_views_xml
         from vcfcf_supermetrics.loader import sm_id_map
 
-        sm_paths = list(sorted(self._SM_DIR.rglob("*.yaml")))
         errors = []
-        count = 0
-        for f in sorted(self._VIEWS_DIR.rglob("*.yaml")):
-            v = load_view(f, enforce_framework_prefix=False)
-            count += 1
-            try:
-                xml_text = render_views_xml([v], sm_map=sm_id_map(sm_paths), sm_scope_active=True)
-                self._parse_view_xml(xml_text)
-            except Exception as exc:
-                errors.append((v.name, str(exc)))
+        shapes = set()
+        for label, view_paths, sm_paths in _view_corpora():
+            sm_map = sm_id_map(sm_paths)
+            rendered = 0
+            for f in view_paths:
+                try:
+                    v = load_view(f, enforce_framework_prefix=False)
+                    xml_text = render_views_xml([v], sm_map=sm_map, sm_scope_active=True)
+                    self._parse_view_xml(xml_text)
+                except Exception as exc:
+                    errors.append((label, f.name, str(exc)))
+                    continue
+                rendered += 1
+                shapes.add((v.data_type, v.presentation))
+            if label in ("content", "vcommunity_shapes"):
+                assert rendered, f"{label}: no view rendered (corpus empty?)"
 
-        assert count == 96, f"Expected 96 view files, found {count}"
         assert not errors, (
             f"{len(errors)} view(s) failed to render:\n"
-            + "\n".join(f"  {name}: {err}" for name, err in errors)
+            + "\n".join(f"  {label}/{name}: {err}" for label, name, err in errors)
         )
+        # The data type and presentation mix the vcommunity corpus covered.
+        expected = {
+            ("list", "list"), ("trend", "line-chart"),
+            ("distribution", "bar-chart"), ("distribution", "donut-chart"),
+            ("distribution", "pie-chart"),
+        }
+        assert expected <= shapes, f"missing render shapes: {sorted(expected - shapes)}"
 
-    @pytest.mark.skipif(
-        not Path("content/sdk-adapters/vcommunity/views").exists(),
-        reason="vcommunity adapter not checked out",
-    )
     def test_applicationdiscovery_view_is_valid_but_optional(self):
-        """Guest OS List of Services uses APPLICATIONDISCOVERY adapter_kind.
+        """A view on the APPLICATIONDISCOVERY adapter kind loads and renders.
 
-        This is the 96th view that doesn't import when Service Discovery is
-        absent from the target instance.  The view itself is well-formed;
-        the import drop is a platform behaviour for unavailable adapters.
+        The vcommunity corpus's Guest OS List of Services was the view that
+        does not import when Service Discovery is absent from the target
+        instance.  The view itself is well-formed; the import drop is a
+        platform behaviour for unavailable adapters.
         """
         from vcfcf_dashboards.loader import load_view
         from vcfcf_dashboards.render import render_views_xml
         from vcfcf_supermetrics.loader import sm_id_map
 
-        view_path = self._VIEWS_DIR / "Guest OS List of Services.yaml"
-        assert view_path.exists(), f"Expected view at {view_path}"
-
+        view_path = _SHAPES / "render" / "guest_os_services.yaml"
         v = load_view(view_path, enforce_framework_prefix=False)
         assert v.adapter_kind == "APPLICATIONDISCOVERY", (
             f"Expected adapter_kind='APPLICATIONDISCOVERY', got {v.adapter_kind!r}"
         )
 
         # Renders without error (format is correct; drop is a platform decision)
-        sm_paths = list(sorted(self._SM_DIR.rglob("*.yaml")))
+        sm_paths = sorted((_REPO_ROOT / "content" / "supermetrics").rglob("*.yaml"))
         xml_text = render_views_xml([v], sm_map=sm_id_map(sm_paths), sm_scope_active=True)
         root = self._parse_view_xml(xml_text)
         vd = root.find(".//ViewDef")
         assert vd is not None, "ViewDef element missing in rendered XML"
-        assert vd.get("id") == "caa77302-9958-4ac0-bcf0-aefcc386b634"
+        assert vd.get("id") == "35d9c8db-3bba-45a7-bbad-fc93aada29cc"

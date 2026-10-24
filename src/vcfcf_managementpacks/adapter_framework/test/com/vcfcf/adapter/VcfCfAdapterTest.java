@@ -135,17 +135,17 @@ public class VcfCfAdapterTest {
         java.util.jar.Manifest mf = new java.util.jar.Manifest();
         java.util.jar.Attributes a = mf.getMainAttributes();
         a.putValue("Implementation-Title", "vcfcf-adapter-base");
-        a.putValue("Implementation-Version", "1.0.13");
+        a.putValue("Implementation-Version", "1.0.14");
         a.putValue("X-Vcfcf-Source-Commit", "abc123\r\nforged");
         String label = VcfCfAdapter.describeFrameworkBuild(mf);
         assertTrue("label carries title and version: " + label,
-                label.startsWith("vcfcf-adapter-base 1.0.13 (source abc123"));
+                label.startsWith("vcfcf-adapter-base 1.0.14 (source abc123"));
         assertFalse("label has no line break", label.contains("\n") || label.contains("\r"));
         java.util.jar.Manifest noCommit = new java.util.jar.Manifest();
-        noCommit.getMainAttributes().putValue("Implementation-Version", "1.0.13");
+        noCommit.getMainAttributes().putValue("Implementation-Version", "1.0.14");
         assertTrue("missing commit and title fall back",
                 VcfCfAdapter.describeFrameworkBuild(noCommit)
-                        .equals("vcfcf-adapter-base 1.0.13 (source unknown)"));
+                        .equals("vcfcf-adapter-base 1.0.14 (source unknown)"));
     }
 
     /**

@@ -23,10 +23,10 @@ Cases covered:
        warning regardless of shape (supermetric output is always numeric).
   T7 — non-distribution data_type (list) with a property column -> no
        warning (guard is scoped to data_type: distribution only).
-  T8 — real-repo regression: all data_type: distribution views under
-       content/sdk-adapters/vcommunity-vsphere/views/ (the four originally
-       fixed ESXi Host Details views plus every view touched by the
-       DEF-012 remediation sweep) must not warn.
+  T8: real-repo regression: every data_type: distribution shape in the
+       vcommunity-vsphere corpus (the four originally fixed ESXi Host
+       Details views plus every view touched by the DEF-012 remediation
+       sweep) must not warn. Fixture-backed since #218.
   T9 — PR #57 P2 partial-fix regression: dynamic DISCRETE buckets present
        but is_property missing -> still warns (the outer buckets-gate used
        to suppress this silently).
@@ -39,7 +39,8 @@ Cases covered:
        shape deliberately; is_string_attribute is not part of the
        suppression condition).
   T12 — real-repo regression: the unfixed vcommunity (vendor original)
-       control corpus must still warn for its broken distribution views.
+       control corpus must still warn for its broken distribution views,
+       and only those. Fixture-backed since #218.
 """
 from __future__ import annotations
 
@@ -282,16 +283,21 @@ def test_fixed_shape_with_is_string_attribute_false_does_not_warn(tmp_path):
 # ---------------------------------------------------------------------------
 
 def test_real_repo_vcommunity_vsphere_distribution_views_do_not_warn():
-    """Every data_type: distribution view under the vcommunity-vsphere SDK
-    adapter must not trigger the guard — this is the corpus the DEF-012
-    remediation sweep fixed (four originally-fixed ESXi Host
-    Details views plus every view touched by the follow-up sweep)."""
+    """Every data_type: distribution shape in the vcommunity-vsphere corpus
+    must not trigger the guard: that is the corpus the DEF-012 remediation
+    sweep fixed (four originally-fixed ESXi Host Details views plus every
+    view touched by the follow-up sweep).
+
+    Since #218 this reads one fixture per shape class that corpus contains
+    (tests/fixtures/views/vcommunity_shapes/distribution_fixed/, provenance
+    in the README there), because the retired clone is absent in CI."""
     from vcfcf_dashboards.loader import load_view
 
     repo_root = Path(__file__).parent.parent
-    views_dir = repo_root / "content" / "sdk-adapters" / "vcommunity-vsphere" / "views"
-    if not views_dir.exists():
-        pytest.skip("vcommunity-vsphere sdk-adapter content not present")
+    views_dir = (
+        repo_root / "tests" / "fixtures" / "views" / "vcommunity_shapes"
+        / "distribution_fixed"
+    )
 
     yaml_files = sorted(views_dir.glob("*.yaml"))
     distribution_files = []
@@ -326,13 +332,20 @@ def test_real_repo_vcommunity_control_corpus_still_warns():
     negative control: it must still trigger the guard for its broken
     distribution views (property-looking attributes with no is_property /
     no dynamic DISCRETE buckets), proving the restructured guard didn't
-    become permissive."""
+    become permissive.
+
+    Since #218 this reads one fixture per shape class that corpus contains
+    (tests/fixtures/views/vcommunity_shapes/distribution_unfixed/). In the
+    real corpus only the property-hint class warned; the fixture set pins
+    that exactly, so the guard can neither go silent nor start flagging
+    the numeric and super metric distributions."""
     from vcfcf_dashboards.loader import load_view
 
     repo_root = Path(__file__).parent.parent
-    views_dir = repo_root / "content" / "sdk-adapters" / "vcommunity" / "views"
-    if not views_dir.exists():
-        pytest.skip("vcommunity sdk-adapter control corpus not present")
+    views_dir = (
+        repo_root / "tests" / "fixtures" / "views" / "vcommunity_shapes"
+        / "distribution_unfixed"
+    )
 
     yaml_files = sorted(views_dir.glob("*.yaml"))
     distribution_files = []
@@ -357,3 +370,4 @@ def test_real_repo_vcommunity_control_corpus_still_warns():
         "unfixed vcommunity control corpus — the guard should not have "
         "gone silent on the known-broken vendor originals"
     )
+    assert {name for name, _ in all_warnings} == {"host_bios_version.yaml"}, all_warnings

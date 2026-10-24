@@ -1,0 +1,19 @@
+id: b1f495ad-0264-41cc-8d42-e53e3f33839c
+name: Fixture - Cluster Admission Control Policy
+description: 'Synthetic fixture: Cluster Admission Control Policy.'
+subject:
+  adapter_kind: VMWARE
+  resource_kind: ClusterComputeResource
+data_type: distribution
+presentation: donut-chart
+columns:
+- attribute: configuration|dasConfig|admissionControlPolicyId
+  display_name: Policy
+  is_property: true
+  is_string_attribute: false
+buckets:
+  dynamic: true
+  calc_function: DISCRETE
+time_window:
+  unit: DAYS
+  count: 7

@@ -130,7 +130,8 @@ def build_import_zip(
         configuration.json    — {"reports": N, "type": "CUSTOM"}
         reports.zip           — inner zip containing content.xml
 
-    The marker filename must match the target instance's fingerprint.  Pass
+    The marker filename must match the target's own value (identical on
+    every instance examined so far, but read from the target, issue #166).  Pass
     the value returned by ``vcfcf_dashboards.client.discover_marker_filename``
     for a live sync; offline ``package`` invocations use a synthetic value that
     the importer will reject (documented limitation, same as dashboards packager).
