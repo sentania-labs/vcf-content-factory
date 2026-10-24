@@ -6,8 +6,8 @@ description: >
   orphaned-disk space, the two primary rightsizing reclaim buckets. All
   capacity metrics are KB-native in the VMWARE adapter; unit: "gb" instructs
   the renderer to emit preferredUnitId="gb" so VCF Ops converts natively.
-  Sort by Snapshot Space descending (largest snapshot consumers first),
-  apply at the dashboard widget level. Part of the Fleet Capacity &
+  Default sort is Snapshot Space descending (largest snapshot consumers
+  first), set on the view itself. Part of the Fleet Capacity &
   Rightsizing dashboard (Band E).
 
 subject:
@@ -33,10 +33,11 @@ columns:
     unit: "gb"
 
   # Snapshot space consumed. KB-native; emit as GB.
-  # Primary sort column: candidate for the per-column `sort: desc` key (not set yet).
+  # Primary sort column: the view's own default sort, largest first.
   - attribute: diskspace|snapshot
     display_name: "Snapshot Space (GB)"
     unit: "gb"
+    sort: desc
 
   # Orphaned-disk reclaimable space. KB-native; emit as GB.
   # Confirmed present in reference: reclaimable|orphaned_disk|diskspace
