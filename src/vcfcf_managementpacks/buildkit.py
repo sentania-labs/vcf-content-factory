@@ -402,11 +402,18 @@ each jar from an appliance of that line
 (/usr/lib/vmware-vcops/common/lib/vrops-adapters-sdk.jar) and name it
 vrops-adapters-sdk-<version>.jar; the report lines name that version.
 Each leg picks a JDK new enough for its jar's class files (PATH,
-JAVA_HOME, JAVA_HOME_<N>_X64, or VCFCF_SDK_COMPAT_JAVAC): the 9.1.1.0100
-jar is Java 25 and needs JDK 25+, which JDK 17 cannot stand in for.
+JAVA_HOME, JAVA_HOME_<N>_X64, or VCFCF_SDK_COMPAT_JAVAC). The supported
+lines and their jars:
+
+    8.18 (8.18.7)      vrops-adapters-sdk-8.18.7.jar       Java 11, any JDK 11+
+    9.1 (9.1.1.0100)   vrops-adapters-sdk-9.1.1.0100.jar   Java 25, JDK 25+
+
+The 8.18.7 jar is the older API: it lacks members the 2.2 jar has, so its
+leg catches a call an 8.18 collector cannot serve. JDK 17 cannot stand in
+for JDK 25 on the 9.1.1.0100 leg.
 
     export VCFCF_SDK_JAR=/path/to/vrops-adapters-sdk-2.2.jar
-    export VCFCF_SDK_COMPAT_JARS=/path/to/vrops-adapters-sdk-9.1.1.0100.jar
+    export VCFCF_SDK_COMPAT_JARS=/path/to/vrops-adapters-sdk-8.18.7.jar:/path/to/vrops-adapters-sdk-9.1.1.0100.jar
     python3 -m sdk_buildkit build-sdk <adapter_dir> --require-sdk-compat
 
 --sdk-compat-jar repeats; VCFCF_SDK_COMPAT_JARS (colon-separated) and the

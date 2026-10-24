@@ -725,3 +725,34 @@ def test_build_framework_runs_legs_from_the_list_env_var(tmp_path):
     assert r.returncode == 1, r.stdout + r.stderr
     assert "against the VCF Ops 8.18.7 SDK jar" in r.stderr
     assert "COMPAT PASS FAILED" in r.stderr
+
+
+def test_the_8_18_jar_in_adapter_runtime_is_a_leg_not_a_primary_jar(runtime, tmp_path):
+    """Issue #252: vrops-adapters-sdk-8.18.7.jar beside the 2.2 jar is the
+    8.18 leg, never a second primary SDK jar; both known compat jars are
+    legs, oldest first."""
+    primary = _touch_jar(runtime / "vrops-adapters-sdk-2.2.jar")
+    old = _touch_jar(runtime / "vrops-adapters-sdk-8.18.7.jar")
+    new = _touch_jar(runtime / sdk_builder._SDK_COMPAT_JAR_NAME)
+    assert sdk_builder._primary_sdk_jar() == primary
+    assert _sdk_jars_on(sdk_builder._build_classpath_jars(tmp_path)) == [primary]
+    assert sdk_builder._resolve_compat_sdk_jars() == [old, new]
+
+
+def test_build_framework_knows_the_same_compat_names_as_sdk_builder():
+    text = _BUILD_FRAMEWORK.read_text(encoding="utf-8")
+    line = next(l for l in text.splitlines() if l.startswith("COMPAT_JAR_NAMES="))
+    names = tuple(line.split("=", 1)[1].strip('"').split())
+    assert names == sdk_builder._SDK_COMPAT_JAR_NAMES
+
+
+def test_ci_sdk_compat_matrix_has_the_8_18_and_9_1_legs():
+    import yaml
+
+    ci = Path(__file__).resolve().parents[2] / ".github" / "workflows" / "ci.yml"
+    legs = yaml.safe_load(ci.read_text(encoding="utf-8"))["jobs"]["sdk-compat"][
+        "strategy"]["matrix"]["include"]
+    by_sdk = {leg["sdk"]: leg for leg in legs}
+    assert by_sdk["8.18.7"] == {"sdk": "8.18.7", "jdk": "17", "jar": "vrops-adapters-sdk-8.18.7.jar"}
+    assert by_sdk["9.1.1.0100"]["jdk"] == "25"
+    assert {leg["jar"] for leg in legs} == set(sdk_builder._SDK_COMPAT_JAR_NAMES)
