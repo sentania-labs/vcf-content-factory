@@ -18,7 +18,8 @@ keep the two in step.
 History (most recent first):
   2026-10-24-1  install.py: post-import dashboard materialization check
                 (MATERIALIZATION lines, --skip-materialization-check,
-                --materialization-wait; issue #244)
+                --materialization-wait; issue #244). README footers name
+                vcfcf_packaging, not the removed vcfops_packaging (#159)
   2026-09-25-1  install.py: an explicit --skip-ssl-verify / VCFOPS_VERIFY_SSL=false
                 is no longer overridden by REQUESTS_CA_BUNDLE (issue #174)
   2026-08-29-1  render.py: multi-subject view columns unbound by default,

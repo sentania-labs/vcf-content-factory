@@ -50,7 +50,6 @@ src/
   vcfcf_packaging/          Bundle builder, releases, publish, install script templates
   vcfcf_managementpacks/    MP YAML loader, MPB render, .pak builder/installer (not in core)
   vcfcf_extractor/          Reverse flow: extract live dashboards into bundles
-  vcfops_*/                 Deprecated one-release import aliases for vcfcf_*
 ```
 
 The parsing, validation and rendering live in `vcfcf_core/<type>/`.

@@ -1480,7 +1480,7 @@ def _extract_view_names(views_xml) -> list:
     """Titles of the views in a rendered views_content.xml, best effort.
 
     Parses with xml.etree.ElementTree (stdlib) exactly the way
-    vcfops_packaging/audit.py reads view titles: walk every ViewDef, take
+    vcfcf_packaging/audit.py reads view titles: walk every ViewDef, take
     its <Title> child text, fall back to a name attribute. The renderer
     emits <Title> once per ViewDef and nowhere else, so extraction is 1:1
     with views.
