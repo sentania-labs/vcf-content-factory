@@ -52,6 +52,7 @@ public final class HttpClientBuilder {
     private AuthStrategy auth = null;
     private RetryPolicy retryPolicy = RetryPolicy.DEFAULT;
     private Duration timeout = Duration.ofSeconds(30);
+    private Duration connectTimeout = null;      // null → same as timeout
     private final List<String[]> defaultHeaders = new ArrayList<>();
 
     private HttpClientBuilder() {}
@@ -147,9 +148,28 @@ public final class HttpClientBuilder {
         return this;
     }
 
-    /** Per-request connect+read timeout. Default: 30 seconds. */
+    /**
+     * Per-request timeout: the budget for each request, from send until the
+     * response headers arrive (the read budget). Also the connect timeout
+     * unless {@link #connectTimeout(Duration)} is set. Default: 30 seconds.
+     */
     public HttpClientBuilder timeout(Duration d) {
         this.timeout = d;
+        return this;
+    }
+
+    /**
+     * Connect timeout: how long the client waits to establish a connection
+     * (issue #222), passed to {@code HttpClient.Builder.connectTimeout}.
+     * Default (or {@code null}): the {@link #timeout(Duration)} value, which
+     * is the behaviour before this setting existed. Set it shorter than
+     * {@code timeout} so an unreachable target fails in seconds while a slow
+     * call keeps the full read budget. Order of the two calls does not
+     * matter. The per-request {@code timeout} still runs from send, so it
+     * should not be shorter than this.
+     */
+    public HttpClientBuilder connectTimeout(Duration d) {
+        this.connectTimeout = d;
         return this;
     }
 
@@ -162,7 +182,7 @@ public final class HttpClientBuilder {
     /** Build the {@link ManagedHttpClient}. */
     public ManagedHttpClient build() {
         HttpClient.Builder clientBuilder = HttpClient.newBuilder()
-                .connectTimeout(timeout)
+                .connectTimeout(connectTimeout != null ? connectTimeout : timeout)
                 .followRedirects(HttpClient.Redirect.NORMAL);
 
         if (sslContext != null) {

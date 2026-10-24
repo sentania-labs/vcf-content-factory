@@ -184,6 +184,15 @@ to keep the default. Do not rethrow certificate failures stripped of their
 cause to dodge the framework text any more; that was compliance's
 pre-1.0.16 workaround.
 
+## HTTP client timeouts
+
+`HttpClientBuilder.timeout(d)` is the per-request budget, send to response
+headers (default 30 s). Since buildkit 1.0.16 (#222)
+`connectTimeout(d)` sets the connect timeout on its own; it defaults to
+`timeout`, so nothing changes until a pak sets it. Typical: a few seconds
+of connect so an unreachable target fails fast, 30 s of `timeout` for a
+slow API call. Keep `timeout` at least as long as `connectTimeout`.
+
 ## Per-cycle state: onCycleStart
 
 Since buildkit 1.0.16 (#221) override `onCycleStart()` on the adapter for
