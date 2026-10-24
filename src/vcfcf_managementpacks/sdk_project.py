@@ -18,6 +18,18 @@ Schema (all fields):
                            docs/README.md and docs/inventory-tree.md, since those
                            surfaces are otherwise derived solely from describe.xml
                            and would silently omit runtime-only stitched edges.
+    content_naming: str  (optional) naming contract for the pak's
+                           bundled_content (#229). One of:
+                             factory_prefixed  every bundled content name starts
+                                               with "[VCF Content Factory] "
+                                               (RULE-006). The default.
+                             unprefixed        no bundled content name carries
+                                               the "[VCF Content Factory]"
+                                               prefix (a pak that keeps its
+                                               upstream names, e.g. vCommunity).
+                           validate-sdk enforces it: an error when the key is
+                           declared, a warning when it is absent, so a pak that
+                           predates the key keeps validating until it declares.
 """
 from __future__ import annotations
 
@@ -34,6 +46,13 @@ except ImportError:
 
 class SdkProjectError(ValueError):
     """Raised when adapter.yaml fails schema validation."""
+
+
+# adapter.yaml ``content_naming`` values (#229). See the module docstring.
+CONTENT_NAMING_FACTORY_PREFIXED = "factory_prefixed"
+CONTENT_NAMING_UNPREFIXED = "unprefixed"
+CONTENT_NAMING_VALUES = (CONTENT_NAMING_FACTORY_PREFIXED, CONTENT_NAMING_UNPREFIXED)
+CONTENT_NAMING_DEFAULT = CONTENT_NAMING_FACTORY_PREFIXED
 
 
 @dataclass
@@ -178,6 +197,11 @@ class SdkProjectDef:
     entry_class: str
     source_path: Path
     cross_mp_edges: List[CrossMpEdgeInfo] = field(default_factory=list)
+    # Naming contract for bundled_content (#229). ``content_naming_declared``
+    # is False when adapter.yaml omits the key: validate-sdk then applies the
+    # default as a warning, not an error.
+    content_naming: str = CONTENT_NAMING_DEFAULT
+    content_naming_declared: bool = False
 
     @property
     def pak_filename(self) -> str:
@@ -325,6 +349,14 @@ def load_sdk_project(path: Path) -> SdkProjectDef:
 
     cross_mp_edges = _parse_cross_mp_edges(raw, where)
 
+    content_naming_declared = "content_naming" in raw
+    content_naming = raw.get("content_naming", CONTENT_NAMING_DEFAULT)
+    if content_naming not in CONTENT_NAMING_VALUES:
+        raise SdkProjectError(
+            f"{where}: 'content_naming' must be one of "
+            f"{', '.join(CONTENT_NAMING_VALUES)}; got {content_naming!r}"
+        )
+
     return SdkProjectDef(
         name=name,
         version=version,
@@ -336,4 +368,6 @@ def load_sdk_project(path: Path) -> SdkProjectDef:
         entry_class=entry_class,
         source_path=path,
         cross_mp_edges=cross_mp_edges,
+        content_naming=content_naming,
+        content_naming_declared=content_naming_declared,
     )

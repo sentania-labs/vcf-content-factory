@@ -41,7 +41,11 @@ Track-specific examples:
 - Sort key from the verb ("top N by X" → sort by X descending).
 - Default sort direction: descending for metrics (high values
   ranked first); ascending for free-space / capacity (smallest
-  first).
+  first). The YAML key is `sort: asc | desc` on exactly one column of
+  a `list` view (it renders the view's `sortCriteria`, so every
+  dashboard that embeds the view opens in that order). Widget-level
+  `sort_by_column` / `sort_by_dir` do not exist for View widgets and
+  the dashboard loader rejects them (issue #175).
 - Subject resource kind when the user names a class of object
   unambiguously ("hosts" → HostSystem; "VMs" → VirtualMachine).
 - Mix of built-in vs super metric columns: prefer built-ins where
@@ -83,7 +87,15 @@ Track-specific examples:
 
 ## YAML conventions
 
-- Name prefix: `[VCF Content Factory] `
+- Name prefix: `[VCF Content Factory] `. For an SDK-adapter pak the prefix follows the pak's `adapter.yaml`
+  `content_naming` field: `factory_prefixed` requires the `[VCF Content
+  Factory] ` prefix on every bundled name, `unprefixed` forbids it, and
+  `validate-sdk` and `build-sdk` fail on a mismatch when the field is
+  declared. When it is absent, match the pak's existing names: the tools
+  assume `factory_prefixed` and only warn (issue #229).
+- Totals: `summary:` takes `true`, one mapping, or a list of mappings
+  (`display_name`, `aggregation` SUM/AVG/MIN/MAX/DEVIATION, `columns` 0-based),
+  one rendered totals row per entry in order (issue #168).
 - SM column reference: `attribute: supermetric:"<exact name>"`
 - UUID v4 in `id` field (loader generates on first validate)
 - **Never write an `id:` line yourself.** The loader mints it on

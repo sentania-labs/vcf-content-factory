@@ -102,7 +102,6 @@ columns:
     unit: gb
     transformation: CURRENT
 
-# Sort note: default sort is CPU Contention P95 descending (worst first).
-# View-level default sort is not a loader-supported field; apply this sort
-# in the dashboard widget that references this view (sort_by_dir: desc,
-# sort_by_column: "CPU Contention P95").
+# Sort note: intended order is CPU Contention P95 descending (worst first).
+# A view's default sort is the per-column `sort: desc` key on exactly one
+# list column (not set here yet).
