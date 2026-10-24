@@ -49,11 +49,14 @@ DEFAULT_OWNER_USER_ID = "00000000-0000-0000-0000-00a1c0ffee01"
 
 def _default_marker_filename() -> str:
     # Fallback for offline `package` invocations: a 19-digit prefix in
-    # the right shape. The importer will reject this as
-    # INVALID_FILE_FORMAT, the marker filename is a per-instance
-    # fingerprint, so the sync path must discover the real value from
-    # the target cluster (see client.discover_marker_filename) and
-    # pass it in via `marker_filename=`.
+    # the right shape. The importer rejects this as INVALID_FILE_FORMAT.
+    # The marker filename is not a per-instance fingerprint: it was
+    # byte-identical (6844548499441080431L.v1) in every export examined,
+    # five exports from four instances on 8.18.7, 9.0.2 and 9.1.1, and
+    # only the file's content (the owner user uuid) varies (issue #166).
+    # It is not proven constant on every build, so the sync path still
+    # reads it from the target (client.discover_marker_filename) and
+    # passes it in via `marker_filename=`.
     return f"{time.time_ns()}L.v1"
 
 

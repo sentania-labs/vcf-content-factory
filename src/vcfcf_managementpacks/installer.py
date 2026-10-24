@@ -68,6 +68,13 @@ POLL_TIMEOUT = 300         # seconds before giving up — NOTE: subprocess wrapp
                            # A 300s subprocess timeout will race the poller and kill the
                            # installer while it is still waiting for the server.
 UPLOAD_POLL_INTERVAL = 3   # seconds between upload-progress polls
+#: (connect, read) timeout in seconds for one /ui/solution.action request.
+#: getIntegrations returns ~590 KB on a populated instance, so the read
+#: allowance is generous; it exists so one hung socket cannot hold a poll or
+#: verify loop forever (issue #235).  The read timeout bounds each socket
+#: read, not the whole response: a server that trickles bytes can still run
+#: longer, a server that goes silent cannot.
+SOLUTION_ACTION_TIMEOUT: Tuple[float, float] = (10.0, 120.0)
 
 
 # ---------------------------------------------------------------------------
@@ -86,6 +93,66 @@ def _warn(msg: str) -> None:
 
 def _info(msg: str) -> None:
     print(msg)
+
+
+#: Raw PAK Manager error key for a refused unsigned pak (CaSA
+#: errors.properties; the product UI bundle has no translation for it).
+UNSIGNED_PAK_ERROR_KEY = "unsigned_pak_installation.not.allowed"
+
+#: Operator-facing explanation for the unsigned-pak gate (issue #216).
+#: knowledge/context/investigations/2026-10-14-unsigned-pak-policy-9-1-1.md
+UNSIGNED_PAK_BLOCKED_MSG = (
+    "This VCF Operations cluster does not allow unsigned pak installation, "
+    "and this pak is unsigned (every factory pak is). Fresh 9.0 and 9.1 "
+    "installs ship with the setting off. To allow it:\n"
+    "  1. Log in to https://<primary node>/admin as the built-in admin user.\n"
+    "  2. Administrator Settings, Security Settings.\n"
+    "  3. Click 'Activate Unsigned PAK Installation' (9.0: 'Enable Unsigned "
+    "PAK Installation'). It is refused while any cluster node is down.\n"
+    "  4. Re-run this install.\n"
+    "This is a cluster-wide security control: it allows any unsigned pak, "
+    "not only this one. The factory never changes it for you. You may turn "
+    "it off again after the install. See Getting_Started.md, 'Installing "
+    "paks: allow unsigned paks first'."
+)
+
+
+def _pak_is_signed(pak_path: Path) -> bool:
+    """True when the pak carries a signature at its outer zip root.
+
+    A signed pak has ``signature.mf`` and a non-empty ``signature.cert``
+    beside manifest.txt (knowledge/context/mpb/mpb_pak_signing_chain.md).
+    Factory paks carry neither.  Community paks (vCommunity) ship
+    ``signature.mf`` with a zero-byte ``signature.cert`` and are unsigned,
+    so an empty cert counts as unsigned.  An unreadable zip counts as
+    unsigned; the manifest parse reports it.
+    """
+    try:
+        with zipfile.ZipFile(pak_path) as zf:
+            names = set(zf.namelist())
+            if not {"signature.mf", "signature.cert"} <= names:
+                return False
+            return zf.getinfo("signature.cert").file_size > 0
+    except (zipfile.BadZipFile, OSError):
+        return False
+
+
+def _parse_unsigned_policy(body: Dict[str, Any]) -> Optional[bool]:
+    """Read ``isUnsignedPakInstallationAllowed`` from a getIntegrations reply.
+
+    Returns True / False when the key is present (9.0 and 9.1), None when it
+    is absent or unrecognisable.  8.18 has no such key and no cluster gate
+    (it warns and asks for confirmation instead), so None means "no gate
+    reported", never "refused" (issue #216, 8.18.7 recon 2026-10-15).
+    """
+    if "isUnsignedPakInstallationAllowed" not in body:
+        return None
+    val = body["isUnsignedPakInstallationAllowed"]
+    if isinstance(val, bool):
+        return val
+    if isinstance(val, str) and val.strip().lower() in ("true", "false"):
+        return val.strip().lower() == "true"
+    return None
 
 
 def _check_json_error(body: Dict[str, Any], context: str) -> None:
@@ -392,13 +459,30 @@ class _UISession:
             self._session = None
             self._csrf = None
 
-    def solution_action(self, **kwargs) -> Dict[str, Any]:
-        """POST /ui/solution.action with arbitrary form fields + CSRF."""
+    def solution_action(self, _timeout: Optional[float] = None,
+                        **kwargs) -> Dict[str, Any]:
+        """POST /ui/solution.action with arbitrary form fields + CSRF.
+
+        Every request carries a timeout (issue #235): ``_timeout`` seconds
+        when given (a caller with its own deadline passes what is left of
+        it), else :data:`SOLUTION_ACTION_TIMEOUT`.  A timeout surfaces as
+        RuntimeError, the error type the install and verify paths handle.
+        """
         assert self._session is not None, "call login() first"
-        r = self._session.post(
-            f"https://{self._host}/ui/solution.action",
-            data={"secureToken": self._csrf or "", **kwargs},
-        )
+        timeout: Any = SOLUTION_ACTION_TIMEOUT
+        if _timeout is not None:
+            timeout = (min(SOLUTION_ACTION_TIMEOUT[0], _timeout), _timeout)
+        try:
+            r = self._session.post(
+                f"https://{self._host}/ui/solution.action",
+                data={"secureToken": self._csrf or "", **kwargs},
+                timeout=timeout,
+            )
+        except requests.exceptions.Timeout as e:
+            raise RuntimeError(
+                f"/ui/solution.action mainAction={kwargs.get('mainAction')!r} "
+                f"timed out (timeout={timeout}s): {e}"
+            ) from e
         r.raise_for_status()
         if not r.text.strip():
             return {}
@@ -516,6 +600,13 @@ class _UISession:
         # "success":true does NOT mean the pak was accepted; check errorMsg.
         err = body.get("errorMsg")
         if err:
+            if UNSIGNED_PAK_ERROR_KEY in str(err):
+                # The appliance does not translate this key; say what it
+                # means and how to fix it (issue #216).
+                raise RuntimeError(
+                    f"Pak upload rejected by PAK Manager: {err}\n"
+                    f"{UNSIGNED_PAK_BLOCKED_MSG}"
+                )
             raise RuntimeError(f"Pak upload rejected by PAK Manager: {err}")
 
         if not body.get("pakId"):
@@ -597,8 +688,11 @@ class _UISession:
     # Uninstall-side methods
     # ------------------------------------------------------------------
 
-    def get_integrations(self) -> list:
+    def get_integrations(self, timeout: Optional[float] = None) -> list:
         """POST /ui/solution.action mainAction=getIntegrations.
+
+        ``timeout`` (seconds) overrides the default request timeout; the
+        post-install settle loop passes what is left of its window.
 
         Returns the installedMPs[] list.  Each entry has:
           - pakId (str): UI short form, e.g. "Broadcom Security Advisories"
@@ -607,8 +701,28 @@ class _UISession:
           - isUnremovable (bool): True for built-in paks (vSAN, vCenter, NSX, etc.)
           - adapter_kind (str): e.g. "mpb_broadcom_security_advisories"
         """
-        body = self.solution_action(mainAction="getIntegrations")
+        body = self.solution_action(_timeout=timeout, mainAction="getIntegrations")
         return body.get("installedMPs", [])
+
+    def get_unsigned_pak_policy(self) -> Optional[bool]:
+        """Read the cluster's "Allow Unsigned PAK Installation" switch.
+
+        POST /ui/solution.action mainAction=getIntegrations, key
+        ``isUnsignedPakInstallationAllowed`` (the same read the product UI's
+        Repository page makes; works as any user with repository access).
+        Returns True / False on 9.0 and 9.1, None when the key is absent or
+        the route answers 404: 8.18.7 has no such switch, no such key, and
+        404s on the CaSA allow_unsigned_pak routes, so "not there" means no
+        gate on this platform, never "refused".  Read-only: the factory
+        never changes the switch.
+        """
+        try:
+            body = self.solution_action(mainAction="getIntegrations")
+        except requests.exceptions.HTTPError as e:
+            if getattr(e.response, "status_code", None) == 404:
+                return None
+            raise
+        return _parse_unsigned_policy(body)
 
     def remove_pak(self, short_pak_id: str, version: str) -> None:
         """POST /ui/solution.action mainAction=remove pakId=<short> version=<ver>.
@@ -765,9 +879,14 @@ def _verify_adapter_registered(
     if matched is not None and _version_mismatch(matched):
         deadline = time.time() + settle_timeout
         while time.time() < deadline:
-            time.sleep(settle_interval)
+            time.sleep(max(0.0, min(settle_interval, deadline - time.time())))
+            remaining = deadline - time.time()
+            if remaining <= 0:
+                break
+            # Each re-read gets only what is left of the window, so one hung
+            # socket cannot hold the verify past settle_timeout (issue #235).
             try:
-                installed = ui.get_integrations()
+                installed = ui.get_integrations(timeout=remaining)
             except Exception as e:
                 _warn(f"getIntegrations re-read failed (will retry): {e}")
                 continue
@@ -866,6 +985,43 @@ def _verify_adapter_registered(
 
 
 # ---------------------------------------------------------------------------
+# Unsigned-pak preflight (issue #216)
+# ---------------------------------------------------------------------------
+
+def _preflight_unsigned_policy(ui: "_UISession", pak_path: Path) -> None:
+    """Abort before upload when the cluster refuses an unsigned pak.
+
+    - Signed pak: no check; the server verifies the signature itself.
+    - Switch reads False (9.0 / 9.1 default): abort with the admin-UI steps.
+    - Switch reads True: proceed.
+    - Key absent (8.18, no cluster gate) or the read fails: proceed.  A
+      failed read must not block an install the cluster may allow; if the
+      cluster does refuse, upload_pak translates the raw error into the
+      same message.
+    Never changes the switch.
+    """
+    if _pak_is_signed(pak_path):
+        return
+    try:
+        allowed = ui.get_unsigned_pak_policy()
+    except Exception as e:
+        _warn(
+            f"Could not read the cluster's unsigned-pak setting ({e}); "
+            f"continuing with the upload."
+        )
+        return
+    if allowed is False:
+        _abort(UNSIGNED_PAK_BLOCKED_MSG)
+    if allowed is None:
+        _info(
+            "      Unsigned pak; this instance reports no cluster-wide unsigned-pak "
+            "gate (8.x behaviour). Signature checking is bypassed for this upload."
+        )
+    else:
+        _info("      Unsigned pak; the cluster allows unsigned pak installation.")
+
+
+# ---------------------------------------------------------------------------
 # Public install function
 # ---------------------------------------------------------------------------
 
@@ -887,6 +1043,9 @@ def install_pak(
     Steps executed:
       1:   Manifest parse (offline preflight)
       2:   _UISession.login()  (3-step /ui/ login + OPS_SESSION CSRF)
+      2a:  _preflight_unsigned_policy(): an unsigned pak on a cluster whose
+           "Allow Unsigned PAK Installation" switch is off stops here with
+           the fix (issue #216)
       3:   _UISession.prepare_upload()  (/ui/utility.action prepareFileUpload)
       4:   _UISession.upload_pak()  (/ui/admin/services/solution/upload)
       5:   _UISession.trigger_install()  (/ui/solution.action mainAction=install)
@@ -939,6 +1098,10 @@ def install_pak(
         _abort(str(e))
 
     try:
+        # Unsigned-pak preflight (issue #216): stop before uploading when the
+        # cluster refuses unsigned paks, with the fix rather than the raw key.
+        _preflight_unsigned_policy(ui, p)
+
         # prepare upload
         _info("[3/6] Preparing upload slot (/ui/utility.action prepareFileUpload) ...")
         try:

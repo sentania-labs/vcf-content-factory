@@ -3,10 +3,12 @@
 The location-agnostic half of the extractor: everything here takes bytes,
 dicts or dataclasses in and writes only to a path it was handed.
 
-- ``_content_xml_from_export_zip``, ``_supermetrics_from_export_zip``,
-  ``_dashboards_from_export_zip``: the three content-export zips (views,
+- ``content_xml_from_export_zip``, ``supermetrics_from_export_zip``,
+  ``dashboards_from_export_zip``: the three content-export zips (views,
   super metrics, dashboards) to bytes / dicts; the factory's live export
-  calls hand their outer zip here.
+  calls hand their outer zip here. Public API, also exported from
+  ``vcfcf_core.extractor`` (issue #165); the underscore-prefixed names are
+  aliases kept for one release.
 - ``_parse_view_xml`` and its helpers: a VIEW_DEFINITIONS export zip (or
   its ``content.xml``) to a view dict the YAML writer accepts.
 - ``_rewrite_formula``: ``sm_<uuid>`` tokens to ``@supermetric:"<name>"``
@@ -88,7 +90,7 @@ def _rewrite_formula(formula: str, name_cache) -> tuple[str, set[str]]:
 # zip here; the migrator reads a saved export the same way from the wheel.
 # ---------------------------------------------------------------------------
 
-def _content_xml_from_export_zip(outer: bytes) -> Optional[bytes]:
+def content_xml_from_export_zip(outer: bytes) -> Optional[bytes]:
     """Extract content.xml from a VIEW_DEFINITIONS (or REPORTS) export: a bare
     zip holding ``content.xml``, the real export's nested ``views.zip``, or an
     embedded ``.xml`` member carrying ``<ViewDef``. None when nothing fits."""
@@ -119,7 +121,7 @@ def _content_xml_from_export_zip(outer: bytes) -> Optional[bytes]:
     return None
 
 
-def _supermetrics_from_export_zip(outer_zip: bytes) -> dict[str, dict]:
+def supermetrics_from_export_zip(outer_zip: bytes) -> dict[str, dict]:
     """Parse a SUPER_METRICS content-zip export into a UUID->dict map.
 
     Wire format (confirmed 2026-04-28 via recon on devel): the outer zip
@@ -165,7 +167,7 @@ def _supermetrics_from_export_zip(outer_zip: bytes) -> dict[str, dict]:
     return result
 
 
-def _dashboards_from_export_zip(outer_zip: bytes) -> list[dict]:
+def dashboards_from_export_zip(outer_zip: bytes) -> list[dict]:
     """Parse a DASHBOARDS content-zip export into the list of dashboard dicts.
 
     The outer zip carries ``dashboards/<ownerUserId>`` (one inner zip per
@@ -210,6 +212,16 @@ def _dashboards_from_export_zip(outer_zip: bytes) -> list[dict]:
     return result
 
 
+# Underscore names kept as aliases for one release (issue #165): the migrator
+# imported these before the public names existed. They are the same objects
+# (an identity check holds), but they are separate module attributes: a
+# monkeypatch rebinding one name does not rebind the other. Callers in this
+# module and the factory use the public names, so patch those.
+_content_xml_from_export_zip = content_xml_from_export_zip
+_supermetrics_from_export_zip = supermetrics_from_export_zip
+_dashboards_from_export_zip = dashboards_from_export_zip
+
+
 # ---------------------------------------------------------------------------
 # View XML parsing
 # ---------------------------------------------------------------------------
@@ -226,7 +238,7 @@ def _parse_view_xml(xml_bytes: bytes, target_uuid: str) -> Optional[dict]:
     """
     import xml.etree.ElementTree as ET
 
-    xml_content = _content_xml_from_export_zip(xml_bytes)
+    xml_content = content_xml_from_export_zip(xml_bytes)
     if xml_content is None:
         _warn("could not extract content.xml from views export zip")
         return None

@@ -50,10 +50,12 @@ check `errorCode` / `errorMessages` AND `operationSummaries`.
 
 Non-negotiables the factory bakes into every import:
 
-1. **Marker file.** Every zip must contain the instance-specific
+1. **Marker file.** Every zip must contain the server's
    `<19-digit>L.v1` marker (contents: the owner user UUID). The
-   importer rejects anything else. The factory discovers it via a
-   throwaway export against the target instance first.
+   importer rejects anything else. The filename has been identical on
+   every instance examined (`6844548499441080431L.v1`, 8.18.7 to 9.1.1,
+   issue #166), but the factory still discovers it via a throwaway
+   export against the target instance first.
 2. **One import at a time.** A concurrent import returns 403
    "Task is already running": retry at 30s intervals, max 3.
 3. **Imported-nothing check.** `imported=0, skipped>0` in the
