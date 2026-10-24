@@ -58,6 +58,12 @@ public class AdapterInstanceStatusTest {
             testStopMidCycleSetsNothing();
             testAllSucceedSetsNothing();
             testWrappedInterruptOnLastResourceSetsNothing();
+            testCycleStartOncePerCycleBeforeDiscovery();
+            testNeedsRediscoveryExactlyOncePerCycle();
+            testCycleStartFailureDoesNotStopCycle();
+            testDefaultCycleStartIsNoOp();
+            testCycleStartErrorDoesNotStopCycle();
+            testCycleStartFatalEndsCycle();
         }
         report();
     }
@@ -227,6 +233,119 @@ public class AdapterInstanceStatusTest {
     }
 
     // -----------------------------------------------------------------------
+    // Issue #221: onCycleStart, and needsRediscovery stays once per cycle
+    // -----------------------------------------------------------------------
+
+    private static void testCycleStartOncePerCycleBeforeDiscovery() throws Exception {
+        TestAdapter a = adapter();
+        a.recordCycleStart = true;
+        a.discover = true;
+        for (int cycle = 1; cycle <= 3; cycle++) {
+            a.events.clear();
+            a.onCollect(a.instance, resources(1, 2));
+            assertEquals("cycle " + cycle + ": onCycleStart once, first, before "
+                    + "needsRediscovery, discovery and collect",
+                    Arrays.asList("cycleStart", "needsRediscovery", "enumerateResources",
+                            "collect:1", "collect:2"),
+                    new ArrayList<>(a.events));
+        }
+        assertEquals("three cycles: onCycleStart called three times", 3, a.cycleStarts);
+    }
+
+    /**
+     * UniFi build 14 and Synology build 31 mark the cycle start inside
+     * needsRediscovery. Pin that the framework still calls it exactly once
+     * per cycle, whether it answers true or false.
+     */
+    private static void testNeedsRediscoveryExactlyOncePerCycle() throws Exception {
+        for (boolean answer : new boolean[] {false, true}) {
+            TestAdapter a = adapter();
+            a.collector.rediscoveryAnswer = answer;
+            for (int cycle = 1; cycle <= 3; cycle++) {
+                a.onCollect(a.instance, resources(1, 2, 3));
+                assertEquals("needsRediscovery=" + answer + ", after cycle " + cycle
+                        + ": called exactly once per cycle", cycle,
+                        a.collector.needsRediscoveryCalls);
+                assertEquals("needsRediscovery=" + answer + ", after cycle " + cycle
+                        + ": rediscover calls", answer ? cycle : 0, a.collector.rediscoverCalls);
+            }
+            a.collector.failing.addAll(Arrays.asList(1, 2, 3));
+            a.onCollect(a.instance, resources(1, 2, 3));
+            assertEquals("needsRediscovery=" + answer + ": still once in a cycle where "
+                    + "every resource fails", 4, a.collector.needsRediscoveryCalls);
+        }
+    }
+
+    private static void testCycleStartFailureDoesNotStopCycle() throws Exception {
+        TestAdapter a = adapter();
+        a.cycleStartFailure = new IllegalStateException("snapshot reset failed");
+        a.onCollect(a.instance, resources(1, 2));
+        assertEquals("needsRediscovery still called", 1, a.collector.needsRediscoveryCalls);
+        assertEquals("resources still collected", ResourceStatusEnum.RESOURCE_STATUS_DATA_RECEIVING,
+                a.statusOf(lastResources.get(1)));
+        assertTrue("a WARN names the hook", a.log.contains("onCycleStart failed"));
+    }
+
+    /** Review N2: an Error such as a LinkageError from the hook does not end the cycle. */
+    private static void testCycleStartErrorDoesNotStopCycle() throws Exception {
+        for (Throwable t : new Throwable[] {new NoClassDefFoundError("com/x/Missing"),
+                new AssertionError("pak assert")}) {
+            TestAdapter a = adapter();
+            a.cycleStartFailure = t;
+            a.onCollect(a.instance, resources(1));
+            String kind = t.getClass().getSimpleName();
+            assertEquals(kind + ": needsRediscovery still called", 1,
+                    a.collector.needsRediscoveryCalls);
+            assertEquals(kind + ": resource still collected",
+                    ResourceStatusEnum.RESOURCE_STATUS_DATA_RECEIVING, a.statusOf(lastResources.get(0)));
+            assertTrue(kind + ": WARN names the hook", a.log.contains("onCycleStart failed"));
+        }
+        TestAdapter a = adapter();
+        a.cycleStartFailure = new InterruptedException("stop");
+        try {
+            Thread.interrupted();
+            a.onCollect(a.instance, resources());
+            assertTrue("InterruptedException from the hook: interrupt status restored",
+                    Thread.currentThread().isInterrupted());
+        } finally {
+            Thread.interrupted();
+        }
+    }
+
+    /** A VirtualMachineError or a thread kill from the hook ends the cycle. */
+    private static void testCycleStartFatalEndsCycle() throws Exception {
+        Throwable kill = (Throwable) Class.forName("java.lang.ThreadDeath")
+                .getDeclaredConstructor().newInstance();
+        for (Throwable fatal : new Throwable[] {new StackOverflowError("sim"), kill}) {
+            TestAdapter a = adapter();
+            a.cycleStartFailure = fatal;
+            Throwable seen = null;
+            try {
+                a.onCollect(a.instance, resources(1));
+            } catch (Throwable t) {
+                seen = t;
+            }
+            String kind = fatal.getClass().getSimpleName();
+            assertTrue(kind + ": rethrown from onCollect; got " + seen, seen == fatal);
+            assertEquals(kind + ": nothing collected after it", 0,
+                    a.collector.needsRediscoveryCalls);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    static <T extends Throwable> void sneaky(Throwable t) throws T {
+        throw (T) t;
+    }
+
+    private static void testDefaultCycleStartIsNoOp() throws Exception {
+        TestAdapter a = adapter();
+        a.onCollect(a.instance, resources(1));
+        assertEquals("default hook: collect proceeds",
+                ResourceStatusEnum.RESOURCE_STATUS_DATA_RECEIVING, a.statusOf(lastResources.get(0)));
+        assertFalse("default hook: no WARN", a.log.contains("onCycleStart"));
+    }
+
+    // -----------------------------------------------------------------------
     // Test adapter
     // -----------------------------------------------------------------------
 
@@ -237,10 +356,27 @@ public class AdapterInstanceStatusTest {
         boolean stopAfterFirst;
         Integer wrapInterruptOn;
         TestAdapter owner;
+        boolean rediscoveryAnswer;
+        int needsRediscoveryCalls;
+        int rediscoverCalls;
+
+        @Override
+        public boolean needsRediscovery(Object config) {
+            needsRediscoveryCalls++;
+            owner.events.add("needsRediscovery");
+            return rediscoveryAnswer;
+        }
+
+        @Override
+        public void rediscover(Object config, ManagedHttpClient httpClient,
+                ResourceConfig adapterInst, AdapterBase adapter) {
+            rediscoverCalls++;
+        }
 
         @Override
         public void collect(Object config, ManagedHttpClient httpClient, ResourceConfig rc,
                 List<MetricData> out, AdapterBase adapter) throws Exception {
+            owner.events.add("collect:" + rc.getResourceId());
             if (stopAfterFirst) owner.onStopCollection();
             if (wrapInterruptOn != null && wrapInterruptOn.equals(rc.getResourceId())) {
                 Thread.currentThread().interrupt();
@@ -268,6 +404,21 @@ public class AdapterInstanceStatusTest {
         LogCapture log;
         boolean discover;
         Exception discoveryFailure;
+        boolean recordCycleStart;
+        Throwable cycleStartFailure;
+        int cycleStarts;
+        List<String> events;
+
+        @Override
+        protected void onCycleStart() {
+            if (cycleStartFailure != null) AdapterInstanceStatusTest.<RuntimeException>sneaky(cycleStartFailure);
+            if (!recordCycleStart) {
+                super.onCycleStart();
+                return;
+            }
+            cycleStarts++;
+            events.add("cycleStart");
+        }
 
         @Override
         protected void configureAdapter(ResourceStatus s, ResourceConfig rc) { }
@@ -285,6 +436,7 @@ public class AdapterInstanceStatusTest {
 
         @Override
         protected void enumerateResources(ResourceSink sink) throws Exception {
+            events.add("enumerateResources");
             if (discoveryFailure != null) throw discoveryFailure;
         }
 
@@ -319,6 +471,7 @@ public class AdapterInstanceStatusTest {
         // Field initializers do not run under allocateInstance.
         setField(TestAdapter.class, a, "statuses", new java.util.IdentityHashMap<>());
         setField(TestAdapter.class, a, "messages", new java.util.IdentityHashMap<>());
+        a.events = new ArrayList<>();
         a.collector = new ScriptedCollector();
         a.collector.owner = a;
         a.instance = new ResourceConfig(9000);

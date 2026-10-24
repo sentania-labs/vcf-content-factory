@@ -74,6 +74,16 @@ public final class ManagedHttpClient {
 		this.defaultHeaders = defaultHeaders;
 	}
 
+	/** The underlying client (tests: the connect timeout it was built with). */
+	HttpClient underlyingClient() {
+		return httpClient;
+	}
+
+	/** The per-request timeout applied to every request (tests). */
+	Duration requestTimeout() {
+		return timeout;
+	}
+
 	/**
 	 * Perform a GET request.
 	 *

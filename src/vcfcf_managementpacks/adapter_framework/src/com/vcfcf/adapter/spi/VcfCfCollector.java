@@ -113,6 +113,10 @@ public interface VcfCfCollector<C> {
      * and the adapter needs to register new resources via the collect cycle's
      * embedded discovery result (spec/19 §1 step 1, §2).
      *
+     * <p>The framework calls this exactly once per collection cycle, after
+     * {@code VcfCfAdapter.onCycleStart()} (issue #221). Use that hook, not
+     * this method, to mark the start of a cycle.
+     *
      * @param config the typed configuration
      * @return {@code true} to trigger rediscovery at the top of this cycle
      */

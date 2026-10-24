@@ -61,6 +61,24 @@ A workflow that ran the old kit and relied on grepping the compare output
 for "0 BLOCKING" now also fails on the exit code; under `set -o pipefail`
 that is the intended gate.
 
+## Behavior since 1.0.17
+
+- Opt-in certificate name checking for pak HTTP connections (#185, #206):
+  `VcfCfAdapter.getPlatformSslContext(host)` and
+  `HttpClientBuilder.platformSsl(adapter, host)` run the platform chain check
+  and then require the certificate to name the dialled host. The no-argument
+  forms are unchanged; the Suite API loopback never name-checks.
+- Validate Connection certificate text (#205): a protected
+  `certificateFailureMessage` hook, neutral default text pointing at the
+  accept dialog, name-mismatch text naming the host, and the Allow Insecure
+  SSL wording only when the describe declares that field.
+- `onCycleStart()` on the adapter base (#221), called once per cycle before
+  discovery; `needsRediscovery` is still called exactly once per cycle.
+- `HttpClientBuilder.connectTimeout(Duration)` (#222), defaulting to the
+  existing timeout, which stays the read budget.
+- 1.0.16 is the installer and ThreadDeath round (factory #242); this kit
+  carries both.
+
 ## Behavior since 1.0.15
 
 - `build-sdk` and `validate-sdk` take `--sdk-compat-jar <path to
