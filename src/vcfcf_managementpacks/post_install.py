@@ -27,7 +27,13 @@ A dashboard the list does not carry is ABSENT (the importer drops a whole
 dashboard silently on an unknown widget type, lesson
 ``unknown-widget-type-aborts-pak-dashboard-import.md``).
 
-Summary tabs (issue #200). A pak's ``content/dashboards/dashboards.properties``
+Summary tabs (issue #200). The repair below is OFF by default
+(``--summary-rebind`` or ``VCFCF_SUMMARY_REBIND=1`` turns it on): on
+2026-10-24 it was refused by the server on devel 9.0.2 and 8.18.7
+(``associateResourceKindDashboards`` answered the generic "Internal Server
+Error" panel, nothing written) and not needed on 9.1.1. With it off, the
+install only reads each bound copy and prints ``SUMMARY OK`` or
+``SUMMARY INCOMPLETE`` as information. A pak's ``content/dashboards/dashboards.properties``
 makes the server's installer clone each bound dashboard into a SUMMARY
 template seconds after importing it. On 9.0.2 that clone is taken while the
 source's widgets are still unresolved, and nothing resolves a template
@@ -58,6 +64,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import time
 import zipfile
@@ -359,6 +366,100 @@ CLONE_INCOMPLETE = "incomplete"
 CLONE_UNKNOWN = "unknown"
 
 
+def template_widget_counts(config, tab_id: str) -> Optional[tuple]:
+    """``(loading, total, name)`` for one template tab of a
+    ``getDashboardConfig`` answer, or None when the tab is not in it.
+    ``loading`` counts widgets with ``isLoading: true``."""
+    tabs = []
+    if isinstance(config, dict) and isinstance(config.get("dashboardConfig"), dict):
+        tabs = config["dashboardConfig"].get("tabConfigs") or []
+    tab = next((t for t in tabs if isinstance(t, dict)
+                and str(t.get("id") or "").lower() == str(tab_id).lower()), None)
+    if tab is None:
+        return None
+    widgets = [w for w in (tab.get("widgets") or []) if isinstance(w, dict)]
+    loading = sum(1 for w in widgets if w.get("isLoading") is True)
+    return loading, len(widgets), str(tab.get("name") or "")
+
+
+#: Server-answer excerpt length in a refused-bind line.
+SERVER_EXCERPT_CHARS = 200
+
+_SECRET_PATTERNS = [
+    # key=value, key: value, "key": "value" for session and credential keys
+    re.compile(r'(?i)((?:secureToken|csrfToken|password|passwd|OPS_SESSION|JSESSIONID|'
+               r'vRealizeOpsToken|Authorization)["\']?\s*[:=]\s*["\']?)([^"\'\s&;,<>]+)'),
+]
+
+
+def redact(text: str, secrets: tuple = ()) -> str:
+    """``text`` with every known secret value and every credential-shaped
+    ``key=value`` replaced by ``<redacted>``."""
+    out = text or ""
+    for secret in secrets:
+        if secret and len(str(secret)) >= 4:
+            out = out.replace(str(secret), "<redacted>")
+    for pat in _SECRET_PATTERNS:
+        out = pat.sub(lambda m: m.group(1) + "<redacted>", out)
+    return out
+
+
+def server_answer(exc: BaseException, secrets: tuple = ()) -> Optional[str]:
+    """``HTTP <status>: <first 200 chars of the body>`` for an exception
+    that carries the server's reply (``UIClientError.status/body`` or a
+    ``requests`` error's ``response``), whitespace collapsed and redacted;
+    None when it carries none."""
+    status = getattr(exc, "status", None)
+    body = getattr(exc, "body", None)
+    resp = getattr(exc, "response", None)
+    if status is None and resp is not None:
+        status = getattr(resp, "status_code", None)
+        body = getattr(resp, "text", None)
+    if status is None:
+        return None
+    excerpt = " ".join(str(body or "").split())[:SERVER_EXCERPT_CHARS]
+    return f"HTTP {status}: {redact(excerpt, secrets)!r}"
+
+
+def report_summary_copies(ui, bindings: List[PakBinding], *,
+                          out: Callable[[str], None]) -> None:
+    """Information only (the repair is off): per bound kind, read the
+    Summary copy the installer made and print
+    ``SUMMARY OK <kind> <copy id> (0 of <m> widgets loading)`` or
+    ``SUMMARY INCOMPLETE <kind> <copy id> (<n> of <m> widgets loading)``.
+    No wait, no write, never raises, no exit-code effect."""
+    incomplete = False
+    for b in bindings:
+        for ak, rk in b.kinds:
+            label = f"{ak}:{rk}"
+            try:
+                answer = ui.get_summary_tab_id(_resource_kind_id(ak, rk))
+                copy = str(answer.get("tabId") or "") if isinstance(answer, dict) else ""
+                if not copy or (isinstance(answer, dict) and answer.get("isDashboard") is False):
+                    out(f"SUMMARY UNCHECKED {label}: not bound to a dashboard "
+                        f"(getSummaryTabId: {answer!r})")
+                    continue
+                counts = template_widget_counts(
+                    ui.get_dashboard_config(copy, is_template=True), copy)
+                if counts is None:
+                    out(f"SUMMARY UNCHECKED {label} {copy}: the copy could not be read")
+                    continue
+                loading, total, name = counts
+                if name and not _is_copy_of(name, b.dashboard.name):
+                    out(f"SUMMARY UNCHECKED {label} {copy}: shows '{name}', not a copy "
+                        f"of '{b.dashboard.name}'")
+                    continue
+                state = "INCOMPLETE" if loading else "OK"
+                incomplete = incomplete or bool(loading)
+                out(f"SUMMARY {state} {label} {copy} ({loading} of {total} widgets loading)")
+            except Exception as exc:  # noqa: BLE001  information only
+                out(f"SUMMARY UNCHECKED {label}: could not read the Summary copy: {exc}")
+    if incomplete:
+        out("  (information only: the Summary tab shows a copy taken before the dashboard "
+            "finished building, issue #200. The repair is off by default; "
+            "--summary-rebind or VCFCF_SUMMARY_REBIND=1 turns it on.)")
+
+
 def template_state(config, tab_id: str) -> tuple:
     """``(state, name)`` of one template tab from a ``getDashboardConfig``
     answer. Incomplete when the tab or any widget has ``isLoading: true``;
@@ -404,6 +505,7 @@ def repair_summary_bindings(
     *,
     out: Callable[[str], None],
     err: Callable[[str], None],
+    secrets: tuple = (),
 ) -> int:
     """Rebind each installer-made Summary clone that did not finish (#200).
 
@@ -467,8 +569,17 @@ def repair_summary_bindings(
                     if needs_fix:
                         rc = POST_INSTALL_FAILED_RC
                     continue
-                ui.associate_resource_kind_dashboards(
-                    {f"resourceKind_{rkid}": f"{d.name}_::_{d.id}"}, {})
+                try:
+                    ui.associate_resource_kind_dashboards(
+                        {f"resourceKind_{rkid}": f"{d.name}_::_{d.id}"}, {})
+                except Exception as exc:  # noqa: BLE001  report what the server said
+                    said = server_answer(exc, secrets)
+                    err(f"WARNING: SUMMARY NOT REBOUND: {label}: binding '{d.name}' "
+                        f"({d.id}) again was refused, so the Summary tab still shows the "
+                        f"unfinished copy {old}. Server answer: "
+                        f"{said or redact(str(exc), secrets)}")
+                    rc = POST_INSTALL_FAILED_RC
+                    continue
                 answer = ui.get_summary_tab_id(rkid)
                 new = str(answer.get("tabId") or "") if isinstance(answer, dict) else ""
                 if not new or new == old:
@@ -503,7 +614,7 @@ def report_pak_dashboards(
     password: str,
     verify_ssl: bool,
     wait_s: Optional[int] = None,
-    summary_rebind: bool = True,
+    summary_rebind: bool = False,
     ui_factory: Optional[Callable[..., object]] = None,
     suite_factory: Optional[Callable[..., object]] = None,
     sleep: Callable[[float], None] = time.sleep,
@@ -513,9 +624,10 @@ def report_pak_dashboards(
     Returns 0, or :data:`POST_INSTALL_FAILED_RC` when a dashboard is
     STALLED (waiting on an adapter kind the target lacks) or a bound
     Summary tab is left showing an unfinished copy (#200). When the pak
-    binds Summary dashboards the wait polls (default
-    :data:`BOUND_SOURCE_WAIT_S`) and, with ``summary_rebind``, the Summary
-    clones are checked and repaired. Credentials are never printed. ``ui_factory(host, user, password, verify_ssl)`` and
+    binds Summary dashboards and ``summary_rebind`` is on (default off), the
+    wait polls (default :data:`BOUND_SOURCE_WAIT_S`) and the Summary clones
+    are checked and repaired; with it off they are only read and reported
+    (:func:`report_summary_copies`), with no effect on the return code. Credentials are never printed. ``ui_factory(host, user, password, verify_ssl)`` and
     ``suite_factory(...)`` are injectable for tests.
     """
     from vcfcf_dashboards.client import list_adapter_kind_keys, materialization_recheck_wait
@@ -601,10 +713,11 @@ def report_pak_dashboards(
                   f"finished building is unknown.", file=sys.stderr)
         rc = POST_INSTALL_FAILED_RC if report_materialization_statuses(statuses) else 0
         if bindings and summary_rebind:
-            rc = repair_summary_bindings(ui, bindings, statuses, out=print, err=_err) or rc
+            secrets = tuple(x for x in (password, getattr(ui, "_csrf_token", None)) if x)
+            rc = repair_summary_bindings(ui, bindings, statuses, out=print, err=_err,
+                                         secrets=secrets) or rc
         elif bindings:
-            print("SUMMARY SKIPPED: --skip-summary-rebind; the installer's Summary tab "
-                  "copies were not checked")
+            report_summary_copies(ui, bindings, out=print)
         return rc
     finally:
         try:

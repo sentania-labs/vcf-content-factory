@@ -274,7 +274,11 @@ def test_read_error_is_unchecked_and_bind_error_after_a_known_blank_fails():
     ui = _UI([{"tabId": OLD_CLONE}], {OLD_CLONE: _config(OLD_CLONE, True, [True])},
              assoc_raises=RuntimeError("associateResourceKindDashboards failed"))
     rc, out, err = _repair(ui)
-    assert rc == pi.POST_INSTALL_FAILED_RC and "SUMMARY UNCHECKED" in err[0]
+    # A refused bind after a known blank copy is NOT REBOUND (exit 3); an
+    # exception with no server reply attached is quoted as it is.
+    assert rc == pi.POST_INSTALL_FAILED_RC
+    assert err[0].startswith("WARNING: SUMMARY NOT REBOUND: ")
+    assert "Server answer: associateResourceKindDashboards failed" in err[0]
 
 
 # --- the polled wait ----------------------------------------------------------------------
@@ -360,7 +364,7 @@ def test_report_waits_660_polled_then_rebinds(tmp_path, monkeypatch, capsys):
         tab_answers=[{"tabId": OLD_CLONE}, {"tabId": NEW_CLONE}],
         configs={OLD_CLONE: _config(OLD_CLONE, True, [True] * 7),
                  NEW_CLONE: _config(NEW_CLONE, False, [False] * 7, name=NAME + " 7")})
-    rc, slept = _report(tmp_path, ui, monkeypatch)
+    rc, slept = _report(tmp_path, ui, monkeypatch, summary_rebind=True)
     out = capsys.readouterr().out
     assert rc == 0 and slept == [30]
     assert ("MATERIALIZATION WAIT: 1 dashboard(s) still building; re-checking every 30 s "
@@ -376,7 +380,7 @@ def test_report_env_wait_wins_with_rebind(tmp_path, monkeypatch, capsys):
     ui = _FullUI([[{"id": ID_WORLD, "isLoading": True}]],
                  tab_answers=[{"tabId": OLD_CLONE}],
                  configs={OLD_CLONE: _config(OLD_CLONE, True, [True])})
-    rc, slept = _report(tmp_path, ui, monkeypatch)
+    rc, slept = _report(tmp_path, ui, monkeypatch, summary_rebind=True)
     assert slept == [30, 15]
 
 
@@ -391,8 +395,9 @@ def test_skip_summary_rebind_keeps_the_single_recheck(tmp_path, monkeypatch, cap
     out = capsys.readouterr().out
     assert slept == expected
     assert f"re-checking once in {expected[0]} s" in out
-    assert "SUMMARY SKIPPED" in out and ui.assoc == []
-    assert rc == 0  # INCOMPLETE source alone does not fail the install
+    assert f"SUMMARY INCOMPLETE vcfcf_compliance:ComplianceWorld {OLD_CLONE} (1 of 1 widgets loading)" in out
+    assert ui.assoc == []
+    assert rc == 0  # information only: neither the source nor the copy changes it
 
 
 def test_report_unfinished_source_and_blank_clone_exits_3(tmp_path, monkeypatch, capsys):
@@ -400,7 +405,7 @@ def test_report_unfinished_source_and_blank_clone_exits_3(tmp_path, monkeypatch,
     ui = _FullUI([[{"id": ID_WORLD, "isLoading": True}]],
                  tab_answers=[{"tabId": OLD_CLONE}],
                  configs={OLD_CLONE: _config(OLD_CLONE, True, [True])})
-    rc, _ = _report(tmp_path, ui, monkeypatch)
+    rc, _ = _report(tmp_path, ui, monkeypatch, summary_rebind=True)
     err = capsys.readouterr().err
     assert rc == pi.POST_INSTALL_FAILED_RC and ui.assoc == []
     assert "WARNING: MATERIALIZATION INCOMPLETE:" in err
@@ -424,3 +429,137 @@ def _pak(tmp_path, props=None, extra_dir=None, two_in_world=False) -> Path:
         if props is not None:
             z.writestr("content/dashboards/dashboards.properties", props)
     return p
+
+
+# --- opt-in repair (2026-10-24 live result: the bind is refused on 9.0.2 and 8.18.7) ---
+
+def test_default_is_information_only(tmp_path, monkeypatch, capsys):
+    """Repair off by default: no long wait, no write, exit code untouched,
+    one SUMMARY line per bound kind with the copy id and the loading count."""
+    monkeypatch.delenv("VCFCF_MATERIALIZATION_WAIT_S", raising=False)
+    ui = _FullUI([[{"id": ID_WORLD, "isLoading": False}]],
+                 tab_answers=[{"tabId": OLD_CLONE}],
+                 configs={OLD_CLONE: _config(OLD_CLONE, True, [True] * 7)})
+    rc, slept = _report(tmp_path, ui, monkeypatch)
+    out = capsys.readouterr().out
+    assert rc == 0 and slept == [] and ui.assoc == []
+    assert (f"SUMMARY INCOMPLETE vcfcf_compliance:ComplianceWorld {OLD_CLONE} "
+            f"(7 of 7 widgets loading)") in out
+    assert "--summary-rebind or VCFCF_SUMMARY_REBIND=1" in out
+
+
+def _info(ui):
+    lines = []
+    pi.report_summary_copies(ui, [_binding()], out=lines.append)
+    return lines
+
+
+def test_info_ok_line():
+    ui = _UI([{"tabId": NEW_CLONE, "isDashboard": True}],
+             {NEW_CLONE: _config(NEW_CLONE, False, [False] * 7, name=NAME + " 4")})
+    assert _info(ui) == [
+        f"SUMMARY OK vcfcf_compliance:ComplianceWorld {NEW_CLONE} (0 of 7 widgets loading)"]
+    assert ui.assoc == []
+
+
+@pytest.mark.parametrize("answer,configs,needle", [
+    ({"isDashboard": False}, {}, "not bound to a dashboard"),
+    ({"tabId": OLD_CLONE}, {OLD_CLONE: {}}, "could not be read"),
+    ({"tabId": OLD_CLONE}, {OLD_CLONE: _config(OLD_CLONE, True, [True], name="Other 2")},
+     "not a copy of"),
+])
+def test_info_unchecked_lines(answer, configs, needle):
+    ui = _UI([answer], configs)
+    lines = _info(ui)
+    assert len(lines) == 1 and lines[0].startswith("SUMMARY UNCHECKED vcfcf_compliance:ComplianceWorld")
+    assert needle in lines[0] and ui.assoc == []
+
+
+def test_info_never_raises():
+    ui = _UI([{"tabId": OLD_CLONE}], {}, config_raises=True)
+    lines = _info(ui)
+    assert lines[0].startswith("SUMMARY UNCHECKED") and "HTTP 500" in lines[0]
+
+
+def test_refused_bind_reports_status_and_redacted_body():
+    from vcfcf_dashboards.ui_client import UIClientError
+
+    body = ("\n   <script type=\"text/javascript\">\n   Ext.onReady(function() { var errorPanel "
+            "= new Ext.Panel({ secureToken=SECRET-TOKEN-1234 title: 'Internal Server Error', "
+            "pw hunter2-pass }); });</script>" + "x" * 400)
+    ui = _UI([{"tabId": OLD_CLONE}], {OLD_CLONE: _config(OLD_CLONE, True, [True] * 7)},
+             assoc_raises=UIClientError("associateResourceKindDashboards failed (HTTP 200)",
+                                        status=200, body=body))
+    out, err = [], []
+    rc = pi.repair_summary_bindings(ui, [_binding()], _status(mat.COMPLETE),
+                                    out=out.append, err=err.append,
+                                    secrets=("hunter2-pass",))
+    assert rc == pi.POST_INSTALL_FAILED_RC and out == []
+    line = err[0]
+    assert line.startswith("WARNING: SUMMARY NOT REBOUND: vcfcf_compliance:ComplianceWorld")
+    assert f"unfinished copy {OLD_CLONE}" in line
+    assert "Server answer: HTTP 200: '<script type=\"text/javascript\"> Ext.onReady" in line
+    assert "Internal Server Error" in line
+    assert "SECRET-TOKEN-1234" not in line and "hunter2-pass" not in line
+    assert "x" * 201 not in line  # excerpt capped at 200 characters
+
+
+def test_server_answer_reads_a_requests_error():
+    class _Resp:
+        status_code = 503
+        text = "  Service   Unavailable  password=abc12345 "
+
+    exc = RuntimeError("boom")
+    exc.response = _Resp()
+    assert pi.server_answer(exc) == "HTTP 503: 'Service Unavailable password=<redacted>'"
+    assert pi.server_answer(RuntimeError("no reply")) is None
+
+
+def test_ui_client_associate_failure_carries_status_and_body():
+    from vcfcf_dashboards.ui_client import UIClientError, VCFOpsUIClient
+
+    class _Resp:
+        status_code = 200
+        text = "<html>Internal Server Error</html>"
+
+    class _Session:
+        def post(self, *a, **k):
+            return _Resp()
+
+    c = VCFOpsUIClient(host="ops.example", username="u", password="p")
+    c._session, c._csrf_token = _Session(), "tok"
+    with pytest.raises(UIClientError) as exc:
+        c.associate_resource_kind_dashboards({"resourceKind_x": "N_::_u"}, {})
+    assert exc.value.status == 200
+    assert exc.value.body == "<html>Internal Server Error</html>"
+    assert "HTTP 200" in str(exc.value)
+
+
+@pytest.mark.parametrize("argv,env,expected,warns", [
+    ([], "", False, False),
+    (["--summary-rebind"], "", True, False),
+    ([], "1", True, False),
+    ([], "no", False, False),
+    (["--skip-summary-rebind"], "", False, True),
+    (["--skip-summary-rebind"], "1", False, True),
+])
+def test_cli_summary_rebind_switch(monkeypatch, capsys, argv, env, expected, warns):
+    from vcfcf_managementpacks import cli as mp_cli
+    from vcfcf_managementpacks import installer
+
+    seen = {}
+    monkeypatch.setenv("VCFCF_SUMMARY_REBIND", env)
+    monkeypatch.setattr(installer, "install_pak", lambda **kw: seen.update(kw) or 0)
+    assert mp_cli.main(["install", "x.pak", *argv]) == 0
+    assert seen["summary_rebind"] is expected
+    assert ("--skip-summary-rebind is deprecated" in capsys.readouterr().err) is warns
+
+
+def test_cli_both_switches_is_a_usage_error(monkeypatch, capsys):
+    from vcfcf_managementpacks import cli as mp_cli
+    from vcfcf_managementpacks import installer
+
+    monkeypatch.setattr(installer, "install_pak",
+                        lambda **kw: pytest.fail("must not install on a usage error"))
+    assert mp_cli.main(["install", "x.pak", "--summary-rebind", "--skip-summary-rebind"]) == 2
+    assert "contradict" in capsys.readouterr().err

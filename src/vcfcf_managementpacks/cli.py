@@ -552,6 +552,10 @@ def cmd_install(args) -> int:
     """
     from .installer import install_pak
 
+    summary_rebind = _summary_rebind_requested(args)
+    if summary_rebind is None:
+        return 2
+
     # installer.install_pak calls sys.exit(1) on fatal errors; a return is
     # an installed pak: 0, or 3 when a post-install dashboard check failed.
     return install_pak(
@@ -564,8 +568,35 @@ def cmd_install(args) -> int:
         profile=getattr(args, "profile", None),
         materialization_check=not getattr(args, "skip_materialization_check", False),
         materialization_wait=getattr(args, "materialization_wait", None),
-        summary_rebind=not getattr(args, "skip_summary_rebind", False),
+        summary_rebind=summary_rebind,
     )
+
+
+#: Environment switch for the opt-in Summary repair (issue #200).
+SUMMARY_REBIND_ENV = "VCFCF_SUMMARY_REBIND"
+
+
+def _summary_rebind_requested(args):
+    """Whether the opt-in Summary repair runs: ``--summary-rebind`` or
+    ``VCFCF_SUMMARY_REBIND=1``; off by default. ``--skip-summary-rebind`` is
+    a deprecated alias for the default (it keeps the repair off, even with
+    the env switch). Returns None, after an error line, when both flags are
+    given."""
+    import os
+
+    on_flag = bool(getattr(args, "summary_rebind", False))
+    skip = bool(getattr(args, "skip_summary_rebind", False))
+    if on_flag and skip:
+        print("ERROR: --summary-rebind and --skip-summary-rebind contradict each other; "
+              "pass one.", file=sys.stderr)
+        return None
+    if skip:
+        print("WARN: --skip-summary-rebind is deprecated and has no effect: the Summary "
+              "repair is off by default (use --summary-rebind to turn it on).",
+              file=sys.stderr)
+        return False
+    env_on = os.environ.get(SUMMARY_REBIND_ENV, "").strip().lower() in ("1", "true", "yes", "on")
+    return on_flag or env_on
 
 
 def cmd_pak_compare(args) -> int:
@@ -1275,22 +1306,31 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Seconds to wait for dashboards still building after the install "
             "(default 180 with one re-check; 660, polled every 30 s, when the pak "
-            "binds a Summary dashboard and --skip-summary-rebind is not set; or "
+            "binds a Summary dashboard and --summary-rebind is on; or "
             "VCFCF_MATERIALIZATION_WAIT_S; capped "
             "at 900; 0 reports them at once)."
+        ),
+    )
+    pi.add_argument(
+        "--summary-rebind",
+        action="store_true",
+        default=False,
+        help=(
+            "Opt in (also VCFCF_SUMMARY_REBIND=1) to the Summary-tab repair for "
+            "issue #200: wait for each dashboard the pak binds in "
+            "dashboards.properties to finish building, then bind it again where "
+            "the server's Summary copy is unfinished. Off by default: on "
+            "2026-10-24 the server refused the bind on 9.0.2 and 8.18.7 (nothing "
+            "written) and 9.1.1 did not need it. Without it the install only "
+            "reads each bound copy and prints SUMMARY OK or SUMMARY INCOMPLETE "
+            "(n of m widgets loading) as information."
         ),
     )
     pi.add_argument(
         "--skip-summary-rebind",
         action="store_true",
         default=False,
-        help=(
-            "Do not check or repair the Summary tabs the pak binds in "
-            "dashboards.properties. Default: when the server cloned a bound "
-            "dashboard into its Summary tab before the dashboard finished "
-            "building (issue #200, seen on 9.0.2), bind it again once it has, "
-            "by the pak dashboard's id. A finished copy is left alone."
-        ),
+        help="Deprecated, no effect: the Summary repair is already off by default.",
     )
     pi.epilog = (
         _creds_help
@@ -1298,8 +1338,10 @@ def build_parser() -> argparse.ArgumentParser:
         "failed or was refused (nothing to retry blindly: read the ERROR); 2 "
         "usage error; 3 the pak installed but a post-install dashboard check "
         "failed (MATERIALIZATION STALLED: a dashboard waits on an adapter "
-        "that is not installed; or SUMMARY NOT REBOUND: a Summary tab still "
-        "shows an unfinished copy). Do not reinstall on 3."
+        "that is not installed; or, with --summary-rebind, SUMMARY NOT REBOUND: "
+        "a Summary tab still shows an unfinished copy, with the server's answer "
+        "when the bind was refused). SUMMARY INCOMPLETE without --summary-rebind "
+        "is information and leaves the exit code alone. Do not reinstall on 3."
     )
     add_profile_arg(pi, default="devel")
     pi.set_defaults(func=cmd_install)
