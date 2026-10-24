@@ -14,24 +14,29 @@
 # The resulting JAR is placed in adapter_runtime/vcfcf-adapter-base.jar
 # and used as compile-time dependency by all Tier 2 SDK adapters.
 #
-# Compatibility legs (issues #211, #252): after the primary compile, the same
-# main source (never the tests) is compiled again against each other
-# platform's SDK jar, one leg per jar, and the build fails on anything
-# unresolved there. Nothing from a leg is kept. The legs are the jars in
+# Compatibility legs (issues #211, #252, RULE-019): after the primary compile
+# (--release 11, the one that ships), the same main source (never the tests)
+# is compiled again once per supported line, and the build fails on anything
+# unresolved there. Nothing from a leg is kept. The legs are the 2.2 jar
+# itself (the 9.0 line, at --release 17) and the jars in
 # $VCFCF_SDK_COMPAT_JARS (colon-separated) and $VCFCF_SDK_COMPAT_JAR (one jar)
 # together, or, when neither is set, every jar in adapter_runtime/ named in
-# COMPAT_JAR_NAMES below. Each leg finds a JDK new enough for its jar's class
-# files (PATH, JAVA_HOME, JAVA_HOME_<N>_X64, or $VCFCF_SDK_COMPAT_JAVAC): the
-# 8.18.7 jar is Java 11, so the JDK 17 that runs the primary compile does; the
-# 9.1.1.0100 jar is Java 25 and needs JDK 25+. A leg without its jar or JDK is
-# skipped with a loud warning, or fails when VCFCF_SDK_COMPAT_REQUIRED=1.
+# COMPAT_JAR_NAMES below. A jar is matched to its line by sha256. Each leg
+# compiles with --release <its line's collector Java> (8.18.7: 11, 9.0: 17,
+# 9.1.1.0100: 25), so each line's own Java class library is checked, on a
+# JDK at least that new (PATH, JAVA_HOME, JAVA_HOME_<N>_X64, or
+# $VCFCF_SDK_COMPAT_JAVAC). Every line is expected: one no jar covers, or
+# whose JDK is missing, is skipped with a loud warning, or fails when
+# VCFCF_SDK_COMPAT_REQUIRED=1 unless $VCFCF_SDK_COMPAT_LEGS (comma list:
+# 8.18.7,9.0,9.1.1.0100) narrows the set.
 # The legs run in python3 (sdk_builder.check_framework_sdk_compat), the same
-# code build-sdk and validate-sdk use. When no compat jar is present and the
-# pass is not required, it is skipped here in the shell, so a plain framework
-# build needs neither python3 nor PyYAML.
+# code build-sdk and validate-sdk use. When no compat jar is present, the
+# pass is not required and python3 cannot import vcfcf_managementpacks (or
+# with --compat-only), it is skipped here in the shell, so a plain framework
+# build still works without python3 or PyYAML.
 #
 # Exit codes: 0 built (every leg passed or skipped), 1 the framework does not
-# compile (primary pass, or against a compat jar), 3 a compat leg could not
+# compile (primary pass, or on a leg), 3 a compat leg could not
 # run (required but jar or JDK missing, misconfigured, or python3 cannot
 # import vcfcf_managementpacks).
 #
@@ -44,7 +49,7 @@
 # Requirements:
 #   - javac (JDK 11 or newer; JDK 17 recommended)
 #   - adapter_runtime/vrops-adapters-sdk-2.2.jar
-#   - python3 with PyYAML (only when the compat pass runs)
+#   - python3 with PyYAML (for the legs; without it they are skipped loudly)
 #   - optional, one per compat leg: adapter_runtime/vrops-adapters-sdk-8.18.7.jar
 #     (Java 11 class files, any JDK 11+) and
 #     adapter_runtime/vrops-adapters-sdk-9.1.1.0100.jar (Java 25, JDK 25+)
@@ -94,18 +99,30 @@ any_compat_jar() {
     return 1
 }
 
+python_can_run_legs() {
+    PYTHONPATH="$ROOT/..${PYTHONPATH:+:$PYTHONPATH}" python3 -c \
+        'import vcfcf_managementpacks.sdk_builder' >/dev/null 2>&1
+}
+
 compat_pass() {
-    if ! any_compat_jar && ! compat_required; then
+    # Full builds run the legs whenever python3 can (the 2.2 jar is the 9.0
+    # leg); --compat-only with no jar has nothing to run.
+    if ! any_compat_jar && ! compat_required \
+            && { [ "$COMPAT_ONLY" -eq 1 ] || ! python_can_run_legs; }; then
+        local why="none of $COMPAT_JAR_NAMES is in adapter_runtime/ and neither"
+        why="$why VCFCF_SDK_COMPAT_JARS nor VCFCF_SDK_COMPAT_JAR is set"
+        if [ "$COMPAT_ONLY" -ne 1 ]; then
+            why="$why, and python3 cannot import vcfcf_managementpacks (the legs need python3 with PyYAML)"
+        fi
         echo "  ========================================================================"
-        echo "  WARNING: SDK COMPAT CHECK SKIPPED: framework source vs any compatibility SDK jar"
-        echo "    reason: none of $COMPAT_JAR_NAMES is in adapter_runtime/ and neither"
-        echo "    VCFCF_SDK_COMPAT_JARS nor VCFCF_SDK_COMPAT_JAR is set"
-        echo "    This run did NOT check for classes or members missing from any other platform's SDK jar."
+        echo "  WARNING: SDK COMPAT CHECK SKIPPED: framework source vs every supported line's SDK jar"
+        echo "    reason: $why"
+        echo "    This run did NOT check the 8.18.7, 9.0 (--release 17) or 9.1.1.0100 legs."
         echo "    Set VCFCF_SDK_COMPAT_REQUIRED=1 to make a skipped check fail."
         echo "  ========================================================================"
         return 0
     fi
-    echo "Compat pass: framework source vs each compatibility SDK jar ..."
+    echo "Compat pass: framework source once per supported line ..."
     local rc=0
     PYTHONPATH="$ROOT/..${PYTHONPATH:+:$PYTHONPATH}" python3 -c '
 import sys
@@ -124,11 +141,11 @@ sys.exit(check_framework_sdk_compat())
 compat_report_failure() {
     # $1: exit code from compat_pass
     if [ "$1" -eq 1 ]; then
-        echo "COMPAT PASS FAILED: framework source does not compile against a" >&2
-        echo "compatibility SDK jar (named in the ERROR above)." >&2
+        echo "COMPAT PASS FAILED: framework source does not compile for a supported" >&2
+        echo "line (named in the ERROR above)." >&2
     else
         echo "COMPAT PASS COULD NOT RUN (exit $1): see the ERROR above; at least" >&2
-        echo "one compatibility SDK jar was not checked." >&2
+        echo "one supported line was not checked." >&2
     fi
 }
 
