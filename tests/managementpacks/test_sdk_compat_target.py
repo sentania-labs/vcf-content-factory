@@ -46,6 +46,7 @@ needs_javac = pytest.mark.skipif(not _HAVE_JDK, reason="javac not on PATH")
 
 _COMPAT_ENV = (
     "VCFCF_SDK_COMPAT_JAR",
+    "VCFCF_SDK_COMPAT_JARS",
     "VCFCF_SDK_COMPAT_JAVAC",
     "VCFCF_SDK_COMPAT_REQUIRED",
     "VCFCF_SDK_JAR",
@@ -86,15 +87,30 @@ def _write_java(root: Path, rel: str, body: str) -> Path:
     return path
 
 
+# Fixed zip entry timestamps: a stub jar's bytes depend only on its content,
+# never on the wall-clock second it was written in. With writestr(str, ...)
+# two stubs of equal content got equal sha256 only when written in the same
+# second, which a fast CI runner hit and a workstation did not (PR #258).
+_ZIP_EPOCH = (1980, 1, 1, 0, 0, 0)
+
+
+def _entry(name: str) -> zipfile.ZipInfo:
+    return zipfile.ZipInfo(name, date_time=_ZIP_EPOCH)
+
+
 def _jar_of(classes_dir: Path, jar_path: Path, major: int = 0) -> Path:
     """Zip classes_dir into jar_path; optionally rewrite each class-file major."""
     with zipfile.ZipFile(jar_path, "w") as zf:
-        zf.writestr("META-INF/MANIFEST.MF", "Manifest-Version: 1.0\n")
+        # The jar's own name in the manifest: two stubs standing for two
+        # different platform jars must not share a sha256, since a supplied
+        # jar is matched to its line by sha256.
+        zf.writestr(_entry("META-INF/MANIFEST.MF"),
+                    f"Manifest-Version: 1.0\nX-Stub-Jar: {jar_path.name}\n")
         for cls in sorted(classes_dir.rglob("*.class")):
             data = cls.read_bytes()
             if major:
                 data = data[:6] + major.to_bytes(2, "big") + data[8:]
-            zf.writestr(str(cls.relative_to(classes_dir)), data)
+            zf.writestr(_entry(str(cls.relative_to(classes_dir))), data)
     return jar_path
 
 
@@ -114,6 +130,15 @@ def _stub_sdk_jar(tmp_path: Path, jar_path: Path, class_names, major: int = 0) -
     return _jar_of(out, jar_path, major)
 
 
+def _register_lines(monkeypatch, jars) -> None:
+    """Make the stub jars the supported lines (key -> jar), so a run that
+    supplies them covers every expected line (issue #252 review B2)."""
+    monkeypatch.setattr(sdk_builder, "_SDK_COMPAT_LINES", tuple(
+        sdk_builder._CompatLine(key, Path(jar).name, sdk_builder._sha256_of(Path(jar)))
+        for key, jar in jars.items()
+    ))
+
+
 def _user_source(tmp_path: Path, class_name: str) -> Path:
     return _write_java(
         tmp_path / "usersrc", "user/Use.java",
@@ -128,7 +153,7 @@ def _user_source(tmp_path: Path, class_name: str) -> Path:
 
 def _touch_jar(path: Path) -> Path:
     with zipfile.ZipFile(path, "w") as zf:
-        zf.writestr("META-INF/MANIFEST.MF", "Manifest-Version: 1.0\n")
+        zf.writestr(_entry("META-INF/MANIFEST.MF"), "Manifest-Version: 1.0\n")
     return path
 
 
@@ -226,8 +251,9 @@ def test_adapter_version_ref_ignores_the_compat_jar(runtime):
 
 
 @needs_javac
-def test_pass_passes_when_the_class_is_present(runtime, tmp_path, capsys):
-    _stub_sdk_jar(tmp_path, runtime / sdk_builder._SDK_COMPAT_JAR_NAME, ["Present"])
+def test_pass_passes_when_the_class_is_present(runtime, tmp_path, capsys, monkeypatch):
+    jar = _stub_sdk_jar(tmp_path, runtime / sdk_builder._SDK_COMPAT_JAR_NAME, ["Present"])
+    _register_lines(monkeypatch, {"9.1.1.0100": jar})
     src = _user_source(tmp_path, "Present")
     assert sdk_builder._sdk_compat_check([src], [], "test source") is True
     assert "sdk-compat: test source compiles against" in capsys.readouterr().err
@@ -251,6 +277,7 @@ def test_pass_uses_the_env_jar_over_adapter_runtime(runtime, tmp_path, monkeypat
     # adapter_runtime/ copy lacks the class; the env-supplied jar has it.
     _stub_sdk_jar(tmp_path, runtime / sdk_builder._SDK_COMPAT_JAR_NAME, ["Other"])
     env_jar = _stub_sdk_jar(tmp_path, tmp_path / "elsewhere.jar", ["Present"])
+    _register_lines(monkeypatch, {"9.1.1.0100": env_jar})
     monkeypatch.setenv("VCFCF_SDK_COMPAT_JAR", str(env_jar))
     src = _user_source(tmp_path, "Present")
     assert sdk_builder._sdk_compat_check([src], [], "test source") is True
@@ -397,11 +424,33 @@ def test_factory_cli_flags_reach_the_env(monkeypatch):
 
     _isolate_compat_env(monkeypatch)
     args = argparse.Namespace(
-        sdk_jar=None, sdk_compat_jar="/x/compat.jar", require_sdk_compat=True,
+        sdk_jar=None, sdk_compat_jar=["/x/a.jar", "/x/b.jar"], require_sdk_compat=True,
     )
     cli._apply_sdk_jar_flag(args)
-    assert os.environ["VCFCF_SDK_COMPAT_JAR"] == "/x/compat.jar"
+    assert os.environ["VCFCF_SDK_COMPAT_JARS"] == os.pathsep.join(["/x/a.jar", "/x/b.jar"])
     assert os.environ["VCFCF_SDK_COMPAT_REQUIRED"] == "1"
+
+
+def test_factory_cli_flag_jars_join_the_env_list(monkeypatch):
+    from vcfcf_managementpacks import cli
+
+    _isolate_compat_env(monkeypatch)
+    monkeypatch.setenv("VCFCF_SDK_COMPAT_JARS", "/env/one.jar")
+    cli._apply_sdk_jar_flag(argparse.Namespace(
+        sdk_jar=None, sdk_compat_jar=["/x/two.jar"], require_sdk_compat=False,
+    ))
+    assert os.environ["VCFCF_SDK_COMPAT_JARS"] == os.pathsep.join(["/env/one.jar", "/x/two.jar"])
+
+
+@pytest.mark.parametrize("cmd", ["build-sdk", "validate-sdk"])
+def test_factory_cli_flag_repeats(cmd, monkeypatch):
+    from vcfcf_managementpacks import cli
+
+    _isolate_compat_env(monkeypatch)
+    args = cli.build_parser().parse_args(
+        [cmd, "proj", "--sdk-compat-jar", "/a/x.jar", "--sdk-compat-jar", "/a/y.jar"]
+    )
+    assert args.sdk_compat_jar == ["/a/x.jar", "/a/y.jar"]
 
 
 @pytest.mark.parametrize("cmd", ["build-sdk", "validate-sdk"])
@@ -412,10 +461,11 @@ def test_kit_main_parses_the_flags_and_sets_the_env(cmd, monkeypatch):
     namespace = {"__name__": "kit_main_under_test"}
     exec(compile(_KIT_MAIN, "sdk_buildkit/__main__.py", "exec"), namespace)
     args = namespace["_build_parser"]().parse_args(
-        [cmd, "proj", "--sdk-compat-jar", "/k/compat.jar", "--require-sdk-compat"]
+        [cmd, "proj", "--sdk-compat-jar", "/k/compat.jar",
+         "--sdk-compat-jar", "/k/other.jar", "--require-sdk-compat"]
     )
     namespace["_apply_sdk_jar"](args)
-    assert os.environ["VCFCF_SDK_COMPAT_JAR"] == "/k/compat.jar"
+    assert os.environ["VCFCF_SDK_COMPAT_JARS"] == os.pathsep.join(["/k/compat.jar", "/k/other.jar"])
     assert os.environ["VCFCF_SDK_COMPAT_REQUIRED"] == "1"
 
 
@@ -575,3 +625,374 @@ def test_cli_flag_helpers_do_not_leak_env_past_a_test():
     real guarantee is _isolate_compat_env.)"""
     leaked = [n for n in _COMPAT_ENV if n != "VCFCF_SDK_JAR" and os.environ.get(n)]
     assert not leaked, leaked
+
+
+# ---------------------------------------------------------------------------
+# Several compatibility legs (issue #252)
+# ---------------------------------------------------------------------------
+
+
+def test_sdk_version_label_comes_from_the_file_name():
+    assert sdk_builder._sdk_jar_label(Path("vrops-adapters-sdk-8.18.7.jar")) == "8.18.7"
+    assert sdk_builder._sdk_jar_label(Path("/x/vrops-adapters-sdk-9.1.1.0100.jar")) == "9.1.1.0100"
+    assert "no version in the file name" in sdk_builder._sdk_jar_label(Path("elsewhere.jar"))
+
+
+@needs_javac
+def test_every_explicit_jar_is_a_leg_and_each_line_names_its_version(
+    runtime, tmp_path, monkeypatch, capsys,
+):
+    a = _stub_sdk_jar(tmp_path, tmp_path / "vrops-adapters-sdk-8.18.7.jar", ["Present"])
+    b = _stub_sdk_jar(tmp_path, tmp_path / "vrops-adapters-sdk-9.1.1.0100.jar", ["Present"])
+    _register_lines(monkeypatch, {"8.18.7": a, "9.1.1.0100": b})
+    monkeypatch.setenv("VCFCF_SDK_COMPAT_JARS", os.pathsep.join([str(a), str(b)]))
+    src = _user_source(tmp_path, "Present")
+    assert sdk_builder._sdk_compat_check([src], [], "test source") is True
+    err = capsys.readouterr().err
+    assert "compiles against the VCF Ops 8.18.7 SDK jar (vrops-adapters-sdk-8.18.7.jar" in err
+    assert "compiles against the VCF Ops 9.1.1.0100 SDK jar (vrops-adapters-sdk-9.1.1.0100.jar" in err
+
+
+@needs_javac
+def test_old_single_env_var_still_works_and_adds_to_the_list(
+    runtime, tmp_path, monkeypatch, capsys,
+):
+    a = _stub_sdk_jar(tmp_path, tmp_path / "vrops-adapters-sdk-8.18.7.jar", ["Present"])
+    b = _stub_sdk_jar(tmp_path, tmp_path / "vrops-adapters-sdk-9.1.1.0100.jar", ["Present"])
+    monkeypatch.setenv("VCFCF_SDK_COMPAT_JARS", str(a))
+    monkeypatch.setenv("VCFCF_SDK_COMPAT_JAR", str(b))
+    assert sdk_builder._resolve_compat_sdk_jars() == [a, b]
+    # The same jar named twice is one leg.
+    monkeypatch.setenv("VCFCF_SDK_COMPAT_JAR", str(a))
+    assert sdk_builder._resolve_compat_sdk_jars() == [a]
+    # The one-jar form on its own, as before #252.
+    monkeypatch.setenv("VCFCF_SDK_COMPAT_JARS", "")
+    monkeypatch.setenv("VCFCF_SDK_COMPAT_JAR", str(b))
+    assert sdk_builder._resolve_compat_sdk_jars() == [b]
+
+
+def test_missing_jar_in_the_list_is_an_error_naming_the_variable(runtime, tmp_path, monkeypatch):
+    real = _touch_jar(tmp_path / "vrops-adapters-sdk-8.18.7.jar")
+    monkeypatch.setenv(
+        "VCFCF_SDK_COMPAT_JARS", os.pathsep.join([str(real), str(tmp_path / "nope.jar")]),
+    )
+    with pytest.raises(sdk_builder.SdkCompatUnavailable, match="VCFCF_SDK_COMPAT_JARS names"):
+        sdk_builder._sdk_compat_check([], [], "test source")
+
+
+def test_runtime_compat_jars_are_legs_only_without_explicit_jars(runtime, tmp_path, monkeypatch):
+    in_runtime = _touch_jar(runtime / sdk_builder._SDK_COMPAT_JAR_NAME)
+    assert sdk_builder._resolve_compat_sdk_jars() == [in_runtime]
+    explicit = _touch_jar(tmp_path / "vrops-adapters-sdk-8.18.7.jar")
+    monkeypatch.setenv("VCFCF_SDK_COMPAT_JARS", str(explicit))
+    assert sdk_builder._resolve_compat_sdk_jars() == [explicit]
+
+
+@needs_javac
+def test_a_failing_leg_fails_the_check_after_every_leg_ran(runtime, tmp_path, monkeypatch, capsys):
+    good = _stub_sdk_jar(tmp_path, tmp_path / "vrops-adapters-sdk-9.1.1.0100.jar", ["Present"])
+    bad = _stub_sdk_jar(tmp_path, tmp_path / "vrops-adapters-sdk-8.18.7.jar", ["Other"])
+    monkeypatch.setenv("VCFCF_SDK_COMPAT_JARS", os.pathsep.join([str(bad), str(good)]))
+    src = _user_source(tmp_path, "Present")
+    with pytest.raises(SdkBuildError) as exc:
+        sdk_builder._sdk_compat_check([src], [], "test source")
+    assert not isinstance(exc.value, sdk_builder.SdkCompatUnavailable)
+    msg = str(exc.value)
+    assert "against the VCF Ops 8.18.7 SDK jar" in msg
+    assert "can fail to load on 8.18.7" in msg
+    assert "9.1.1.0100 SDK jar" not in msg
+    # The leg after the failing one still ran.
+    assert "compiles against the VCF Ops 9.1.1.0100 SDK jar" in capsys.readouterr().err
+
+
+@needs_javac
+def test_each_leg_picks_its_own_jdk(runtime, tmp_path, monkeypatch, capsys):
+    """An old-bytecode jar runs on the javac at hand while a jar no installed
+    JDK can read is skipped, naming only that leg (the 8.18 jar on JDK 17
+    next to the 9.1.1 jar without a JDK 25)."""
+    old = _stub_sdk_jar(tmp_path, tmp_path / "vrops-adapters-sdk-8.18.7.jar", ["Present"])
+    new = _stub_sdk_jar(
+        tmp_path, tmp_path / "vrops-adapters-sdk-9.1.1.0100.jar", ["Present"], major=200,
+    )
+    _register_lines(monkeypatch, {"8.18.7": old, "9.1.1.0100": new})
+    monkeypatch.setenv("VCFCF_SDK_COMPAT_JARS", os.pathsep.join([str(old), str(new)]))
+    src = _user_source(tmp_path, "Present")
+    assert sdk_builder._sdk_compat_check([src], [], "test source") is False
+    err = capsys.readouterr().err
+    assert "compiles against the VCF Ops 8.18.7 SDK jar" in err
+    assert "SDK COMPAT CHECK SKIPPED: test source vs the VCF Ops 9.1.1.0100 SDK jar" in err
+    assert "needs JDK 156 or newer" in err
+
+    monkeypatch.setenv("VCFCF_SDK_COMPAT_REQUIRED", "1")
+    with pytest.raises(sdk_builder.SdkCompatUnavailable) as exc:
+        sdk_builder._sdk_compat_check([src], [], "test source")
+    assert "the VCF Ops 9.1.1.0100 SDK jar could not run" in str(exc.value)
+    assert "8.18.7" not in str(exc.value)
+
+
+def test_legs_compile_main_sources_only(runtime, tmp_path):
+    """Framework tests (adapter_framework/test/) and the pak's tests/ never
+    reach a leg: CertificateReviewTest calls a 2.2-only member."""
+    fw = _write_java(sdk_builder._ADAPTER_FRAMEWORK_SRC_DIR, "fw/F.java", "package fw; class F {}\n")
+    _write_java(
+        sdk_builder._ADAPTER_FRAMEWORK_SRC_DIR.parent / "test", "fw/FTest.java",
+        "package fw; class FTest {}\n",
+    )
+    proj = tmp_path / "proj"
+    _write_java(proj / "tests", "a/ATest.java", "package a; class ATest {}\n")
+    adapter_src = _write_java(proj / "src", "a/A.java", "package a; class A {}\n")
+    _touch_jar(runtime / "vrops-adapters-sdk-2.2.jar")
+    sources, _jars = sdk_builder._adapter_compat_inputs(proj, sdk_builder._find_sources(proj))
+    assert sources == [fw, adapter_src]
+
+
+@needs_javac
+def test_build_framework_runs_legs_from_the_list_env_var(tmp_path):
+    jar = _stub_sdk_jar(tmp_path, tmp_path / "vrops-adapters-sdk-8.18.7.jar", ["Present"])
+    r = _run_build_framework(_BUILD_FRAMEWORK, _clean_env(VCFCF_SDK_COMPAT_JARS=str(jar)))
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "against the VCF Ops 8.18.7 SDK jar" in r.stderr
+    assert "COMPAT PASS FAILED" in r.stderr
+
+
+def test_the_8_18_jar_in_adapter_runtime_is_a_leg_not_a_primary_jar(runtime, tmp_path):
+    """Issue #252: vrops-adapters-sdk-8.18.7.jar beside the 2.2 jar is the
+    8.18 leg, never a second primary SDK jar; both known compat jars are
+    legs, oldest first."""
+    primary = _touch_jar(runtime / "vrops-adapters-sdk-2.2.jar")
+    old = _touch_jar(runtime / "vrops-adapters-sdk-8.18.7.jar")
+    new = _touch_jar(runtime / sdk_builder._SDK_COMPAT_JAR_NAME)
+    assert sdk_builder._primary_sdk_jar() == primary
+    assert _sdk_jars_on(sdk_builder._build_classpath_jars(tmp_path)) == [primary]
+    assert sdk_builder._resolve_compat_sdk_jars() == [old, new]
+
+
+def test_build_framework_knows_the_same_compat_names_as_sdk_builder():
+    text = _BUILD_FRAMEWORK.read_text(encoding="utf-8")
+    line = next(l for l in text.splitlines() if l.startswith("COMPAT_JAR_NAMES="))
+    names = tuple(line.split("=", 1)[1].strip('"').split())
+    assert names == sdk_builder._SDK_COMPAT_JAR_NAMES
+
+
+def test_ci_sdk_compat_matrix_has_the_8_18_and_9_1_legs():
+    import yaml
+
+    ci = Path(__file__).resolve().parents[2] / ".github" / "workflows" / "ci.yml"
+    legs = yaml.safe_load(ci.read_text(encoding="utf-8"))["jobs"]["sdk-compat"][
+        "strategy"]["matrix"]["include"]
+    by_sdk = {leg["sdk"]: leg for leg in legs}
+    assert by_sdk["8.18.7"] == {"sdk": "8.18.7", "jdk": "17", "jar": "vrops-adapters-sdk-8.18.7.jar"}
+    assert by_sdk["9.1.1.0100"]["jdk"] == "25"
+    assert by_sdk["9.0"] == {"sdk": "9.0", "jdk": "17", "jar": "vrops-adapters-sdk-2.2.jar"}
+    # One row per supported line; the row's sdk is the VCFCF_SDK_COMPAT_LEGS key.
+    assert {(leg["sdk"], leg["jar"]) for leg in legs} == {
+        (line.key, line.jar_name) for line in sdk_builder._SDK_COMPAT_LINES}
+    job = yaml.safe_load(ci.read_text(encoding="utf-8"))["jobs"]["sdk-compat"]
+    env = next(s["env"] for s in job["steps"] if s.get("name", "").startswith("Compile"))
+    assert env["VCFCF_SDK_COMPAT_LEGS"] == "${{ matrix.sdk }}"
+    assert env["VCFCF_SDK_COMPAT_REQUIRED"] == "1"
+
+
+# ---------------------------------------------------------------------------
+# Each line at its own Java, the 9.0 leg, the expected set (#252 review)
+# ---------------------------------------------------------------------------
+
+_JAVAC_MAJOR = sdk_builder._javac_major(shutil.which("javac")) if _HAVE_JDK else None
+needs_javac_17 = pytest.mark.skipif(
+    not _JAVAC_MAJOR or _JAVAC_MAJOR < 17, reason="needs javac 17+ on PATH",
+)
+
+
+def _write_src(tmp_path: Path, name: str, body: str) -> Path:
+    return _write_java(tmp_path / "usersrc", f"user/{name}.java", f"package user;\n{body}\n")
+
+
+def test_line_hashes_match_provenance():
+    prov = (Path(sdk_builder.__file__).parent / "adapter_runtime" / "PROVENANCE.md").read_text(
+        encoding="utf-8")
+    import re
+
+    for line in sdk_builder._SDK_COMPAT_LINES:
+        rows = [r for r in prov.splitlines() if r.startswith("|") and f"`{line.jar_name}`" in r]
+        hashes = set(re.findall(r"\b[0-9a-f]{64}\b", "\n".join(rows)))
+        assert hashes == {line.sha256}, line.key
+    assert [l.key for l in sdk_builder._SDK_COMPAT_LINES] == ["8.18.7", "9.0", "9.1.1.0100"]
+
+
+def test_leg_release_follows_the_jar_class_files():
+    assert sdk_builder._compat_leg_release(11) == 11   # 8.18.7, major 55
+    assert sdk_builder._compat_leg_release(17) == 17   # 2.2 (9.0), major 61
+    assert sdk_builder._compat_leg_release(25) == 25   # 9.1.1.0100, major 69
+    assert sdk_builder._compat_leg_release(8) == 11    # never below the shipped release
+
+
+def test_primary_jar_is_the_first_leg(runtime, tmp_path, monkeypatch):
+    primary = _touch_jar(runtime / "vrops-adapters-sdk-2.2.jar")
+    compat = _touch_jar(runtime / "vrops-adapters-sdk-8.18.7.jar")
+    assert sdk_builder._compat_leg_jars() == [primary, compat]
+    env_primary = _touch_jar(tmp_path / "supplied-sdk.jar")
+    monkeypatch.setenv("VCFCF_SDK_JAR", str(env_primary))
+    assert sdk_builder._compat_leg_jars() == [env_primary, compat]
+
+
+@needs_javac_17
+def test_java17_library_removal_fails_the_9_0_leg(runtime, tmp_path, monkeypatch, capsys):
+    """Review B1: java.rmi.activation exists in Java 11 and was removed in
+    Java 17. The 8.18 leg (release 11) passes it; the 9.0 leg (the primary
+    jar, major 61, release 17) must fail it, blaming the Java 17 library."""
+    primary = _stub_sdk_jar(tmp_path, tmp_path / "vrops-adapters-sdk-2.2.jar", ["Present"], major=61)
+    old = _stub_sdk_jar(tmp_path, tmp_path / "vrops-adapters-sdk-8.18.7.jar", ["Present"], major=55)
+    _register_lines(monkeypatch, {"8.18.7": old, "9.0": primary})
+    monkeypatch.setenv("VCFCF_SDK_JAR", str(primary))
+    monkeypatch.setenv("VCFCF_SDK_COMPAT_JARS", str(old))
+    src = _write_src(tmp_path, "Act", "class Act { Object a(){ return new java.rmi.activation.ActivationID(null); } }")
+    with pytest.raises(SdkBuildError) as exc:
+        sdk_builder._sdk_compat_check([src], [], "test source")
+    msg = str(exc.value)
+    assert "against the VCF Ops 9.0 SDK jar" in msg and "--release 17" in msg
+    assert "not in the Java 17 class library" in msg
+    assert "missing package java.rmi.activation" in msg
+    assert "lacks or has changed" not in msg
+    assert "against the VCF Ops 8.18.7 SDK jar" not in msg
+    assert "compiles against the VCF Ops 8.18.7 SDK jar" in capsys.readouterr().err
+
+
+@needs_javac_17
+def test_removal_warnings_come_from_the_leg_java(runtime, tmp_path, monkeypatch, capsys):
+    """#242's [removal] gate needs the leg to compile against its own Java:
+    System.getSecurityManager is deprecated for removal in 17, not in 11."""
+    primary = _stub_sdk_jar(tmp_path, tmp_path / "vrops-adapters-sdk-2.2.jar", ["Present"], major=61)
+    old = _stub_sdk_jar(tmp_path, tmp_path / "vrops-adapters-sdk-8.18.7.jar", ["Present"], major=55)
+    _register_lines(monkeypatch, {"8.18.7": old, "9.0": primary})
+    monkeypatch.setenv("VCFCF_SDK_JAR", str(primary))
+    monkeypatch.setenv("VCFCF_SDK_COMPAT_JARS", str(old))
+    src = _write_src(tmp_path, "Sm", "class Sm { Object s(){ return System.getSecurityManager(); } }")
+    assert sdk_builder._sdk_compat_check([src], [], "test source") is True
+    err = capsys.readouterr().err
+    block_17 = err.split("sdk-compat javac warnings (9.0):", 1)[1]
+    assert "[removal]" in block_17
+    assert "sdk-compat javac warnings (8.18.7)" not in err  # release 11: no warning
+
+
+@needs_javac
+def test_jdk_library_miss_is_not_blamed_on_the_jar(runtime, tmp_path, monkeypatch):
+    """Review N1: String.indent (Java 12) on the release 11 leg."""
+    old = _stub_sdk_jar(tmp_path, tmp_path / "vrops-adapters-sdk-8.18.7.jar", ["Present"], major=55)
+    _register_lines(monkeypatch, {"8.18.7": old})
+    monkeypatch.setenv("VCFCF_SDK_COMPAT_JARS", str(old))
+    src = _write_src(tmp_path, "Ind", "class Ind { String i(String s){ return s.indent(2); } }")
+    with pytest.raises(SdkBuildError) as exc:
+        sdk_builder._sdk_compat_check([src], [], "test source")
+    msg = str(exc.value)
+    assert "not in the Java 11 class library" in msg
+    assert "missing method indent(int) in java.lang.String" in msg
+    assert "lacks or has changed" not in msg
+
+
+@needs_javac
+def test_sdk_miss_is_blamed_on_the_jar(runtime, tmp_path, monkeypatch):
+    old = _stub_sdk_jar(tmp_path, tmp_path / "vrops-adapters-sdk-8.18.7.jar", ["Other"])
+    _register_lines(monkeypatch, {"8.18.7": old})
+    monkeypatch.setenv("VCFCF_SDK_COMPAT_JARS", str(old))
+    with pytest.raises(SdkBuildError) as exc:
+        sdk_builder._sdk_compat_check([_user_source(tmp_path, "Gone")], [], "test source")
+    msg = str(exc.value)
+    assert "the VCF Ops 8.18.7 SDK jar lacks or has changed" in msg
+    assert "missing class Gone in sdkstub" in msg
+    assert "class library" not in msg
+
+
+def _renewal_stub(tmp_path: Path, jar_name: str) -> Path:
+    """A stub SDK jar whose AdapterBase has getCertificateRenewalUrls (as 2.2
+    and 9.1.1 do; 8.18 does not)."""
+    src = _write_java(
+        tmp_path / ("rs_" + jar_name), "sdkstub/AdapterBase.java",
+        "package sdkstub;\npublic class AdapterBase { "
+        "public java.util.Set<String> getCertificateRenewalUrls() { return null; } }\n",
+    )
+    out = tmp_path / ("ro_" + jar_name)
+    out.mkdir()
+    subprocess.run(["javac", "--release", "11", "-d", str(out), str(src)],
+                   check=True, capture_output=True)
+    return _jar_of(out, tmp_path / jar_name)
+
+
+@needs_javac
+def test_required_run_without_the_8_18_jar_fails_naming_8_18(runtime, tmp_path, monkeypatch, capsys):
+    """Review B2: required, only the 9.1.1 jar supplied, source calling a
+    member 8.18 lacks: the run must fail naming 8.18.7, not pass."""
+    (tmp_path / "elsewhere").mkdir()
+    absent_818 = _touch_jar(tmp_path / "elsewhere" / "vrops-adapters-sdk-8.18.7.jar")
+    new = _renewal_stub(tmp_path, "vrops-adapters-sdk-9.1.1.0100.jar")
+    _register_lines(monkeypatch, {"8.18.7": absent_818, "9.1.1.0100": new})
+    monkeypatch.setenv("VCFCF_SDK_COMPAT_JARS", str(new))
+    src = _write_src(tmp_path, "Ren",
+                     "class Ren { Object r(sdkstub.AdapterBase b){ return b.getCertificateRenewalUrls(); } }")
+    # Not required: the 9.1.1 leg passes, 8.18.7 gets its SKIPPED box.
+    assert sdk_builder._sdk_compat_check([src], [], "test source") is False
+    err = capsys.readouterr().err
+    assert "compiles against the VCF Ops 9.1.1.0100 SDK jar" in err
+    assert "SDK COMPAT CHECK SKIPPED: test source vs the VCF Ops 8.18.7 SDK jar" in err
+    # Required: fails naming 8.18.7.
+    monkeypatch.setenv("VCFCF_SDK_COMPAT_REQUIRED", "1")
+    with pytest.raises(sdk_builder.SdkCompatUnavailable) as exc:
+        sdk_builder._sdk_compat_check([src], [], "test source")
+    assert "the VCF Ops 8.18.7 SDK jar could not run" in str(exc.value)
+    assert "9.1.1.0100 SDK jar could not run" not in str(exc.value)
+    # Narrowed to the one line the run covers (a CI matrix row): passes.
+    monkeypatch.setenv("VCFCF_SDK_COMPAT_LEGS", "9.1.1.0100")
+    assert sdk_builder._sdk_compat_check([src], [], "test source") is True
+
+
+def test_unknown_leg_key_is_a_configuration_error(runtime, monkeypatch):
+    monkeypatch.setenv("VCFCF_SDK_COMPAT_LEGS", "8.18.7,9.2")
+    with pytest.raises(sdk_builder.SdkCompatUnavailable, match="unknown line"):
+        sdk_builder._sdk_compat_check([], [], "test source")
+
+
+def test_a_jar_with_a_known_name_but_another_hash_does_not_cover_the_line(
+    runtime, tmp_path, monkeypatch, capsys,
+):
+    fake = _touch_jar(tmp_path / "vrops-adapters-sdk-8.18.7.jar")
+    monkeypatch.setenv("VCFCF_SDK_COMPAT_JARS", str(fake))
+    monkeypatch.setenv("VCFCF_SDK_COMPAT_LEGS", "8.18.7")
+    monkeypatch.setattr(sdk_builder, "_find_compat_javac", lambda *_a: (None, None, []))
+    assert sdk_builder._sdk_compat_check([], [], "test source") is False
+    err = capsys.readouterr().err
+    assert "sha256 matches no known line" in err
+    assert "vrops-adapters-sdk-8.18.7.jar was supplied but its sha256" in err
+
+
+@needs_javac
+def test_stub_jars_are_deterministic_and_distinct_per_name(tmp_path):
+    """PR #258 CI: equal-content stubs written in the same second had equal
+    sha256, so two 'lines' collapsed into one on a fast runner. Stub bytes
+    now depend only on content and name, the same on every machine."""
+    (tmp_path / "a").mkdir()
+    (tmp_path / "b").mkdir()
+    a = _stub_sdk_jar(tmp_path / "a", tmp_path / "vrops-adapters-sdk-8.18.7.jar", ["Present"])
+    b = _stub_sdk_jar(tmp_path / "b", tmp_path / "vrops-adapters-sdk-9.1.1.0100.jar", ["Present"])
+    assert sdk_builder._sha256_of(a) != sdk_builder._sha256_of(b)
+    again = tmp_path / "again"
+    again.mkdir()
+    (again / "x").mkdir()
+    c = _stub_sdk_jar(again / "x", again / "vrops-adapters-sdk-8.18.7.jar", ["Present"])
+    assert sdk_builder._sha256_of(c) == sdk_builder._sha256_of(a)
+
+
+def test_identical_jar_bytes_cover_one_line_only(runtime, tmp_path, monkeypatch, capsys):
+    """Two files with the same bytes are the same jar: they cover one line,
+    and the other line is reported as not covered (what CI saw)."""
+    (tmp_path / "x").mkdir()
+    (tmp_path / "y").mkdir()
+    a = _touch_jar(tmp_path / "x" / "vrops-adapters-sdk-8.18.7.jar")
+    b = _touch_jar(tmp_path / "y" / "vrops-adapters-sdk-9.1.1.0100.jar")
+    assert sdk_builder._sha256_of(a) == sdk_builder._sha256_of(b)
+    monkeypatch.setattr(sdk_builder, "_SDK_COMPAT_LINES", (
+        sdk_builder._CompatLine("8.18.7", a.name, sdk_builder._sha256_of(a)),
+        sdk_builder._CompatLine("9.1.1.0100", b.name, "0" * 64),
+    ))
+    monkeypatch.setenv("VCFCF_SDK_COMPAT_JARS", os.pathsep.join([str(a), str(b)]))
+    monkeypatch.setattr(sdk_builder, "_sdk_compat_leg", lambda *a_, **k: True)
+    assert sdk_builder._sdk_compat_check([], [], "test source") is False
+    assert "SKIPPED: test source vs the VCF Ops 9.1.1.0100 SDK jar" in capsys.readouterr().err

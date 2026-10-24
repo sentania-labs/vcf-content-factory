@@ -86,7 +86,7 @@ from typing import Optional
 # Version constant: bump when kit contents change in a meaningful way
 # ---------------------------------------------------------------------------
 
-BUILDKIT_VERSION = "1.0.15"
+BUILDKIT_VERSION = "1.0.18"
 
 # ---------------------------------------------------------------------------
 # Source paths (relative to this file's parent = vcfcf_managementpacks/)
@@ -391,28 +391,44 @@ In CI, store the JAR as a secret-gated artifact and expose its path via
 VCFCF_SDK_JAR.  The build fails with a clear actionable message when the
 JAR is absent from both adapter_runtime/ and the env var.
 
-### Second compile target: the 9.1.1.0100 SDK jar (kit 1.0.15+)
+### Compile matrix: one leg per supported line (kit 1.0.15+, per line 1.0.18+)
 
-VCF Ops 9.1.1 ships a rebuilt SDK jar with a slightly different class set.
-build-sdk and validate-sdk also compile the framework and adapter source
-against vrops-adapters-sdk-9.1.1.0100.jar (from a 9.1.1.0100 appliance,
-/usr/lib/vmware-vcops/common/lib/vrops-adapters-sdk.jar) and fail on
-anything that does not resolve there. Nothing from that pass ships: the
-pak is still compiled against the 2.2 jar. Its class files are Java 25, so
-the pass needs JDK 25+ (PATH, JAVA_HOME, JAVA_HOME_<N>_X64, or
-VCFCF_SDK_COMPAT_JAVAC); JDK 17 cannot read them.
+The pak ships compiled against the 2.2 jar with javac --release 11. Each
+supported VCF Ops line ships its own SDK jar and runs its own collector
+Java, so build-sdk and validate-sdk also compile the framework and adapter
+main source (never tests) once per line, keep nothing, and fail on a class
+or member the line's jar lacks or a Java API the line's Java removed. Each
+leg compiles with --release <that line's collector Java>, read from its
+jar's class files, on a JDK at least that new (PATH, JAVA_HOME,
+JAVA_HOME_<N>_X64, or VCFCF_SDK_COMPAT_JAVAC):
+
+    8.18.7       vrops-adapters-sdk-8.18.7.jar       --release 11, any JDK 11+
+    9.0          vrops-adapters-sdk-2.2.jar          --release 17, JDK 17+
+    9.1.1.0100   vrops-adapters-sdk-9.1.1.0100.jar   --release 25, JDK 25+
+
+The 9.0 leg uses the primary jar you already supply. A supplied jar is
+matched to its line by sha256, so take each from an appliance of that line
+(/usr/lib/vmware-vcops/common/lib/vrops-adapters-sdk.jar), unchanged.
 
     export VCFCF_SDK_JAR=/path/to/vrops-adapters-sdk-2.2.jar
-    export VCFCF_SDK_COMPAT_JAR=/path/to/vrops-adapters-sdk-9.1.1.0100.jar
+    export VCFCF_SDK_COMPAT_JARS=/path/to/vrops-adapters-sdk-8.18.7.jar:/path/to/vrops-adapters-sdk-9.1.1.0100.jar
     python3 -m sdk_buildkit build-sdk <adapter_dir> --require-sdk-compat
 
-Without the jar or a JDK 25 the pass is skipped with a loud warning;
---require-sdk-compat (VCFCF_SDK_COMPAT_REQUIRED=1) turns that into a failure.
+--sdk-compat-jar repeats; VCFCF_SDK_COMPAT_JARS (colon-separated) and the
+older one-jar VCFCF_SDK_COMPAT_JAR do the same, and all of them add up.
+Every line is expected: a line with no matching jar, or no new enough
+JDK, is skipped with a loud warning, and --require-sdk-compat
+(VCFCF_SDK_COMPAT_REQUIRED=1) turns that into a failure.
+VCFCF_SDK_COMPAT_LEGS=<comma list of the keys above> narrows the lines a
+run must cover (for example one CI matrix row per line).
 
 ## Other requirements
 
 - Python 3.9+ with PyYAML
-- JDK 11+ on PATH (javac, jar) — used both to compile the framework and the adapter
+- JDK 11+ on PATH (javac, jar), used to compile both the framework and the
+  adapter with javac --release 11: Java 11 bytecode and the Java 11 library
+  API only, because the 8.18 collector runs Java 11 (a Java 12+ call fails
+  the build)
 - No factory checkout, no LLM, no other network access required.
 """
 '''
@@ -440,15 +456,20 @@ _SDK_JAR_HELP = (
 
 
 _SDK_COMPAT_JAR_HELP = (
-    "Path to vrops-adapters-sdk-9.1.1.0100.jar (Broadcom; not shipped in this "
-    "kit), the second compile target: the source must also compile against "
-    "it, which needs JDK 25+ (found on PATH, JAVA_HOME, JAVA_HOME_<N>_X64 or "
-    "VCFCF_SDK_COMPAT_JAVAC). Alternatively set VCFCF_SDK_COMPAT_JAR. "
-    "Skipped with a warning when absent."
+    "A compatibility SDK jar (Broadcom; not shipped in this kit). Repeatable, "
+    "one per platform, e.g. vrops-adapters-sdk-9.1.1.0100.jar: the framework "
+    "and adapter main source must also compile against each, at that line's "
+    "collector Java, on a JDK at least that new (9.1.1.0100 needs JDK 25+; found on "
+    "PATH, JAVA_HOME, JAVA_HOME_<N>_X64 or VCFCF_SDK_COMPAT_JAVAC). "
+    "Alternatively set VCFCF_SDK_COMPAT_JARS (colon-separated) or "
+    "VCFCF_SDK_COMPAT_JAR (one jar); they add up. Skipped with a warning "
+    "when absent."
 )
 _REQUIRE_SDK_COMPAT_HELP = (
-    "Fail instead of warning when the 9.1.1.0100 compat compile cannot run "
-    "(jar or JDK 25+ missing). Equivalent to VCFCF_SDK_COMPAT_REQUIRED=1."
+    "Fail instead of warning when a supported line's compat compile cannot "
+    "run (8.18.7, 9.0 or 9.1.1.0100: its jar, or a JDK new enough for it, "
+    "missing). VCFCF_SDK_COMPAT_LEGS (comma list of those keys) narrows the "
+    "lines expected. Equivalent to VCFCF_SDK_COMPAT_REQUIRED=1."
 )
 
 
@@ -457,9 +478,18 @@ def _apply_sdk_jar(args) -> None:
     sdk_jar = getattr(args, "sdk_jar", None)
     if sdk_jar:
         os.environ["VCFCF_SDK_JAR"] = str(sdk_jar)
-    compat_jar = getattr(args, "sdk_compat_jar", None)
-    if compat_jar:
-        os.environ["VCFCF_SDK_COMPAT_JAR"] = str(compat_jar)
+    compat_jars = getattr(args, "sdk_compat_jar", None)
+    if compat_jars:
+        # Repeatable flag; its jars join any already in VCFCF_SDK_COMPAT_JARS.
+        if isinstance(compat_jars, (str, os.PathLike)):
+            compat_jars = [compat_jars]
+        existing = [
+            p for p in os.environ.get("VCFCF_SDK_COMPAT_JARS", "").split(os.pathsep)
+            if p.strip()
+        ]
+        os.environ["VCFCF_SDK_COMPAT_JARS"] = os.pathsep.join(
+            existing + [str(j) for j in compat_jars]
+        )
     if getattr(args, "require_sdk_compat", False):
         os.environ["VCFCF_SDK_COMPAT_REQUIRED"] = "1"
 
@@ -532,6 +562,7 @@ def _build_parser() -> argparse.ArgumentParser:
     pbsdk.add_argument(
         "--sdk-compat-jar",
         dest="sdk_compat_jar",
+        action="append",
         default=None,
         metavar="JAR_PATH",
         help=_SDK_COMPAT_JAR_HELP,
@@ -564,6 +595,7 @@ def _build_parser() -> argparse.ArgumentParser:
     pvsdk.add_argument(
         "--sdk-compat-jar",
         dest="sdk_compat_jar",
+        action="append",
         default=None,
         metavar="JAR_PATH",
         help=_SDK_COMPAT_JAR_HELP,

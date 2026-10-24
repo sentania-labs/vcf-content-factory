@@ -151,18 +151,22 @@ on 2026-05-15 by Navani):
 | `alive_platform.jar` | Layer 1 — platform API types | Yes (do NOT bundle in pak) |
 | `aria-ops-core-8.0.0.jar` | Layer 2 — UnlicensedAdapter | No (MUST bundle in pak) |
 
-A fifth, optional jar is a compile check only, never on the shipped
-classpath: `vrops-adapters-sdk-9.1.1.0100.jar` (VCF Ops 9.1.1.0100). It is
-not in this public repo and not yet in the private
-`sentania-labs/vcf-content-factory-sdk-runtime` repo (issue #250): it is
-parked on the lab holding share at
+Two more jars are compile checks only, never on the shipped classpath,
+one leg per supported line (issues #211, #252): `vrops-adapters-sdk-8.18.7.jar`
+(Aria Operations 8.18.7; Java 11, any JDK 11+) and
+`vrops-adapters-sdk-9.1.1.0100.jar` (VCF Ops 9.1.1.0100; Java 25, JDK 25+).
+The 2.2 jar is the third leg (9.0, compiled again at `--release 17`). Neither
+compat jar is in this public repo. Both are in the private
+`sentania-labs/vcf-content-factory-sdk-runtime` repo (factory CI fetches
+them there) and on the lab holding share under
+`/mnt/holding/vendor/vcf-ops-8.18.7/extracted-jars/` and
 `/mnt/holding/vendor/vcf-ops-9.1.1.0100/extracted-jars/` (local-only), or
-take a 9.1.1.0100 appliance's `common/lib/vrops-adapters-sdk.jar`. Put it in
-`adapter_runtime/` **renamed to `vrops-adapters-sdk-9.1.1.0100.jar`** (under
-any other name it is a second primary SDK jar and the build stops), check
-its sha256, and put JDK 25+ where the build can find it; build-sdk, validate-sdk and
-`build-framework.sh` then also compile against it and fail on anything
-9.1.1 lacks (issue #211). Both SDK jars' hashes and builds:
+take one from an appliance of that line (`common/lib/vrops-adapters-sdk.jar`).
+Put each in `adapter_runtime/` **under the name above** (under any other
+name it is a second primary SDK jar and the build stops), check its sha256,
+and put JDK 25+ where the build can find it for the 9.1.1 leg; build-sdk,
+validate-sdk and `build-framework.sh` then compile once per line and fail
+on anything a line lacks. Every SDK jar's hashes and builds:
 `adapter_runtime/PROVENANCE.md`.
 
 A new cloning user would source these JARs the same way: from a VCF Ops
