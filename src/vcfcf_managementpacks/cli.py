@@ -1102,7 +1102,8 @@ def build_parser() -> argparse.ArgumentParser:
             "generate or refresh the docs/ docset for a Tier 2 SDK adapter project. "
             "Regenerates: inventory-tree.md, inventory-tree.excalidraw, "
             "inventory-tree.svg, docs/README.md. "
-            "Scaffolds if missing: overview.md, installing.md."
+            "Scaffolds if missing: overview.md, installing.md. "
+            "Merges docs/_index_extra.md (optional, never written) into docs/README.md."
         ),
     )
     pdg.add_argument(

@@ -52,8 +52,8 @@ Track-specific examples:
 2. **Never fabricate metric/property keys.**
 3. **Validate:** `python -m vcfcf_symptoms validate content/symptoms/<file>.yaml`
    (for a pak file, pass its path under `content/sdk-adapters/<name>/symptoms/`;
-   this validator enforces the `[VCF Content Factory]` prefix, so for a pak
-   whose names are unprefixed use
+   this validator always enforces the `[VCF Content Factory]` prefix, so for
+   a pak whose `adapter.yaml` declares `content_naming: unprefixed` use
    `python3 -m vcfcf_managementpacks validate-sdk content/sdk-adapters/<name>`
    once the file is listed in `adapter.yaml` `bundled_content`, and say in
    your report that it is unvalidated until then).
@@ -65,6 +65,12 @@ Track-specific examples:
 
 ```yaml
 name: "[VCF Content Factory] <Human Name>"
+# For an SDK-adapter pak the prefix follows the pak's `adapter.yaml`
+# `content_naming` field: `factory_prefixed` requires the `[VCF Content
+# Factory] ` prefix on every bundled name, `unprefixed` forbids it, and
+# `validate-sdk` and `build-sdk` fail on a mismatch when the field is
+# declared. When it is absent, match the pak's existing names: the tools
+# assume `factory_prefixed` and only warn (issue #229).
 adapter_kind: VMWARE
 resource_kind: VirtualMachine
 wait_cycles: 3
