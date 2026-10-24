@@ -154,3 +154,5 @@ scripts/
   version_line_guard.sh      pre-push hook (.githooks/pre-push): version line consistency
   validate-content.py        Content validation entry point
 ```
+
+> `reference/README.md` line 14 still says the release builder is `vcfops_packaging`; it is `vcfcf_packaging` since the M1 rename and the alias was removed 2026-10-24 (#159). The file is under `reference/` and therefore immutable (RULE-016), so the correction lives here.
