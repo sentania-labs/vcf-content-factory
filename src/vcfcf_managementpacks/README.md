@@ -166,8 +166,12 @@ on 2026-05-15 by Navani):
 | `alive_platform.jar` | Layer 1 — platform API types | Yes (do NOT bundle in pak) |
 | `aria-ops-core-8.0.0.jar` | Layer 2 — UnlicensedAdapter | No (MUST bundle in pak) |
 
-A fifth, optional jar is a compile check only, never on the shipped
-classpath: `vrops-adapters-sdk-9.1.1.0100.jar` (VCF Ops 9.1.1.0100). It is
+Optional compat jars are compile checks only, never on the shipped
+classpath, one leg each (issue #252): `vrops-adapters-sdk-8.18.7.jar`
+(Aria Operations 8.18.7; Java 11, any JDK 11+; parked at
+`/mnt/holding/vendor/vcf-ops-8.18.7/extracted-jars/`, local-only, going
+into the private sdk-runtime repo with its PR 7) and
+`vrops-adapters-sdk-9.1.1.0100.jar` (VCF Ops 9.1.1.0100), below. The latter is
 not in this public repo and not yet in the private
 `sentania-labs/vcf-content-factory-sdk-runtime` repo (issue #250): it is
 parked on the lab holding share at
