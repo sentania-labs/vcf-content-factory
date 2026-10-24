@@ -86,7 +86,7 @@ from typing import Optional
 # Version constant: bump when kit contents change in a meaningful way
 # ---------------------------------------------------------------------------
 
-BUILDKIT_VERSION = "1.0.17"
+BUILDKIT_VERSION = "1.0.18"
 
 # ---------------------------------------------------------------------------
 # Source paths (relative to this file's parent = vcfcf_managementpacks/)
@@ -391,26 +391,24 @@ In CI, store the JAR as a secret-gated artifact and expose its path via
 VCFCF_SDK_JAR.  The build fails with a clear actionable message when the
 JAR is absent from both adapter_runtime/ and the env var.
 
-### Compatibility compile legs: other platforms' SDK jars (kit 1.0.15+)
+### Compile matrix: one leg per supported line (kit 1.0.15+, per line 1.0.18+)
 
-Each VCF Ops line ships its own SDK jar with a slightly different class
-set. build-sdk and validate-sdk also compile the framework and adapter
-main source (never tests) against each compatibility jar you supply, one
-leg per jar, and fail on anything that does not resolve there. Nothing
-from a leg ships: the pak is still compiled against the 2.2 jar. Take
-each jar from an appliance of that line
-(/usr/lib/vmware-vcops/common/lib/vrops-adapters-sdk.jar) and name it
-vrops-adapters-sdk-<version>.jar; the report lines name that version.
-Each leg picks a JDK new enough for its jar's class files (PATH,
-JAVA_HOME, JAVA_HOME_<N>_X64, or VCFCF_SDK_COMPAT_JAVAC). The supported
-lines and their jars:
+The pak ships compiled against the 2.2 jar with javac --release 11. Each
+supported VCF Ops line ships its own SDK jar and runs its own collector
+Java, so build-sdk and validate-sdk also compile the framework and adapter
+main source (never tests) once per line, keep nothing, and fail on a class
+or member the line's jar lacks or a Java API the line's Java removed. Each
+leg compiles with --release <that line's collector Java>, read from its
+jar's class files, on a JDK at least that new (PATH, JAVA_HOME,
+JAVA_HOME_<N>_X64, or VCFCF_SDK_COMPAT_JAVAC):
 
-    8.18 (8.18.7)      vrops-adapters-sdk-8.18.7.jar       Java 11, any JDK 11+
-    9.1 (9.1.1.0100)   vrops-adapters-sdk-9.1.1.0100.jar   Java 25, JDK 25+
+    8.18.7       vrops-adapters-sdk-8.18.7.jar       --release 11, any JDK 11+
+    9.0          vrops-adapters-sdk-2.2.jar          --release 17, JDK 17+
+    9.1.1.0100   vrops-adapters-sdk-9.1.1.0100.jar   --release 25, JDK 25+
 
-The 8.18.7 jar is the older API: it lacks members the 2.2 jar has, so its
-leg catches a call an 8.18 collector cannot serve. JDK 17 cannot stand in
-for JDK 25 on the 9.1.1.0100 leg.
+The 9.0 leg uses the primary jar you already supply. A supplied jar is
+matched to its line by sha256, so take each from an appliance of that line
+(/usr/lib/vmware-vcops/common/lib/vrops-adapters-sdk.jar), unchanged.
 
     export VCFCF_SDK_JAR=/path/to/vrops-adapters-sdk-2.2.jar
     export VCFCF_SDK_COMPAT_JARS=/path/to/vrops-adapters-sdk-8.18.7.jar:/path/to/vrops-adapters-sdk-9.1.1.0100.jar
@@ -418,9 +416,11 @@ for JDK 25 on the 9.1.1.0100 leg.
 
 --sdk-compat-jar repeats; VCFCF_SDK_COMPAT_JARS (colon-separated) and the
 older one-jar VCFCF_SDK_COMPAT_JAR do the same, and all of them add up.
-A leg without its jar or a new enough JDK is skipped with a loud warning;
---require-sdk-compat (VCFCF_SDK_COMPAT_REQUIRED=1) turns that into a
-failure.
+Every line is expected: a line with no matching jar, or no new enough
+JDK, is skipped with a loud warning, and --require-sdk-compat
+(VCFCF_SDK_COMPAT_REQUIRED=1) turns that into a failure.
+VCFCF_SDK_COMPAT_LEGS=<comma list of the keys above> narrows the lines a
+run must cover (for example one CI matrix row per line).
 
 Since kit 1.0.16 the framework's own pass also fails on a javac [removal]
 warning (an API deprecated for removal on the Java 25 collectors); the
@@ -462,17 +462,18 @@ _SDK_JAR_HELP = (
 _SDK_COMPAT_JAR_HELP = (
     "A compatibility SDK jar (Broadcom; not shipped in this kit). Repeatable, "
     "one per platform, e.g. vrops-adapters-sdk-9.1.1.0100.jar: the framework "
-    "and adapter main source must also compile against each, with a JDK new "
-    "enough for that jar's class files (9.1.1.0100 needs JDK 25+; found on "
+    "and adapter main source must also compile against each, at that line's "
+    "collector Java, on a JDK at least that new (9.1.1.0100 needs JDK 25+; found on "
     "PATH, JAVA_HOME, JAVA_HOME_<N>_X64 or VCFCF_SDK_COMPAT_JAVAC). "
     "Alternatively set VCFCF_SDK_COMPAT_JARS (colon-separated) or "
     "VCFCF_SDK_COMPAT_JAR (one jar); they add up. Skipped with a warning "
     "when absent."
 )
 _REQUIRE_SDK_COMPAT_HELP = (
-    "Fail instead of warning when a compat compile cannot run (its jar, or a "
-    "JDK new enough to read it, missing). Equivalent to "
-    "VCFCF_SDK_COMPAT_REQUIRED=1."
+    "Fail instead of warning when a supported line's compat compile cannot "
+    "run (8.18.7, 9.0 or 9.1.1.0100: its jar, or a JDK new enough for it, "
+    "missing). VCFCF_SDK_COMPAT_LEGS (comma list of those keys) narrows the "
+    "lines expected. Equivalent to VCFCF_SDK_COMPAT_REQUIRED=1."
 )
 
 
