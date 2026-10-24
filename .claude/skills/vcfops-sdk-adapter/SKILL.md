@@ -159,7 +159,7 @@ safe. Contract: `knowledge/context/tier2_architecture.md`.
 `getPlatformSslContext()` / `HttpClientBuilder.platformSsl(this)` check the
 certificate chain only: the platform `CustomTrustManager` never matches the
 certificate's name to the host dialled, and neither JDK client adds that
-check for it. Since buildkit 1.0.16 (#185, #206) a pak opts in with one
+check for it. Since buildkit 1.0.17 (#185, #206) a pak opts in with one
 call: `platformSsl(this, dialledHost)` on the builder, or
 `getPlatformSslContext(dialledHost)` for a context of its own. Pass the
 host as the account entered it (`host` or `host:port`, a Unicode name in
@@ -176,7 +176,7 @@ entered by IP needs that IP in the certificate's SANs. The Suite API hop
 behaves exactly as before. Reference: compliance (`VCenterCertificates`,
 from which the framework class was ported).
 
-Validate Connection text for a certificate failure (#205, 1.0.16): an
+Validate Connection text for a certificate failure (#205, 1.0.17): an
 untrusted chain gets text pointing at the accept dialog; a certificate that
 does not name the host (`CertificateNames.isNameMismatch(e)`) or a name
 check with no usable host (`isNoUsableHost(e)`) gets name-specific text
@@ -187,12 +187,12 @@ Allow Insecure SSL is mentioned only when the pak's describe declares the
 all three; return `null` to keep the default. Once a pak checks names
 through the framework, it no longer needs to rethrow certificate failures
 stripped of their cause to dodge the framework text (compliance's
-pre-1.0.16 workaround).
+pre-1.0.17 workaround).
 
 ## HTTP client timeouts
 
 `HttpClientBuilder.timeout(d)` is the per-request budget, send to response
-headers (default 30 s). Since buildkit 1.0.16 (#222)
+headers (default 30 s). Since buildkit 1.0.17 (#222)
 `connectTimeout(d)` sets the connect timeout on its own; it defaults to
 `timeout`, so nothing changes until a pak sets it (it must be positive;
 `null` means "same as `timeout`"). Typical: a few seconds
@@ -201,7 +201,7 @@ slow API call. Keep `timeout` at least as long as `connectTimeout`.
 
 ## Per-cycle state: onCycleStart
 
-Since buildkit 1.0.16 (#221) override `onCycleStart()` on the adapter for
+Since buildkit 1.0.17 (#221) override `onCycleStart()` on the adapter for
 anything that must happen once per collection cycle (reset a per-cycle
 snapshot, clear a cached failure). It runs at the top of `onCollect`,
 before `needsRediscovery` and discovery; anything it throws is logged and
