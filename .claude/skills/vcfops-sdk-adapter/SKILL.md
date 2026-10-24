@@ -154,6 +154,27 @@ adapter's own collect result still go through `RelationshipBuilder`. Do
 not mix the two routes on one parent until a live install proves it
 safe. Contract: `knowledge/context/tier2_architecture.md`.
 
+## Target-system TLS: certificate names (opt-in)
+
+`getPlatformSslContext()` / `HttpClientBuilder.platformSsl(this)` check the
+certificate chain only: the platform `CustomTrustManager` never matches the
+certificate's name to the host dialled, and neither JDK client adds that
+check for it. Since buildkit 1.0.16 (#185, #206) a pak opts in with one
+call: `platformSsl(this, dialledHost)` on the builder, or
+`getPlatformSslContext(dialledHost)` for a context of its own. Pass the
+host as the account entered it (`host` or `host:port`), not the URL; a
+blank or unusable host refuses every handshake. On an
+`HttpsURLConnection` path (JAX-WS, raw SOAP) also call
+`CertificateNames.secure(conn, ctx.getSocketFactory())` for the strict
+always-false hostname verifier. `CertificateNames.isNameMismatch(e)` tells
+a name failure from an untrusted chain. The chain check is unchanged, so
+the accept dialog still works; accepting does not fix a wrong name, the
+admin re-enters the host by the name on the certificate. An account
+entered by IP needs that IP in the certificate's SANs. The Suite API hop
+(`openPlatformConnection`) is never name checked. Without the opt-in a pak
+behaves exactly as before. Reference: compliance (`VCenterCertificates`,
+from which the framework class was ported).
+
 ## Environment-wide totals: ComputedMetrics on the pak singleton
 
 A number that spans every adapter instance (fleet counts, a weighted
