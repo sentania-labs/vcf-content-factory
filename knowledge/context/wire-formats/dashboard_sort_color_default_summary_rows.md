@@ -27,7 +27,7 @@
 |---|---|---|---|
 | #175 View widget sort | The dashboard View widget has **no** sort key. Default sort is a per-column `sortCriteria` Property in the **view definition** XML (`true` ascending, `false` descending, absent none). | View XML, `attributes-selector` column Item | seen in export, plus live server render on 9.0.2 |
 | #176 Lower-is-worse Scoreboard color | No flag exists. Write the three bounds in **descending** order (`yellowBound > orangeBound > redBound`) and the server colors lower values worse. The factory renderer already passes the triple through unchanged. | Widget `metric.resourceKindMetrics[]` entry | seen in export, plus live server replay on 9.0.2 |
-| #177 Show all, narrow on selection | No "default resource plus receiver" mode exists on any widget. But an **AlertList** receiver with `selfProvider: false` already shows every matching alert until an interaction arrives, so setting the **provider** View widget's `selectFirstRow` to `false` gives exactly "all on load, narrow on click". This is the vendor's own `Cluster Performance` pattern. A **View** receiver does not fall back (it shows "resource not selected"). | Provider widget `config.selectFirstRow.selectFirstRow` | seen in export (vendor dashboard) plus UI source; on-screen render not checked |
+| #177 Show all, narrow on selection | No "default resource plus receiver" mode exists on any widget. But an **AlertList** receiver with `selfProvider: false` already shows every matching alert until an interaction arrives, so setting the **provider** View widget's `selectFirstRow` to `false` gives exactly "all on load, narrow on click". This is the vendor's own `Cluster Performance` pattern. A **View** receiver does not fall back (it shows "resource not selected"). | Provider widget `config.selectFirstRow.selectFirstRow` | seen on screen 2026-10-26 (compliance build 101, devel 9.0.2 and 8.18): all on load, narrows on click, reset returns to all |
 | #168 Multiple summary rows | `summaryInfos` is a `List` of `Item`s, one per row, each with its own `displayName`, `aggregation`, and `attributeIndexes`. | View XML, `attributes-selector` Control | seen in export (summary and list presentations; list multi-row in vendor paks) plus live server render of the summary presentation; on-screen list multi-row not observed |
 
 ## #175: default sort for a View widget
@@ -269,6 +269,29 @@ only difference is its provider View `Compliance by vCenter and Object
 Type` has `selectFirstRow: {"selectFirstRow": true}`, which is why it
 opens on the first vCenter's alerts.
 
+### On-screen confirmation (2026-10-26)
+
+Compliance build 97 set the provider's `select_first_row: false`; the
+build 101 re-import was checked live with a fresh load and nothing
+clicked (content-installer, Playwright; `getWidgetConfigs` read the
+provider as `selectFirstRow false`, `selfProvider true`):
+
+| Line | Rows / alerts on load | Active compliance alerts (API) | After clicking a type row | After reset |
+|---|---|---|---|---|
+| devel (9.0.2) | 36 / 731 | 734 | 28 / 132 | 36 / 731 |
+| devel_8_18 | 32 / 356 | 356 | "No Results Found" (wld01 has none) | 32 / 356 |
+
+- The devel gap of 3 is "Host Compliance Score Degraded" (widget 7, API
+  10); not investigated. The widget's criticality filter `[2, 3, 4]` is a
+  candidate.
+- The toolbar "Reset Interaction" button rendered 0x0 and was clicked by
+  script; whether a user can see it is not settled.
+- The vendor `Cluster Performance` dashboard on devel lists
+  environment-wide alerts in its lower "Performance Alerts" widget before
+  any cluster is clicked (narrowing not exercised).
+- Counting alerts: `POST /api/alerts/query` with `activeOnly=true`
+  returned canceled alerts too on devel; filter on status instead.
+
 ### What the factory needs
 
 - Renderer: nothing new. `selectFirstRow` is emitted from
@@ -422,11 +445,7 @@ screen.
   `concurrentSessionDetected`. Forcing the login (`forceLogin=true`) would
   end any other session of that account, so it was not used. The session
   times out on its own; re-run the replay on 9.1 after that.
-- **On-screen check of #177.** The AlertList fallback is read from the UI
-  source and the vendor dashboard config, not from a rendered page. A
-  30-second look at the vendor `Cluster Performance` dashboard on devel
-  (does `Performance Alerts` list alerts before any cluster is clicked?)
-  would confirm it.
+- **On-screen check of #177.** Done 2026-10-26; see "On-screen confirmation" in the #177 section.
 - **On-screen render of a list view with two summary rows, and
   multi-column sort priority.** The XML shape is seen in vendor paks;
   confirming the rendered rows, or which sorted column wins, needs a

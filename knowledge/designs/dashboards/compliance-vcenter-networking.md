@@ -117,3 +117,16 @@ the widget reaches every descendant that can carry a compliance alert
 Port Group), following the VMWARE relationship tree. Each chosen depth is
 justified in a YAML comment on the widget. Layout, coords and interactions
 are unchanged, so the RULE-011 wireframe gate does not re-open.
+
+## Amendment 2026-10-26: Failing Controls lists are self-only (build 101)
+
+Owner decision (Scott, 2026-10-26): the "Failing Controls on Selected …"
+AlertList widget shows only the selected object's own controls. VM
+controls belong to the VMs dashboard. This supersedes the 2026-10-12
+"cover all the children" depth for this widget only. The widget is
+`relationship_mode: self`, `depth: 1` (factory #274). Depth 0 is
+rejected by the server, so 1 is the floor. Evidence:
+`knowledge/context/investigations/2026-10-26-alertlist-depth-semantics.md`.
+Ships in compliance build 101 (pak repo `1962909`). Layout, filters and
+interactions are unchanged, so the RULE-011 wireframe gate does not
+re-open.
