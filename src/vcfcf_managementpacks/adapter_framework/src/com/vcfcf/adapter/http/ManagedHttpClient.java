@@ -18,7 +18,7 @@ import java.util.logging.Logger;
  * Wrapper around {@link HttpClient} that applies auth, retry, base URL,
  * and default headers to every outgoing request.
  *
- * <p>Instances are created by {@link HttpClientBuilder#build()} — do not
+ * <p>Instances are created by {@link HttpClientBuilder#build()}; do not
  * construct directly.
  *
  * <h3>Auth-failure single-retry</h3>
@@ -28,7 +28,7 @@ import java.util.logging.Logger;
  * the response status code (typically 401 for session-cookie strategies),
  * the client calls {@link AuthStrategy#invalidateAuth()} and replays the
  * request exactly once with a fresh credential.  A second auth failure on
- * the retry propagates immediately — there is no retry loop.
+ * the retry propagates immediately: there is no retry loop.
  *
  * <p>Stateless strategies ({@code BasicAuth}, {@code BearerAuth}) inherit
  * the default {@code shouldRetryAfterStatus → false} and are unaffected.
@@ -43,7 +43,7 @@ import java.util.logging.Logger;
  * {@link ConnectException}, {@link #sendWithRoundRobin} resolves the hostname
  * to all its IPs via {@link InetAddress#getAllByName} and retries the request
  * against each IP in turn, substituting the raw IP into the URL.  The
- * {@code Host} header is intentionally NOT set — {@code java.net.http.HttpClient}
+ * {@code Host} header is intentionally NOT set: {@code java.net.http.HttpClient}
  * treats {@code Host} as a restricted header and throws
  * {@link IllegalArgumentException} if set explicitly; the JDK derives the
  * correct {@code Host} value from the request URI automatically.  SNI is
@@ -183,12 +183,12 @@ public final class ManagedHttpClient {
 	 * <p>The retry is performed by rebuilding the request from the same URI
 	 * and method as {@code original} so that the new {@link #apply} call
 	 * injects the refreshed credential.  A second auth-failure response on
-	 * the retry is returned directly — there is no loop.
+	 * the retry is returned directly: there is no loop.
 	 *
 	 * <p>Synology's {@code SynologyApiClient} manages its own {@code _sid}
 	 * query-param session and does NOT use an {@link AuthStrategy} (the HTTP
 	 * client for Synology is built with no auth strategy). This method is
-	 * therefore a no-op for Synology — it only fires when an
+	 * therefore a no-op for Synology: it only fires when an
 	 * {@link AuthStrategy} is present and opts in via
 	 * {@link AuthStrategy#shouldRetryAfterStatus(int)}.
 	 *
@@ -205,7 +205,7 @@ public final class ManagedHttpClient {
 			return resp;
 		}
 		LOG.warning(() -> "Auth failure (HTTP " + resp.statusCode()
-				+ ") — invalidating credential and retrying once");
+				+ "): invalidating credential and retrying once");
 		auth.invalidateAuth();
 
 		// Rebuild the request so the next applyDefaults injects a fresh credential.
@@ -226,7 +226,7 @@ public final class ManagedHttpClient {
 		}
 		// Re-apply Content-Type and any default headers from the original.
 		original.headers().map().forEach((name, values) -> {
-			// Skip the Cookie header — auth.apply() will add a fresh one below.
+			// Skip the Cookie header: auth.apply() will add a fresh one below.
 			if ("Cookie".equalsIgnoreCase(name)) return;
 			for (String value : values) {
 				rb.header(name, value);
@@ -245,7 +245,7 @@ public final class ManagedHttpClient {
 	 * rewritten to substitute the raw IP address for the hostname.  Auth and
 	 * default headers are already baked into the original request and are
 	 * carried over automatically via {@link HttpRequest#headers()}.  No
-	 * {@code Host} header is set — {@code java.net.http.HttpClient} treats
+	 * {@code Host} header is set: {@code java.net.http.HttpClient} treats
 	 * {@code Host} as a restricted header and derives it from the request URI.
 	 *
 	 * @param originalReq the request that triggered the ConnectException
@@ -274,12 +274,12 @@ public final class ManagedHttpClient {
 		}
 
 		if (addresses.length <= 1) {
-			// Only one IP — round-robin fallback cannot help.
+			// Only one IP: round-robin fallback cannot help.
 			throw originalEx;
 		}
 
 		LOG.warning(() -> "ConnectException for " + hostname
-				+ " — attempting DNS round-robin across " + addresses.length + " IPs");
+				+ ": attempting DNS round-robin across " + addresses.length + " IPs");
 
 		ConnectException lastCe = originalEx;
 
@@ -299,13 +299,7 @@ public final class ManagedHttpClient {
 			}
 
 			// Copy the original request and rewrite the URI to use the resolved IP.
-			// Do NOT set a Host header: java.net.http.HttpClient treats "Host" as a
-			// restricted header name and throws IllegalArgumentException if set
-			// explicitly. The JDK derives the correct Host value from the request URI.
-			HttpRequest.Builder rb = HttpRequest.newBuilder(originalReq, (n, v) -> true)
-					.uri(ipUri);
-
-			HttpRequest ipReq = rb.build();
+			HttpRequest ipReq = copyWithUri(originalReq, ipUri);
 
 			try {
 				HttpResponse<T> resp = httpClient.send(ipReq, bodyHandler);
@@ -318,10 +312,55 @@ public final class ManagedHttpClient {
 				LOG.warning(() -> "DNS round-robin: IP " + logIp + " also unreachable: "
 						+ ce.getMessage());
 			}
-			// Any non-ConnectException IOException propagates immediately —
+			// Any non-ConnectException IOException propagates immediately:
 			// it means we reached the host but something else went wrong.
 		}
 
 		throw lastCe;
+	}
+
+	/**
+	 * Headers {@link HttpClient} derives itself and refuses to have set (the
+	 * JDK's restricted set, compared case-insensitively). Never copied: Host
+	 * comes from the request URI, Content-Length from the body publisher,
+	 * Expect from {@code expectContinue}.
+	 */
+	private static final java.util.Set<String> RESTRICTED_HEADERS = java.util.Set.of(
+			"connection", "content-length", "expect", "host", "upgrade");
+
+	/**
+	 * A copy of {@code original} aimed at {@code uri}: same method, body
+	 * publisher, headers (restricted ones skipped), timeout, version and
+	 * expect-continue.
+	 *
+	 * <p>Java 11 API only. {@code HttpRequest.newBuilder(HttpRequest,
+	 * BiPredicate)} would do this in one call but is Java 16, and the 8.18
+	 * collector and Cloud Proxy run OpenJDK 11, where it throws
+	 * NoSuchMethodError (issue #252). Package-private for the test.
+	 */
+	static HttpRequest copyWithUri(HttpRequest original, URI uri) {
+		HttpRequest.Builder rb = HttpRequest.newBuilder(uri)
+				.expectContinue(original.expectContinue());
+		String method = original.method();
+		if (original.bodyPublisher().isPresent()) {
+			rb.method(method, original.bodyPublisher().get());
+		} else if ("GET".equals(method)) {
+			rb.GET();  // GET and DELETE carry no publisher; keep it that way
+		} else if ("DELETE".equals(method)) {
+			rb.DELETE();
+		} else {
+			rb.method(method, HttpRequest.BodyPublishers.noBody());
+		}
+		original.timeout().ifPresent(rb::timeout);
+		original.version().ifPresent(rb::version);
+		original.headers().map().forEach((name, values) -> {
+			if (RESTRICTED_HEADERS.contains(name.toLowerCase(java.util.Locale.ROOT))) {
+				return;
+			}
+			for (String value : values) {
+				rb.header(name, value);
+			}
+		});
+		return rb.build();
 	}
 }

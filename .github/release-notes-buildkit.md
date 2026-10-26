@@ -91,6 +91,37 @@ that is the intended gate.
 - 1.0.16 is the installer and ThreadDeath round (factory #242); this kit
   carries both.
 
+## Behavior since 1.0.18
+
+- The pak is compiled with `javac --release 11` instead of `-source 11
+  -target 11`: Java 11 bytecode and the Java 11 class library, the Java the
+  8.18 collector runs. A Java 12+ library call now fails the build. The
+  framework had one (`ManagedHttpClient`'s DNS round-robin retry, a Java 16
+  call); it is fixed in this kit, so rebuild every pak.
+- The compile matrix covers every supported line, one leg each, nothing
+  kept: 8.18.7 (`vrops-adapters-sdk-8.18.7.jar`, `--release 11`), 9.0 (the
+  2.2 jar you already supply, `--release 17`) and 9.1.1.0100
+  (`vrops-adapters-sdk-9.1.1.0100.jar`, `--release 25`). Each leg compiles
+  at its line's collector Java, read from the jar's class files, on a JDK
+  at least that new (JDK 17 for the first two, JDK 25 for 9.1.1.0100), and
+  fails on a class or member the line's jar lacks or a Java API its
+  collector's Java lacks. A Java-library miss is reported as such, not
+  against the jar.
+- `--sdk-compat-jar` repeats; `VCFCF_SDK_COMPAT_JARS` (colon-separated) is
+  its env form, and the one-jar `VCFCF_SDK_COMPAT_JAR` still works. They
+  add up.
+- A supplied jar is matched to its line by sha256. Every line is expected:
+  a line no jar covers prints the SKIPPED box, and with
+  `--require-sdk-compat` it fails the build. `VCFCF_SDK_COMPAT_LEGS=<comma
+  list of 8.18.7, 9.0, 9.1.1.0100>` narrows the lines a run must cover. A
+  required pak build that supplies only the 9.1.1 jar now fails naming
+  8.18.7 instead of passing.
+- The 1.0.16 `[removal]` gate on the framework's own pass now runs on
+  every leg; the framework-plus-adapter pass still only prints them.
+
+Version note: 1.0.16 is the installer/shims round and 1.0.17 the
+adapter-framework designs round; this is 1.0.18.
+
 ## Behavior since 1.0.15
 
 - `build-sdk` and `validate-sdk` take `--sdk-compat-jar <path to
