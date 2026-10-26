@@ -824,6 +824,34 @@ def _metric_spec_to_yaml(spec) -> dict:
     return d
 
 
+_ALERT_LIST_RM_NAMES = {1: "parents", -1: "children", 0: "self"}
+
+
+def _alert_list_relationship_mode_yaml(value):
+    """YAML for an AlertList's source ``relationshipMode``, or None to omit.
+
+    Faithful, never repaired: each real int 1 / -1 / 0 becomes its name and
+    every other entry (bool, float, string, other ints) is emitted raw, so a
+    value the YAML cannot express fails ``validate`` with the loader's own
+    message. A non-list value is emitted raw for the same reason. Omitted
+    when the source has no value (None) or exactly the default children
+    plus self, which the loader renders as ``[-1, 0]`` anyway.
+    """
+    if value is None:
+        return None
+    if not isinstance(value, list):
+        return value
+    out = [
+        _ALERT_LIST_RM_NAMES[v]
+        if isinstance(v, int) and not isinstance(v, bool) and v in _ALERT_LIST_RM_NAMES
+        else v
+        for v in value
+    ]
+    if sorted(out, key=repr) == ["children", "self"]:
+        return None
+    return out
+
+
 def _widget_to_yaml_dict(widget, view_name_map: dict) -> dict:
     """Serialize a Widget dataclass to a YAML-ready dict that load_dashboard() can round-trip.
 
@@ -1011,7 +1039,11 @@ def _widget_to_yaml_dict(widget, view_name_map: dict) -> dict:
             if cfg.status:
                 d["status"] = cfg.status
             d["mode"] = cfg.mode
-            d["depth"] = cfg.depth
+            if cfg.depth is not None:
+                d["depth"] = cfg.depth
+            rm = _alert_list_relationship_mode_yaml(cfg.relationship_mode)
+            if rm is not None:
+                d["relationship_mode"] = rm
         else:
             _warn(f"widget '{w.local_id}' (AlertList): no config; emitting best-effort shape")
 
