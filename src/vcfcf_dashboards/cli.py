@@ -651,15 +651,17 @@ def _load_repo_sms(supermetrics_dir: str) -> tuple[list, str]:
     Returns ``(defs, error)``: an absent directory is ``([], "")``, a load
     failure is ``([], message)``.  Loaded without the framework-prefix rule
     (a validate gate, RULE-006, not a sync gate), the way validate loads
-    ``third_party/*/supermetrics``, so a third-party SM directory loads.
-    Shared by the pre-import referent check and the post-import walker.
+    ``third_party/*/supermetrics``, so a third-party SM directory loads, and
+    read-only (``load_dir_readonly``): an id-less YAML is never given a
+    minted id, so a check never rewrites a file.  Shared by the pre-import
+    referent check and the post-import walker.
     """
     sm_dir = Path(supermetrics_dir)
     if not sm_dir.exists():
         return [], ""
     try:
-        from vcfcf_supermetrics.loader import load_dir as _sm_load_dir
-        return _sm_load_dir(sm_dir, enforce_framework_prefix=False), ""
+        from vcfcf_supermetrics.loader import load_dir_readonly
+        return load_dir_readonly(sm_dir, enforce_framework_prefix=False), ""
     except Exception as e:  # noqa: BLE001  caller decides how loud to be
         return [], str(e)
 
@@ -693,8 +695,10 @@ def _check_sm_referents_before_import(
     """Resolve the ``@supermetric:"<name>"`` referents of every super metric
     the synced views and dashboards use, before the import (issue #154).
 
-    The SM corpus is ``supermetrics_dir`` plus ``_sm_corpus_dirs``.  The SMs
-    a view column or dashboard widget names are taken from it, plus their
+    The SM corpus is ``supermetrics_dir`` plus ``_sm_corpus_dirs``.  A
+    ``supermetric:"<name>"`` column resolves to the SM the renderer's
+    unscoped ``sm_id_map()`` maps it to; an ``sm_<uuid>`` column or widget
+    key resolves by id in the corpus.  Those SMs are taken, plus their
     in-corpus referents transitively, and each referent must resolve
     against the corpus or the target instance.  Returns 1 when one does not,
     when a target lookup failed (DEP-ERROR lines naming referrer and
@@ -702,7 +706,7 @@ def _check_sm_referents_before_import(
     check cannot run, so nothing is imported); 0 otherwise.  An extra corpus
     directory that does not load, or a column or widget whose SM is in no
     loaded directory, is a WARN naming it.  Read-only: ``find_by_name``
-    lookups only.
+    lookups only, and every SM YAML is loaded without minting ids.
     """
     try:
         from vcfcf_common.dep_walker import check_sm_referents, supermetrics_used_by
@@ -729,7 +733,14 @@ def _check_sm_referents_before_import(
             )
         repo_sms.extend(more)
 
-    used, unresolved = supermetrics_used_by(views, dashboards, repo_sms)
+    # A supermetric:"<name>" column resolves exactly as the renderer will
+    # resolve it in this sync (build_import_zip(sm_map=sm_id_map())): the
+    # SMs behind the unscoped map, loaded read-only.
+    from vcfcf_supermetrics.loader import unscoped_sm_defs_readonly
+    column_sms = {sm.name: sm for sm in unscoped_sm_defs_readonly()}
+    used, unresolved = supermetrics_used_by(
+        views, dashboards, repo_sms, column_sms=column_sms
+    )
     for ref in unresolved:
         print(
             f"WARN  {ref}, which is in no loaded super metric YAML; its "

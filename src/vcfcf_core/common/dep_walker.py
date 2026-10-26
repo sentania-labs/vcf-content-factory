@@ -55,7 +55,7 @@ Public API — offline (no client required)
       super metric or a view instead of a dashboard.  Seeds first, then
       referents in discovery order; errors name the missing referent.
 
-  supermetrics_used_by(views, dashboards, all_sms) -> (list[SuperMetricDef], list[str])
+  supermetrics_used_by(views, dashboards, all_sms, column_sms=None) -> (list[SuperMetricDef], list[str])
       SMs in all_sms that view columns and dashboard widgets name, plus
       their @supermetric referents in all_sms, and the references all_sms
       could not resolve; feeds the pre-import referent check on the
@@ -524,6 +524,7 @@ def supermetrics_used_by(
     views: "List",
     dashboards: "List",
     all_sms: "List",
+    column_sms: "Optional[dict]" = None,
 ) -> "Tuple[List, List[str]]":
     """Super metrics in ``all_sms`` that ``views`` and ``dashboards`` use.
 
@@ -539,6 +540,13 @@ def supermetrics_used_by(
     ``_SM_COLUMN_REF_RE`` on the stripped attribute, so a column the renderer
     resolves as a super metric (any token case, optional ``@``) is a seed
     here too.
+
+    ``column_sms`` (``{name: SuperMetricDef}``) is the set the renderer will
+    resolve a ``supermetric:"<name>"`` column against for this import (the
+    SMs behind its ``sm_map``).  When given, a name-form column resolves
+    only through it, so the check reads the formula the import uses even
+    when another project defines an SM of the same name.  When None, the
+    name is picked from ``all_sms`` by the view's provenance.
 
     Returns ``(supermetrics, unresolved)``: ``unresolved`` names every view
     column or widget whose SM is not in ``all_sms``, so its referents could
@@ -571,9 +579,12 @@ def supermetrics_used_by(
             m = _SM_COLUMN_REF_RE.match((col.attribute or "").strip())
             if not m:
                 continue
-            sm = _pick_sm_by_name(
-                by_name.get(m.group(1), []), getattr(view, "provenance", "")
-            )
+            if column_sms is not None:
+                sm = column_sms.get(m.group(1))
+            else:
+                sm = _pick_sm_by_name(
+                    by_name.get(m.group(1), []), getattr(view, "provenance", "")
+                )
             if sm is None:
                 unresolved.append(
                     f"view '{view.name}' col '{col.display_name}' references "

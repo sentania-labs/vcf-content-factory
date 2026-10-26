@@ -271,13 +271,15 @@ def test_dashboard_sync_unloadable_sm_yaml_fails_closed(monkeypatch, tmp_path, c
 def test_dashboard_sync_third_party_sm_dir_loads_without_prefix(
         monkeypatch, tmp_path, capsys):
     """W1: a third-party SM directory (no framework prefix) loads, so the
-    check runs instead of being switched off by a prefix failure."""
+    check runs instead of being switched off by a prefix failure.  The
+    column is sm_<uuid>: a name-form column resolves only through the
+    renderer's content/supermetrics map (see the same-named-pair tests)."""
     tp_used, tp_missing = "[Acme] Used SM", "[Acme] Nowhere SM"
     client = _FakeClient()
     rc, imports, out = _run_dash_sync(
         monkeypatch, tmp_path, capsys,
         [_sm_doc(UUID_USED, tp_used, ref=tp_missing)],
-        client, [_view(tp_used)], sm_rel="third_party/acme/supermetrics",
+        client, [_uuid_view(UUID_USED)], sm_rel="third_party/acme/supermetrics",
     )
     assert rc == 1, out.err
     assert imports == []
@@ -426,4 +428,92 @@ def test_sync_all_bundles_continues_past_a_failing_bundle(make_bundle, monkeypat
     # The broken bundle imported nothing; the clean one after it still ran.
     assert calls == ["supermetrics"]
     assert "Syncing bundle: b-clean" in out.out
+    assert f'@supermetric:"{NAME_MISSING}"' in out.err
+
+
+# --- Codex P2 findings on PR #267 --------------------------------------------
+
+def _write_raw(path: Path, doc: dict) -> bytes:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(yaml.safe_dump(doc, sort_keys=False), encoding="utf-8")
+    return path.read_bytes()
+
+
+def _idless(name):
+    return {k: v for k, v in _sm_doc(None, name).items() if k != "id"}
+
+
+def test_dashboard_sync_preflight_never_writes_sm_yaml(monkeypatch, tmp_path, capsys):
+    """An id-less SM YAML, in an unrelated third_party project and in
+    content/supermetrics, is byte-identical after the preflight: the check
+    loads without minting ids.  The preflight stops this sync, so the
+    import path (whose sm_id_map() mints by the UUID contract) is not run."""
+    tp_file = tmp_path / "third_party/other/supermetrics/idless.yaml"
+    tp_before = _write_raw(tp_file, _idless("[Other] Idless SM"))
+    f_file = tmp_path / "content/supermetrics/zz_idless.yaml"
+    f_before = _write_raw(f_file, _idless(f"{P} Idless"))
+    client = _FakeClient()
+    rc, imports, out = _run_dash_sync(
+        monkeypatch, tmp_path, capsys,
+        [_sm_doc(UUID_USED, NAME_USED, ref=NAME_MISSING)], client, [_view(NAME_USED)],
+    )
+    assert rc == 1, out.err
+    assert imports == []
+    assert tp_file.read_bytes() == tp_before
+    assert f_file.read_bytes() == f_before
+
+
+def test_load_repo_sms_is_read_only_for_the_post_import_walker(tmp_path):
+    """_run_dep_walker shares _load_repo_sms, so its SM load does not mint
+    ids either."""
+    f_file = tmp_path / "sms/idless.yaml"
+    before = _write_raw(f_file, _idless(f"{P} Idless"))
+    defs, err = dash_cli._load_repo_sms(str(tmp_path / "sms"))
+    assert err == ""
+    assert [d.name for d in defs] == [f"{P} Idless"]
+    assert defs[0].id  # an in-memory stand-in id
+    assert f_file.read_bytes() == before
+
+
+SHARED = f"{P} Shared SM"
+UUID_TP = "cccccccc-3333-4333-8333-cccccccccccc"
+
+
+def _same_named_pair(tmp_path, factory_ref, tp_ref):
+    """Write the third_party/acme twin; return the factory SM docs."""
+    _write_sms(tmp_path / "third_party/acme/supermetrics",
+               [_sm_doc(UUID_TP, SHARED, ref=tp_ref)])
+    return [_sm_doc(UUID_USED, SHARED, ref=factory_ref)]
+
+
+def _acme_view():
+    view = _view(SHARED)
+    view.provenance = "acme"
+    return view
+
+
+def test_preflight_checks_the_sm_the_renderer_uses_not_a_same_named_one(
+        monkeypatch, tmp_path, capsys):
+    """A third-party view names an SM whose display name exists in both
+    content/supermetrics and third_party/acme.  The renderer's unscoped
+    sm_id_map() resolves the column to the factory SM, so that formula is
+    the one checked: the third-party twin's missing referent does not
+    block."""
+    client = _FakeClient()
+    factory = _same_named_pair(tmp_path, factory_ref=None, tp_ref=NAME_MISSING)
+    rc, imports, out = _run_dash_sync(
+        monkeypatch, tmp_path, capsys, factory, client, [_acme_view()])
+    assert rc == 0, out.err
+    assert imports == [b"zip"]
+    assert NAME_MISSING not in out.err
+
+
+def test_preflight_blocks_on_the_renderer_sm_even_with_a_valid_twin(
+        monkeypatch, tmp_path, capsys):
+    client = _FakeClient()
+    factory = _same_named_pair(tmp_path, factory_ref=NAME_MISSING, tp_ref=None)
+    rc, imports, out = _run_dash_sync(
+        monkeypatch, tmp_path, capsys, factory, client, [_acme_view()])
+    assert rc == 1
+    assert imports == []
     assert f'@supermetric:"{NAME_MISSING}"' in out.err
