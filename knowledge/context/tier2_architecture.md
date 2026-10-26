@@ -250,20 +250,126 @@ buildkit (`python3 -m sdk_buildkit`), from buildkit 1.0.11:
 - `javac` runs with `-proc:none` (framework and adapter compiles), so an
   annotation processor inside a classpath jar never executes at build time.
 
-### Defect gate in pak repos (re-vendor pending)
+### Defect gate in pak repos (generated vendored copy, #226)
 
-Each pak repo's release CI runs a VENDORED copy of
-`src/vcfcf_packaging/defects.py` as `ci/defect_gate.py` (run as a plain
-script, no package). The copies predate #153, so until they are refreshed a
-registry entry with a multi-token `Affects:` still parses as valid there and
-gates nothing. After #153 lands, every pak repo must re-vendor
-`ci/defect_gate.py` from the current `defects.py`. The re-vendor waits on
-Scott's decision about where the defect gate should live (vendored copy,
-fetched at CI time, or shipped in the buildkit). Script mode is covered by
-`tests/test_defect_affects_single_token.py`: with no managed-paks registry
-importable, a malformed entry still fails closed for the pak being gated
-when its first token names that pak, and the lookup failure is reported on
-stderr.
+Each pak repo's release CI runs the RULE-012 gate as `ci/defect_gate.py`
+(plain script, stdlib only) BEFORE it downloads the buildkit, so it cannot
+use `sdk_buildkit/defect_gate.py`. Decision (#226): the factory module
+`src/vcfcf_packaging/defects.py` is the single implementation, and
+`ci/defect_gate.py` is a GENERATED copy of it, never hand-edited.
+
+- Generate: `python3 -m vcfcf_packaging vendor-defect-gate --out <pak>/ci/defect_gate.py`.
+  The output is a `#` comment header carrying
+  `vcfcf-defect-gate-source-sha256` (the factory module it came from) and
+  `vcfcf-defect-gate-body-sha256` (everything below the header), then the
+  module with exactly one line changed: `_STANDALONE_REQUIRE_REGISTRY = True`.
+  Deterministic, so a copy is checked by regenerating it.
+- Behaviour difference from the factory CLI, by design: the vendored copy
+  always applies `--require-registry`. Pak CI fetched the registry on
+  purpose, so it exits 1, as the hand-vendored gate did, on:
+  - an absent, empty or unrecognised registry (no valid entry);
+  - any malformed entry whose target cannot be confirmed (`Affects:` missing,
+    misspelled, without the bold, empty, under a malformed heading with
+    other bullets, or a multi-token value whose candidates do not include
+    the gated pak) and that does not already refuse this pak
+    (`unconfirmed_errors()`, #226 review B1).
+
+  The factory's own `defect-gate`, `release`, `publish` and the pre-push
+  hook never pass the flag and keep RULE-012's isolation: an absent
+  registry and an unconfirmed entry both warn and pass. In every caller a
+  malformed entry refuses (exit 2) every pak it names, and an entry
+  confirmed to name another pak does not refuse this one.
+- Pak CI checks its copy against the factory (#226 review B2, Scott's
+  decision 2026-10-26): `python3 ci/defect_gate.py --verify-vendored
+  --against <defects.py> --against-ref <sha>`, with `defects.py` fetched AS
+  DATA (never executed) at the same factory commit as the registry. Exit 1
+  when the copy was edited after generation, carries a byte-order mark, or
+  is not what that `defects.py` generates; the stale message names the fix,
+  "regenerate with 'python3 -m vcfcf_packaging vendor-defect-gate --out
+  ci/defect_gate.py' from a factory checkout at <sha>". Trade accepted: any
+  change to `defects.py` on factory `main` blocks every pak's tag build until
+  that pak regenerates (one command), so an old parser never gates the
+  newest registry. `--verify-vendored` without `--against` only proves no
+  hand edit. On the buildkit's copy it exits 1 and says it is the kit copy,
+  which carries no checksums.
+- Factory-side drift check: `python3 -m vcfcf_packaging vendor-defect-gate --check`
+  with no paths checks the live managed paks (read through
+  `managed_paks.load_registry()`, so retired paks never appear) plus the
+  sdk-template clone, and skips a clone that is not present. Never glob
+  `content/sdk-adapters/*`: that matches the retired vcommunity clones.
+
+**Adopting it in a pak repo.** The repos are the live managed paks
+(compliance, unifi, synology today; take the list from the registry reader)
+plus `vcf-content-factory-sdk-template`. Skip the retired vcommunity,
+vcommunity-os and vcommunity-vsphere. Do this only from a factory `main`
+that contains the #226 review B1 matrix rows, since deleting the pak-side
+test file relies on the factory matrix covering what it covered. In each
+repo:
+
+1. `python3 -m vcfcf_packaging vendor-defect-gate --out content/sdk-adapters/<name>/ci/defect_gate.py`
+   (from the factory root).
+2. Delete `tests/ci/test_defect_gate.py` and the `tests/ci/` directory. Its
+   cases run in the factory, and it fails against the generated copy (it
+   expects the old in-process `DefectRegistryError` API and exit 1 where
+   the gate now exits 2).
+3. In `.github/workflows/build-pak-on-tag.yml`, DELETE the
+   "Test the vendored defect gate" step
+   (`python3 -m unittest discover -s tests/ci ...`). Left in place after
+   step 2 it exits 5 ("NO TESTS RAN") and breaks every tag build.
+4. Replace the "Defect gate (RULE-012)" step's `run:` from the `REG_SHA=`
+   line down with the block below. Two changes from today's step:
+   - `REG_SHA` resolves factory `main`'s HEAD commit instead of the last
+     commit that touched the registry. The registry content is the same
+     (HEAD carries the latest `defects.md`), but `defects.py` must come
+     from the SAME commit: at the registry's last-touching commit it can be
+     older than the module the pak regenerated from, which would fail a
+     fresh copy as stale. The log still names the exact commit that gated
+     the release.
+   - `defects.py` is fetched with `curl -o` into a file that nothing
+     executes or imports; only `--against` reads it, as text, to regenerate
+     and compare. The gate code that runs is still the committed
+     `ci/defect_gate.py`, so no remote code crosses onto the runner.
+
+   ```yaml
+          REG_SHA="$(gh api "repos/${REGISTRY_REPO}/commits/main" --jq '.sha')"
+          if ! printf '%s' "$REG_SHA" | grep -qE '^[0-9a-f]{40}$'; then
+            echo "::error::Could not resolve ${REGISTRY_REPO} main (got '${REG_SHA}'). Failing closed." >&2
+            exit 1
+          fi
+          RAW="https://raw.githubusercontent.com/${REGISTRY_REPO}/${REG_SHA}"
+          # Both DATA, both at one pinned commit: the registry, and the gate
+          # module the vendored copy must have been generated from. Neither
+          # is executed; defects_src.py is only read by --against.
+          curl -fsSL "${RAW}/${REGISTRY_PATH}" -o defects.md
+          curl -fsSL "${RAW}/src/vcfcf_packaging/defects.py" -o defects_src.py
+          echo "Defect registry and gate source: ${REGISTRY_REPO}@${REG_SHA}"
+          python3 ci/defect_gate.py --verify-vendored \
+            --against defects_src.py --against-ref "$REG_SHA"
+          echo "Gating pak '$NAME' against the live factory defect registry (vendored gate)..."
+          python3 ci/defect_gate.py --pak "$NAME" --registry defects.md
+          # exit 0 = clear; 1 = stale or edited gate, or an unusable registry
+          # (absent, empty, or an entry whose target cannot be read);
+          # 2 = refused (an open blocker, or a malformed entry naming this pak).
+          # Any non-zero propagates via set -e and fails the build before it starts.
+   ```
+
+   Everything above `REG_SHA=` in that step (`set -euo pipefail`, the
+   `NAME` derivation, the missing-`ci/defect_gate.py` check) stays.
+5. Rewrite the comment block above the gate steps. It still says to
+   re-vendor by hand and reconcile the two implementations, that a malformed
+   DEF heading exits 1, and the inline exit comment reads "1 = bad
+   registry". The new text: the gate is generated by `vendor-defect-gate`
+   and never edited; regenerate it when the factory's `defects.py` changes;
+   exit 0 clear, 1 unusable registry, an entry whose target cannot be read,
+   or a failed verify, 2 refused (an open blocker, or a malformed entry
+   naming this pak).
+6. From the factory: `python3 -m vcfcf_packaging vendor-defect-gate --check`
+   reports OK for every clone.
+
+`tests/test_defect_gate_parity.py` runs one fixture matrix (ported from the
+template's `tests/ci/test_defect_gate.py`) against the module, the buildkit
+copy and the generated vendored copy. Script mode without the managed-paks
+registry is covered by `tests/test_defect_affects_single_token.py`.
 
 ## Agent roster for Tier 2
 
@@ -978,6 +1084,7 @@ Empirical basis: `knowledge/context/investigations/suiteapi_ambient_auth_devel_2
 
 | Date | Change |
 |---|---|
+| 2026-10-26 | **Pak repos vendor a generated defect gate (issue #226).** New `python3 -m vcfcf_packaging vendor-defect-gate --out PATH | --check PATH...` writes or checks the `ci/defect_gate.py` a pak repo vendors: `defects.py` behind a checksum header (source and body SHA-256), with `--require-registry` defaulted on, the only change. The generated copy self-verifies with `--verify-vendored [--against <defects.py>]`. The buildkit's `sdk_buildkit/defect_gate.py` still copies the module verbatim, so it gains the generator functions and the `--verify-vendored` flag (which exits 1 there: the kit header carries no checksums) but gates exactly as before, `--require-registry` still opt-in. See §Defect gate in pak repos. No `BUILDKIT_VERSION` bump: pak CI does not run the kit's gate, and the next kit cut carries the change. Review round (#226): under `--require-registry` (always on in the vendored copy) a malformed entry whose target cannot be confirmed refuses every pak (exit 1), where the default gate warns and passes (`unconfirmed_errors()`); pak CI runs `--verify-vendored --against` the `defects.py` fetched at the registry's commit (`--against-ref` names it in the regenerate advice); `--check` with no paths reads the live paks through the registry reader; the kit copy and a BOM get their own verify messages; `--out` into a missing directory is a clean error. **Adapter adoption:** live managed paks plus the sdk-template, per §Defect gate in pak repos, Adopting it in a pak repo: regenerate `ci/defect_gate.py`, delete `tests/ci/` and its workflow step, replace the gate step with the pinned-commit fetch and `--verify-vendored --against`, rewrite the workflow comment block. |
 | 2026-10-24 | **Compile matrix: one leg per supported line at its own Java, the 8.18.7 leg, several compat jars, `--release 11` for what ships (issue #252, RULE-019).** The shipped compile (framework and adapter, `build-framework.sh` primary) uses `javac --release 11` instead of `-source 11 -target 11`, so a Java 12+ library call fails the build instead of throwing `NoSuchMethodError` on the 8.18 collector (OpenJDK 11). It found one: `ManagedHttpClient`'s DNS round-robin retry copied the request with `HttpRequest.newBuilder(HttpRequest, BiPredicate)` (Java 16); it now copies field by field with Java 11 API in the package-private `ManagedHttpClient.copyWithUri` (method, body publisher, headers, timeout, version, expect-continue; the JDK's restricted headers Host, Connection, Content-Length, Expect and Upgrade are skipped, since the client derives them), covered by `adapter_framework/test/.../http/ManagedHttpClientCopyTest.java`, which `tests/managementpacks/test_managed_http_client_copy.py` compiles with `--release 11` and runs. That was the only call site `--release 11` flagged across the framework and the compliance, unifi and synology sources. Then the same main source (never tests) compiles once per supported line, nothing kept: 8.18.7 (`vrops-adapters-sdk-8.18.7.jar`, `--release 11`), 9.0 (the 2.2 jar again, `--release 17`) and 9.1.1.0100 (`--release 25`). Each leg's `--release` is its line's collector Java, read from the jar's class files, so each line's own class library is checked (a Java 17 or 25 removal, and `[removal]` warnings such as `ThreadDeath` on the 25 leg), on a JDK at least that new found per leg. A supplied jar is matched to its line by sha256 (`_SDK_COMPAT_LINES`, equal to `adapter_runtime/PROVENANCE.md`, test-checked). Every line is expected: one no supplied jar covers prints the SKIPPED box and fails a `--require-sdk-compat` run, unless `VCFCF_SDK_COMPAT_LEGS` (comma list of `8.18.7`, `9.0`, `9.1.1.0100`) narrows the set. Every leg runs after one fails; a missing symbol owned by `java.*`, `javax.*` or `jdk.*` is reported as not in the Java N class library, anything else against the jar. `--sdk-compat-jar` repeats (factory CLI and the kit), `VCFCF_SDK_COMPAT_JARS` is its env form, the one-jar `VCFCF_SDK_COMPAT_JAR` still works, all add up. The one-primary-SDK-jar check stays. `build-framework.sh` runs the legs whenever python3 can import the package (the 2.2 jar is the 9.0 leg) and still builds without python3, skipping them loudly. Factory CI `sdk-compat` has three rows (8.18.7 on JDK 17, 9.0 on JDK 17, 9.1.1.0100 on JDK 25), each fetching its jar from the private sdk-runtime repo (all three are there; `SDK_RUNTIME_SSH_KEY` is set), checking its hash against PROVENANCE.md, and running required with `VCFCF_SDK_COMPAT_LEGS` set to its own line. Measured 2026-10-24: compliance with all three legs required passes (JDK 17 for 8.18.7 and 9.0, Temurin 25.0.5 for 9.1.1.0100); the 25 leg shows the `ThreadDeath` `[removal]` warning; `java.rmi.activation` and `Runtime.traceInstructions` pass the 8.18.7 leg and fail the 9.0 leg as Java 17 library misses. **Versioning:** `BUILDKIT_VERSION` `1.0.18` (merge order: installer/shims branch 1.0.16, adapter-framework designs 1.0.17, this third); #242's fail-on-`[removal]` gate from 1.0.16 is carried into the per-leg code: the framework pass (`fail_on_removal`) fails on a `[removal]` warning on any leg, the framework + adapter pass still only prints them. **Adapter adoption:** every Tier 2 pak needs a rebuild on 1.0.18 for the `ManagedHttpClient` fix to reach an 8.18 collector; the framework and all seven Java paks compile clean with `--release 11` against 2.2 and 8.18.7 (framework review measurement; this branch measured compliance, unifi and synology). Pak CI gets the per-line legs when each pak repo's `build-pak-on-tag.yml` passes the jars (the #250 pattern, template first). |
 | 2026-10-24 | **Adapter framework designs: certificate names, Test Connection text, cycle start, connect timeout (issues #185, #206, #205, #221, #222).** Opt-in certificate name checking (#185, #206): new `com.vcfcf.adapter.http.CertificateNames` (ported from compliance `VCenterCertificates`, builds 93 and 94: `nameCheckingContext`, `strictHostnameVerifier`, `secure`, `isNameMismatch`, `expectedHost`, `nameMatches`), `VcfCfAdapter.getPlatformSslContext(String dialledHost)` and `HttpClientBuilder.platformSsl(adapter, dialledHost)`; the platform chain check runs first, unchanged, then a SAN/CN match against the dialled host during the handshake, fail closed on no host; the no-argument forms and the Suite API hop (`openPlatformConnection`, trust-all and ignore-hostname, the loopback exemption) are unchanged. The stale 2026-06-30 claim that `openPlatformConnection` sets a peer-gated strict verifier is marked superseded. Test Connection text (#205): neutral default pointing at the accept dialog and at entering the host by the name on its certificate, naming Allow Insecure SSL only when `describesAllowInsecure(config)` finds the identifier in the pak's describe; a certificate name failure (`CertificateNames.isNameMismatch`, or the no-usable-host refusal `isNoUsableHost`) gets name-specific default text (`certificateNameFailureMessage`: the certificate does not name <host>, enter the host by a name on the certificate) and also goes through the hook (framework review B1); new protected hook `certificateFailureMessage(Throwable, ResourceConfig, String)`; every pak-hook wrapper rethrows a `VirtualMachineError` or a thread kill (`isThreadKill`, matched by class name as in #242; no framework code names the type) and restores an interrupt. Cycle start (#221): protected `onCycleStart()`, default no-op, once at the top of `onCollect` before `needsRediscovery` and discovery, anything but a fatal error logged and the cycle continues; `needsRediscovery` is pinned at exactly once per cycle. Connect timeout (#222): `HttpClientBuilder.connectTimeout(Duration)`, default the `timeout` value, non-positive rejected; `timeout` stays the per-request read budget. New tests `CertificateNamesTest` (235 checks, real wrong-name HTTPS handshakes, and Validate Connection driven through `onTest` against a wrong-name server) and `HttpClientBuilderTest`; `CertificateReviewTest` and `AdapterInstanceStatusTest` extended. **Versioning:** `BUILDKIT_VERSION` bumped to `1.0.17`; reaches paks once `sdk-buildkit-v1.0.17` is tagged and `sdk-buildkit-v1` moves to it. **Adapter adoption:** every change is opt-in or a no-op default, so a rebuild on 1.0.17 changes nothing a pak does except the Test Connection wording for an untrusted certificate (no Allow Insecure advice where the describe has no such field). Compliance can replace `VCenterCertificates.nameChecking` with `getPlatformSslContext(host)` and then drop its rethrow-without-cause workaround in favour of `certificateFailureMessage` (its wrong-name failures reach the hook with `CertificateNames.isNameMismatch` true); unifi and synology opt in to name checking with `platformSsl(this, host)` and move their cycle-start marker from `needsRediscovery` to `onCycleStart()`; synology can set `connectTimeout`. None of this is applied by this change. |
 | 2026-10-24 | **Pak install: post-install dashboard checks (issues #244, #200).** `python3 -m vcfcf_managementpacks install` (with the default wait) now checks that each dashboard the pak ships finished building, by the pak's own dashboard ids over `getDashboardList` (a `CUSTOM` dashboard export does not carry pak dashboards), and prints the same `MATERIALIZATION` lines as `vcfcf_dashboards sync`; STALLED exits 3 (installed, post-install check failed), distinct from 1. For each `dashboards.properties` binding it reads the server's Summary copy and prints `SUMMARY OK` / `SUMMARY INCOMPLETE <kind> <copy id> (<n> of <m> widgets loading)` as information. The #200 repair (wait for the source, then bind again) is opt-in, `--summary-rebind` or `VCFCF_SUMMARY_REBIND=1`: on 2026-10-24 compliance 0.0.0.98 showed it refused by the server on 9.0.2 and 8.18.7 (generic Internal Server Error panel, nothing written, exit 3) and not needed on 9.1.1; a refused bind now quotes the HTTP status and a redacted 200-character excerpt of the answer. Cause of the refusal is open. Not in the buildkit (the installer is factory-only), so no `BUILDKIT_VERSION` change. **Adapter adoption:** none; operators of 9.0.2 and 8.18.7 bind the Summary dashboard by hand after the source finishes until #200 is resolved. |

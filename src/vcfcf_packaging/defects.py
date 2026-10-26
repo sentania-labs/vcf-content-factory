@@ -29,7 +29,10 @@ absent registry, or one holding no ``DEF`` entry at all, warns and passes
 :class:`DefectRegistryError`.  The standalone entrypoint's
 ``--require-registry`` refuses (exit 1) on absent or empty instead, for a
 caller that fetched the registry on purpose and must never read a failed
-fetch as an all-clear (#226).
+fetch as an all-clear (#226).  It also refuses every pak when an entry is
+malformed AND its target cannot be confirmed (see
+:func:`unconfirmed_errors`), where the default gate warns and blocks nothing.  The copy a pak repo vendors as
+``ci/defect_gate.py`` is generated from this file with that flag always on.
 
 Public API
 ----------
@@ -97,6 +100,15 @@ format_defect_line(entry) -> str
     Format one defect for human output:
     ``DEF-NNN  <title>  (first seen <first_seen>, source <source>)``
 
+vendored_gate_text(source_text) -> str
+    The vendorable ``ci/defect_gate.py`` for pak-repo CI, generated from this
+    module's text: a checksum header, then this file with
+    ``--require-registry`` defaulted on.  See "Vendored copy for pak-repo CI".
+
+verify_vendored_text(text, source_text=None) -> Optional[str]
+    Why ``text`` is not a faithful vendored copy (hand-edited, or with
+    ``source_text`` stale), or None.
+
 REGISTRY_PATH
     Default registry path (``knowledge/context/defects.md`` relative to repo root).
 
@@ -119,6 +131,7 @@ Optional fields: Closing-evidence (required when Status is ``closed``), Related.
 """
 from __future__ import annotations
 
+import hashlib
 import re
 import sys
 from dataclasses import dataclass, field, replace
@@ -1183,6 +1196,37 @@ def _read_registry_for_gate(
     return registry
 
 
+def unconfirmed_errors(
+    registry: "Registry", pak_name: Optional[str] = None,
+) -> List[ParseError]:
+    """Parse errors whose target is unknown and that do not block ``pak_name``.
+
+    A malformed entry with no confirmed scope (its ``Affects:`` line is
+    missing, misspelled, empty or unreadable) blocks nothing by default:
+    RULE-012's isolation, so one sloppy edit cannot stop every release in
+    the factory.  A gate that fetched the registry on purpose
+    (``--require-registry``, always on in a pak repo's vendored copy) cannot
+    tell whether such an entry was meant for the pak it is gating, and
+    refuses on any of these instead (#226 review B1), as the hand-vendored
+    gate did.
+
+    An error whose candidates include ``pak_name`` is excluded: it already
+    refuses that pak.  With ``pak_name`` None (``--all``), an error with any
+    candidate is excluded, since ``gate_all`` lists each candidate.
+    """
+    out: List[ParseError] = []
+    for err in registry.errors:
+        if err.scoped:
+            continue
+        if pak_name is None:
+            if err.candidates:
+                continue
+        elif any(_norm(c) == _norm(pak_name) for c in err.candidates):
+            continue
+        out.append(err)
+    return out
+
+
 def gate_pak(
     pak_name: str,
     registry_path: "str | Path | None" = None,
@@ -1309,6 +1353,172 @@ def format_defect_line(entry: DefectEntry) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Vendored copy for pak-repo CI (#226)
+#
+# A pak repo's release CI runs the gate BEFORE it downloads the buildkit, so
+# it cannot use sdk_buildkit/defect_gate.py and carries its own copy as
+# ci/defect_gate.py.  That copy is GENERATED from this file, never written by
+# hand: ``python3 -m vcfcf_packaging vendor-defect-gate --out <path>``.  The
+# generated text is a comment header carrying two SHA-256 checksums, then
+# this file with exactly one line changed (_STANDALONE_REQUIRE_REGISTRY).
+#
+#   source sha256: of this file, the factory module it was generated from
+#   body sha256:   of everything below the header, as written
+#
+# ``python3 ci/defect_gate.py --verify-vendored`` (stdlib, no factory needed)
+# proves the body is what was generated; ``--against <defects.py>`` also
+# proves it is what that factory module generates today.  Pak CI runs the
+# --against form, with defects.py fetched as data at the same factory commit
+# as the registry, so a stale copy fails the tag build (#226 review B2: an
+# old parser must never gate the newest registry).  The factory side
+# checks a copy with ``vendor-defect-gate --check <path>``.  The generator
+# lives HERE, not in the CLI, so the vendored copy carries it too and can
+# regenerate itself for the comparison.
+# ---------------------------------------------------------------------------
+
+#: Default of ``--require-registry`` when this file runs as a script.  False
+#: here, so the factory module and the sdk-buildkit's verbatim copy keep the
+#: RULE-012 default: an absent or entry-less registry warns and passes.
+#: vendored_gate_text() sets it to True in the ci/defect_gate.py a pak repo
+#: vendors.  That CI fetched the registry on purpose, so a failed fetch must
+#: never read as an all-clear, and a pak repo that regenerates without
+#: touching its workflow keeps the refusal its hand-vendored gate had.
+_STANDALONE_REQUIRE_REGISTRY = False
+
+#: File name a pak repo vendors the gate under (``ci/defect_gate.py``).
+VENDORED_GATE_NAME = "defect_gate.py"
+
+_VENDOR_SOURCE_MARK = "# vcfcf-defect-gate-source-sha256: "
+#: First words of the header vcfcf_managementpacks/buildkit.py puts on the
+#: kit's verbatim copy, recognised so --verify-vendored names it.
+_KIT_HEADER_PREFIX = "# GENERATED FILE, do not edit. sdk-buildkit "
+_VENDOR_BODY_MARK = "# vcfcf-defect-gate-body-sha256: "
+#: The one line the generator changes.  Anchored to a whole line, so the
+#: mentions of the name in comments and code never match.
+_VENDOR_DEFAULT_LINE_RE = re.compile(
+    r"^_STANDALONE_REQUIRE_REGISTRY = False$", re.MULTILINE
+)
+
+
+def _sha256_text(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def vendored_gate_text(source_text: str) -> str:
+    """The vendorable ``ci/defect_gate.py`` generated from ``source_text``.
+
+    ``source_text`` is the text of this module (``vcfcf_packaging/defects.py``).
+    Deterministic: the same source always yields the same bytes, which is
+    what lets a copy be checked by regenerating it.
+
+    Raises:
+        ValueError: if ``source_text`` does not carry the require-registry
+            default line exactly once (not a defects.py this generator knows).
+    """
+    body, count = _VENDOR_DEFAULT_LINE_RE.subn(
+        "_STANDALONE_REQUIRE_REGISTRY = True", source_text
+    )
+    if count != 1:
+        raise ValueError(
+            "source is not vcfcf_packaging/defects.py: expected exactly one "
+            f"'_STANDALONE_REQUIRE_REGISTRY = False' line, found {count}"
+        )
+    header = (
+        "# GENERATED FILE, do not edit. The RULE-012 defect gate, vendored for\n"
+        "# pak-repo CI from src/vcfcf_packaging/defects.py in\n"
+        "# sentania-labs/vcf-content-factory by\n"
+        "#   python3 -m vcfcf_packaging vendor-defect-gate --out ci/defect_gate.py\n"
+        "# Fix the factory module and regenerate; never edit this copy (#226).\n"
+        "#\n"
+        "# Pak CI:\n"
+        "#   python3 ci/defect_gate.py --verify-vendored --against <defects.py>\n"
+        "#       --against-ref <sha>   (defects.py fetched, as data, at <sha>)\n"
+        "#   python3 ci/defect_gate.py --pak <name> --registry defects.md\n"
+        "# Exit 0 clear, 1 unusable registry or failed verify, 2 refused.  Unlike\n"
+        "# the factory module, this copy refuses (exit 1) an absent, empty or\n"
+        "# unrecognised registry by default: --require-registry is always on.\n"
+        "#\n"
+        f"{_VENDOR_SOURCE_MARK}{_sha256_text(source_text)}\n"
+        f"{_VENDOR_BODY_MARK}{_sha256_text(body)}\n"
+    )
+    return header + body
+
+
+def _split_vendored(text: str) -> Tuple[str, str]:
+    """``(header, body)``: the leading run of ``#`` lines, and the rest."""
+    lines = text.splitlines(keepends=True)
+    n = 0
+    while n < len(lines) and lines[n].startswith("#"):
+        n += 1
+    return "".join(lines[:n]), "".join(lines[n:])
+
+
+def verify_vendored_text(
+    text: str, source_text: Optional[str] = None,
+    source_ref: Optional[str] = None,
+) -> Optional[str]:
+    """Why ``text`` is not a faithful vendored gate, or None when it is.
+
+    Without ``source_text``: the header must carry both checksums and the
+    body must hash to the recorded one (no hand edit since generation).
+    With ``source_text`` (a factory ``defects.py``): additionally, ``text``
+    must be byte for byte what that source generates (not stale, header not
+    edited either).  ``source_ref`` names where ``source_text`` came from
+    (a factory commit SHA in pak CI); it only shapes the regenerate advice.
+    """
+    regen = (
+        "regenerate with 'python3 -m vcfcf_packaging vendor-defect-gate --out "
+        "ci/defect_gate.py' from a factory checkout at "
+        + (_clip(source_ref, 64) if source_ref
+           else "the commit the given defects.py came from")
+    )
+    if text.startswith("\ufeff"):
+        return (
+            "starts with a UTF-8 byte-order mark (an editor added one); "
+            "regenerate it, or save it without the BOM"
+        )
+    header, body = _split_vendored(text)
+    if any(line.startswith(_KIT_HEADER_PREFIX) for line in header.splitlines()):
+        return (
+            "this is the sdk-buildkit's copy (sdk_buildkit/defect_gate.py), "
+            "which carries no checksums; --verify-vendored applies only to a "
+            "pak repo's generated ci/defect_gate.py"
+        )
+    marks = {}
+    for line in header.splitlines():
+        for mark in (_VENDOR_SOURCE_MARK, _VENDOR_BODY_MARK):
+            if line.startswith(mark):
+                marks[mark] = line[len(mark):].strip()
+    if _VENDOR_SOURCE_MARK not in marks or _VENDOR_BODY_MARK not in marks:
+        return (
+            "no generated checksum header: this is not a vendored copy made by "
+            "'python3 -m vcfcf_packaging vendor-defect-gate'; regenerate it"
+        )
+    if _sha256_text(body) != marks[_VENDOR_BODY_MARK]:
+        return (
+            "edited by hand: the body no longer matches the checksum recorded "
+            "when it was generated; regenerate it from the factory module"
+        )
+    if source_text is not None:
+        if _sha256_text(source_text) != marks[_VENDOR_SOURCE_MARK]:
+            return (
+                "stale: generated from a factory defects.py with sha256 "
+                f"{_clip(marks[_VENDOR_SOURCE_MARK], 64)}, the given source is "
+                f"{_sha256_text(source_text)}; {regen}"
+            )
+        try:
+            expected = vendored_gate_text(source_text)
+        except ValueError as exc:
+            return f"cannot regenerate from the given source: {exc}"
+        if text != expected:
+            return (
+                "differs from what the given factory defects.py generates "
+                f"although the checksums agree (header edited?); {regen}"
+            )
+    return None
+
+
+# ---------------------------------------------------------------------------
 # Standalone entrypoint
 #
 # This block makes defects.py runnable as a bare script with no package
@@ -1335,11 +1545,19 @@ def format_defect_line(entry: DefectEntry) -> str:
 #      also an absent registry or one with no DEF entry at all: for a caller
 #      that fetched the registry on purpose (pak CI), either means the fetch
 #      went wrong, never an all-clear (the vendored ci/defect_gate.py rule,
-#      kept as an opt-in so the RULE-012 default is unchanged, #226).
+#      kept as an opt-in so the RULE-012 default is unchanged, #226).  And
+#      with --require-registry, a malformed entry whose target cannot be
+#      confirmed and that does not already refuse this pak (exit 2) refuses
+#      every pak: unconfirmed_errors() (#226 review B1).
 #   2, one or more open blocking defects found
 #
+# --verify-vendored exits 0 when this file is a faithful generated copy (see
+# "Vendored copy for pak-repo CI" above) and 1 otherwise.
+#
 # The sdk-buildkit ships this file, unchanged but for a generated header, as
-# sdk_buildkit/defect_gate.py (vcfcf_managementpacks/buildkit.py).
+# sdk_buildkit/defect_gate.py (vcfcf_managementpacks/buildkit.py).  Pak repos
+# vendor it as ci/defect_gate.py through vendored_gate_text(), which differs
+# only in defaulting --require-registry on.
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
@@ -1373,6 +1591,34 @@ if __name__ == "__main__":
         default=False,
         help="list every open blocking defect across all artifacts",
     )
+    _mode.add_argument(
+        "--verify-vendored",
+        action="store_true",
+        default=False,
+        help=(
+            "check that this file is an unedited copy generated by "
+            "'python3 -m vcfcf_packaging vendor-defect-gate' (exit 0) or not "
+            "(exit 1); reads no registry"
+        ),
+    )
+    _p.add_argument(
+        "--against",
+        metavar="DEFECTS_PY",
+        default=None,
+        help=(
+            "with --verify-vendored: also require this file to be exactly what "
+            "the given factory src/vcfcf_packaging/defects.py generates"
+        ),
+    )
+    _p.add_argument(
+        "--against-ref",
+        metavar="SHA",
+        default=None,
+        help=(
+            "with --against: the factory commit that file was fetched from, "
+            "named in the regenerate advice on a mismatch"
+        ),
+    )
     _p.add_argument(
         "--registry",
         metavar="PATH",
@@ -1386,14 +1632,42 @@ if __name__ == "__main__":
     _p.add_argument(
         "--require-registry",
         action="store_true",
-        default=False,
+        default=_STANDALONE_REQUIRE_REGISTRY,
         help=(
-            "exit 1 when the registry is absent or holds no DEF entry, instead "
-            "of warning and passing (for CI that fetched the registry on purpose)"
+            "exit 1 when the registry is absent or holds no valid DEF entry, "
+            "instead of warning and passing (for CI that fetched the registry "
+            "on purpose)"
+            + ("; always on in this vendored copy"
+               if _STANDALONE_REQUIRE_REGISTRY else "")
         ),
     )
 
     _args = _p.parse_args()
+
+    if _args.against is not None and not _args.verify_vendored:
+        _p.error("--against is only valid with --verify-vendored")
+    if _args.against_ref is not None and _args.against is None:
+        _p.error("--against-ref is only valid with --against")
+    if _args.verify_vendored:
+        try:
+            _self_text = Path(__file__).read_text(encoding="utf-8")
+            _source_text = (
+                Path(_args.against).read_text(encoding="utf-8")
+                if _args.against is not None else None
+            )
+        except (OSError, UnicodeDecodeError) as _exc:
+            print(f"ERROR: --verify-vendored could not read a file "
+                  f"({type(_exc).__name__}: {_exc})", file=_sys.stderr)
+            _sys.exit(1)
+        _problem = verify_vendored_text(
+            _self_text, _source_text, _args.against_ref
+        )
+        if _problem is not None:
+            print(f"ERROR: {Path(__file__).name}: {_problem}", file=_sys.stderr)
+            _sys.exit(1)
+        print(f"{Path(__file__).name}: vendored defect gate verified"
+              + (f" against {_args.against}" if _args.against else ""))
+        _sys.exit(0)
     _registry_path = (
         Path(_args.registry) if _args.registry is not None
         else preferred_registry(_DEFAULT_REGISTRY)
@@ -1405,11 +1679,26 @@ if __name__ == "__main__":
                 raise FileNotFoundError(
                     f"--require-registry: no defect registry at {_registry_path}"
                 )
-            if parse_registry(_registry_path).unreadable:
+            _parsed = parse_registry(_registry_path)
+            if _parsed.unreadable:
                 raise DefectRegistryError(
                     f"--require-registry: {_registry_path} holds no valid "
                     f"'### DEF-NNN' entry; the registry is empty or in an "
                     f"unrecognised format. Refusing to treat it as clear."
+                )
+            _unconfirmed = unconfirmed_errors(
+                _parsed, None if _args.all else _args.pak
+            )
+            if _unconfirmed:
+                raise DefectRegistryError(
+                    f"--require-registry: {len(_unconfirmed)} registry "
+                    f"entr{'y' if len(_unconfirmed) == 1 else 'ies'} could not "
+                    f"be attributed to any artifact (the 'Affects:' line is "
+                    f"missing, misspelled or unreadable), so this gate cannot "
+                    f"prove "
+                    + (f"{_args.pak!r}" if not _args.all else "anything")
+                    + " is clear and refuses every pak: "
+                    + "; ".join(str(_e) for _e in _unconfirmed[:5])
                 )
         if _args.all:
             _blockers = gate_all(_registry_path)

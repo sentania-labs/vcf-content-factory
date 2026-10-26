@@ -560,6 +560,71 @@ def cmd_check_staleness(args) -> int:
         return 1
 
 
+#: The sdk-template clone, relative to the factory root.  The template repo
+#: is deliberately not a registered managed pak (managed_paks.md), but new
+#: paks are instantiated from it, so its vendored gate is checked too.
+_SDK_TEMPLATE_CLONE = "content/sdk-adapters/template/"
+
+
+def cmd_vendor_defect_gate(args) -> int:
+    """Write or check the ``ci/defect_gate.py`` a pak repo vendors (#226).
+
+    ``--out PATH`` writes the copy generated from this checkout's
+    ``vcfcf_packaging/defects.py``.  ``--check PATH [PATH ...]`` exits 1 when
+    any copy is unreadable, hand-edited, or stale against this checkout's
+    module, naming which; 0 when every copy is exactly what it generates.
+    ``--check`` with no PATH checks the live managed paks, read through the
+    managed-paks registry reader (retired paks excluded), plus the
+    sdk-template clone; a clone that is not present is skipped.
+    """
+    from . import defects
+
+    source = Path(defects.__file__).read_text(encoding="utf-8")
+    if args.check is not None:
+        rc = 0
+        if args.check:
+            targets = [(Path(raw), False) for raw in args.check]
+        else:
+            from .managed_paks import load_registry as _load_paks
+            root = Path(defects.__file__).resolve().parents[2]
+            clones = [pak.target for pak in _load_paks()] + [_SDK_TEMPLATE_CLONE]
+            targets = [
+                (root / clone / "ci" / defects.VENDORED_GATE_NAME, True)
+                for clone in clones
+            ]
+        checked = 0
+        for path, optional in targets:
+            if optional and not path.parent.parent.is_dir():
+                print(f"SKIP {path}: clone not present")
+                continue
+            checked += 1
+            try:
+                text = path.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError) as exc:
+                print(f"FAIL {path}: unreadable ({type(exc).__name__})")
+                rc = 1
+                continue
+            problem = defects.verify_vendored_text(text, source)
+            if problem is None:
+                print(f"OK   {path}")
+            else:
+                print(f"FAIL {path}: {problem}")
+                rc = 1
+        if not checked:
+            print("nothing checked: no pak clone is present")
+        return rc
+
+    out = Path(args.out)
+    try:
+        out.write_text(defects.vendored_gate_text(source), encoding="utf-8")
+    except OSError as exc:
+        print(f"ERROR: cannot write {out} ({type(exc).__name__}: {exc})",
+              file=sys.stderr)
+        return 1
+    print(f"wrote {out} (generated from {Path(defects.__file__).name})")
+    return 0
+
+
 def cmd_defect_gate(args) -> int:
     """Run the defect gate and exit 0 (clean), 1 (malformed registry), or 2 (blocked).
 
@@ -1801,6 +1866,36 @@ def build_parser() -> argparse.ArgumentParser:
         help="slug (filename stem) of the content item",
     )
     pdg.set_defaults(func=cmd_defect_gate)
+
+    # -----------------------------------------------------------------------
+    # vendor-defect-gate (--out PATH | --check PATH [PATH ...])
+    # -----------------------------------------------------------------------
+    pvdg = sub.add_parser(
+        "vendor-defect-gate",
+        help=(
+            "write or check the ci/defect_gate.py a pak repo vendors, generated "
+            "from vcfcf_packaging/defects.py with a checksum header (#226)"
+        ),
+    )
+    _vdg_mode = pvdg.add_mutually_exclusive_group(required=True)
+    _vdg_mode.add_argument(
+        "--out",
+        metavar="PATH",
+        default=None,
+        help="write the generated copy to PATH (e.g. <pak>/ci/defect_gate.py)",
+    )
+    _vdg_mode.add_argument(
+        "--check",
+        metavar="PATH",
+        nargs="*",
+        default=None,
+        help=(
+            "exit 1 unless every PATH is exactly what this checkout generates; "
+            "with no PATH, check the live managed paks' clones and the "
+            "sdk-template clone"
+        ),
+    )
+    pvdg.set_defaults(func=cmd_vendor_defect_gate)
 
     # -----------------------------------------------------------------------
     # publish
