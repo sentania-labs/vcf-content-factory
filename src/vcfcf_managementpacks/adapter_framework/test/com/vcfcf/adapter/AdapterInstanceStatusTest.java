@@ -79,6 +79,10 @@ public class AdapterInstanceStatusTest {
             testInterruptedChildIsNotRefused();
             testSdkNotTakingStatusIsLogged();
             testInstanceNotTakingStatusIsLogged();
+            testMoveSummaryIsOneLinePerCycle();
+            testOffListWarnOncePerStatus();
+            testFailedChildRecoversNextCycle();
+            testStackTraceOncePerFailureStreak();
         }
         report();
     }
@@ -177,6 +181,9 @@ public class AdapterInstanceStatusTest {
                 VcfCfAdapter.isAdapterInstance(inst, new ResourceConfig(9000)));
         assertFalse("other id is a child", VcfCfAdapter.isAdapterInstance(inst, new ResourceConfig(1)));
         assertFalse("no instance: a child", VcfCfAdapter.isAdapterInstance(null, inst));
+        ResourceConfig noId = new ResourceConfig();
+        assertFalse("null id is a child even as the same object (SDK isAdapterInstResourceConfig)",
+                VcfCfAdapter.isAdapterInstance(noId, noId));
     }
 
     // -----------------------------------------------------------------------
@@ -308,9 +315,10 @@ public class AdapterInstanceStatusTest {
                 ResourceStatusEnum.RESOURCE_STATUS_NO_DATA_RECEIVING, a.statusOf(lastResources.get(0)));
         assertEquals("healthy child shows DATA_RECEIVING",
                 ResourceStatusEnum.RESOURCE_STATUS_DATA_RECEIVING, a.statusOf(lastResources.get(1)));
-        assertTrue("the move is logged", a.log.contains(
-                "status RESOURCE_STATUS_ERROR is not accepted on a child object by the SDK; "
-                + "set RESOURCE_STATUS_NO_DATA_RECEIVING instead"));
+        assertTrue("the move is logged in the cycle summary", a.log.contains(
+                "1 failed object(s) set to RESOURCE_STATUS_NO_DATA_RECEIVING this cycle (first: ?/1)"));
+        assertTrue("summary says ERROR or DOWN on the instance",
+                a.log.contains("which turns ERROR or DOWN when every object in the cycle fails"));
         assertFalse("partial failure: instance untouched", a.statuses.containsKey(a.instance));
     }
 
@@ -348,11 +356,113 @@ public class AdapterInstanceStatusTest {
             ResourceStatusEnum got = a.statusOf(lastResources.get(0));
             assertTrue(st + ": child got " + got, got != null
                     && ResourceStatusEnum.isResourceAllowedStatus(got));
-            if (got != st) {
-                assertTrue(st + ": the move is logged",
-                        a.log.contains("status " + st.name() + " is not accepted on a child object"));
+            if (st == ResourceStatusEnum.RESOURCE_STATUS_ERROR
+                    || st == ResourceStatusEnum.RESOURCE_STATUS_DOWN) {
+                assertTrue(st + ": the move is in the cycle summary",
+                        a.log.contains("1 failed object(s) set to RESOURCE_STATUS_NO_DATA_RECEIVING"));
+            } else if (got != st) {
+                assertTrue(st + ": the move is logged at WARN", a.log.lines().stream().anyMatch(
+                        l -> l.startsWith("WARN ") && l.contains(
+                                "status " + st.name() + " is not accepted on a child object")));
             }
         }
+    }
+
+    /** Review N1: the expected ERROR/DOWN move is one INFO line per cycle, not one per object. */
+    private static void testMoveSummaryIsOneLinePerCycle() throws Exception {
+        TestAdapter a = adapter();
+        a.collector.failing.addAll(Arrays.asList(1, 2, 3));
+        a.collector.downIds.add(2);
+        a.onCollect(a.instance, resources(1, 2, 3, 4));
+        assertEquals("one summary line", 1, countLines(a, "INFO", "failed object(s) set to", null));
+        assertTrue("summary counts all three", a.log.contains(
+                "3 failed object(s) set to RESOURCE_STATUS_NO_DATA_RECEIVING this cycle (first: ?/1)"));
+        assertEquals("no per-object move line", 0,
+                countLines(a, null, "is not accepted on a child object", null));
+        a.log.clear();
+        a.onCollect(a.instance, resources(4));
+        assertEquals("healthy cycle: no summary", 0,
+                countLines(a, null, "failed object(s) set to", null));
+    }
+
+    /** Review N1: an off-list pak mapping is warned once per status per instance, not every cycle. */
+    private static void testOffListWarnOncePerStatus() throws Exception {
+        TestAdapter a = adapter();
+        a.collector.failing.addAll(Arrays.asList(1, 2));
+        a.collector.mapTo = ResourceStatusEnum.RESOURCE_STATUS_UNKNOWN;
+        for (int cycle = 0; cycle < 3; cycle++) a.onCollect(a.instance, resources(1, 2, 3));
+        assertEquals("UNKNOWN warned once over 3 cycles and 6 failures", 1,
+                countLines(a, "WARN", "status RESOURCE_STATUS_UNKNOWN is not accepted", null));
+        assertEquals("children still NO_DATA_RECEIVING",
+                ResourceStatusEnum.RESOURCE_STATUS_NO_DATA_RECEIVING, a.statusOf(lastResources.get(1)));
+        a.collector.mapTo = ResourceStatusEnum.RESOURCE_STATUS_COLLECTOR_DOWN;
+        a.onCollect(a.instance, resources(1, 2, 3));
+        a.onCollect(a.instance, resources(1, 2, 3));
+        assertEquals("a second status gets its own single WARN", 1,
+                countLines(a, "WARN", "status RESOURCE_STATUS_COLLECTOR_DOWN is not accepted", null));
+    }
+
+    /** Review N5: NO_DATA_RECEIVING is not sticky; a child that recovers shows DATA_RECEIVING. */
+    private static void testFailedChildRecoversNextCycle() throws Exception {
+        TestAdapter a = adapter();
+        a.collector.failing.add(1);
+        a.onCollect(a.instance, resources(1, 2));
+        ResourceConfig child = lastResources.get(0);
+        assertEquals("cycle 1: failed child NO_DATA_RECEIVING",
+                ResourceStatusEnum.RESOURCE_STATUS_NO_DATA_RECEIVING, a.statusOf(child));
+        a.collector.failing.clear();
+        a.onCollect(a.instance, Arrays.asList(child, lastResources.get(1)));
+        assertEquals("cycle 2: recovered child DATA_RECEIVING",
+                ResourceStatusEnum.RESOURCE_STATUS_DATA_RECEIVING, a.statusOf(child));
+        assertEquals("nothing refused in either cycle", 0, a.refused.size());
+    }
+
+    /**
+     * Review follow-up 2: the stack trace at WARN once per failure streak; a
+     * one-line WARN plus the trace at DEBUG while it keeps failing; a new
+     * streak after success, or after the resource left a cycle, logs it again.
+     */
+    private static void testStackTraceOncePerFailureStreak() throws Exception {
+        TestAdapter a = adapter("DEBUG");
+        a.collector.failing.add(1);
+        for (int cycle = 0; cycle < 3; cycle++) a.onCollect(a.instance, resources(1, 2));
+        assertEquals("trace at WARN once in a 3-cycle streak", 1,
+                countLines(a, "WARN", "error collecting ?/1", true));
+        assertEquals("one-line WARN on cycles 2 and 3", 2,
+                countLines(a, "WARN", "error collecting ?/1", false));
+        assertTrue("streak length named", a.log.contains("(failed 3 cycles in a row; stack trace at DEBUG)"));
+        assertEquals("trace at DEBUG on cycles 2 and 3", 2,
+                countLines(a, "DEBUG", "stack trace for ?/1", true));
+
+        a.collector.failing.clear();
+        a.onCollect(a.instance, resources(1, 2));
+        a.collector.failing.add(1);
+        a.log.clear();
+        a.onCollect(a.instance, resources(1, 2));
+        assertEquals("after a success: new streak, trace at WARN again", 1,
+                countLines(a, "WARN", "error collecting ?/1", true));
+
+        a.onCollect(a.instance, resources(2));
+        a.log.clear();
+        a.onCollect(a.instance, resources(1, 2));
+        assertEquals("after leaving a cycle: streak forgotten, trace at WARN again", 1,
+                countLines(a, "WARN", "error collecting ?/1", true));
+    }
+
+    /**
+     * Captured lines at {@code level} (any level when null) containing
+     * {@code text}; {@code withTrace} true/false filters on an attached
+     * throwable, null ignores it.
+     */
+    private static int countLines(TestAdapter a, String level, String text, Boolean withTrace) {
+        int n = 0;
+        for (String l : a.log.lines()) {
+            if (level != null && !l.startsWith(level + " ")) continue;
+            if (!l.contains(text)) continue;
+            if (withTrace != null && withTrace != l.contains(" [thrown ")) continue;
+            n++;
+        }
+        return n;
     }
 
     private static void testInterruptedChildIsNotRefused() throws Exception {
@@ -644,9 +754,13 @@ public class AdapterInstanceStatusTest {
     static List<ResourceConfig> lastResources;
 
     private static TestAdapter adapter() throws Exception {
+        return adapter("INFO");
+    }
+
+    private static TestAdapter adapter(String logLevel) throws Exception {
         TestAdapter a = allocate(TestAdapter.class);
         setField(VcfCfAdapter.class, a, "abortRequested", new AtomicBoolean(false));
-        a.log = LogCapture.create();
+        a.log = LogCapture.create(logLevel);
         Class<?> fi = Class.forName("com.vmware.vrops.logging.AdapterLoggerFactory");
         Object factory = Proxy.newProxyInstance(fi.getClassLoader(), new Class<?>[] {fi},
                 (p, m, args) -> m.getName().equals("getLogger") ? a.log.logger() : null);

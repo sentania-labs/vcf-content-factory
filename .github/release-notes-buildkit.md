@@ -91,23 +91,6 @@ that is the intended gate.
 - 1.0.16 is the installer and ThreadDeath round (factory #242); this kit
   carries both.
 
-## Behavior since 1.0.19
-
-- A child object whose collect fails now shows `NO_DATA_RECEIVING` (#245).
-  The SDK accepts only `NONE`, `DATA_RECEIVING` and `NO_DATA_RECEIVING` on a
-  child object, the same on 8.18.7, 9.0 and 9.1.1; `ERROR` and `DOWN` only on
-  the adapter instance. Before this kit, the `ERROR` or `DOWN` that
-  `mapCollectException` returns (or the `ERROR` default) was refused by the
-  SDK on the child, and the object kept its last status. The framework now
-  moves any status a child cannot take to `NO_DATA_RECEIVING` and logs the
-  move. `ERROR` and `DOWN` still count as failures, so a cycle where every
-  object fails still sets the account row to `ERROR` (or `DOWN`), as since
-  1.0.14.
-- A status the SDK does not take (`setResourceStatus` returns `false`) is
-  logged at WARN for objects and for the adapter instance, instead of being
-  ignored.
-- No pak source change. Rebuild every pak on this kit to pick it up.
-
 ## Behavior since 1.0.18
 
 - The pak is compiled with `javac --release 11` instead of `-source 11
@@ -138,6 +121,31 @@ that is the intended gate.
 
 Version note: 1.0.16 is the installer/shims round and 1.0.17 the
 adapter-framework designs round; this is 1.0.18.
+
+## Behavior since 1.0.19
+
+- A child object whose collect fails now shows `NO_DATA_RECEIVING` (#245).
+  The SDK accepts only `NONE`, `DATA_RECEIVING` and `NO_DATA_RECEIVING` on a
+  child object, the same on 8.18.7, 9.0 and 9.1.1; `ERROR` and `DOWN` only on
+  the adapter instance. Before this kit, the `ERROR` or `DOWN` that
+  `mapCollectException` returns (or the `ERROR` default) was refused by the
+  SDK on the child, and the object kept its last status. The framework now
+  moves any status a child cannot take to `NO_DATA_RECEIVING`. `ERROR` and
+  `DOWN` still count as failures, so a cycle where every object fails still
+  sets the account row to `ERROR` (or `DOWN`), as since 1.0.14.
+- Logging: the expected `ERROR`/`DOWN` move is one INFO line per cycle
+  (count and first object). A `mapCollectException` status the SDK refuses
+  everywhere (for example `UNKNOWN`) is one WARN per status per adapter
+  instance. A status the SDK does not take (`setResourceStatus` returns
+  `false`) is logged at WARN every time, for objects and for the adapter
+  instance, instead of being ignored.
+- A failed collect logs its stack trace at WARN once per failure streak.
+  While the same object keeps failing, each cycle logs one WARN line with
+  the message and the streak length, and the stack trace at DEBUG. A
+  success, or the object leaving the collected set, ends the streak.
+- No pak source change. Rebuild every pak on this kit to pick it up.
+
+Version note: this is 1.0.19, after 1.0.18.
 
 ## Behavior since 1.0.15
 

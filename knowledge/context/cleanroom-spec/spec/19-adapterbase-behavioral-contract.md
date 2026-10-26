@@ -103,19 +103,20 @@ onCollect(adapterInstance, resources):
 ### Per-resource collection status `[API]`
 
 `CommonConstants$ResourceStatusEnum` (set via base
-`setResourceStatus(rc, …)` / `setResourceDown(rc, …)`, or
-`ResourceStatus.setStatus(…)`):
+`setResourceStatus(rc, …)`, `setResourceDown(rc, …)` (adapter instance
+only), or `ResourceStatus.setStatus(…)`). Which resource takes which status
+is in the "Settable on" column and the 2026-10-26 correction below:
 
-| Constant | Meaning | When to set |
-|---|---|---|
-| `RESOURCE_STATUS_DATA_RECEIVING` | healthy, data arrived this cycle | resource collected OK |
-| `RESOURCE_STATUS_OLD_DATA_RECEIVING` | stale data only | got data but older than cycle |
-| `RESOURCE_STATUS_NO_DATA_RECEIVING` | reachable, no data | resource yielded nothing |
-| `RESOURCE_STATUS_DOWN` | resource down | target reports/looks down |
-| `RESOURCE_STATUS_ERROR` | collection error | exception collecting this resource |
-| `RESOURCE_STATUS_NO_PARENT_MONITORING` | parent not monitored | dependency gap |
-| `RESOURCE_STATUS_COLLECTOR_DOWN` | collector-side failure | infra fault |
-| `RESOURCE_STATUS_UNKNOWN` / `_NONE` | indeterminate / unset | — |
+| Constant | Meaning | When to set | Settable on |
+|---|---|---|---|
+| `RESOURCE_STATUS_DATA_RECEIVING` | healthy, data arrived this cycle | resource collected OK | any resource |
+| `RESOURCE_STATUS_OLD_DATA_RECEIVING` | stale data only | got data but older than cycle | neither (refused on both lists) |
+| `RESOURCE_STATUS_NO_DATA_RECEIVING` | reachable, no data | resource yielded nothing; a failed child object | any resource |
+| `RESOURCE_STATUS_DOWN` | resource down | target reports/looks down (adapter instance only) | adapter instance only |
+| `RESOURCE_STATUS_ERROR` | collection error | collection failed (adapter instance only; a child shows NO_DATA_RECEIVING) | adapter instance only |
+| `RESOURCE_STATUS_NO_PARENT_MONITORING` | parent not monitored | dependency gap | neither (refused on both lists) |
+| `RESOURCE_STATUS_COLLECTOR_DOWN` | collector-side failure | infra fault (adapter instance only) | adapter instance only |
+| `RESOURCE_STATUS_UNKNOWN` / `_NONE` | indeterminate / unset | — | UNKNOWN: neither; NONE: any resource |
 
 `ResourceStatusEnum.isAdapterAllowedStatus(status)` `[API]` gates which
 statuses an adapter is permitted to set — **call it (or pre-validate)

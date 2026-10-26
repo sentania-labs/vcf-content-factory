@@ -31,7 +31,11 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashSet;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -223,6 +227,22 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
      * kept; issue #224).
      */
     private volatile com.integrien.alive.common.adapter3.Logger adapterLogger;
+
+    /**
+     * Consecutive failed collects per resource ({@link #streakKey}), so the
+     * stack trace is logged at WARN only on the first failure of a streak
+     * (issue #245 review). Cleared on success; pruned to the resources of
+     * each completed cycle. Created lazily: see {@link #failureStreaks()}.
+     */
+    private volatile Map<Object, Integer> failureStreaks;
+
+    /**
+     * Status moves already warned about for this adapter instance, keyed
+     * {@code child:<status>} or {@code instance:<status>} (issue #245 review
+     * N1): a pak mapping to a status the SDK refuses is a fixed defect, so it
+     * is logged once, not every cycle. Created lazily.
+     */
+    private volatile Set<String> warnedStatusMoves;
 
     // -----------------------------------------------------------------------
     // Constructors
@@ -852,7 +872,9 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
      * failure status the SDK accepts on a child on 8.18.7, 9.0 and 9.1.1;
      * the cycle still counts it as ERROR or DOWN for the adapter instance
      * rule above. Before this the SDK refused it and the object kept its old
-     * status.
+     * status. The move is one INFO line per cycle. A failed collect logs its
+     * stack trace at WARN on the first failure of a streak only; while the
+     * object keeps failing, one WARN line per cycle and the trace at DEBUG.
      */
     @Override
     @SuppressWarnings("unchecked")
@@ -881,7 +903,7 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
         if (collector == null) {
             for (ResourceConfig rc : resources) {
                 setStatusSafe(adapterInstance, rc,
-                        ResourceStatusEnum.RESOURCE_STATUS_NO_DATA_RECEIVING);
+                        ResourceStatusEnum.RESOURCE_STATUS_NO_DATA_RECEIVING, null);
             }
             return;
         }
@@ -932,6 +954,7 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
         // §1 step 2: per-resource gather.
         MetricDataCache cache = this.metricCache;
         CycleOutcome outcome = new CycleOutcome();
+        Set<Object> seenThisCycle = new HashSet<>();
 
         for (ResourceConfig rc : resources) {
             if (isAbortRequested() || Thread.currentThread().isInterrupted()) {
@@ -941,6 +964,8 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
             }
 
             outcome.attempted++;
+            Object streakKey = streakKey(rc);
+            seenThisCycle.add(streakKey);
             try {
                 List<MetricData> samples = new ArrayList<>();
                 collector.collect(config, httpClient, rc, samples, this);
@@ -978,7 +1003,8 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
 
                 // §1: REQUIRED per-resource status every cycle.
                 setStatusSafe(adapterInstance, rc,
-                        ResourceStatusEnum.RESOURCE_STATUS_DATA_RECEIVING);
+                        ResourceStatusEnum.RESOURCE_STATUS_DATA_RECEIVING, outcome);
+                failureStreaks().remove(streakKey);
 
             } catch (InterruptedException ie) {
                 Thread.currentThread().interrupt();
@@ -987,22 +1013,47 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
                 // Issue #245: ERROR is refused on a child; NO_DATA_RECEIVING
                 // is the failed-object status the SDK accepts.
                 setStatusSafe(adapterInstance, rc,
-                        ResourceStatusEnum.RESOURCE_STATUS_NO_DATA_RECEIVING);
+                        ResourceStatusEnum.RESOURCE_STATUS_NO_DATA_RECEIVING, outcome);
                 outcome.cut = true;
                 break;
             } catch (Exception e) {
                 String msg = e.getMessage() != null ? e.getMessage()
                         : e.getClass().getSimpleName();
-                logWarn("onCollect: error collecting " + rcLabel(rc) + ": " + msg, e);
+                // Issue #245 review: the stack trace at WARN once per failure
+                // streak; while the resource keeps failing, one line at WARN
+                // and the trace at DEBUG.
+                int streak = failureStreaks().merge(streakKey, 1, Integer::sum);
+                String line = "onCollect: error collecting " + rcLabel(rc) + ": " + msg;
+                if (streak == 1) {
+                    logWarn(line, e);
+                } else {
+                    logWarn(line + " (failed " + streak
+                            + " cycles in a row; stack trace at DEBUG)");
+                    logDebugTrace("onCollect: stack trace for " + rcLabel(rc), e);
+                }
                 ResourceStatusEnum status = collector.mapCollectException(e);
                 ResourceStatusEnum effective =
                         status != null ? status : ResourceStatusEnum.RESOURCE_STATUS_ERROR;
                 // Issue #245: a child shows ERROR or DOWN as NO_DATA_RECEIVING
                 // (setStatusSafe); the cycle still counts it as ERROR or DOWN,
                 // so an all-failed cycle raises the adapter instance (#223).
-                setStatusSafe(adapterInstance, rc, effective);
+                setStatusSafe(adapterInstance, rc, effective, outcome);
                 outcome.recordFailure(effective, e);
             }
+        }
+
+        // Issue #245 review N1: one line per cycle for the expected move.
+        if (outcome.moved > 0) {
+            logInfo("onCollect: " + outcome.moved + " failed object(s) set to "
+                    + "RESOURCE_STATUS_NO_DATA_RECEIVING this cycle (first: "
+                    + outcome.firstMoved + "): the SDK takes ERROR and DOWN only on "
+                    + "the adapter instance, which turns ERROR or DOWN when every "
+                    + "object in the cycle fails");
+        }
+
+        // Forget streaks of resources no longer collected (removed objects).
+        if (!outcome.cut) {
+            failureStreaks().keySet().retainAll(seenThisCycle);
         }
 
         // Issue #223: a cycle in which nothing could be collected shows on
@@ -3020,6 +3071,15 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
         }
     }
 
+    /**
+     * DEBUG with cause, framework-internal. Private so it cannot clash with a
+     * {@code logDebug} a pak already declares.
+     */
+    private void logDebugTrace(String message, Throwable t) {
+        com.integrien.alive.common.adapter3.Logger l = adapterLogger();
+        if (l.isDebugEnabled()) l.debug(message, t);
+    }
+
     /** Log at INFO level to the adapter-specific log file. */
     protected void logInfo(String message) {
         adapterLogger().info(message);
@@ -3051,6 +3111,14 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
         boolean everyFailureDown = true;
         boolean cut;
         Exception firstFailure;
+        /** Children whose ERROR or DOWN was set as NO_DATA_RECEIVING (issue #245). */
+        int moved;
+        String firstMoved;
+
+        void recordMove(String label) {
+            moved++;
+            if (firstMoved == null) firstMoved = label;
+        }
 
         /**
          * Count a resource failure that left it ERROR or DOWN. Other mapped
@@ -3198,42 +3266,84 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
     }
 
     /**
-     * True when {@code rc} is the adapter instance resource: the same object,
-     * or the same resource id (the SDK's own test compares ids). Visible to
-     * tests.
+     * True when {@code rc} is the adapter instance resource. Compares
+     * resource ids only, as the SDK's {@code isAdapterInstResourceConfig}
+     * does: a resource with a null id is a child there, so it is a child here
+     * (issue #245 review N4). Visible to tests.
      */
     static boolean isAdapterInstance(ResourceConfig adapterInstance, ResourceConfig rc) {
         if (rc == null || adapterInstance == null) return false;
-        if (rc == adapterInstance) return true;
         Integer id = rc.getResourceId();
         return id != null && id.equals(adapterInstance.getResourceId());
+    }
+
+    /**
+     * Key for {@link #failureStreaks}: the resource id, or the label for a
+     * resource that has none yet.
+     */
+    private static Object streakKey(ResourceConfig rc) {
+        Integer id = rc == null ? null : rc.getResourceId();
+        return id != null ? id : "label:" + rcLabel(rc);
+    }
+
+    private Map<Object, Integer> failureStreaks() {
+        Map<Object, Integer> m = failureStreaks;
+        if (m == null) {
+            synchronized (this) {
+                m = failureStreaks;
+                if (m == null) {
+                    m = new ConcurrentHashMap<>();
+                    failureStreaks = m;
+                }
+            }
+        }
+        return m;
+    }
+
+    private Set<String> warnedStatusMoves() {
+        Set<String> s = warnedStatusMoves;
+        if (s == null) {
+            synchronized (this) {
+                s = warnedStatusMoves;
+                if (s == null) {
+                    s = ConcurrentHashMap.newKeySet();
+                    warnedStatusMoves = s;
+                }
+            }
+        }
+        return s;
     }
 
     /**
      * Set a resource's status from {@link #onCollect}, never letting the SDK
      * drop it (issue #245). The status is first moved onto the list the SDK
      * accepts for that resource: {@link #childStatusFor} for a child,
-     * {@link #instanceStatusFor} for the adapter instance. A move is logged
-     * (INFO for ERROR or DOWN on a child, the expected case; WARN for any
-     * other status, which is a pak mapping the platform cannot show). If the
-     * SDK still does not take the status ({@code setResourceStatus} returns
-     * false, for example with no collect result), that is logged at WARN.
+     * {@link #instanceStatusFor} for the adapter instance. ERROR or DOWN moved
+     * on a child is the expected case: it is counted on {@code outcome} and
+     * {@link #onCollect} logs one INFO line per cycle. Any other move is a pak
+     * mapping the platform cannot show and is logged at WARN once per status
+     * per adapter instance. If the SDK still does not take the status
+     * ({@code setResourceStatus} returns false, for example with no collect
+     * result), that is logged at WARN every time.
      */
     private void setStatusSafe(ResourceConfig adapterInstance, ResourceConfig rc,
-            ResourceStatusEnum status) {
+            ResourceStatusEnum status, CycleOutcome outcome) {
         boolean instance = isAdapterInstance(adapterInstance, rc);
         ResourceStatusEnum safe = instance ? instanceStatusFor(status) : childStatusFor(status);
         if (safe != status) {
-            String line = "onCollect: " + rcLabel(rc) + ": status "
-                    + (status == null ? "null" : status.name())
-                    + " is not accepted on " + (instance ? "the adapter instance" : "a child object")
-                    + " by the SDK; set " + safe.name() + " instead";
-            if (!instance && (status == ResourceStatusEnum.RESOURCE_STATUS_ERROR
-                    || status == ResourceStatusEnum.RESOURCE_STATUS_DOWN)) {
-                logInfo(line + " (the adapter instance turns " + status.name()
-                        + " when every object in the cycle fails)");
+            if (!instance && outcome != null
+                    && (status == ResourceStatusEnum.RESOURCE_STATUS_ERROR
+                        || status == ResourceStatusEnum.RESOURCE_STATUS_DOWN)) {
+                outcome.recordMove(rcLabel(rc));
             } else {
-                logWarn(line);
+                String name = status == null ? "null" : status.name();
+                if (warnedStatusMoves().add((instance ? "instance:" : "child:") + name)) {
+                    logWarn("onCollect: " + rcLabel(rc) + ": status " + name
+                            + " is not accepted on "
+                            + (instance ? "the adapter instance" : "a child object")
+                            + " by the SDK; set " + safe.name() + " instead (logged once per"
+                            + " status for this adapter instance)");
+                }
             }
         }
         boolean accepted;
