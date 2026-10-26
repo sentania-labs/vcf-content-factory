@@ -1764,3 +1764,28 @@ def test_stale_record_with_only_unknown_gets_the_past_tense_line(tmp_path):
     text = "\n".join(collect(root, fake_git()))
     assert "alignment is unknown" not in text
     assert "did not record a run this session" in text
+
+
+# ---------------------------------------------------------------------------
+# Issue #159: leftover src/vcfops_* directories after the shim removal
+# ---------------------------------------------------------------------------
+
+def test_leftover_vcfops_dirs_are_reported_never_deleted(tmp_path):
+    root = make_configured_root(tmp_path)
+    cache = root / "src" / "vcfops_common" / "__pycache__"
+    cache.mkdir(parents=True)
+    (cache / "__init__.cpython-312.pyc").write_bytes(b"x")
+    (root / "src" / "vcfops_packaging").mkdir()
+    lines = collect(root, fake_git())
+    hits = [ln for ln in lines if "vcfops_* shims" in ln]
+    assert len(hits) == 1
+    assert "src/vcfops_common, src/vcfops_packaging" in hits[0]
+    assert "never deletes" in hits[0]
+    assert (cache / "__init__.cpython-312.pyc").exists()
+
+
+def test_no_leftover_vcfops_dirs_stays_green(tmp_path):
+    root = make_configured_root(tmp_path)
+    lines = collect(root, fake_git())
+    assert not any("vcfops_" in ln for ln in lines)
+    assert lines[0].startswith("doctor: all green")

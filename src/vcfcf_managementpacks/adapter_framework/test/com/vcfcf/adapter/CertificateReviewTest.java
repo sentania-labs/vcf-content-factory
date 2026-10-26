@@ -67,6 +67,9 @@ public class CertificateReviewTest {
         testOnTestSkipsHookForOtherFailures();
         testOnTestHookErrorDoesNotEscape();
         testPromptAvailableRethrowsVirtualMachineError();
+        testIsThreadKill();
+        testPromptAvailableRethrowsThreadKill();
+        testPromptAvailableRestoresInterrupt();
         testParseAllowInsecureLegacyAndEnum();
         testParseAllowInsecureLegacyNotFalseMatchesSynology();
         testIsAllowInsecureReadsIdentifier();
@@ -164,6 +167,43 @@ public class CertificateReviewTest {
         @Override
         protected List<String> certificateCheckUrls(ResourceConfig rc) {
             throw new StackOverflowError("simulated");
+        }
+    }
+
+    /**
+     * The error {@code Thread.stop} throws, created reflectively so this test
+     * never names the deprecated-for-removal type (issue #242). Null on a JDK
+     * that no longer has it.
+     */
+    static Error threadKill() {
+        try {
+            return (Error) Class.forName("java.lang.ThreadDeath")
+                    .getDeclaredConstructor().newInstance();
+        } catch (ReflectiveOperationException e) {
+            return null;
+        }
+    }
+
+    /** Throws {@code t} unchecked (lets a hook throw a checked exception). */
+    @SuppressWarnings("unchecked")
+    static <T extends Throwable> RuntimeException sneaky(Throwable t) throws T {
+        throw (T) t;
+    }
+
+    /** Hook throws the thread-kill error. */
+    static class ThreadKillAdapter extends PlainAdapter {
+        @Override
+        protected List<String> certificateCheckUrls(ResourceConfig rc) {
+            throw threadKill();
+        }
+    }
+
+    /** Hook is interrupted. */
+    static class InterruptedAdapter extends PlainAdapter {
+        @Override
+        protected List<String> certificateCheckUrls(ResourceConfig rc) {
+            throw CertificateReviewTest.<RuntimeException>sneaky(
+                    new InterruptedException("simulated"));
         }
     }
 
@@ -452,6 +492,51 @@ public class CertificateReviewTest {
         assertTrue("certificatePromptAvailable swallows a non-fatal Error; got " + other,
                 other == null);
         assertFalse("non-fatal Error from the hook means no prompt", prompt);
+    }
+
+    private static void testIsThreadKill() {
+        Error kill = threadKill();
+        if (kill != null) {
+            assertTrue("isThreadKill matches java.lang.ThreadDeath", VcfCfAdapter.isThreadKill(kill));
+        }
+        assertFalse("isThreadKill: AssertionError is not a thread kill",
+                VcfCfAdapter.isThreadKill(new AssertionError("x")));
+        assertFalse("isThreadKill: StackOverflowError is not a thread kill",
+                VcfCfAdapter.isThreadKill(new StackOverflowError()));
+        assertFalse("isThreadKill: an exception is not a thread kill",
+                VcfCfAdapter.isThreadKill(new RuntimeException("ThreadDeath")));
+        assertFalse("isThreadKill: null is not a thread kill", VcfCfAdapter.isThreadKill(null));
+    }
+
+    private static void testPromptAvailableRethrowsThreadKill() throws Exception {
+        if (threadKill() == null) {
+            return;  // a JDK without the class: nothing can throw it
+        }
+        ThreadKillAdapter a = allocate(ThreadKillAdapter.class);
+        Throwable seen = null;
+        try {
+            a.certificatePromptAvailable(new TestParam(cfg("host", "vc.example.com")));
+        } catch (Throwable t) {
+            seen = t;
+        }
+        assertTrue("certificatePromptAvailable rethrows a thread kill; got " + seen,
+                seen != null && VcfCfAdapter.isThreadKill(seen));
+    }
+
+    private static void testPromptAvailableRestoresInterrupt() throws Exception {
+        InterruptedAdapter a = allocate(InterruptedAdapter.class);
+        Thread.interrupted();  // start clean
+        boolean prompt = true;
+        Throwable seen = null;
+        try {
+            prompt = a.certificatePromptAvailable(new TestParam(cfg("host", "vc.example.com")));
+        } catch (Throwable t) {
+            seen = t;
+        }
+        boolean flagged = Thread.interrupted();  // read and clear
+        assertTrue("an interrupted hook does not escape; got " + seen, seen == null);
+        assertFalse("an interrupted hook means no prompt", prompt);
+        assertTrue("the thread's interrupt status is restored", flagged);
     }
 
     // -----------------------------------------------------------------------

@@ -2341,20 +2341,40 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
      * Whether review URLs are declared for the config under test. Anything the
      * pak's hook throws means "no prompt", so a broken hook cannot replace the
      * tester's own failure, except {@link VirtualMachineError} (out of memory,
-     * stack overflow) and {@link ThreadDeath}, which are rethrown: the JVM or
-     * thread is in no state to continue as if nothing happened.
+     * stack overflow) and a thread kill ({@link #isThreadKill(Throwable)}),
+     * which are rethrown: the JVM or thread is in no state to continue as if
+     * nothing happened. An interrupt is not swallowed either: the thread's
+     * interrupt status is restored before answering "no prompt".
      */
-    @SuppressWarnings("deprecation") // ThreadDeath: deprecated in newer JDKs, still thrown
     final boolean certificatePromptAvailable(TestParam param) {
         try {
             return param != null
                     && !declaredCertificateUrls(param.getAdapterConfig()).isEmpty();
-        } catch (VirtualMachineError | ThreadDeath fatal) {
+        } catch (VirtualMachineError fatal) {
             throw fatal;
         } catch (Throwable t) {
+            if (isThreadKill(t)) {
+                throw (Error) t;
+            }
+            if (t instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
             logWarnSafe("certificateCheckUrls failed during Test Connection: " + t, t);
             return false;
         }
+    }
+
+    /**
+     * True for the error {@code Thread.stop} throws on JDKs that still have it
+     * ({@code java.lang.ThreadDeath}, deprecated for removal, issue #242). It
+     * is matched by class name so the framework never references the
+     * deprecated type: the JDK 25 compile stays warning-free, Java 17
+     * collectors keep rethrowing it, and a JDK without the class simply never
+     * matches (its {@code Thread.stop} throws
+     * {@code UnsupportedOperationException} instead).
+     */
+    static boolean isThreadKill(Throwable t) {
+        return t instanceof Error && "java.lang.ThreadDeath".equals(t.getClass().getName());
     }
 
     /** {@link #logWarn(String, Throwable)} that never throws (logger may be unavailable). */

@@ -86,7 +86,7 @@ from typing import Optional
 # Version constant: bump when kit contents change in a meaningful way
 # ---------------------------------------------------------------------------
 
-BUILDKIT_VERSION = "1.0.15"
+BUILDKIT_VERSION = "1.0.16"
 
 # ---------------------------------------------------------------------------
 # Source paths (relative to this file's parent = vcfcf_managementpacks/)
@@ -408,6 +408,10 @@ VCFCF_SDK_COMPAT_JAVAC); JDK 17 cannot read them.
 
 Without the jar or a JDK 25 the pass is skipped with a loud warning;
 --require-sdk-compat (VCFCF_SDK_COMPAT_REQUIRED=1) turns that into a failure.
+
+Since kit 1.0.16 the framework's own pass also fails on a javac [removal]
+warning (an API deprecated for removal on the Java 25 collectors); the
+framework + adapter pass still only prints them.
 
 ## Other requirements
 

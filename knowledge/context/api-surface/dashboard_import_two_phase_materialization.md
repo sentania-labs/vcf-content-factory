@@ -329,9 +329,45 @@ Every CLI line starts `MATERIALIZATION <STATE>:`.
 | absent | in the import, not in the export | WARNING `MATERIALIZATION ABSENT:` | warn |
 | unchecked | the check itself failed | WARNING `MATERIALIZATION UNCHECKED:` | warn |
 
-`--skip-materialization-check` turns it off. The shipped `install.py` and
-the pak installer do not run this check (follow-up issue). Not yet
-exercised against a live instance (fixtures only).
+`--skip-materialization-check` turns it off. Not yet exercised against a
+live instance (fixtures only).
+
+### The shipped installers (issue #244)
+
+- **`install.py`** (distribution zips, template `2026-10-24-1`): the same
+  check, re-stated inside the standalone script (it ships with no factory
+  import; `tests/test_install_materialization.py` pins parity with the core
+  classifier, sentence for sentence). Same lines, same 180 s single
+  re-check, same `--skip-materialization-check`, `--materialization-wait`
+  and `VCFCF_MATERIALIZATION_WAIT_S`. STALLED joins the warnings (exit 2);
+  INCOMPLETE, ABSENT and UNCHECKED print in their own end-of-run attention
+  list and never change the exit code. Only dashboards the import changed
+  are checked. `install.ps1` does not run the check yet.
+- **Pak installer** (`vcfcf_managementpacks install`): **a `CUSTOM`
+  `DASHBOARDS` export does not carry pak-installed dashboards.** Read on
+  devel 9.0.2 on 2026-10-24 (about 12:15 AM): the export listed 13
+  dashboards, all owned by `admin`, and none of the five compliance pak
+  dashboards, which `getDashboardList` showed as `owner: admin` too. So the
+  pak path reads `getDashboardList` by the pak's own dashboard ids (the
+  importer keeps them) and maps `isLoading: true` to `importComplete:
+  false`, with the pak JSON's `entries` table standing in for the pending
+  `entryKeys` (that table is what the server parks there). The records go
+  through the same core classifier and print the same lines.
+  `getDashboardList` entries on 9.0.2 carry `autoswitchDelay`,
+  `autoswitchEnabled`, `autoswitchTabId`, `description`, `disabled`,
+  `edit`, `editable`, `groupIds`, `id`, `isLoading`, `locked`, `name`,
+  `owner`, `reportUsageCount`, `shared`, `sharedPublicly`; an entry with no
+  `isLoading` key is reported UNCHECKED, never complete. A pak dashboard the
+  list lacks is ABSENT, which catches the silent whole-dashboard drop of
+  `../../lessons/unknown-widget-type-aborts-pak-dashboard-import.md`. A
+  STALLED dashboard exits `install` with 3 (installed, post-install check
+  failed), distinct from 1 (the install failed). Not run with `--no-wait`.
+
+The same STALLED state therefore exits differently per tool, each following
+its own existing convention: `vcfcf_dashboards sync` exits 1, the shipped
+`install.py` exits 2 (its "partial failure" code), and the pak `install`
+exits 3 (installed, post-install check failed; 1 there means the install
+itself failed).
 
 ## Method log (reproducible, read-only)
 
