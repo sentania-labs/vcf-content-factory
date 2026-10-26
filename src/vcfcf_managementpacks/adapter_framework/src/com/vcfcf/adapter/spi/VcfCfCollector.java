@@ -35,7 +35,9 @@ import java.util.List;
  *       top-of-cycle rediscovery (spec/19 §1 step 1).</li>
  *   <li>{@link #mapCollectException} translates a caught exception to an
  *       appropriate {@link ResourceStatusEnum}. Return {@code null} to use
- *       the default ({@code RESOURCE_STATUS_ERROR}).</li>
+ *       the default ({@code RESOURCE_STATUS_ERROR}). On a child object the
+ *       framework shows ERROR and DOWN as {@code RESOURCE_STATUS_NO_DATA_RECEIVING}
+ *       (issue #245).</li>
  * </ul>
  *
  * <h3>MetricData property flag (cert item)</h3>
@@ -166,6 +168,16 @@ public interface VcfCfCollector<C> {
      * if (e instanceof NoDataException) return RESOURCE_STATUS_NO_DATA_RECEIVING;
      * return RESOURCE_STATUS_ERROR;
      * </pre>
+     *
+     * <p><strong>What the object shows (issue #245).</strong> The SDK accepts
+     * only NONE, DATA_RECEIVING and NO_DATA_RECEIVING on a child object (on
+     * 8.18.7, 9.0 and 9.1.1 alike); ERROR and DOWN only on the adapter
+     * instance. So the framework sets any other status, ERROR and DOWN
+     * included, on the failed object as NO_DATA_RECEIVING. ERROR and DOWN
+     * still count as failures: when every object in a cycle fails, the
+     * adapter instance (the account row) is set to ERROR, or DOWN when every
+     * failure was DOWN, with the first failure as the reason. A
+     * NO_DATA_RECEIVING return is not a failure for that rule.
      *
      * @param e the exception thrown by {@link #collect}
      * @return the status to set, or {@code null} for the default
