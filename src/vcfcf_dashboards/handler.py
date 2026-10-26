@@ -29,7 +29,6 @@ from vcfcf_packaging.handler import (
     ValidateResult,
 )
 from vcfcf_supermetrics.client import VCFOpsClient, VCFOpsError
-from vcfcf_supermetrics.loader import sm_id_map
 
 from .client import (
     all_skipped_content_types,
@@ -40,7 +39,30 @@ from .client import (
 )
 from .loader import DashboardValidationError, load_view, load_dashboard
 from .packager import build_import_zip
+from . import sm_columns
 from .ui_client import UIClientError, VCFOpsUIClient
+
+
+def _sm_resolver_or_fail(views, items, result: SyncResult):
+    """The ``supermetric:"<name>"`` column resolver for ``views`` (issue
+    #270): each column binds to the SM of its view's own content set, then
+    the factory, from the same corpus ``vcfcf_dashboards sync`` reads.
+
+    Returns the renderer callable, or None after marking every one of
+    ``items`` failed with the column errors (ambiguous, unresolved, or an
+    id-less SM), so nothing is imported with a column bound to the wrong SM
+    or to none.
+    """
+    resolver = sm_columns.load_sm_corpus().resolver()
+    errors = resolver.column_errors(views)
+    if not errors:
+        return resolver.uuid_for
+    message = "; ".join(errors)
+    for item in items:
+        result.items.append(
+            ItemResult(name=item.name, status="failed", message=message)
+        )
+    return None
 
 
 def _all_skipped_message(api_result: dict, content_type: str) -> str:
@@ -144,6 +166,10 @@ class ViewsHandler(ContentHandler):
         if not views:
             return result
 
+        sm_resolver = _sm_resolver_or_fail(views, views, result)
+        if sm_resolver is None:
+            return result
+
         try:
             user = get_current_user(session)
             marker = discover_marker_filename(session)
@@ -153,7 +179,7 @@ class ViewsHandler(ContentHandler):
                 owner_user_id=user["id"],
                 owner_username=user.get("userName", "admin"),
                 marker_filename=marker,
-                sm_map=sm_id_map(),
+                sm_resolver=sm_resolver,
             )
             api_result = import_content_zip(session, blob)
         except VCFOpsError as exc:
@@ -313,6 +339,11 @@ class DashboardsHandler(ContentHandler):
                     )
                 return result
 
+        sm_resolver = _sm_resolver_or_fail(
+            list(views_by_name.values()), dashboards, result)
+        if sm_resolver is None:
+            return result
+
         try:
             user = get_current_user(session)
             marker = discover_marker_filename(session)
@@ -326,7 +357,7 @@ class DashboardsHandler(ContentHandler):
                 owner_user_id=user["id"],
                 owner_username=user.get("userName", "admin"),
                 marker_filename=marker,
-                sm_map=sm_id_map(),
+                sm_resolver=sm_resolver,
             )
             api_result = import_content_zip(session, blob)
         except VCFOpsError as exc:

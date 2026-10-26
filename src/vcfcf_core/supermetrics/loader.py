@@ -12,8 +12,8 @@ callbacks a caller may supply:
 
 ``load_dir`` takes its directory as a required argument and ``sm_id_map``
 only ever loads the files it is handed (``None`` is an empty map, never a
-scan); the factory wrapper keeps the old ``"supermetrics"`` default and the
-cwd scan.
+scan); the factory wrapper keeps the old ``"supermetrics"`` default (its
+cwd scan for ``sm_id_map(None)`` was removed with issue #270).
 """
 from __future__ import annotations
 
@@ -275,21 +275,32 @@ def sm_id_map(
     clear message.
 
     ``sm_scope=None`` is an empty map: the library never scans a directory
-    for SM YAML. The factory wrapper (``vcfcf_supermetrics.loader.sm_id_map``)
-    keeps the pre-row-2 renderer's unscoped mode on top, scanning
-    ``content/supermetrics`` then ``supermetrics`` under the working
-    directory.
+    for SM YAML. Two different SMs (different ids) sharing a display name in
+    the scope are a ``ValueError`` (issue #270): a ``supermetric:"<name>"``
+    column could not say which it means.
     """
     sm_map: dict[str, str] = {}
     if sm_scope is None:
         return sm_map
+    seen_at: dict[str, Path] = {}
     try:
         for sm_path in sm_scope:
             sm = load_file(
                 sm_path, enforce_framework_prefix=False,
                 on_missing_id=on_missing_id, provenance_of=provenance_of,
             )
+            prior = sm_map.get(sm.name)
+            if prior is not None and prior.lower() != sm.id.lower():
+                # Two different SMs share a display name in one scope: a
+                # supermetric:"<name>" column cannot say which it means, and
+                # last-loaded-wins would bind it silently (issue #270).
+                raise SuperMetricValidationError(
+                    f"super metric name {sm.name!r} is ambiguous in this "
+                    f"scope: {seen_at[sm.name]} ({prior}) and {sm_path} "
+                    f"({sm.id}) share it; rename one"
+                )
             sm_map[sm.name] = sm.id
+            seen_at.setdefault(sm.name, Path(sm_path))
     except Exception as exc:
         raise ValueError(
             f"sm_id_map: failed to load scoped SM for "

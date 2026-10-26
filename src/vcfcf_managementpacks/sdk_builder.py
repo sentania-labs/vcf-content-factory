@@ -1863,13 +1863,14 @@ def _build_views_zip_bytes(views: list, sm_scope: Optional[List[Path]] = None) -
     Returns the zip bytes.  The zip structure mirrors what the VCF Ops
     content importer expects inside a views import payload.
 
-    ``sm_scope``: when provided, restricts SM name resolution to only these
-    YAML files (same scoped-resolution contract used at pak build time).
+    ``sm_scope``: the bundled SM YAML files SM name resolution is restricted
+    to (same scoped-resolution contract used at pak build time). None is an
+    empty scope (issue #270): a name-form column must name a bundled SM.
     """
     from vcfcf_dashboards.render import render_views_xml
     from vcfcf_supermetrics.loader import sm_id_map as _sm_id_map
     xml_text = render_views_xml(
-        views, sm_map=_sm_id_map(sm_scope), sm_scope_active=sm_scope is not None
+        views, sm_map=_sm_id_map(list(sm_scope or [])), sm_scope_active=True
     )
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
@@ -2632,14 +2633,14 @@ def _write_outer_pak(
     # YAML files and build its own name→uuid map so that supermetric:"<name>"
     # column references resolve to the correct "Super Metric|sm_<uuid>"
     # attributeKey.  Both sides derive the UUID from the same YAML id: field —
-    # consistent by construction.  When no supermetrics are bundled, pass
-    # sm_scope=None: in the factory, sm_id_map falls back to its unscoped
-    # mode (scanning the full supermetrics/ dir, if any) before the renderer
-    # runs; in the sdk buildkit, sm_id_map is the vcfcf_core copy and None
-    # is an empty map, so an unbundled SM reference fails the build.
-    _sm_scope: Optional[List[Path]] = None
-    if supermetrics:
-        _sm_scope = [sm.source_path for sm in supermetrics if sm.source_path is not None]
+    # consistent by construction.  The scope is always the pak's own bundled
+    # SMs, an empty list when it bundles none (issue #270): a name-form column
+    # that names an SM the pak does not ship fails the build, here and in the
+    # sdk buildkit alike, instead of binding to a same-named factory SM from
+    # content/supermetrics that the pak never carries.
+    _sm_scope: List[Path] = [
+        sm.source_path for sm in (supermetrics or []) if sm.source_path is not None
+    ]
 
     with zipfile.ZipFile(pak_path, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
         zf.writestr("manifest.txt", _generate_outer_manifest(project))
@@ -2777,12 +2778,10 @@ def _write_outer_pak(
             # The SM name to uuid map is built from _sm_scope so view columns using
             # supermetric:"<name>" syntax resolve to the correct
             # "Super Metric|sm_<uuid>" attributeKey from the bundled SM YAML files.
-            # When _sm_scope is None (no bundled SMs), the factory's sm_id_map
-            # falls back to its directory scan (M2 row 2: the renderer no longer
-            # scans); the sdk buildkit's core copy returns an empty map instead
-            # (M2 row 3), so an unbundled SM reference fails the build there.
+            # _sm_scope is always a list (empty when no SMs are bundled), so an
+            # unbundled SM reference fails the build (issue #270).
             _sm_map = _sm_id_map(_sm_scope)
-            _sm_scope_active = _sm_scope is not None
+            _sm_scope_active = True
             for v in views:
                 xml_text = render_views_xml(
                     [v],
@@ -3026,7 +3025,7 @@ def _write_outer_pak(
 
             _views_by_id = {v.id: v for v in (views or [])}
             _rpt_sm_map = _sm_id_map(_sm_scope)
-            _rpt_sm_scope_active = _sm_scope is not None
+            _rpt_sm_scope_active = True
 
             # Emit content/reports/ dir entry — only once; views may have
             # already written it.  ZipFile silently de-dupes same-path entries
@@ -4246,10 +4245,11 @@ def build_sdk_pak(project_dir: Path, output_dir: Optional[Path] = None,
         # NOTE: content/ is no longer written inside adapters.zip (spec A4).
         # Build sm_scope from bundled SM source paths so that view columns
         # using supermetric:"<name>" resolve against adapter-local SMs, not
-        # the factory-level content/supermetrics/ tree.
-        _sdk_sm_scope: Optional[List[Path]] = None
-        if bundled_supermetrics:
-            _sdk_sm_scope = [sm.source_path for sm in bundled_supermetrics if sm.source_path is not None]
+        # the factory-level content/supermetrics/ tree.  Always a list, empty
+        # when no SMs are bundled (issue #270).
+        _sdk_sm_scope: List[Path] = [
+            sm.source_path for sm in (bundled_supermetrics or []) if sm.source_path is not None
+        ]
         _views_zip_bytes: Optional[bytes] = None
         if bundled_views:
             _views_zip_bytes = _build_views_zip_bytes(bundled_views, sm_scope=_sdk_sm_scope)
@@ -4334,9 +4334,9 @@ def _validate_localization_key_contract(views: list, sm_scope: Optional[List[Pat
     columns using the ``supermetric:"<name>"`` cross-reference form can be
     resolved to ``Super Metric|sm_<uuid>`` using only the bundled SM YAMLs.
     This is the same scoped-resolution path used at build time (step 10 of
-    _build_sdk_pak_inner).  Without it, the renderer falls back to the
-    factory-level ``content/supermetrics/`` tree, which does not contain
-    adapter-local SMs and causes spurious resolution errors here.
+    _build_sdk_pak_inner).  None is an empty scope (issue #270), never the
+    factory-level ``content/supermetrics/`` tree: a pak ships only its own
+    SMs, so a column naming any other one is an error here too.
 
     Returns a list of error strings (empty = all OK).
 
@@ -4364,8 +4364,8 @@ def _validate_localization_key_contract(views: list, sm_scope: Optional[List[Pat
         # Cannot check without the renderer — skip silently (consistent with
         # how the build path handles missing vcfcf_dashboards).
         return errors
-    _sm_map = _sm_id_map(sm_scope)
-    _sm_scope_active = sm_scope is not None
+    _sm_map = _sm_id_map(list(sm_scope or []))
+    _sm_scope_active = True
 
     for view in views:
         uuid = view.id
@@ -4601,10 +4601,11 @@ def validate_sdk_project(project_dir: Path) -> List[str]:
         if bundled_views:
             # Build sm_scope from bundled SM source paths so that view columns
             # using supermetric:"<name>" resolve against adapter-local SMs, not
-            # the factory-level content/supermetrics/ tree.
-            _val_sm_scope: Optional[List[Path]] = None
-            if _bdc_sms:
-                _val_sm_scope = [sm.source_path for sm in _bdc_sms if sm.source_path is not None]
+            # the factory-level content/supermetrics/ tree.  Always a list,
+            # empty when no SMs are bundled (issue #270).
+            _val_sm_scope: List[Path] = [
+                sm.source_path for sm in (_bdc_sms or []) if sm.source_path is not None
+            ]
             loc_errors = _validate_localization_key_contract(bundled_views, sm_scope=_val_sm_scope)
             errors.extend(loc_errors)
     except SdkBuildError as exc:

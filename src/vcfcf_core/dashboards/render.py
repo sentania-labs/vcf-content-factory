@@ -19,7 +19,7 @@ import json
 import re
 import time
 import uuid
-from typing import Iterable, Mapping, Optional
+from typing import Callable, Iterable, Mapping, Optional
 from xml.sax.saxutils import escape
 
 from .loader import (
@@ -691,6 +691,10 @@ def _xml_kind_binding_props(view: ViewDef, col) -> list[str]:
 _SM_COLUMN_PREFIX_RE = re.compile(r"(?i:@?supermetric)\s*:")
 _SM_COLUMN_REF_RE = re.compile(r'''(?i:@?supermetric):["'](.+?)["']$''')
 
+# ``(view, sm_name) -> uuid | None``: per-view super metric resolution
+# (issue #270). See render_view_def_fragments.
+SmResolver = Callable[[ViewDef, str], Optional[str]]
+
 
 def _xml_attribute_item(
     view: ViewDef,
@@ -699,6 +703,7 @@ def _xml_attribute_item(
     sm_map: dict[str, str] | None = None,
     sm_scope_active: bool = False,
     bundle_context: str | None = None,
+    sm_resolver: "SmResolver | None" = None,
 ) -> str:
     # Instanced-group columns (driver + member) have their own wire shape,
     # distinct from every other column kind rendered below. Handle them
@@ -729,10 +734,27 @@ def _xml_attribute_item(
         m = _SM_COLUMN_REF_RE.match(raw)
         if m:
             sm_name = m.group(1)
-            sm_id = (sm_map or {}).get(sm_name)
+            if sm_resolver is not None:
+                # Per-view resolution (issue #270): the caller scopes the
+                # name to the view's own content set. An ambiguous name is
+                # the resolver's ValueError, re-raised with the column.
+                try:
+                    sm_id = sm_resolver(view, sm_name)
+                except ValueError as exc:
+                    raise ValueError(
+                        f'View "{view.name}" column {idx}: {exc}'
+                    ) from exc
+            else:
+                sm_id = (sm_map or {}).get(sm_name)
             if sm_id:
                 attribute_key = f"Super Metric|sm_{sm_id}"
             else:
+                if sm_resolver is not None:
+                    raise ValueError(
+                        f'View "{view.name}" column {idx} references super metric '
+                        f'"{sm_name}" which could not be resolved to a UUID in '
+                        f"the view's own content set or the factory set."
+                    )
                 if sm_scope_active:
                     ctx = bundle_context or "(unknown bundle)"
                     raise ValueError(
@@ -903,9 +925,12 @@ def _render_view_def_fragment(
     sm_map: dict[str, str] | None = None,
     sm_scope_active: bool = False,
     bundle_context: str | None = None,
+    sm_resolver: "SmResolver | None" = None,
 ) -> str:
     items = "".join(
-        _xml_attribute_item(view, c, i, sm_map, sm_scope_active, bundle_context)
+        _xml_attribute_item(
+            view, c, i, sm_map, sm_scope_active, bundle_context, sm_resolver
+        )
         for i, c in enumerate(view.columns)
     )
 
@@ -1068,6 +1093,7 @@ def render_view_def_fragments(
     owning_adapter_kind: Optional[str] = None,
     owning_resource_kind: Optional[str] = None,
     sm_scope_active: bool = False,
+    sm_resolver: "SmResolver | None" = None,
 ) -> str:
     """Render one or more ViewDefs into bare ``<ViewDef>...</ViewDef>``
     fragments (no ``<?xml?>`` prolog, no ``<Content><Views>`` wrapper).
@@ -1087,8 +1113,8 @@ def render_view_def_fragments(
             ``supermetric:"<name>"`` column references. The caller builds it;
             this module never looks for SM YAML on disk. The factory's
             ``vcfcf_supermetrics.loader.sm_id_map`` produces it from a bundle
-            scope or from the repo's ``content/supermetrics`` tree. None is an
-            empty map.
+            or pak scope. None is an empty map. A render whose views come from
+            more than one content set uses ``sm_resolver`` instead.
         sm_scope_active: Bundle-scoped mode. Any ``supermetric:"<name>"``
             reference absent from ``sm_map`` raises ``ValueError`` with a
             message naming the view, the reference, and the bundle context.
@@ -1107,20 +1133,34 @@ def render_view_def_fragments(
             (the type=1 ResourceKind in describe.xml by convention).  Must be
             supplied together with ``owning_adapter_kind``; ignored when
             ``owning_adapter_kind`` is None.
+        sm_resolver: Per-view resolution, ``(view, name) -> uuid | None``,
+            for a render whose views come from more than one content set
+            (issue #270: a third-party view's column must bind to its own
+            project's SM, not a same-named factory one). When given it is
+            the only source; ``sm_map`` must then be None. ``None`` from it
+            is an unresolved reference (``ValueError``); a ``ValueError``
+            it raises (an ambiguous name) is re-raised naming the column.
+            ``vcfcf_core.supermetrics.column_resolver.SmColumnResolver.uuid_for``
+            is the implementation.
 
     Returns:
         Concatenated ``<ViewDef>...</ViewDef>`` fragments (no wrapper).
 
     Raises:
         ValueError: when a ``supermetric:"<name>"`` column references an SM
-            not present in ``sm_map``.
+            not present in ``sm_map`` (or that ``sm_resolver`` does not
+            resolve, or reports as ambiguous).
     """
+    if sm_resolver is not None and sm_map:
+        raise ValueError("render_view_def_fragments: pass sm_map or sm_resolver, not both")
     sm_map = dict(sm_map or {})
 
     emit_owning_subject = bool(owning_adapter_kind and owning_resource_kind)
 
     def _fragment_with_owning(v: ViewDef) -> str:
-        frag = _render_view_def_fragment(v, sm_map, sm_scope_active, bundle_context)
+        frag = _render_view_def_fragment(
+            v, sm_map, sm_scope_active, bundle_context, sm_resolver
+        )
         if not emit_owning_subject:
             return frag
         # Inject the owning-adapter SubjectType immediately after the existing
@@ -1151,6 +1191,7 @@ def render_views_xml(
     owning_adapter_kind: Optional[str] = None,
     owning_resource_kind: Optional[str] = None,
     sm_scope_active: bool = False,
+    sm_resolver: "SmResolver | None" = None,
 ) -> str:
     """Render one or more ViewDefs into the single content.xml the
     VCF Ops content importer expects inside views.zip.
@@ -1166,6 +1207,7 @@ def render_views_xml(
         owning_adapter_kind=owning_adapter_kind,
         owning_resource_kind=owning_resource_kind,
         sm_scope_active=sm_scope_active,
+        sm_resolver=sm_resolver,
     )
     return (
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'

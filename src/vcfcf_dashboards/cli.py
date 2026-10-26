@@ -11,7 +11,6 @@ import requests
 
 from vcfcf_common._profile_cli import add_profile_arg, validate_profile_arg, resolve_profile_from_args
 from vcfcf_supermetrics.client import VCFOpsClient, VCFOpsError
-from vcfcf_supermetrics.loader import sm_id_map
 
 from .client import (
     DASHBOARD_CONTENT_TYPES,
@@ -29,6 +28,7 @@ from .loader import (
     split_navigation_targets,
 )
 from .packager import build_import_zip
+from . import sm_columns
 from .summary_bind import WAIT_DEFAULT_S, WAIT_MAX_S, WAIT_POLL_S, bind_summary
 from .ui_client import UIClientError, VCFOpsUIClient
 
@@ -221,6 +221,13 @@ def cmd_validate(args) -> int:
     nav_sources = nav_corpus if using_defaults else dashboards
     rc |= _report_navigation_errors(nav_sources, nav_corpus, nav_unloadable)
 
+    # supermetric:"<name>" columns bind the way package / sync / build bind
+    # them (issue #270, review W2), so validate (RULE-005) fails on what they
+    # would fail on.  Third-party views are checked below with the rest of
+    # the full-corpus pass; pak views stay with validate-sdk.
+    sm_corpus = sm_columns.load_sm_corpus()
+    rc |= _report_column_problems(views, sm_corpus)
+
     # Issue #113 identity guard: dashboard import identity is the NAME, so a
     # changed id: under an unchanged name: silently orphans the previously
     # installed UUID. Compare against the last committed version (git HEAD).
@@ -359,6 +366,8 @@ def cmd_validate(args) -> int:
         except ImportError:
             pass
 
+        rc |= _report_column_problems(all_views_corpus[len(views):], sm_corpus)
+
         membership_errors = check_project_membership(
             dashboards=all_dashboards_corpus,
             all_views=all_views_corpus,
@@ -375,6 +384,22 @@ def cmd_validate(args) -> int:
         _replay_non_time_window_warnings(captured_warnings)
         _replay_time_window_warnings_for_standalone_views(captured_warnings, all_dashboards_corpus)
 
+    return rc
+
+
+def _report_column_problems(views: list, corpus) -> int:
+    """Validate's ``supermetric:"<name>"`` column check: one line per column
+    that does not bind to exactly one SM.  Unresolved, ambiguous and
+    failed-to-load sets are ``SM-COLUMN:`` errors (rc 1); an SM with no id
+    yet is a WARNING only, since ``vcfcf_supermetrics validate`` mints it
+    and the chain order should not decide the result."""
+    rc = 0
+    for kind, msg in sm_columns.column_errors(views, corpus):
+        if kind == "unusable":
+            print(f"WARNING: {msg}", file=sys.stderr)
+        else:
+            print(f"SM-COLUMN: {msg}", file=sys.stderr)
+            rc = 1
     return rc
 
 
@@ -440,9 +465,17 @@ def cmd_package(args) -> int:
     nav_rc, known = _resolve_import_navigations(args, dashboards)
     if nav_rc:
         return 1
-    # sm_id_map() with no scope scans content/supermetrics from the cwd,
-    # the map the renderer used to find on its own before M2 row 2.
-    blob = build_import_zip(views, dashboards, sm_map=sm_id_map(), known_dashboards=known)
+    # supermetric:"<name>" columns bind per view, to the view's own content
+    # set then the factory (issue #270); a column that does not bind fails
+    # here, before anything is written.
+    corpus, col_rc = _column_corpus(
+        views, getattr(args, "supermetrics_dir", str(DEFAULT_SUPERMETRICS)))
+    if col_rc:
+        return 1
+    blob = build_import_zip(
+        views, dashboards, sm_resolver=corpus.resolver().uuid_for,
+        known_dashboards=known,
+    )
     out = Path(args.output)
     out.write_bytes(blob)
     print(f"wrote {out} ({len(blob)} bytes)")
@@ -461,6 +494,17 @@ def cmd_sync(args) -> int:
     nav_rc, known = _resolve_import_navigations(args, dashboards)
     if nav_rc:
         return 1
+    # Every supermetric:"<name>" view column must bind to exactly one SM of
+    # the view's own content set or the factory (issue #270), before the
+    # instance is touched.  The same corpus and resolver feed the referent
+    # check, the renderer and the post-import walker.
+    supermetrics_dir = getattr(args, "supermetrics_dir", str(DEFAULT_SUPERMETRICS))
+    corpus, col_rc = _column_corpus(views, supermetrics_dir, primary_required=True)
+    if col_rc:
+        print("sync aborted before import; nothing was imported", file=sys.stderr)
+        return 1
+    resolver = corpus.resolver()
+
     profile, default = resolve_profile_from_args(args)
     client = VCFOpsClient.from_env(profile=profile, default_profile=default)
 
@@ -471,7 +515,7 @@ def cmd_sync(args) -> int:
     # is imported.  Read-only.
     if _check_sm_referents_before_import(
         client, views, dashboards,
-        supermetrics_dir=getattr(args, "supermetrics_dir", str(DEFAULT_SUPERMETRICS)),
+        supermetrics_dir=supermetrics_dir, corpus=corpus,
     ):
         return 1
 
@@ -480,7 +524,7 @@ def cmd_sync(args) -> int:
         marker = discover_marker_filename(client)
         blob = build_import_zip(
             views, dashboards, owner_user_id=user["id"], marker_filename=marker,
-            sm_map=sm_id_map(), known_dashboards=known,
+            sm_resolver=resolver.uuid_for, known_dashboards=known,
         )
         result = import_content_zip(client, blob)
     except VCFOpsError as e:
@@ -571,9 +615,10 @@ def cmd_sync(args) -> int:
         client,
         views=views,
         dashboards=dashboards,
-        supermetrics_dir=getattr(args, "supermetrics_dir", str(DEFAULT_SUPERMETRICS)),
+        supermetrics_dir=supermetrics_dir,
         auto_enable_metrics=getattr(args, "auto_enable_metrics", False),
         skip_metric_check=getattr(args, "skip_metric_check", False),
+        corpus=corpus,
     )
     return dep_rc or mat_rc
 
@@ -648,44 +693,49 @@ def report_materialization_statuses(statuses: list) -> int:
 
 
 def _load_repo_sms(supermetrics_dir: str) -> tuple[list, str]:
-    """Load the SM YAML under ``supermetrics_dir``.
+    """Load the SM YAML under ``supermetrics_dir``, read-only.
 
     Returns ``(defs, error)``: an absent directory is ``([], "")``, a load
     failure is ``([], message)``.  Loaded without the framework-prefix rule
-    (a validate gate, RULE-006, not a sync gate), the way validate loads
-    ``third_party/*/supermetrics``, so a third-party SM directory loads, and
-    read-only (``load_dir_readonly``): an id-less YAML is never given a
-    minted id, so a check never rewrites a file.  Shared by the pre-import
-    referent check and the post-import walker.
+    and without minting ids (``sm_columns.load_sm_dir_readonly``), so a
+    check never rewrites a file.
     """
-    sm_dir = Path(supermetrics_dir)
-    if not sm_dir.exists():
-        return [], ""
-    try:
-        from vcfcf_supermetrics.loader import load_dir_readonly
-        return load_dir_readonly(sm_dir, enforce_framework_prefix=False), ""
-    except Exception as e:  # noqa: BLE001  caller decides how loud to be
-        return [], str(e)
+    defs, err, _idless = sm_columns.load_sm_dir_readonly(supermetrics_dir)
+    return defs, err
 
 
-def _sm_corpus_dirs(supermetrics_dir: str) -> list[Path]:
-    """The extra SM directories the referent check reads besides
-    ``supermetrics_dir``: ``content/supermetrics`` (when ``supermetrics_dir``
-    points elsewhere) and every ``third_party/*/supermetrics/``, the same
-    corpus ``_navigation_corpus`` uses for dashboards.  A third-party view
-    may name a factory SM and the reverse, so either may seed the check.
+def _column_corpus(views: list, supermetrics_dir: str, primary_required: bool = False):
+    """Load the SM corpus and check every ``supermetric:"<name>"`` column
+    of ``views`` binds to exactly one SM (issue #270).
+
+    Returns ``(corpus, rc)``; rc 1 after printing one ``ERROR:`` line per
+    column that is ambiguous, unresolved, or names an id-less SM.  A corpus
+    directory that does not load is a WARN naming it (its SMs then cannot
+    resolve, which the column check reports if a column needs one), except
+    ``supermetrics_dir`` when ``primary_required`` (sync: the referent check
+    cannot run without it), which is an ERROR and rc 1.
     """
-    candidates = [DEFAULT_SUPERMETRICS]
-    third_party = Path("third_party")
-    if third_party.is_dir():
-        candidates.extend(proj / "supermetrics" for proj in sorted(third_party.iterdir()))
-    seen = {Path(supermetrics_dir).resolve()}
-    dirs: list[Path] = []
-    for d in candidates:
-        if d.is_dir() and d.resolve() not in seen:
-            seen.add(d.resolve())
-            dirs.append(d)
-    return dirs
+    corpus = sm_columns.load_sm_corpus(supermetrics_dir)
+    if corpus.primary_error and primary_required:
+        print(
+            f"ERROR: cannot check super metric references: the super metric "
+            f"YAML in {supermetrics_dir} does not load: {corpus.primary_error}",
+            file=sys.stderr,
+        )
+        return corpus, 1
+    if corpus.primary_error:
+        print(
+            f"WARN  could not load super metric YAML from {supermetrics_dir}: "
+            f"{corpus.primary_error}",
+            file=sys.stderr,
+        )
+    for extra, err in corpus.extra_errors:
+        print(f"WARN  could not load super metric YAML from {extra}: {err}",
+              file=sys.stderr)
+    errors = corpus.resolver().column_errors(views)
+    for msg in errors:
+        print(f"ERROR: {msg}", file=sys.stderr)
+    return corpus, (1 if errors else 0)
 
 
 def _check_sm_referents_before_import(
@@ -693,13 +743,20 @@ def _check_sm_referents_before_import(
     views: list,
     dashboards: list,
     supermetrics_dir: str = str(DEFAULT_SUPERMETRICS),
+    corpus=None,
 ) -> int:
     """Resolve the ``@supermetric:"<name>"`` referents of every super metric
     the synced views and dashboards use, before the import (issue #154).
 
-    The SM corpus is ``supermetrics_dir`` plus ``_sm_corpus_dirs``.  A
-    ``supermetric:"<name>"`` column resolves to the SM the renderer's
-    unscoped ``sm_id_map()`` maps it to; an ``sm_<uuid>`` column or widget
+    The SM corpus is ``sm_columns.load_sm_corpus(supermetrics_dir)``:
+    ``supermetrics_dir`` plus ``content/supermetrics``, every
+    ``third_party/*/supermetrics`` and every
+    ``content/sdk-adapters/*/supermetrics`` (``corpus``, when the caller
+    loaded it).  A content set whose YAML did not load, or an ambiguous name,
+    is an ERROR and nothing is imported.  A
+    ``supermetric:"<name>"`` column resolves through the corpus resolver the
+    renderer uses (the view's own content set, then the factory, issue
+    #270); an ``sm_<uuid>`` column or widget
     key resolves by id in the corpus.  Those SMs are taken, plus their
     in-corpus referents transitively, and each referent must resolve
     against the corpus or the target instance.  Returns 1 when one does not,
@@ -716,33 +773,37 @@ def _check_sm_referents_before_import(
         print(f"WARN  dep walker unavailable: {e}", file=sys.stderr)
         return 0
 
-    repo_sms, err = _load_repo_sms(supermetrics_dir)
-    if err:
-        print(
-            f"ERROR: cannot check super metric references: the super metric "
-            f"YAML in {supermetrics_dir} does not load: {err}",
-            file=sys.stderr,
-        )
-        print("sync aborted before import; nothing was imported", file=sys.stderr)
-        return 1
-    for extra in _sm_corpus_dirs(supermetrics_dir):
-        more, extra_err = _load_repo_sms(str(extra))
-        if extra_err:
+    if corpus is None:
+        # Loaded here, so warned here; a caller that passes a corpus has
+        # already said which directories did not load.
+        corpus = sm_columns.load_sm_corpus(supermetrics_dir)
+        for extra, extra_err in corpus.extra_errors:
             print(
                 f"WARN  could not load super metric YAML from {extra}: {extra_err}; "
                 f"super metrics defined there are not checked before the import",
                 file=sys.stderr,
             )
-        repo_sms.extend(more)
+    if corpus.primary_error:
+        print(
+            f"ERROR: cannot check super metric references: the super metric "
+            f"YAML in {supermetrics_dir} does not load: {corpus.primary_error}",
+            file=sys.stderr,
+        )
+        print("sync aborted before import; nothing was imported", file=sys.stderr)
+        return 1
+    repo_sms = list(corpus.defs)
 
     # A supermetric:"<name>" column resolves exactly as the renderer will
-    # resolve it in this sync (build_import_zip(sm_map=sm_id_map())): the
-    # SMs behind the unscoped map, loaded read-only.
-    from vcfcf_supermetrics.loader import unscoped_sm_defs_readonly
-    column_sms = {sm.name: sm for sm in unscoped_sm_defs_readonly()}
-    used, unresolved = supermetrics_used_by(
-        views, dashboards, repo_sms, column_sms=column_sms
-    )
+    # resolve it in this sync: the same corpus, the same resolver.
+    from vcfcf_core.supermetrics.column_resolver import SmColumnResolutionError
+    try:
+        used, unresolved = supermetrics_used_by(
+            views, dashboards, repo_sms, column_resolver=corpus.resolver()
+        )
+    except SmColumnResolutionError as e:
+        print(f"ERROR: cannot check super metric references: {e}", file=sys.stderr)
+        print("sync aborted before import; nothing was imported", file=sys.stderr)
+        return 1
     for ref in unresolved:
         print(
             f"WARN  {ref}, which is in no loaded super metric YAML; its "
@@ -777,6 +838,7 @@ def _run_dep_walker(
     customgroups_dir: str = "customgroups",
     auto_enable_metrics: bool = False,
     skip_metric_check: bool = False,
+    corpus=None,
 ) -> int:
     """Run the dependency walker after a successful views/dashboards sync.
 
@@ -789,6 +851,10 @@ def _run_dep_walker(
 
     Loads the customgroups corpus from customgroups_dir so the walker can
     validate customgroup references found in view ``customgroup:`` fields.
+
+    ``corpus`` (an ``sm_columns.SmCorpus``, loaded when None) gives the
+    walker the resolver the renderer used, so a ``supermetric:"<name>"``
+    column is checked and enabled as the SM it was bound to (issue #266).
     """
     try:
         from vcfcf_common.dep_walker import walk_and_check
@@ -800,6 +866,8 @@ def _run_dep_walker(
     sm_defs, _err = _load_repo_sms(supermetrics_dir)
 
     sm_name_map = {d.name: d.id for d in sm_defs}
+    if corpus is None:
+        corpus = sm_columns.load_sm_corpus(supermetrics_dir)
 
     # Load customgroup defs for ref validation (optional, walker degrades gracefully)
     cg_defs: list = []
@@ -825,6 +893,7 @@ def _run_dep_walker(
         auto_enable_metrics=auto_enable_metrics,
         skip_metric_check=skip_metric_check,
         sm_name_map=sm_name_map,
+        sm_column_resolver=corpus.resolver(),
     )
     for level, msg in walk.messages:
         if level == "ERROR":
@@ -1123,7 +1192,9 @@ def build_parser() -> argparse.ArgumentParser:
             "Path to the supermetrics/ YAML directory. Used to check the "
             "@supermetric cross-references of the super metrics the synced "
             "views and dashboards use (before the import, together with "
-            "content/supermetrics and third_party/*/supermetrics) and to build the SM "
+            "content/supermetrics, third_party/*/supermetrics and "
+            "content/sdk-adapters/*/supermetrics, which also resolve "
+            "supermetric:\"<name>\" view columns) and to build the SM "
             "name map for dependency check annotations. Default: content/supermetrics"
         ),
     )

@@ -32,7 +32,7 @@ import io
 import json
 import time
 import zipfile
-from typing import Iterable, Mapping, Optional
+from typing import Callable, Iterable, Mapping, Optional
 
 from .loader import Dashboard, ViewDef
 from .render import render_dashboards_bundle_json, render_views_xml
@@ -86,12 +86,16 @@ def build_import_zip(
     marker_filename: str | None = None,
     sm_map: Optional[Mapping[str, str]] = None,
     known_dashboards: Optional[Iterable[Dashboard]] = None,
+    sm_resolver: Optional[Callable[[ViewDef, str], Optional[str]]] = None,
 ) -> bytes:
     """Assemble the nested import zip for ``views`` and ``dashboards``.
 
     ``sm_map`` (super metric name to uuid) resolves ``supermetric:"<name>"``
-    view columns; the caller supplies it (the factory scans its
-    ``content/supermetrics`` tree), this module never looks on disk.
+    view columns; the caller supplies it (a bundle's own SM list), this
+    module never looks on disk.
+    ``sm_resolver`` (``(view, name) -> uuid | None``) replaces ``sm_map`` when
+    the views come from more than one content set (issue #270); see
+    ``render_view_def_fragments``.
     ``known_dashboards`` is passed to the renderer as the extra set a
     ``navigations: - dashboard:`` name may resolve to.
     """
@@ -108,7 +112,7 @@ def build_import_zip(
         outer.writestr(marker_filename or _default_marker_filename(), owner_user_id)
 
         if views:
-            xml = render_views_xml(views, sm_map=sm_map)
+            xml = render_views_xml(views, sm_map=sm_map, sm_resolver=sm_resolver)
             outer.writestr("views.zip", _build_views_inner_zip(xml))
             config["views"] = len(views)
 

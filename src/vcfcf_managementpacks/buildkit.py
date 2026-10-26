@@ -71,7 +71,10 @@ Bundled-content closure:
   (nothing in the kit reads it). Since row 3 the kit's ``sm_id_map(None)``
   is an empty map: with no bundled super metrics a view column naming one
   fails the build instead of resolving against whatever
-  ``content/supermetrics`` the working directory happens to hold.
+  ``content/supermetrics`` the working directory happens to hold. Since
+  issue #270 the factory's ``build-sdk`` / ``validate-sdk`` behave the same
+  (the scope is always the pak's bundled SMs), and ``sm_id_map`` rejects two
+  bundled SMs sharing a display name, here and in the factory.
 """
 from __future__ import annotations
 

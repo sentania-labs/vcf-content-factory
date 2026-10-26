@@ -272,8 +272,7 @@ def test_dashboard_sync_third_party_sm_dir_loads_without_prefix(
         monkeypatch, tmp_path, capsys):
     """W1: a third-party SM directory (no framework prefix) loads, so the
     check runs instead of being switched off by a prefix failure.  The
-    column is sm_<uuid>: a name-form column resolves only through the
-    renderer's content/supermetrics map (see the same-named-pair tests)."""
+    column is sm_<uuid>; the name-form case is the same-named-pair tests."""
     tp_used, tp_missing = "[Acme] Used SM", "[Acme] Nowhere SM"
     client = _FakeClient()
     rc, imports, out = _run_dash_sync(
@@ -447,7 +446,7 @@ def test_dashboard_sync_preflight_never_writes_sm_yaml(monkeypatch, tmp_path, ca
     """An id-less SM YAML, in an unrelated third_party project and in
     content/supermetrics, is byte-identical after the preflight: the check
     loads without minting ids.  The preflight stops this sync, so the
-    import path (whose sm_id_map() mints by the UUID contract) is not run."""
+    import path is not run (it never mints either, since #270)."""
     tp_file = tmp_path / "third_party/other/supermetrics/idless.yaml"
     tp_before = _write_raw(tp_file, _idless("[Other] Idless SM"))
     f_file = tmp_path / "content/supermetrics/zz_idless.yaml"
@@ -492,28 +491,30 @@ def _acme_view():
     return view
 
 
-def test_preflight_checks_the_sm_the_renderer_uses_not_a_same_named_one(
+def test_preflight_checks_the_views_own_sm_not_a_same_named_factory_one(
         monkeypatch, tmp_path, capsys):
     """A third-party view names an SM whose display name exists in both
-    content/supermetrics and third_party/acme.  The renderer's unscoped
-    sm_id_map() resolves the column to the factory SM, so that formula is
-    the one checked: the third-party twin's missing referent does not
-    block."""
+    content/supermetrics and third_party/acme.  The column binds to the
+    view's own project's SM (issue #270), so that formula is the one
+    checked: the acme twin's missing referent blocks the sync even though
+    the factory twin is valid."""
     client = _FakeClient()
     factory = _same_named_pair(tmp_path, factory_ref=None, tp_ref=NAME_MISSING)
-    rc, imports, out = _run_dash_sync(
-        monkeypatch, tmp_path, capsys, factory, client, [_acme_view()])
-    assert rc == 0, out.err
-    assert imports == [b"zip"]
-    assert NAME_MISSING not in out.err
-
-
-def test_preflight_blocks_on_the_renderer_sm_even_with_a_valid_twin(
-        monkeypatch, tmp_path, capsys):
-    client = _FakeClient()
-    factory = _same_named_pair(tmp_path, factory_ref=NAME_MISSING, tp_ref=None)
     rc, imports, out = _run_dash_sync(
         monkeypatch, tmp_path, capsys, factory, client, [_acme_view()])
     assert rc == 1
     assert imports == []
     assert f'@supermetric:"{NAME_MISSING}"' in out.err
+
+
+def test_preflight_ignores_a_broken_same_named_factory_twin(
+        monkeypatch, tmp_path, capsys):
+    """The reverse: the factory twin's missing referent does not block a
+    third-party view whose own SM is valid."""
+    client = _FakeClient()
+    factory = _same_named_pair(tmp_path, factory_ref=NAME_MISSING, tp_ref=None)
+    rc, imports, out = _run_dash_sync(
+        monkeypatch, tmp_path, capsys, factory, client, [_acme_view()])
+    assert rc == 0, out.err
+    assert imports == [b"zip"]
+    assert NAME_MISSING not in out.err

@@ -23,6 +23,8 @@ Public API (online, requires VCFOpsClient)
       customgroups,       # list[CustomGroupDef], optional, default []
       auto_enable_metrics=False,
       skip_metric_check=False,
+      sm_name_map=None,
+      sm_column_resolver=None,  # SmColumnResolver for supermetric:"<name>" columns (#266)
   ) -> WalkResult
 
   check_sm_referents(client, supermetrics, sm_name_map=None) -> WalkResult
@@ -226,12 +228,14 @@ def _resolve_name_only_sm_refs(
             uuid_to_name[uid] = ref.name
         elif (ref.source, ref.name) not in missing_reported:
             missing_reported.add((ref.source, ref.name))
+            token = getattr(ref, "token", "@supermetric")
+            where = "view column" if token == "supermetric" else "formula"
             result._msg(
                 "ERROR",
-                f"{ref.source} references @supermetric:\"{ref.name}\" but no "
+                f"{ref.source} references {token}:\"{ref.name}\" but no "
                 f"super metric with that name is in this sync batch, in the "
                 f"repo SM YAML, or on the target instance. Sync that super "
-                f"metric first, or fix the name in the formula."
+                f"metric first, or fix the name in the {where}."
             )
 
 
@@ -270,6 +274,7 @@ def walk_and_check(
     auto_enable_metrics: bool = False,
     skip_metric_check: bool = False,
     sm_name_map: Optional[dict] = None,
+    sm_column_resolver=None,
 ) -> WalkResult:
     """Walk all content, check instance-side dependencies, auto-enable where appropriate.
 
@@ -285,6 +290,12 @@ def walk_and_check(
         skip_metric_check:    If True, skip the OOTB metric describe check entirely.
         sm_name_map:          Optional {sm_name: uuid} map from the repo's SM YAML.
                               Used to annotate SM refs discovered by UUID-only with their names.
+        sm_column_resolver:   Optional ``SmColumnResolver`` (the one the renderer used for
+                              this import).  A ``supermetric:"<name>"`` view column is an
+                              SM reference (issue #266): it resolves through this to the
+                              SM of the view's own content set, then the factory, and is
+                              checked and enabled like an ``sm_<uuid>`` column.  A name it
+                              does not know is looked up on the target by name.
 
     Returns WalkResult with all outcomes recorded.
     """
@@ -323,7 +334,7 @@ def walk_and_check(
     sm_refs_all.extend(sm_r)
     metric_refs_all.extend(m_r)
 
-    sm_r, m_r = extract_refs_from_views(views)
+    sm_r, m_r = extract_refs_from_views(views, column_resolver=sm_column_resolver)
     sm_refs_all.extend(sm_r)
     metric_refs_all.extend(m_r)
 

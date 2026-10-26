@@ -7,7 +7,8 @@ top of it:
 - provenance: core requires the root, the wrapper sniffs it;
 - super metric / report loaders: core refuses to mint, the wrapper mints;
   custom group loader: provenance is a callback; ``load_dir`` defaults;
-- ``sm_id_map``: core ``None`` is an empty map, the wrapper scans the cwd;
+- ``sm_id_map``: ``None`` is an empty map in core and wrapper (the wrapper's
+  cwd scan was removed with #270);
 - bundle loader: core resolves against the root it is handed, the wrapper
   sniffs one; report sections resolve where the caller says;
 - dependency walker: the offline walk is core, ``walk_and_check`` is not;
@@ -183,13 +184,16 @@ class TestSmIdMap:
         mapped = old.sm_id_map([f], "probe")
         assert f.read_text(encoding="utf-8").startswith(f"id: {mapped['Third Party Map']}\n")
 
-    def test_wrapper_none_still_scans_the_cwd(self, tmp_path, monkeypatch):
+    def test_wrapper_none_no_longer_scans_the_cwd(self, tmp_path, monkeypatch):
+        """#270 removed the wrapper's unscoped cwd scan: every caller passes
+        a scope, and standalone dashboards paths use vcfcf_dashboards.sm_columns."""
         import vcfcf_supermetrics.loader as old
         d = tmp_path / "content" / "supermetrics"
         d.mkdir(parents=True)
         (d / "a.yaml").write_text(_sm_yaml("[VCF Content Factory] Map A", _SM_UUID), encoding="utf-8")
         monkeypatch.chdir(tmp_path)
-        assert old.sm_id_map() == {"[VCF Content Factory] Map A": _SM_UUID}
+        assert old.sm_id_map() == {}
+        assert old.sm_id_map(None) == {}
 
 
 class TestCustomGroupLoader:
