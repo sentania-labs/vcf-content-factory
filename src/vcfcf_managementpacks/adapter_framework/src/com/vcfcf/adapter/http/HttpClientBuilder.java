@@ -18,7 +18,9 @@ import java.util.List;
  * <p>By default, no custom SSL context is set — the JVM's default trust store
  * is used. To use the platform's trust store (recommended for production,
  * ensures user-trusted certs from VCF Ops certificate management are honoured),
- * call {@link #platformSsl(VcfCfAdapter)}. To disable both certificate chain
+ * call {@link #platformSsl(VcfCfAdapter)}; to also require the certificate
+ * to carry the host dialled (opt-in), call
+ * {@link #platformSsl(VcfCfAdapter, String)}. To disable both certificate chain
  * validation and hostname verification in lab environments with self-signed
  * certs (or a certificate name that does not match the configured address),
  * call {@link #allowInsecure(boolean)}. This is an explicit, documented
@@ -50,6 +52,7 @@ public final class HttpClientBuilder {
     private AuthStrategy auth = null;
     private RetryPolicy retryPolicy = RetryPolicy.DEFAULT;
     private Duration timeout = Duration.ofSeconds(30);
+    private Duration connectTimeout = null;      // null → same as timeout
     private final List<String[]> defaultHeaders = new ArrayList<>();
 
     private HttpClientBuilder() {}
@@ -85,12 +88,32 @@ public final class HttpClientBuilder {
     }
 
     /**
+     * As {@link #platformSsl(VcfCfAdapter)}, plus certificate NAME checking
+     * (opt-in, issues #185, #206): the target certificate must carry
+     * {@code dialledHost}. Calls
+     * {@link VcfCfAdapter#getPlatformSslContext(String)}.
+     *
+     * <p>Pass the host of {@link #baseUrl(String)} as the account entered it
+     * ({@code host} or {@code host:port}), not the URL. The name is checked
+     * against that host for every request this client sends, including the
+     * raw-IP retries of the DNS round-robin path, so a request to any other
+     * host ({@code getAbsolute}) fails the name check.
+     *
+     * @param adapter     the {@link VcfCfAdapter} instance
+     * @param dialledHost the host the client connects to
+     */
+    public HttpClientBuilder platformSsl(VcfCfAdapter<?> adapter, String dialledHost) {
+        this.sslContext = adapter.getPlatformSslContext(dialledHost);
+        return this;
+    }
+
+    /**
      * Disable SSL certificate chain validation AND hostname verification.
      *
      * <p><strong>Explicit opt-out — use ONLY in lab/dev environments with
      * self-signed certificates.</strong> Do not use in production adapters.
-     * If both {@link #platformSsl} and {@link #allowInsecure(boolean)} are
-     * called, the last call wins.
+     * If both {@link #platformSsl} (either form) and
+     * {@link #allowInsecure(boolean)} are called, the last call wins.
      *
      * @param insecure {@code true} to trust all certificates and skip
      *                 hostname verification, without any validation
@@ -125,9 +148,35 @@ public final class HttpClientBuilder {
         return this;
     }
 
-    /** Per-request connect+read timeout. Default: 30 seconds. */
+    /**
+     * Per-request timeout: the budget for each request, from send until the
+     * response headers arrive (the read budget). Also the connect timeout
+     * unless {@link #connectTimeout(Duration)} is set. Default: 30 seconds.
+     */
     public HttpClientBuilder timeout(Duration d) {
         this.timeout = d;
+        return this;
+    }
+
+    /**
+     * Connect timeout: how long the client waits to establish a connection
+     * (issue #222), passed to {@code HttpClient.Builder.connectTimeout}.
+     * Default (or {@code null}): the {@link #timeout(Duration)} value, which
+     * is the behaviour before this setting existed. Set it shorter than
+     * {@code timeout} so an unreachable target fails in seconds while a slow
+     * call keeps the full read budget. Order of the two calls does not
+     * matter. The per-request {@code timeout} still runs from send, so it
+     * should not be shorter than this.
+     *
+     * @param d a positive duration, or {@code null} to use {@code timeout}
+     * @throws IllegalArgumentException if {@code d} is zero or negative
+     */
+    public HttpClientBuilder connectTimeout(Duration d) {
+        if (d != null && (d.isZero() || d.isNegative())) {
+            throw new IllegalArgumentException("HttpClientBuilder.connectTimeout must be "
+                    + "positive, got " + d + " (pass null to use the request timeout)");
+        }
+        this.connectTimeout = d;
         return this;
     }
 
@@ -140,7 +189,7 @@ public final class HttpClientBuilder {
     /** Build the {@link ManagedHttpClient}. */
     public ManagedHttpClient build() {
         HttpClient.Builder clientBuilder = HttpClient.newBuilder()
-                .connectTimeout(timeout)
+                .connectTimeout(connectTimeout != null ? connectTimeout : timeout)
                 .followRedirects(HttpClient.Redirect.NORMAL);
 
         if (sslContext != null) {
