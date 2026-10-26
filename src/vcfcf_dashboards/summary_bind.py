@@ -18,6 +18,18 @@ knowledge/context/api-surface/summary_dashboard_assignment.md (the dated
   the generic fallback).
 - ``getSummaryTabId`` omits the ``tabId`` key when it is null; a missing
   key is treated as null everywhere here.
+- The association call is sent in whichever request form the build reads
+  (two maps on 9.1.1 and 9.2, one ``dashboardAssociations`` map on 9.0.2
+  and 8.18; issue #260, ``VCFOpsUIClient.associate_resource_kind_dashboards``).
+  9.0.2 answers ``getSummaryTabId`` without an ``isDashboard`` key, so a
+  bound tab is read with ``summary_dashboard_tab``.
+- A bind copies the source as it is right now. A source still building
+  (``getDashboardList`` ``isLoading: true``) copies into a Summary template
+  whose widgets are never resolved, so the Summary tab shows stock widgets
+  for good (issue #200). A bind therefore refuses a source that is still
+  building, or whose state the list does not report, and names its
+  unfinished widgets; ``wait=True`` (``--wait``) polls every
+  ``WAIT_POLL_S`` until it is built or ``wait_s`` is spent (issue #256).
 
 Dashboard identity is the NAME (see id_guard.py): the installed
 dashboard is resolved by name, never by the YAML id, because an import
@@ -37,6 +49,7 @@ instance.
 from __future__ import annotations
 
 import sys
+import time
 from typing import Callable, Iterable, Optional
 
 from vcfcf_core.dashboards.loader import Dashboard
@@ -45,9 +58,19 @@ from vcfcf_core.dashboards.summary_bind import (  # noqa: F401  (re-exported for
     KindTarget,
     _default_template_name,
     _find_kind_entry,
+    loading_widgets,
     plan_bindings,
     resource_kind_id,
+    source_loading,
+    summary_dashboard_tab,
 )
+
+#: ``--wait`` default: the per-user importer resolves dashboards on a
+#: 10-minute tick (bytecode read on 9.0.2), plus a minute of margin; the
+#: same budget as the pak install's Summary repair.
+WAIT_DEFAULT_S = 660
+#: ``--wait`` poll interval.
+WAIT_POLL_S = 30
 
 
 def _template_label(value) -> str:
@@ -62,13 +85,88 @@ def _template_label(value) -> str:
     return str(value)
 
 
-def _resolve_installed(ui, name: str) -> Optional[str]:
-    """Installed dashboard UUID by exact name, or by ``<folder>/<name>``."""
-    for d in ui.list_dashboards():
+def _installed_entries(listing, name: str) -> list:
+    """Every ``getDashboardList`` entry named ``name`` or ``<folder>/<name>``."""
+    out = []
+    for d in listing or []:
+        if not isinstance(d, dict):
+            continue
         dn = d.get("name", "")
         if dn == name or dn.endswith("/" + name):
-            return d.get("id")
+            out.append(d)
+    return out
+
+
+def _resolve_installed(ui, name: str) -> Optional[str]:
+    """Installed dashboard UUID by exact name, or by ``<folder>/<name>``
+    (the first match; ``bind_summary`` refuses several)."""
+    found = _installed_entries(ui.list_dashboards(), name)
+    return found[0].get("id") if found else None
+
+
+def _entry_by_id(listing, uuid: str) -> Optional[dict]:
+    for d in listing or []:
+        if isinstance(d, dict) and str(d.get("id") or "").lower() == uuid.lower():
+            return d
     return None
+
+
+def _source_state(ui, entry: dict) -> tuple:
+    """``(state, pending)`` for an installed source dashboard.
+
+    ``state`` is ``"built"``, ``"building"`` or ``"unknown"``. The list's
+    ``isLoading`` is the gate; the dashboard's own config
+    (``getDashboardConfig``, ``isTemplate=false``) names the widgets still
+    building and can only make the answer stricter (a widget still loading
+    under a list entry that says built is ``"building"``). A config that
+    cannot be read leaves the list's answer and no names.
+    """
+    loading = source_loading(entry)
+    pending = None
+    try:
+        pending = loading_widgets(
+            ui.get_dashboard_config(str(entry.get("id")), is_template=False),
+            str(entry.get("id")))
+    except Exception:  # noqa: BLE001  naming the widgets is best effort
+        pending = None
+    if loading is None:
+        return "unknown", pending or []
+    if loading or pending:
+        return "building", pending or []
+    return "built", []
+
+
+def _pending_text(pending) -> str:
+    return ("unfinished widgets: " + ", ".join(f"'{w}'" for w in pending)
+            if pending else "its unfinished widgets could not be read")
+
+
+def _wait_until_built(ui, entry: dict, *, wait_s: int, poll_s: int,
+                      sleep: Callable[[float], None], out: Callable[[str], None]) -> tuple:
+    """Poll the source every ``poll_s`` seconds for up to ``wait_s``.
+
+    Returns the last ``(state, pending)``. A failed read keeps the last
+    answer and polls on (a transient error must not end the wait).
+    """
+    uuid = str(entry.get("id"))
+    state, pending = _source_state(ui, entry)
+    elapsed = 0
+    while state != "built" and elapsed < wait_s:
+        step = min(poll_s, wait_s - elapsed)
+        sleep(step)
+        elapsed += step
+        try:
+            fresh = _entry_by_id(ui.list_dashboards(), uuid)
+        except Exception as exc:  # noqa: BLE001  transient: poll on
+            out(f"   [{elapsed} s] could not read the dashboard list ({exc}); polling on")
+            continue
+        if fresh is None:
+            out(f"   [{elapsed} s] {uuid} is not in the dashboard list; polling on")
+            continue
+        state, pending = _source_state(ui, fresh)
+        if state == "building":
+            out(f"   [{elapsed} s] still building; {_pending_text(pending)}")
+    return state, pending
 
 
 def _live_tab_id(answer) -> Optional[str]:
@@ -88,6 +186,10 @@ def bind_summary(
     unbind: bool = False,
     dry_run: bool = False,
     out: Callable[[str], None] = print,
+    wait: bool = False,
+    wait_s: int = WAIT_DEFAULT_S,
+    poll_s: int = WAIT_POLL_S,
+    sleep: Callable[[float], None] = time.sleep,
 ) -> int:
     """Bind (or unbind) every ``summary_for`` dashboard. Returns an exit code.
 
@@ -105,6 +207,15 @@ def bind_summary(
     skipped whole only when none of its kinds resolve. ``--unbind``
     behaves the same. ``dry_run`` prints the full map only and needs no
     client.
+
+    A bind first checks the source (issue #256): several installed
+    dashboards with the name, a source still building, or one whose state
+    the list does not report is an ERROR with nothing written. With
+    ``wait`` a building source is polled every ``poll_s`` seconds for up to
+    ``wait_s`` and bound once built. After the write each kind's Summary
+    tab must show a dashboard template other than the one it showed
+    before; an unchanged tab is an ERROR (a pre-9.1 server skips, and still
+    answers ``ok`` for, a dashboard the session user cannot see).
     """
     plans = plan_bindings(dashboards, only)
     if not plans:
@@ -164,27 +275,71 @@ def bind_summary(
             out(f"   ERROR: {name}: no listed kind resolves on this instance; nothing written")
             continue
 
+        before: dict[str, Optional[str]] = {}
         if not unbind:
-            uuid = _resolve_installed(ui, name)
-            if uuid is None:
+            found = _installed_entries(ui.list_dashboards(), name)
+            if not found:
                 out(f"   ERROR: dashboard {name!r} is not installed (identity is the name; "
                     f"sync it first)")
                 failures += 1
                 continue
+            if len(found) > 1:
+                listed = "; ".join(
+                    f"{d.get('name')!r} id {d.get('id')} owner {d.get('owner') or '?'}"
+                    for d in found)
+                out(f"   ERROR: {len(found)} installed dashboards are named {name!r} "
+                    f"({listed}); cannot tell which one to bind, nothing written. Rename "
+                    f"or delete the extra one.")
+                failures += 1
+                continue
+            entry = found[0]
+            uuid = entry.get("id")
             out(f"   installed dashboard uuid: {uuid}")
+            state, pending = _source_state(ui, entry)
+            if state == "building" and wait:
+                out(f"   '{name}' is still building; {_pending_text(pending)}. Waiting up to "
+                    f"{wait_s} s, re-checking every {poll_s} s.")
+                state, pending = _wait_until_built(
+                    ui, entry, wait_s=wait_s, poll_s=poll_s, sleep=sleep, out=out)
+            if state == "building":
+                waited = f" after {wait_s} s" if wait else ""
+                hint = ("Opening the dashboard once in the UI usually finishes it; then run "
+                        "bind-summary again." if wait else
+                        "Re-run with --wait, or open the dashboard once in the UI and run "
+                        "bind-summary again.")
+                out(f"   ERROR: '{name}' ({uuid}) is still building{waited} (isLoading: true; "
+                    f"{_pending_text(pending)}). Nothing written: a bind now would copy the "
+                    f"unfinished widgets into the Summary template, which the server never "
+                    f"finishes (issue #200). {hint}")
+                failures += 1
+                continue
+            if state == "unknown":
+                out(f"   ERROR: '{name}' ({uuid}): the dashboard list carries no isLoading "
+                    f"flag for it on this build, so whether it finished building is unknown. "
+                    f"Nothing written. Once it shows its configured widgets in the UI, bind "
+                    f"it under Manage Summary Dashboards.")
+                failures += 1
+                continue
             assigned = {k.association_key: f"{name}_::_{uuid}" for k in bound}
+            for k in bound:
+                before[k.association_key] = summary_dashboard_tab(
+                    ui.get_summary_tab_id(k.resource_kind_id))
 
         ui.associate_resource_kind_dashboards(assigned, reset)
+        form = getattr(ui, "association_form", None)
+        how = f" ({form} request form)" if isinstance(form, str) else ""
         for k in bound:
             if unbind:
-                out(f"   wrote resetAssociations {k.association_key} = {reset[k.association_key]}")
+                out(f"   wrote resetAssociations {k.association_key} = "
+                    f"{reset[k.association_key]}{how}")
             else:
-                out(f"   wrote assignedAssociations {k.association_key} = {assigned[k.association_key]}")
+                out(f"   wrote assignedAssociations {k.association_key} = "
+                    f"{assigned[k.association_key]}{how}")
 
         for k in bound:
             live = ui.get_summary_tab_id(k.resource_kind_id)
             tab = _live_tab_id(live)
-            is_dashboard = bool(isinstance(live, dict) and live.get("isDashboard"))
+            shown = summary_dashboard_tab(live)
             out(f"   {k.label}  LIVE tabId: {tab}")
 
             if unbind:
@@ -192,14 +347,19 @@ def bind_summary(
                 # no longer reports a dashboard. A native page may still answer
                 # with a non-uuid tabId (isDashboard: false, pluginExist), which
                 # is the expected post-unbind state, not a failure.
-                if is_dashboard:
+                if shown:
                     out(f"   WARNING: {k.label}: expected isDashboard: false after unbind, "
                         f"got dashboard tab {tab}")
                     failures += 1
-            elif not tab or not is_dashboard:
-                out(f"   ERROR: {k.label}: getSummaryTabId did not return isDashboard: true "
-                    f"with a tabId after bind; the association did not take (native page "
-                    f"still renders)")
+            elif not shown:
+                out(f"   ERROR: {k.label}: getSummaryTabId did not return a dashboard tab "
+                    f"after bind; the association did not take (native page still renders)")
+                failures += 1
+            elif shown == before.get(k.association_key):
+                out(f"   ERROR: {k.label}: the server answered ok but the Summary tab still "
+                    f"shows {shown}, the copy it showed before the bind; the association "
+                    f"did not take (a pre-9.1 server skips a dashboard the session user "
+                    f"cannot see)")
                 failures += 1
             else:
                 out(f"   {k.label}  template UUID: {tab}   <- the server's copy of the "

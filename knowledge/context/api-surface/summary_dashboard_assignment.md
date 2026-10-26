@@ -103,9 +103,10 @@ built-in summary page a per-entry `defaultTemplateName` (for example
 `bind-summary` matches on `resourceKindId` and falls back to the
 (`adapterKind`, `resourceKind`) pair.
 
-Write (bulk; one call carries both maps, from the SPA's
-`DashboardAssociateWindow.save()` and the disassembled `DashboardAction`;
-provenance in the 2026-08-25 note at the end of this file):
+Write (bulk). **The request form depends on the build** (issue #260; see
+"Two request forms" below). The two-map form, from the 9.1.1/9.2 SPA's
+`DashboardAssociateWindow.save()` and the disassembled `DashboardAction`
+(provenance in the 2026-08-25 note at the end of this file):
 
 ```
 POST /ui/dashboard.action
@@ -122,9 +123,60 @@ ERRPANEL with HTTP 200. Binds go in `assignedAssociations`. Restore to the
 built-in page ("Use Default") goes in `resetAssociations`, whose value is
 the kind's **plain** `defaultTemplateName` (the per-entry one from
 `getResourceKindList` when present, e.g. `Host System Summary`; no
-`_::_null` suffix). The parameter name `dashboardAssociations` does not
-exist on any build and an earlier version of this section that used it was
-wrong.
+`_::_null` suffix). **Corrected 2026-10-24 (#260):** this section used to
+say `dashboardAssociations` exists on no build. That held for the builds
+measured on 2026-08-25 (a 9.0.0.0 pre-release and 9.2) and for 9.1.1, and
+is wrong for 9.0.2 Build 25429562 and 8.18.6 Build 25423535, which read
+only `dashboardAssociations`.
+
+### Two request forms (issue #260)
+
+Read 2026-10-24 from `DashboardAction.class` copied off each appliance
+(`javap -c -p -l`), the bundled SPA, and the `web.log` stack traces of the
+refused calls
+(`../investigations/2026-10-24-devel-summary-rebind-500-and-alertlist-gap.md`,
+part 1):
+
+| Build | Parameters the action reads | Reset value | Proven how |
+|---|---|---|---|
+| 8.18.6 Build 25423535 (devel_8_18) | `dashboardAssociations` only | `<templateName>_::_null` | bytecode, SPA, NPE stack trace of the two-map call. **The single-map call has not been sent live.** |
+| 9.0.2.0 Build 25429562 (devel) | `dashboardAssociations` only | `<templateName>_::_null` | same as 8.18.6. **The single-map call has not been sent live.** |
+| 9.1.1 Build 25794169 (devel_9_1; its `lastbuildversion.txt` reads 9.0.0.0) | `assignedAssociations` + `resetAssociations` | plain `<defaultTemplateName>` | bytecode, SPA; the two-map call is the one the factory has always sent |
+| 9.0.0.0 pre-release, 9.2.0.0 pre-release | `assignedAssociations` + `resetAssociations` | plain | 2026-08-25 note below: two empty maps answered `200 ok` live |
+
+The single-map request, from bytecode and SPA:
+
+```
+POST /ui/dashboard.action
+  mainAction=associateResourceKindDashboards
+  dashboardAssociations={"resourceKind_<resourceKindId>":"<dashboardName>_::_<dashboardUuid>",
+                         "resourceKind_<otherId>":"<templateName>_::_null", ...}
+  secureToken=<csrfToken>
+```
+
+- Bind: value `<name>_::_<uuid>`; the server splits on `_::_` (a value
+  without it throws), looks the dashboard up with the **caller's** userId,
+  calls the 4-argument `saveDashboardAsTemplate(uuid, name, SUMMARY,
+  userId)`, stores the new template id and deletes the kind's previous
+  template if it differs.
+- Reset: value `<templateName>_::_null`; the entry is removed from the
+  association map and the old template is **not** deleted.
+- A dashboard the caller cannot see is skipped silently and the action
+  still takes the success path.
+- What the success answer's body is (`ok` on 9.1.1 and 9.2) has not been
+  read for this form; the factory treats only `ok` as success.
+
+Each build NPEs on the first line of the action when the parameter it
+reads is absent (`new JSONObject(null)`), before any lookup or write, and
+answers HTTP 200 with the generic error panel. That makes a retry in the
+other form safe on every build read. `VCFOpsUIClient.associate_resource_kind_dashboards`
+therefore sends the two-map form first, then the single-map form on any
+answer other than `ok`, and remembers the form that answered `ok` for the
+rest of the session (`association_form`). The version string is not used
+to choose. `getSummaryTabId` on 9.0.2 answers `{"tabId": "<uuid>"}` with no
+`isDashboard` key (summary_dashboard_pak_binding.md, 2026-10-24), so the
+factory reads a bound tab with `vcfcf_core.dashboards.summary_bind.summary_dashboard_tab`:
+an explicit `isDashboard` decides, otherwise only a UUID `tabId` counts.
 
 ### The key is resourceKind, not adapter kind
 
@@ -335,22 +387,32 @@ Two routes carry the binding, one implementation each:
   (`summary_dashboard_pak_binding.md`). Tier 1 MPB paks do not bundle
   dashboards at all (`builder.py` writes an empty `content/dashboards/`).
 - **Post-import** (content-zip installs): `python3 -m vcfcf_dashboards
-  bind-summary --profile <p> [--dashboard <name>] [--unbind] [--dry-run]`,
+  bind-summary --profile <p> [--dashboard <name>] [--unbind] [--dry-run]
+  [--wait [--wait-timeout SECONDS]]`,
   implemented in `src/vcfcf_dashboards/summary_bind.py` over the
   `VCFOpsUIClient` methods `get_resource_kind_list`,
   `associate_resource_kind_dashboards(assigned, reset)` and
   `get_summary_tab_id` (`ui_client.py`; all send
   `X-Requested-With: XMLHttpRequest` plus `secureToken`). Per dashboard it
   resolves the installed dashboard **by name** (identity is the name,
-  `id_guard.py`), computes each listed kind's resource kind id offline,
+  `id_guard.py`; two installed dashboards with the name are an ERROR, nothing
+  written), refuses it while it is still building (issue #256: the
+  `getDashboardList` entry's `isLoading` is true, or a widget in its own
+  `getDashboardConfig` is; the ERROR names the unfinished widgets; a list
+  entry without `isLoading` is refused too, since a bind copies the source as
+  it is and a copy of an unfinished dashboard never finishes, #200; with
+  `--wait` it re-checks every 30 s for up to `--wait-timeout`, default
+  660 s, then binds), computes each listed kind's resource kind id offline,
   reads every kind's current assignment (one `getResourceKindList` per
   distinct adapter kind), writes ONE `associateResourceKindDashboards`
   call whose `assignedAssociations` map carries every kind
   (`{"resourceKind_<id>": "<name>_::_<uuid>", ...}`, with
   `resetAssociations` `{}`; the map takes many entries and the server
-  materializes one template copy per kind), then reads `getSummaryTabId`
-  back per kind: the bind counts only when every answer carries
-  `isDashboard: true` and a `tabId`, printed per kind as `LIVE tabId` /
+  materializes one template copy per kind; the client falls back to the
+  single `dashboardAssociations` map on 9.0.2 and 8.18, see "Two request
+  forms"), then reads `getSummaryTabId` back per kind: the bind counts only
+  when every answer shows a dashboard tab other than the one it showed
+  before the write, printed per kind as `LIVE tabId` /
   `template UUID` (that copy is what renders for that kind). A listed kind
   absent on the instance is printed as `ERROR` (dashboard name and kind)
   and left out of the map; the resolvable kinds are still bound and the
@@ -414,7 +476,8 @@ Lines 2071-2073 of the action read
 `request.getParameter("assignedAssociations")` and
 `request.getParameter("resetAssociations")`, then `new JSONObject(assigned)`.
 The string `dashboardAssociations` is not a request parameter on either
-build. The client sends `dashboardAssociations`, the server sees null,
+of these two builds (it is the only one on 9.0.2 GA and 8.18.6; see "Two
+request forms", issue #260). The client sends `dashboardAssociations`, the server sees null,
 NPE, and the Struts error interceptor renders the generic ERRPANEL with
 HTTP 200. The SPA's `save()` sends exactly:
 
@@ -433,7 +496,8 @@ value is the plain default template name (the SPA does not append
 `_::_null` there). Verified: the corrected shape with two empty maps
 returns `200 ok` on both builds; the same call with `dashboardAssociations`
 returns the ERRPANEL on both builds. The earlier "Write (bulk)" section
-above is therefore wrong on the parameter name and on the restore value.
+above was therefore wrong on the parameter name and on the restore value
+for these builds (and right for 9.0.2 GA and 8.18.6, #260).
 
 Server-side behaviour of the corrected call, from the bytecode (not yet
 exercised live):

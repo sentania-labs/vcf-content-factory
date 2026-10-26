@@ -7,6 +7,8 @@ import sys
 import warnings
 from pathlib import Path
 
+import requests
+
 from vcfcf_common._profile_cli import add_profile_arg, validate_profile_arg, resolve_profile_from_args
 from vcfcf_supermetrics.client import VCFOpsClient, VCFOpsError
 from vcfcf_supermetrics.loader import sm_id_map
@@ -27,7 +29,7 @@ from .loader import (
     split_navigation_targets,
 )
 from .packager import build_import_zip
-from .summary_bind import bind_summary
+from .summary_bind import WAIT_DEFAULT_S, WAIT_POLL_S, bind_summary
 from .ui_client import UIClientError, VCFOpsUIClient
 
 DEFAULT_VIEWS = Path("content/views")
@@ -1047,12 +1049,24 @@ def cmd_bind_summary(args) -> int:
         print(f"FAILED (UI login): {e}", file=sys.stderr)
         return 2
     try:
-        return bind_summary(ui, dashboards, only=args.dashboard, unbind=args.unbind)
-    except UIClientError as e:
+        return bind_summary(ui, dashboards, only=args.dashboard, unbind=args.unbind,
+                            wait=args.wait, wait_s=args.wait_timeout)
+    except (UIClientError, requests.RequestException) as e:
         print(f"FAILED: {e}", file=sys.stderr)
         return 2
     finally:
         ui.logout()
+
+
+def _nonneg_int(text: str) -> int:
+    """argparse type: a whole number of seconds, 0 or more."""
+    try:
+        value = int(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"not a whole number of seconds: {text!r}") from None
+    if value < 0:
+        raise argparse.ArgumentTypeError(f"must be 0 or more, got {value}")
+    return value
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -1218,6 +1232,25 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="print the association map only; no session, nothing written",
     )
+    pbs.add_argument(
+        "--wait",
+        action="store_true",
+        help=("when a dashboard is still building (isLoading: true), re-check every "
+              f"{WAIT_POLL_S} s until it is built, then bind (default: refuse it, nothing "
+              "written; a copy of an unfinished dashboard stays unfinished, issue #200)"),
+    )
+    pbs.add_argument(
+        "--wait-timeout",
+        type=_nonneg_int,
+        default=WAIT_DEFAULT_S,
+        metavar="SECONDS",
+        help=f"with --wait, give up after this many seconds (default {WAIT_DEFAULT_S}: one "
+             f"10-minute importer tick plus a margin); still building then is an ERROR",
+    )
+    pbs.epilog = ("Exit codes: 0 every kind bound (or reset); 1 nothing to do or the YAML "
+                  "did not load; 2 any ERROR (a dashboard still building, not installed, "
+                  "named twice, a kind not found, a refused or not-taken association, a "
+                  "UI login failure).")
     add_profile_arg(pbs, default="devel")
     pbs.set_defaults(func=cmd_bind_summary)
 

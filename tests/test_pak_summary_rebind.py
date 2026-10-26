@@ -431,21 +431,36 @@ def _pak(tmp_path, props=None, extra_dir=None, two_in_world=False) -> Path:
     return p
 
 
-# --- opt-in repair (2026-10-24 live result: the bind is refused on 9.0.2 and 8.18.7) ---
+# --- repair on by default since #260 (the bind goes out in the form each build reads) ---
 
-def test_default_is_information_only(tmp_path, monkeypatch, capsys):
-    """Repair off by default: no long wait, no write, exit code untouched,
-    one SUMMARY line per bound kind with the copy id and the loading count."""
+def test_repair_is_on_by_default(tmp_path, monkeypatch, capsys):
+    """#200: with no switch the install waits for the source, then binds an
+    unfinished copy again; the server's clone-before-build order is undone."""
+    monkeypatch.delenv("VCFCF_MATERIALIZATION_WAIT_S", raising=False)
+    ui = _FullUI([[{"id": ID_WORLD, "isLoading": False}]],
+                 tab_answers=[{"tabId": OLD_CLONE}, {"tabId": NEW_CLONE}],
+                 configs={OLD_CLONE: _config(OLD_CLONE, True, [True] * 7),
+                          NEW_CLONE: _config(NEW_CLONE, False, [False] * 7, name=NAME + " 8")})
+    rc, _ = _report(tmp_path, ui, monkeypatch)
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert ui.assoc[0][0] == {f"resourceKind_{RKID}": f"{NAME}_::_{ID_WORLD}"}
+    assert f"SUMMARY REBOUND: vcfcf_compliance:ComplianceWorld now shows copy {NEW_CLONE}" in out
+
+
+def test_turned_off_is_information_only(tmp_path, monkeypatch, capsys):
+    """Repair turned off: no long wait, no write, exit code untouched, one
+    SUMMARY line per bound kind with the copy id and the loading count."""
     monkeypatch.delenv("VCFCF_MATERIALIZATION_WAIT_S", raising=False)
     ui = _FullUI([[{"id": ID_WORLD, "isLoading": False}]],
                  tab_answers=[{"tabId": OLD_CLONE}],
                  configs={OLD_CLONE: _config(OLD_CLONE, True, [True] * 7)})
-    rc, slept = _report(tmp_path, ui, monkeypatch)
+    rc, slept = _report(tmp_path, ui, monkeypatch, summary_rebind=False)
     out = capsys.readouterr().out
     assert rc == 0 and slept == [] and ui.assoc == []
     assert (f"SUMMARY INCOMPLETE vcfcf_compliance:ComplianceWorld {OLD_CLONE} "
             f"(7 of 7 widgets loading)") in out
-    assert "--summary-rebind or VCFCF_SUMMARY_REBIND=1" in out
+    assert "--skip-summary-rebind or VCFCF_SUMMARY_REBIND=0" in out
 
 
 def _info(ui):
@@ -535,15 +550,18 @@ def test_ui_client_associate_failure_carries_status_and_body():
     assert "HTTP 200" in str(exc.value)
 
 
-@pytest.mark.parametrize("argv,env,expected,warns", [
-    ([], "", False, False),
-    (["--summary-rebind"], "", True, False),
-    ([], "1", True, False),
-    ([], "no", False, False),
-    (["--skip-summary-rebind"], "", False, True),
-    (["--skip-summary-rebind"], "1", False, True),
+@pytest.mark.parametrize("argv,env,expected", [
+    ([], "", True),
+    (["--summary-rebind"], "", True),
+    ([], "1", True),
+    ([], "no", False),
+    ([], "0", False),
+    ([], "OFF", False),
+    (["--summary-rebind"], "0", True),
+    (["--skip-summary-rebind"], "", False),
+    (["--skip-summary-rebind"], "1", False),
 ])
-def test_cli_summary_rebind_switch(monkeypatch, capsys, argv, env, expected, warns):
+def test_cli_summary_rebind_switch(monkeypatch, capsys, argv, env, expected):
     from vcfcf_managementpacks import cli as mp_cli
     from vcfcf_managementpacks import installer
 
@@ -552,7 +570,7 @@ def test_cli_summary_rebind_switch(monkeypatch, capsys, argv, env, expected, war
     monkeypatch.setattr(installer, "install_pak", lambda **kw: seen.update(kw) or 0)
     assert mp_cli.main(["install", "x.pak", *argv]) == 0
     assert seen["summary_rebind"] is expected
-    assert ("--skip-summary-rebind is deprecated" in capsys.readouterr().err) is warns
+    assert "deprecated" not in capsys.readouterr().err
 
 
 def test_cli_both_switches_is_a_usage_error(monkeypatch, capsys):
