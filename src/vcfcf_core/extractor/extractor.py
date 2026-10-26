@@ -7,8 +7,7 @@ dicts or dataclasses in and writes only to a path it was handed.
   ``dashboards_from_export_zip``: the three content-export zips (views,
   super metrics, dashboards) to bytes / dicts; the factory's live export
   calls hand their outer zip here. Public API, also exported from
-  ``vcfcf_core.extractor`` (issue #165); the underscore-prefixed names are
-  aliases kept for one release.
+  ``vcfcf_core.extractor``.
 - ``_parse_view_xml`` and its helpers: a VIEW_DEFINITIONS export zip (or
   its ``content.xml``) to a view dict the YAML writer accepts.
 - ``_rewrite_formula``: ``sm_<uuid>`` tokens to ``@supermetric:"<name>"``
@@ -87,7 +86,7 @@ def _rewrite_formula(formula: str, name_cache) -> tuple[str, set[str]]:
 # ---------------------------------------------------------------------------
 # Content-export zip readers: bytes in, dicts out, no instance involved.
 # The factory's live _export_* functions run the export and hand the outer
-# zip here; the migrator reads a saved export the same way from the wheel.
+# zip here; any caller holding a saved export reads it the same way.
 # ---------------------------------------------------------------------------
 
 def content_xml_from_export_zip(outer: bytes) -> Optional[bytes]:
@@ -210,16 +209,6 @@ def dashboards_from_export_zip(outer_zip: bytes) -> list[dict]:
     except Exception as e:
         raise ValueError(f"failed to parse dashboard export zip: {e}") from e
     return result
-
-
-# Underscore names kept as aliases for one release (issue #165): the migrator
-# imported these before the public names existed. They are the same objects
-# (an identity check holds), but they are separate module attributes: a
-# monkeypatch rebinding one name does not rebind the other. Callers in this
-# module and the factory use the public names, so patch those.
-_content_xml_from_export_zip = content_xml_from_export_zip
-_supermetrics_from_export_zip = supermetrics_from_export_zip
-_dashboards_from_export_zip = dashboards_from_export_zip
 
 
 # ---------------------------------------------------------------------------

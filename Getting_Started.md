@@ -110,8 +110,10 @@ they can never be confused with a release.
 
 Every management pak this factory builds or publishes is unsigned (Broadcom
 offers no way for a third party to sign one), and fresh VCF Operations 9.0
-and 9.1 installs refuse unsigned paks (8.x is unverified). For each install
-or upgrade of an unsigned pak:
+and 9.1 installs refuse unsigned paks. 8.18 has no such switch: it warns and
+asks for confirmation, and the factory's installer answers that for you, so
+the steps below do not apply there. On 9.0 and 9.1, for each install or
+upgrade of an unsigned pak:
 
 1. Log in to the primary node's `https://<primary node>/admin` as `admin`.
 2. Administrator Settings, Security Settings: click **Activate Unsigned PAK
