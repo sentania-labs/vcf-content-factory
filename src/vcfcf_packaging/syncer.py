@@ -4,6 +4,9 @@ This module drives the sync/uninstall workflow:
 1. Load the bundle manifest.
 2. Authenticate once (single session from env vars).
 3. Discover available handlers (one pass, cached for the run).
+   Before any handler runs, every @supermetric:"<name>" in the bundle's
+   super metrics must resolve (bundle, then target); a missing referent is
+   named and nothing is imported (issue #154).
 4. For each content type in sync_order (or reverse for uninstall):
    - If the bundle has YAML paths for that type AND a handler is available:
      call handler.sync() / handler.delete().
@@ -171,6 +174,44 @@ def _authenticate():
         sys.exit(1)
 
 
+def _check_sm_referents_before_import(bundle: Bundle, session) -> int:
+    """Resolve every ``@supermetric:"<name>"`` in the bundle's super metrics
+    before any handler imports anything (issue #154).
+
+    Each referent must be in the bundle or on the target, the same order the
+    SM push resolver uses; the views and dashboards that use those SMs import
+    after them, so a missing referent stops the whole bundle.  Returns 1 and
+    prints a FAIL line per problem, naming referrer and referent; 0 when
+    every referent resolves.  Read-only: ``find_by_name`` lookups only.
+    """
+    sms = list(getattr(bundle, "supermetrics", None) or [])
+    if not sms:
+        return 0
+    from vcfcf_common.dep_walker import check_sm_referents
+    from vcfcf_core.supermetrics.crossref import (
+        SuperMetricCrossRefError,
+        sm_name_to_uuid_map,
+    )
+
+    try:
+        name_map = sm_name_to_uuid_map(sms)
+    except SuperMetricCrossRefError as exc:
+        _print_fail(f"supermetrics: {exc}")
+        _print_fail("bundle sync aborted before import; nothing was imported")
+        return 1
+    walk = check_sm_referents(session, sms, sm_name_map=name_map)
+    if walk.ok:
+        return 0
+    for level, msg in walk.messages:
+        if level == "ERROR":
+            _print_fail(msg)
+    _print_fail(
+        "bundle sync aborted before import: unresolved super metric "
+        "reference(s); nothing was imported"
+    )
+    return 1
+
+
 # ---------------------------------------------------------------------------
 # Sync one bundle
 # ---------------------------------------------------------------------------
@@ -211,6 +252,9 @@ def sync_bundle(
     if bundle.description:
         first_line = bundle.description.splitlines()[0]
         print(f"  {first_line}")
+
+    if _check_sm_referents_before_import(bundle, session):
+        return 1
 
     any_failure = False
     # Warn/skip counts per content type, for the end-of-run trailer. The
