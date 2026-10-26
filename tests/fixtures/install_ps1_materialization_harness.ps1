@@ -6,11 +6,14 @@
 # tests/test_install_ps1_materialization.py to compare against the core
 # classifier (vcfcf_core.dashboards.materialization) and install.py.
 #
-# Usage: pwsh -NoProfile -File <this> <install.ps1> <scenario.json> <out.json>
+# Usage: <pwsh|powershell> -NoProfile -NonInteractive -ExecutionPolicy Bypass
+#        -File <this> <install.ps1> <scenario.json> <out.json>
+# (tests/ps_runner.py builds that line; VCFCF_PS_EXE picks the interpreter.)
 #
-# NOTE: this runs under whatever PowerShell is on the box (pwsh 7 on the
-# factory's POSIX runners).  Passing here does NOT prove Windows PowerShell
-# 5.1 compatibility; only a windows-latest runner can prove that.
+# Written for pwsh 7 and Windows PowerShell 5.1.  The POSIX hosts only have
+# pwsh 7; 5.1 is proven only by a windows-latest run with
+# VCFCF_PS_EXE=powershell.  Results go to <out.json> (UTF-8, no BOM), never
+# through stdout, so console encoding cannot corrupt them.
 param(
     [Parameter(Mandatory = $true)][string]$TemplatePath,
     [Parameter(Mandatory = $true)][string]$ScenarioPath,
@@ -28,6 +31,16 @@ trap {
     exit 1
 }
 
+# 5.1 writes the OEM code page to a redirected stdout; pin UTF-8 so the
+# printed lines the tests read round-trip (Python decodes as UTF-8).
+try { [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false) } catch { }
+
+# Windows PowerShell 5.1 ships an ETS Count property on System.Array that
+# makes ConvertTo-Json emit {"value": [...], "Count": n} for some arrays.
+if ($PSVersionTable.PSVersion.Major -lt 6) {
+    try { Remove-TypeData -TypeName System.Array -ErrorAction Stop } catch { }
+}
+
 Add-Type -AssemblyName System.IO.Compression
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 
@@ -38,7 +51,7 @@ if ($errors) { throw "install.ps1 has parse errors: $errors" }
 
 $want = @(
     "Write-Ok", "Write-Warn", "Write-Step", "Get-PropValue", "Get-PropList", "Get-StatusCode",
-    "Get-MaterializationWait", "Test-MatMapping", "Get-MatMembers", "Get-MatJsonArray",
+    "Get-MaterializationWait", "ConvertFrom-MatJson", "Test-MatMapping", "Get-MatMembers", "Get-MatJsonArray",
     "ConvertFrom-DashboardExportZip", "Get-MatPendingResources", "Get-MatPendingKinds",
     "Test-MatIncomplete", "Get-MatClassification", "Complete-MatStatuses",
     "Get-MatQuoted", "Get-MatDescription", "Get-DashboardIdNames",
@@ -74,7 +87,9 @@ foreach ($a in $assignments) {
 }
 if ($replayed -lt 10) { throw "expected the Mat*/Advisory* constants, replayed $replayed" }
 
-$scenario = Get-Content -LiteralPath $ScenarioPath -Raw -Encoding UTF8 | ConvertFrom-Json
+# Parsed with the template's own reader, so date-like strings in a scenario
+# stay strings on pwsh 7.5+ exactly as they do in the shipped code.
+$scenario = ConvertFrom-MatJson (Get-Content -LiteralPath $ScenarioPath -Raw -Encoding UTF8)
 
 # --- stubs ------------------------------------------------------------------
 # The export queue: each item is a zip path (bytes returned) or an object
@@ -160,7 +175,19 @@ switch ($scenario.mode) {
         } catch {
             $err = $_.Exception.Message
         }
-        $result = [ordered]@{ ids = $ids; error = $err }
+        # Each badly shaped export: the error text, or "" plus the ids read.
+        $bad = New-Object System.Collections.Generic.List[object]
+        foreach ($path in @($scenario.bad)) {
+            $e = ""; $got = @()
+            try {
+                $d = ConvertFrom-DashboardExportZip -ZipBytes ([System.IO.File]::ReadAllBytes([string]$path))
+                $got = @($d | ForEach-Object { [string](Get-PropValue $_ "id") })
+            } catch {
+                $e = $_.Exception.Message
+            }
+            $bad.Add([ordered]@{ error = $e; ids = $got })
+        }
+        $result = [ordered]@{ ids = $ids; error = $err; bad = $bad.ToArray() }
     }
     "wait" {
         $waits = New-Object System.Collections.Generic.List[int]
@@ -243,9 +270,22 @@ switch ($scenario.mode) {
             if ($script:ExportPolls -le 2) { return ('{"state":"FINISHED","startTime":100}' | ConvertFrom-Json) }
             return ('{"state":"FINISHED","startTime":200}' | ConvertFrom-Json)
         }
+        $script:ProgressSeen = ""
         function Invoke-WebRequest {
             param($Uri, $Method, $Headers, [switch]$UseBasicParsing, [switch]$SkipCertificateCheck, $OutFile)
             $script:Calls.Add("DOWNLOAD $Uri basic=$UseBasicParsing")
+            $script:ProgressSeen = [string]$ProgressPreference
+            if ($scenario.download_status -eq -1) {
+                throw (New-Object System.Exception "connection reset")
+            }
+            if ($scenario.download_status -ne 200) {
+                # The shape both runtimes give: an exception whose .Response
+                # carries .StatusCode (HttpResponseMessage / HttpWebResponse).
+                $ex = New-Object System.Exception "Response status code does not indicate success"
+                Add-Member -InputObject $ex -MemberType NoteProperty -Name Response `
+                    -Value ([pscustomobject]@{ StatusCode = [System.Net.HttpStatusCode][int]$scenario.download_status })
+                throw $ex
+            }
             [System.IO.File]::WriteAllBytes($OutFile, [byte[]](80, 75, 9))
         }
         $kinds = $null; $kindsErr = ""
@@ -267,6 +307,7 @@ switch ($scenario.mode) {
         if ($null -ne $bytes) { $bytesOut = @($bytes | ForEach-Object { [int]$_ }) }
         $result = [ordered]@{
             kinds = $kindsOut; kinds_type = $kindsType; kinds_error = $kindsErr; bytes = $bytesOut
+            progress_during = $script:ProgressSeen; progress_after = [string]$ProgressPreference
             export_error = $exportErr; posted = $posted; calls = $script:Calls.ToArray()
         }
     }

@@ -10,7 +10,8 @@ Two layers here:
    They pin the shape of the TLS gate and the advisory feature so a future
    edit cannot silently re-nest or delete them.
 2. A behaviour harness executed by whatever PowerShell is available
-   (``pwsh``), skipped when there is none.
+   (``pwsh``, or ``VCFCF_PS_EXE``), skipped when there is none unless
+   ``VCFCF_REQUIRE_PWSH=1`` (see tests/ps_runner.py).
 
 Neither layer proves Windows PowerShell 5.1 compatibility: 5.1 is
 .NET Framework and does not exist off Windows.  Only a windows-latest
@@ -20,11 +21,11 @@ runner can prove that.  See knowledge/context/authoring/guide_powershell.md.
 from __future__ import annotations
 
 import re
-import shutil
-import subprocess
 from pathlib import Path
 
 import pytest
+
+from ps_runner import ps_exe, run_ps_file  # noqa: F401  (ps_exe is a fixture)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE = REPO_ROOT / "src" / "vcfcf_packaging" / "templates" / "install.ps1"
@@ -528,20 +529,13 @@ def _run_installer(tmp_path: Path, args: list[str], env_extra: dict | None = Non
     env = dict(os.environ)
     env.pop("VCFOPS_VERIFY_SSL", None)
     env.update(env_extra or {})
-    return subprocess.run(
-        ["pwsh", "-NoProfile", "-File", str(TEMPLATE), *args],
-        cwd=str(tmp_path),
-        capture_output=True,
-        text=True,
-        timeout=300,
-        env=env,
-    )
+    return run_ps_file(TEMPLATE, args, cwd=tmp_path, env=env)
 
 
 _BYPASS_WARNING = "TLS certificate verification disabled."
 
 
-@pytest.mark.skipif(shutil.which("pwsh") is None, reason="PowerShell not installed")
+@pytest.mark.usefixtures("ps_exe")
 class TestSkipSslVerifyIsReachable:
     """Reachability of the cert-bypass branch, measured on the real script.
 
@@ -1084,13 +1078,8 @@ class TestImportWaitTimeoutNamesTheStatus:
         )
 
 
-@pytest.mark.skipif(shutil.which("pwsh") is None, reason="PowerShell not installed")
+@pytest.mark.usefixtures("ps_exe")
 def test_advisory_harness() -> None:
-    proc = subprocess.run(
-        ["pwsh", "-NoProfile", "-File", str(HARNESS), str(TEMPLATE)],
-        capture_output=True,
-        text=True,
-        timeout=300,
-    )
+    proc = run_ps_file(HARNESS, [TEMPLATE])
     assert proc.returncode == 0, f"harness failed:\n{proc.stdout}\n{proc.stderr}"
     assert "ALL ASSERTIONS PASSED" in proc.stdout

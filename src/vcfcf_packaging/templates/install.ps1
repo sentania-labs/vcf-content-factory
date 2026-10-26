@@ -1993,6 +1993,8 @@ function Get-MaterializationWait {
     if ($null -eq $value) {
         $raw = [string][System.Environment]::GetEnvironmentVariable($script:MatWaitEnv)
         $raw = $raw.Trim()
+        # Python's int() accepts single underscores between digits ("1_000").
+        if ($raw -match '^[+-]?[0-9]+(_[0-9]+)+$') { $raw = $raw.Replace("_", "") }
         if ($raw) {
             $parsed = [long]0
             if ([long]::TryParse($raw, [System.Globalization.NumberStyles]::AllowLeadingSign,
@@ -2046,31 +2048,57 @@ function Get-MatJsonArray {
     return ,@()
 }
 
+function ConvertFrom-MatJson {
+    param([string]$Text)
+    # ConvertFrom-Json that keeps ISO-8601-looking strings as strings.  pwsh 7
+    # coerces them to DateTime (a resource named "2024-01-01T00:00:00Z" would
+    # print as a localized date); Windows PowerShell 5.1 and Python never do.
+    # -DateKind exists from pwsh 7.5, so it is probed rather than assumed;
+    # 7.0-7.4 keep the coercion, a cosmetic difference in a name only.
+    $cmd = Get-Command ConvertFrom-Json
+    if ($PSVersionTable.PSVersion.Major -ge 7 -and $cmd.Parameters.ContainsKey("DateKind")) {
+        return ($Text | ConvertFrom-Json -DateKind String)
+    }
+    return ($Text | ConvertFrom-Json)
+}
+
 function ConvertFrom-DashboardExportZip {
     param([byte[]]$ZipBytes)
     # Dashboard objects from a DASHBOARDS export (one inner zip per owner).
-    # Throws "failed to parse dashboard export zip: ..." when the outer bytes
-    # are not a zip; an unreadable inner member is skipped.
+    # Same structure as install.py _mat_dashboards_from_export_zip: a member
+    # that is not a zip, or carries no dashboard/dashboard.json, is skipped;
+    # anything else unreadable throws "failed to parse dashboard export zip:
+    # ..." so the run prints UNCHECKED rather than a false ABSENT.  That
+    # includes a dashboard.json ConvertFrom-Json cannot parse: on PowerShell
+    # that is far more often a shape it rejects and Python accepts (keys that
+    # differ only in case, an empty key) than truly broken JSON.
     $result = [System.Collections.Generic.List[object]]::new()
     $outer = $null
+    $prefix = "failed to parse dashboard export zip: "
     try {
         try {
             $outerStream = New-Object System.IO.MemoryStream(,$ZipBytes)
             $outer = New-Object System.IO.Compression.ZipArchive($outerStream, [System.IO.Compression.ZipArchiveMode]::Read)
         } catch {
-            throw "failed to parse dashboard export zip: $($_.Exception.Message)"
+            throw "$prefix$($_.Exception.Message)"
         }
         foreach ($entry in $outer.Entries) {
             $name = $entry.FullName
             if (-not $name.StartsWith("dashboards/", [System.StringComparison]::Ordinal) -or
                 $name.EndsWith("/", [System.StringComparison]::Ordinal)) { continue }
-            $dj = $null
-            $inner = $null
+            # Reading the outer member is outside the skip-on-error try, as in
+            # install.py (zf.read sits outside its inner try).
+            $buf = New-Object System.IO.MemoryStream
             try {
-                $buf = New-Object System.IO.MemoryStream
                 $es = $entry.Open()
                 try { $es.CopyTo($buf) } finally { $es.Dispose() }
-                $buf.Position = 0
+            } catch {
+                throw "$prefix${name}: $($_.Exception.Message)"
+            }
+            $buf.Position = 0
+            $text = $null
+            $inner = $null
+            try {
                 $inner = New-Object System.IO.Compression.ZipArchive($buf, [System.IO.Compression.ZipArchiveMode]::Read)
                 $djEntry = $inner.GetEntry("dashboard/dashboard.json")
                 if ($null -eq $djEntry) { continue }
@@ -2080,15 +2108,44 @@ function ConvertFrom-DashboardExportZip {
                     $reader = New-Object System.IO.StreamReader($js, [System.Text.Encoding]::UTF8, $true)
                     $text = $reader.ReadToEnd()
                 } finally { $js.Dispose() }
-                $dj = $text | ConvertFrom-Json
             } catch {
                 continue
             } finally {
                 if ($null -ne $inner) { $inner.Dispose() }
             }
-            if (-not (Test-MatMapping $dj)) { continue }
-            foreach ($dash in (Get-MatJsonArray $dj "dashboards")) {
-                if (Test-MatMapping $dash) { $result.Add($dash) }
+            # Checked on the text: ConvertFrom-Json on pwsh 7 enumerates a
+            # top-level array, and a one-element one would come back as a
+            # bare object that passes the object test below.
+            if (-not ([string]$text).TrimStart().StartsWith("{", [System.StringComparison]::Ordinal)) {
+                throw "$prefix${name}: dashboard.json is not an object"
+            }
+            try {
+                $dj = ConvertFrom-MatJson $text
+            } catch {
+                throw "$prefix${name}: dashboard/dashboard.json: $($_.Exception.Message)"
+            }
+            if (-not (Test-MatMapping $dj)) { throw "$prefix${name}: dashboard.json is not an object" }
+            # Python: dj.get("dashboards") or [], then dict(dash) per element.
+            # A falsy value yields nothing; a list must hold objects; any other
+            # truthy value fails.  Read in place (a function return would
+            # unwrap a one-element array).
+            $value = $null
+            if ($dj -is [System.Collections.IDictionary]) {
+                if ($dj.Contains("dashboards")) { $value = $dj["dashboards"] }
+            } else {
+                $prop = $dj.PSObject.Properties["dashboards"]
+                if ($null -ne $prop) { $value = $prop.Value }
+            }
+            if ($value -is [System.Array] -or $value -is [System.Collections.IList]) {
+                foreach ($dash in $value) {
+                    if (-not (Test-MatMapping $dash)) { throw "$prefix${name}: a dashboards[] element is not an object" }
+                    $result.Add($dash)
+                }
+            } elseif (Test-MatMapping $value) {
+                $members = Get-MatMembers $value
+                if ($members.Count -gt 0) { throw "$prefix${name}: dashboards is not a list" }
+            } elseif ($value) {
+                throw "$prefix${name}: dashboards is not a list"
             }
         }
     } finally {
@@ -2270,7 +2327,7 @@ function Get-DashboardIdNames {
     # runs after the import, where an exception would leave a partial install.
     $out = [System.Collections.Generic.List[object]]::new()
     try {
-        $data = ($DashJson -replace "PLACEHOLDER_USER_ID", $OwnerId) | ConvertFrom-Json
+        $data = ConvertFrom-MatJson ($DashJson -replace "PLACEHOLDER_USER_ID", $OwnerId)
         if (-not (Test-MatMapping $data)) { return ,$out.ToArray() }
         foreach ($d in (Get-MatJsonArray $data "dashboards")) {
             if (-not (Test-MatMapping $d)) { continue }
@@ -2342,11 +2399,28 @@ function Export-DashboardsZip {
     if ($script:Token) { $zipParams["Headers"] = @{ Authorization = "vRealizeOpsToken $script:Token" } }
     if ($SkipSslVerify -and $PSVersionTable.PSVersion.Major -ge 6) { $zipParams["SkipCertificateCheck"] = $true }
     $tmpZip = [System.IO.Path]::GetTempFileName()
+    # Windows PowerShell 5.1 renders a progress bar for -OutFile that slows a
+    # large download markedly; a CUSTOM DASHBOARDS export covers every user's
+    # dashboards.  Silenced for this call only, then restored.
+    $savedProgress = $ProgressPreference
     try {
         try {
+            $ProgressPreference = 'SilentlyContinue'
             Invoke-WebRequest @zipParams -OutFile $tmpZip
         } catch {
-            throw "export zip download failed ($($_.Exception.Message))"
+            # Same text as install.py ("export zip download failed (404)")
+            # when the server answered; the exception message otherwise.
+            # Both runtimes expose .Response.StatusCode (HttpResponseMessage on
+            # pwsh 7, HttpWebResponse on 5.1); probed StrictMode-safely.
+            $detail = $_.Exception.Message
+            $respProp = $_.Exception.PSObject.Properties["Response"]
+            if ($null -ne $respProp -and $null -ne $respProp.Value) {
+                $codeProp = $respProp.Value.PSObject.Properties["StatusCode"]
+                if ($null -ne $codeProp -and $null -ne $codeProp.Value) { $detail = [string][int]$codeProp.Value }
+            }
+            throw "export zip download failed ($detail)"
+        } finally {
+            $ProgressPreference = $savedProgress
         }
         $bytes = [System.IO.File]::ReadAllBytes($tmpZip)
     } finally {
@@ -3821,14 +3895,24 @@ function Invoke-Install {
 
     Write-Host ""
     if ($allWarnings.Count -gt 0) {
-        Write-Host "Done with $($allWarnings.Count) warning(s):"
-        foreach ($w in $allWarnings) { Write-Host "  WARN  $w" }
         # Materialization lines are classified by their prefix, never by the
         # substring test: a dashboard or resource name containing "enable" or
-        # "resolve" must not read as a super metric enable failure.
-        $enableWarns = @($allWarnings | Where-Object {
-            -not $_.StartsWith("MATERIALIZATION ", [System.StringComparison]::Ordinal) -and
-            ($_ -like "*enable*" -or $_ -like "*resolve*") })
+        # "resolve" must not read as a super metric enable failure.  Enable
+        # warnings print first, then the rest, as install.py does.
+        $enableWarns = [System.Collections.Generic.List[string]]::new()
+        $enableSet = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::Ordinal)
+        foreach ($w in $allWarnings) {
+            if (-not $w.StartsWith("MATERIALIZATION ", [System.StringComparison]::Ordinal) -and
+                ($w -like "*enable*" -or $w -like "*resolve*")) {
+                $enableWarns.Add($w)
+                $null = $enableSet.Add($w)
+            }
+        }
+        $otherWarns = [System.Collections.Generic.List[string]]::new()
+        foreach ($w in $allWarnings) { if (-not $enableSet.Contains($w)) { $otherWarns.Add($w) } }
+        Write-Host "Done with $($enableWarns.Count + $otherWarns.Count) warning(s):"
+        foreach ($w in $enableWarns) { Write-Host "  WARN  $w" }
+        foreach ($w in $otherWarns) { Write-Host "  WARN  $w" }
         if ($enableWarns.Count -gt 0) {
             Write-Host "Content was imported but one or more super metrics could not be enabled."
         }
