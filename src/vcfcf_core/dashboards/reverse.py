@@ -991,25 +991,35 @@ def _parse_alert_list_config(cfg: dict, dash_name: str, local_id: str) -> AlertL
     alert_impact = [str(a).strip() for a in (cfg.get("alertImpact") or [])]
     alert_action = list(cfg.get("alertAction") or [])
     mode = str(cfg.get("mode") or "all").strip()
-    depth = int(cfg.get("depth") or 1)
-    # relationshipMode is {"relationshipMode": [ints]} (parents=1,
-    # children=-1, self=0). Keep a value the loader would accept; anything
-    # else falls back to the renderer default [-1, 0].
-    rm_raw = (cfg.get("relationshipMode") or {}).get("relationshipMode") \
-        if isinstance(cfg.get("relationshipMode"), dict) else None
-    relationship_mode = [-1, 0]
-    if isinstance(rm_raw, list) and rm_raw:
-        try:
-            ints = {int(v) for v in rm_raw}
-        except (TypeError, ValueError):
-            ints = set()
-        if ints and ints <= {1, -1, 0} and not {0, 1} <= ints and len(ints) == len(rm_raw):
-            relationship_mode = [v for v in (1, -1, 0) if v in ints]
-        else:
+    # depth and relationshipMode are carried through verbatim (None when the
+    # source omits the key) and never repaired or defaulted here: the
+    # extractor emits them as-is and the loader rejects an inexpressible
+    # value at validate time with its own message. Raising here would drop
+    # every widget on the dashboard (extractor.py falls back to an empty
+    # widget list on a parse error).
+    depth = cfg.get("depth")
+    rm_outer = cfg.get("relationshipMode")
+    if isinstance(rm_outer, dict):
+        relationship_mode = rm_outer.get("relationshipMode")
+    else:
+        relationship_mode = rm_outer
+        if rm_outer is not None:
             _warn(
                 f"dashboard {dash_name!r} widget {local_id!r}: AlertList "
-                f"relationshipMode {rm_raw!r} not representable; using [-1, 0]"
+                f"relationshipMode is not wrapped in {{'relationshipMode': ...}} "
+                f"(got {rm_outer!r}); carried through as-is"
             )
+    if relationship_mode is None:
+        _warn(
+            f"dashboard {dash_name!r} widget {local_id!r}: AlertList has no "
+            f"relationshipMode; the extracted YAML omits it, which renders [-1, 0]"
+        )
+    elif not isinstance(relationship_mode, list) or not relationship_mode:
+        _warn(
+            f"dashboard {dash_name!r} widget {local_id!r}: AlertList "
+            f"relationshipMode {relationship_mode!r} is not a non-empty list; "
+            f"carried through as-is, validate will reject it"
+        )
     return AlertListConfig(
         criticality=criticality,
         alert_types=alert_types,

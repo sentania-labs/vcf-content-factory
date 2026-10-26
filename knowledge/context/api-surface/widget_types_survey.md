@@ -647,10 +647,27 @@ self-only). Source:
 `knowledge/context/investigations/2026-10-26-alertlist-depth-semantics.md`
 (live replay, 9.0.2 and 8.18.6).
 
+Live replay covered `[0]`, `[-1]` and `[-1, 0]`. `[1]` (parents only) was
+not replayed; `[1, -1]` has reference backing (brockpeterson "Troubleshooting
+VMs v4") but no live run.
+
+Defaults differ on purpose: the editor's default for a new widget is
+Parent + Children (`[1, -1]`), while the factory renders `[-1, 0]` (Children +
+Self), which every factory and managed-pak AlertList has shipped with. Do not
+"fix" the factory default to match the editor; it would change which alerts
+every existing widget shows.
+
 Factory YAML: `relationship_mode:` takes `self`, `children`, `parents`, or a
 list of them (`[self, children]`); the renderer emits them in the order
 parents, children, self. Omitted means `[-1, 0]`. `self` with `parents` and
-`depth` outside 1 to 10 are load errors.
+`depth` outside 1 to 10 (or not a YAML integer) are load errors. With
+`relationship_mode: self` the depth is inert (the editor disables the field);
+author `depth: 1`.
+
+Extraction carries both values through verbatim: `1`, `-1` and `0` become
+their names, anything else (and any depth) is written as the source had it,
+so a value the YAML cannot express fails `validate` instead of being
+silently replaced.
 
 ---
 

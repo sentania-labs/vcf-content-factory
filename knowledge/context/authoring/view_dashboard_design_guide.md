@@ -372,8 +372,13 @@ and renders the int array (`self` 0, `children` -1, `parents` 1):
 - `children` alone drops the object's own alerts.
 - `self` and `parents` together are a load error (the widget editor
   makes them exclusive).
-- AlertList `depth` outside 1 to 10 is a load error: the server rejects
-  it and the widget shows no list.
+- AlertList `depth` outside 1 to 10, or not a plain integer, is a load
+  error: the server rejects it and the widget shows no list.
+- With `self` alone the depth does nothing (the widget editor disables the
+  field); write `depth: 1`.
+- `parents` alone was not replayed live; `[parents, children]` has
+  reference backing but no live run. Prefer `self`, `children` or the
+  default until one is proven.
 
 Source:
 `knowledge/context/investigations/2026-10-26-alertlist-depth-semantics.md`.

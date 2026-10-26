@@ -1,0 +1,178 @@
+# AlertList render regression corpus: every distinct AlertList widget in the
+# managed paks (content/sdk-adapters/*, gitignored) as of 2026-10-26, copied
+# verbatim except id and coords. Golden output: alertlist_corpus_golden.json,
+# rendered by origin/main @ 1a758dc before relationship_mode existed.
+# Sources, in widget order:
+#   alertlist_00: compliance/dashboards/compliance-environment-overview.yaml
+#   alertlist_01: compliance/dashboards/compliance-esxi-hosts.yaml
+#   alertlist_02: compliance/dashboards/compliance-overview.yaml
+#   alertlist_03: compliance/dashboards/compliance-vcenter-networking.yaml
+#   alertlist_04: compliance/dashboards/compliance-vms.yaml
+#   alertlist_05: compliance/dashboards/compliance-world-summary.yaml
+#   alertlist_06: vcommunity-vsphere/dashboards/Cluster Performance 2.0.yaml
+#   alertlist_07: vcommunity-vsphere/dashboards/VM Details.yaml
+#   alertlist_08: vcommunity-vsphere/dashboards/VM Performance 2.0.yaml
+id: 6f1d2c1e-0d2b-4b8e-9a51-2a7d4f0c9e10
+name: '[VCF Content Factory] AlertList Corpus Fixture'
+description: AlertList widgets copied from the managed paks; render regression fixture.
+widgets:
+- id: alertlist_00
+  coords:
+    x: 1
+    y: 1
+    w: 12
+    h: 6
+  type: AlertList
+  title: Open Compliance Alerts
+  criticality:
+  - 2
+  - 3
+  - 4
+  status:
+  - 0
+  mode: all
+  depth: 4
+  alert_types:
+  - '15_21'
+- id: alertlist_01
+  coords:
+    x: 1
+    y: 7
+    w: 12
+    h: 6
+  type: AlertList
+  title: Failing Controls on Selected Host
+  criticality:
+  - 2
+  - 3
+  - 4
+  mode: all
+  depth: 1
+  alert_types:
+  - '15_21'
+- id: alertlist_02
+  coords:
+    x: 1
+    y: 13
+    w: 12
+    h: 6
+  type: AlertList
+  title: Fleet Compliance Alerts
+  self_provider: true
+  pin_to_world: true
+  pin:
+    adapter_kind: VMWARE
+    resource_kind: HostSystem
+  mode: all
+  depth: 5
+  alert_types:
+  - '15_21'
+  criticality:
+  - 2
+  - 3
+  - 4
+- id: alertlist_03
+  coords:
+    x: 1
+    y: 19
+    w: 12
+    h: 6
+  type: AlertList
+  title: Failing Controls on Selected Object
+  criticality:
+  - 2
+  - 3
+  - 4
+  mode: all
+  depth: 4
+  alert_types:
+  - '15_21'
+- id: alertlist_04
+  coords:
+    x: 1
+    y: 25
+    w: 12
+    h: 6
+  type: AlertList
+  title: Failing Controls on Selected VM
+  criticality:
+  - 2
+  - 3
+  - 4
+  mode: all
+  depth: 1
+  alert_types:
+  - '15_21'
+- id: alertlist_05
+  coords:
+    x: 1
+    y: 31
+    w: 12
+    h: 6
+  type: AlertList
+  title: Open Compliance Alerts
+  criticality:
+  - 2
+  - 3
+  - 4
+  mode: all
+  depth: 4
+  alert_types:
+  - '15_21'
+- id: alertlist_06
+  coords:
+    x: 1
+    y: 37
+    w: 12
+    h: 6
+  type: AlertList
+  title: Performance Alerts
+  criticality:
+  - 2
+  - 3
+  - 4
+  alert_types:
+  - '15_19'
+  - '16_19'
+  - '17_19'
+  - '18_19'
+  - '19_19'
+  mode: all
+  depth: 1
+- id: alertlist_07
+  coords:
+    x: 1
+    y: 43
+    w: 12
+    h: 6
+  type: AlertList
+  title: Active Alerts (for selected VM)
+  criticality:
+  - 2
+  - 3
+  - 4
+  status:
+  - 0
+  mode: all
+  depth: 1
+- id: alertlist_08
+  coords:
+    x: 1
+    y: 49
+    w: 12
+    h: 6
+  type: AlertList
+  title: Performance Alerts
+  criticality:
+  - 2
+  - 3
+  - 4
+  alert_types:
+  - '15_19'
+  - '16_19'
+  - '17_19'
+  - '18_19'
+  - '19_19'
+  - '20_19'
+  mode: all
+  depth: 1

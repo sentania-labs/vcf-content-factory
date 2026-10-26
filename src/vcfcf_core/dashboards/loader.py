@@ -1433,6 +1433,11 @@ class AlertListConfig:
     alert_impact: List[str] = field(default_factory=list)
     alert_action: List = field(default_factory=list)
     mode: str = "all"
+    # depth and relationship_mode are validated ints when the loader built
+    # the config. The reverse parser (reverse.py) instead carries the source
+    # wire values through verbatim, valid or not, or None when the source
+    # omits the key, so the extractor can emit them faithfully and the
+    # loader rejects an inexpressible value at validate time.
     depth: int = 1
     alert_definitions: List[str] = field(default_factory=list)
     relationship_mode: List[int] = field(default_factory=lambda: [-1, 0])
@@ -2392,7 +2397,7 @@ def _parse_alert_list_relationship_mode(w: dict) -> List[int]:
     valid = dict(_ALERT_LIST_RELATIONSHIP_MODES)
     chosen = set()
     for n in names:
-        key = n.strip().lower() if isinstance(n, str) else n
+        key = n.strip().lower() if isinstance(n, str) else None
         if key not in valid:
             raise DashboardValidationError(
                 f"widget {wid!r}: AlertList relationship_mode entry {n!r} "
@@ -2415,17 +2420,13 @@ def _parse_alert_list_relationship_mode(w: dict) -> List[int]:
 def _parse_alert_list_depth(w: dict) -> int:
     """Parse an AlertList ``depth``; the server accepts only 1 to 10."""
     wid = w.get("id", "?")
-    raw = w.get("depth", 1)
-    if isinstance(raw, bool):
-        raw = None
-    try:
-        depth = int(raw)
-        if isinstance(raw, float) and raw != depth:
-            raise ValueError
-    except (TypeError, ValueError):
+    depth = w.get("depth", 1)
+    # Strict: a YAML integer only. bool is an int subclass; strings and
+    # floats ("5", 3.0) are rejected rather than coerced.
+    if not isinstance(depth, int) or isinstance(depth, bool):
         raise DashboardValidationError(
             f"widget {wid!r}: AlertList depth must be an integer from "
-            f"{_ALERT_LIST_DEPTH_MIN} to {_ALERT_LIST_DEPTH_MAX}, got {w.get('depth')!r}"
+            f"{_ALERT_LIST_DEPTH_MIN} to {_ALERT_LIST_DEPTH_MAX}, got {depth!r}"
         )
     if not _ALERT_LIST_DEPTH_MIN <= depth <= _ALERT_LIST_DEPTH_MAX:
         raise DashboardValidationError(
@@ -3416,16 +3417,16 @@ def load_dashboard(
         # array form is parsed with its config below) ---
         raw_rm = w.get("relationship_mode")
         if raw_rm is not None and widget_type != "AlertList":
+            if widget_type != "MetricChart":
+                raise DashboardValidationError(
+                    f"widget {w.get('id', '?')!r}: relationship_mode is only "
+                    f"supported on MetricChart and AlertList widgets, got type {widget_type!r}"
+                )
             rm_str = str(raw_rm).strip().lower()
             if rm_str not in ("children", "parents"):
                 raise DashboardValidationError(
                     f"widget {w.get('id', '?')!r}: relationship_mode must be "
                     f"'children', 'parents', or omitted, got {raw_rm!r}"
-                )
-            if widget_type != "MetricChart":
-                raise DashboardValidationError(
-                    f"widget {w.get('id', '?')!r}: relationship_mode is only "
-                    f"supported on MetricChart and AlertList widgets, got type {widget_type!r}"
                 )
             relationship_mode: Optional[str] = rm_str
         else:
