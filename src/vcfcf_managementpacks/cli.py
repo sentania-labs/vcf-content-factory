@@ -564,6 +564,10 @@ def cmd_install(args) -> int:
     summary_rebind = _summary_rebind_requested(args)
     if summary_rebind is None:
         return 2
+    if getattr(args, "install_timeout", None) is not None and not args.wait:
+        print("ERROR: --install-timeout has no effect with --no-wait (nothing "
+              "waits for the install); pass one.", file=sys.stderr)
+        return 2
 
     # installer.install_pak calls sys.exit(1) on fatal errors; a return is
     # 0, 3 when the pak installed but a post-install dashboard check failed,
@@ -1392,15 +1396,17 @@ def build_parser() -> argparse.ArgumentParser:
     pi.epilog = (
         _creds_help
         + " Exit codes: 0 installed and every check passed; 1 the install "
-        "failed or was refused (nothing to retry blindly: read the ERROR); 2 "
+        "failed or was refused, or the wait ran out with its status unread "
+        "(the last status poll failed) (nothing to retry blindly: read the "
+        "ERROR); 2 "
         "usage error; 3 the pak installed but a post-install dashboard check "
         "failed (MATERIALIZATION STALLED: a dashboard waits on an adapter "
         "that is not installed; or SUMMARY NOT REBOUND: a Summary tab still "
         "shows an unfinished copy, with the server's answer when the bind was "
         "refused). SUMMARY INCOMPLETE with --skip-summary-rebind is information "
         "and leaves the exit code alone. Do not reinstall on 3. 4 the wait "
-        "(--install-timeout, default 1800 s) ran out while the server still "
-        "reported the install running (INSTALL STILL RUNNING): not a failure "
+        "(--install-timeout or VCFCF_INSTALL_TIMEOUT_S, default 1800 s) ran out while the server still "
+        "reported the install running on its last poll (INSTALL STILL RUNNING): not a failure "
         "and the post-install checks did not run; watch Admin UI > Software "
         "Updates > Solutions until the new version shows, and check the pak's "
         "dashboards and Summary tabs by hand (no command re-runs those checks "

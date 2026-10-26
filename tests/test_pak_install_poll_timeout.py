@@ -34,12 +34,13 @@ class _Clock:
         self.now += s
 
 
-def _wire(monkeypatch, tmp_path, installing_polls):
+def _wire(monkeypatch, tmp_path, installing_polls, script=None):
     """Fake session that reports isPakInstalling=True for ``installing_polls``
-    polls (None: forever), then False."""
+    polls (None: forever), then False.  ``script(n)``, when given, answers
+    poll ``n`` instead (return a body, or raise)."""
     events = []
     clock = _Clock()
-    polls = {"n": 0}
+    polls = {"n": 0, "timeouts": []}
 
     class _Session:
         def __init__(self, **kw):
@@ -60,8 +61,11 @@ def _wire(monkeypatch, tmp_path, installing_polls):
         def trigger_install(self, pak_id):
             events.append("install")
 
-        def is_pak_installing(self):
+        def is_pak_installing(self, timeout=None):
             polls["n"] += 1
+            polls["timeouts"].append(timeout)
+            if script is not None:
+                return script(polls["n"])
             if installing_polls is None or polls["n"] <= installing_polls:
                 return {"isPakInstalling": True, "isPakUninstallActive": False}
             return {"isPakInstalling": False, "isPakUninstallActive": False}
@@ -185,5 +189,144 @@ def test_epilog_documents_exit_4():
     sub = next(a for a in parser._actions if a.__class__.__name__ == "_SubParsersAction")
     epilog = sub.choices["install"].epilog
     assert "4 the wait" in epilog
-    assert "--install-timeout, default 1800 s" in epilog
+    assert "--install-timeout or VCFCF_INSTALL_TIMEOUT_S, default 1800 s" in epilog
     assert "Do not reinstall on 4" in epilog
+
+
+# --- review B1: exit 4 needs a last poll that read isPakInstalling true ------
+
+def _raise(n):
+    raise RuntimeError("isPakInstalling returned HTTP 401. Response body: x")
+
+
+def test_every_poll_fails_exits_1_not_4(monkeypatch, tmp_path, capsys):
+    pak, events, _, polls = _wire(monkeypatch, tmp_path, None, script=_raise)
+    with pytest.raises(SystemExit) as exc:
+        installer.install_pak(str(pak), poll_timeout=30)
+    assert exc.value.code == 1
+    assert "logout" in events and "verify" not in events
+    err = capsys.readouterr().err
+    assert "INSTALL STILL RUNNING" not in err
+    assert f"the last {polls['n']} status poll(s) failed" in err
+    assert "HTTP 401" in err
+    assert "Last good status: (unknown)" in err
+
+
+def test_missing_key_is_a_failed_poll(monkeypatch, tmp_path, capsys):
+    """An answer without isPakInstalling was read as True before review B1."""
+    pak, _, _, polls = _wire(monkeypatch, tmp_path, None,
+                             script=lambda n: {"error": "session expired"})
+    with pytest.raises(SystemExit) as exc:
+        installer.install_pak(str(pak), poll_timeout=30)
+    assert exc.value.code == 1
+    err = capsys.readouterr().err
+    assert "INSTALL STILL RUNNING" not in err
+    assert "no boolean isPakInstalling" in err
+    assert f"the last {polls['n']} status poll(s) failed" in err
+
+
+def test_true_then_failures_exits_1_naming_stale_status(monkeypatch, tmp_path, capsys):
+    def script(n):
+        if n <= 2:
+            return {"isPakInstalling": True, "isPakUninstallActive": False}
+        raise RuntimeError("connection reset")
+
+    pak, _, _, polls = _wire(monkeypatch, tmp_path, None, script=script)
+    with pytest.raises(SystemExit) as exc:
+        installer.install_pak(str(pak), poll_timeout=60)
+    assert exc.value.code == 1
+    err = capsys.readouterr().err
+    assert "INSTALL STILL RUNNING" not in err
+    assert f"the last {polls['n'] - 2} status poll(s) failed" in err
+    assert "connection reset" in err
+    assert "Last good status: pakInstalling=True" in err
+
+
+def test_failures_then_true_exits_4(monkeypatch, tmp_path, capsys):
+    """A failed poll followed by a good True read is evidence again."""
+    def script(n):
+        if n <= 3:
+            raise RuntimeError("blip")
+        return {"isPakInstalling": True, "isPakUninstallActive": False}
+
+    pak, _, _, _ = _wire(monkeypatch, tmp_path, None, script=script)
+    assert installer.install_pak(str(pak), poll_timeout=60) == 4
+    assert "INSTALL STILL RUNNING" in capsys.readouterr().err
+
+
+# --- review W1: each status poll carries a bounded request timeout ----------
+
+def test_poll_passes_the_time_left(monkeypatch, tmp_path):
+    pak, _, _, polls = _wire(monkeypatch, tmp_path, None)
+    installer.install_pak(str(pak), poll_timeout=20)
+    t = polls["timeouts"]
+    assert t[0] == pytest.approx(20)
+    assert all(b < a for a, b in zip(t, t[1:]))  # shrinks as the wait runs
+    assert all(x > 0 for x in t)
+
+
+class _Resp:
+    ok = True
+    status_code = 200
+    text = "{}"
+
+    def json(self):
+        return {"isPakInstalling": True}
+
+
+class _Http:
+    def __init__(self):
+        self.kw = None
+
+    def post(self, url, **kw):
+        self.kw = kw
+        return _Resp()
+
+
+def _session():
+    s = installer._UISession.__new__(installer._UISession)
+    s._session = _Http()
+    s._host = "ops.example"
+    s._csrf = "tok"
+    return s
+
+
+def test_is_pak_installing_sends_a_timeout():
+    connect, read = installer.SOLUTION_ACTION_TIMEOUT
+    s = _session()
+    s.is_pak_installing()
+    assert s._session.kw["timeout"] == (connect, read)
+    s.is_pak_installing(timeout=7.5)
+    assert s._session.kw["timeout"] == (connect, 7.5)
+    s.is_pak_installing(timeout=10_000)
+    assert s._session.kw["timeout"] == (connect, read)  # capped at the default read
+
+
+def test_stalled_poll_falls_into_retry(monkeypatch, tmp_path, capsys):
+    """A request timeout is a failed poll: retried, then exit 1 if it is last."""
+    import requests
+
+    def script(n):
+        if n == 1:
+            return {"isPakInstalling": True}
+        raise requests.exceptions.ReadTimeout("read timed out")
+
+    pak, _, _, polls = _wire(monkeypatch, tmp_path, None, script=script)
+    with pytest.raises(SystemExit) as exc:
+        installer.install_pak(str(pak), poll_timeout=30)
+    assert exc.value.code == 1
+    assert polls["n"] > 2  # retried after the timeout
+    err = capsys.readouterr().err
+    assert "Status poll failed (will retry): read timed out" in err
+
+
+# --- review N1 ---------------------------------------------------------------
+
+def test_cli_rejects_install_timeout_with_no_wait(monkeypatch, capsys):
+    called = []
+    monkeypatch.setattr(installer, "install_pak", lambda **kw: called.append(kw) or 0)
+    monkeypatch.delenv("VCFCF_SUMMARY_REBIND", raising=False)
+    assert cli.main(["install", "x.pak", "--no-wait", "--install-timeout", "5"]) == 2
+    assert not called
+    assert "--no-wait" in capsys.readouterr().err
+    assert cli.main(["install", "x.pak", "--no-wait"]) == 0

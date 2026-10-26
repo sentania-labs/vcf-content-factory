@@ -54,8 +54,9 @@ when two devel installs outlived it).  If you invoke
 via `subprocess`, set your subprocess timeout above that wait plus the
 post-install checks below, or the harness kills the process while an
 install is still in progress on the server.  When the poller runs out with
-the server still reporting the install running, `install` prints
-`INSTALL STILL RUNNING` and exits 4: not a failure, do not reinstall, and
+the server's last answer still reporting the install running, `install`
+prints `INSTALL STILL RUNNING` and exits 4 (when the last status poll
+failed instead, the status is unknown and it exits 1): not a failure, do not reinstall, and
 the post-install checks below did not run (no command re-runs them on their
 own against an installed pak).  Uninstall keeps its 300 s poll (`POLL_TIMEOUT`).
 After the install, `install` checks that each dashboard the pak ships

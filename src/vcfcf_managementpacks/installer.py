@@ -686,8 +686,15 @@ class _UISession:
             mainAction="getLatestInstalledSolutionStatuses"
         )
 
-    def is_pak_installing(self) -> Dict[str, Any]:
+    def is_pak_installing(self, timeout: Optional[float] = None) -> Dict[str, Any]:
         """POST /ui/clusterManagement.action mainAction=isPakInstalling.
+
+        Every request carries a timeout (as :meth:`solution_action` does,
+        issue #235): the :data:`SOLUTION_ACTION_TIMEOUT` connect timeout and
+        a read timeout of :data:`SOLUTION_ACTION_TIMEOUT`'s read value,
+        capped at ``timeout`` seconds (the wait left) when given.  A stalled
+        socket then raises into the caller's retry path instead of holding
+        the wait past its deadline.
 
         Returns {"isPakInstalling": bool, "isPakUninstallActive": bool}.
         Both fields transition correctly on VCF Ops 9.0.2 — confirmed working
@@ -698,12 +705,16 @@ class _UISession:
           - Uninstall done: not isPakInstalling AND not isPakUninstallActive
         """
         assert self._session is not None
+        read = SOLUTION_ACTION_TIMEOUT[1]
+        if timeout is not None:
+            read = max(0.001, min(read, timeout))
         r = self._session.post(
             f"https://{self._host}/ui/clusterManagement.action",
             data={
                 "mainAction": "isPakInstalling",
                 "secureToken": self._csrf or "",
             },
+            timeout=(SOLUTION_ACTION_TIMEOUT[0], read),
         )
         if not r.ok:
             raise RuntimeError(
@@ -1207,15 +1218,34 @@ def install_pak(
             # on 9.0.2 (returns empty solutionStatuses[], never transitions).
             deadline = time.time() + poll_timeout
             last_state = "(unknown)"
+            # Exit 4 ("still running") needs evidence: the most recent poll
+            # succeeded and read an explicit isPakInstalling true.  A poll
+            # that raised, or answered without a boolean isPakInstalling,
+            # is a failed poll and clears that evidence.
+            last_poll_read_installing = False
+            failed_polls = 0          # consecutive, since the last good poll
+            last_error = ""
             while time.time() < deadline:
+                remaining = deadline - time.time()
                 try:
-                    status = ui.is_pak_installing()
+                    status = ui.is_pak_installing(timeout=remaining)
+                    installing = (status.get("isPakInstalling")
+                                  if isinstance(status, dict) else None)
+                    if not isinstance(installing, bool):
+                        raise RuntimeError(
+                            f"isPakInstalling answer has no boolean "
+                            f"isPakInstalling: {str(status)[:200]}"
+                        )
                 except Exception as e:
+                    last_poll_read_installing = False
+                    failed_polls += 1
+                    last_error = str(e)
                     _warn(f"Status poll failed (will retry): {e}")
                     time.sleep(poll_interval)
                     continue
 
-                installing = status.get("isPakInstalling", True)
+                failed_polls = 0
+                last_error = ""
                 uninstall_active = status.get("isPakUninstallActive", False)
                 last_state = (
                     f"pakInstalling={installing}  "
@@ -1231,8 +1261,21 @@ def install_pak(
                     installed = True
                     break
 
+                last_poll_read_installing = True
                 time.sleep(poll_interval)
 
+            if not installed and not last_poll_read_installing:
+                # No evidence the install is running: the last poll failed
+                # (or none ran).  Status unknown, the pre-2026-10-26 exit 1.
+                _abort(
+                    f"Install status unknown after {poll_timeout}s: the last "
+                    f"{failed_polls} status poll(s) failed. Last error: "
+                    f"{last_error or '(no poll ran)'}\n"
+                    f"Last good status: {last_state}\n"
+                    f"The install may still be running on the server, or may "
+                    f"have failed. Check Admin UI > Software Updates > "
+                    f"Solutions before reinstalling."
+                )
             if not installed:
                 # The poll ran out, the install did not fail: on 2026-10-26
                 # compliance 0.0.0.100 was still installing at 300 s on

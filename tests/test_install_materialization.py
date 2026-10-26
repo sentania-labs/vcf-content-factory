@@ -564,7 +564,7 @@ def test_install_pak_runs_the_check_after_logout(monkeypatch, tmp_path):
         def trigger_install(self, pak_id):
             events.append("install")
 
-        def is_pak_installing(self):
+        def is_pak_installing(self, timeout=None):
             return {"isPakInstalling": False}
 
     monkeypatch.setattr(installer, "_UISession", _Session)
