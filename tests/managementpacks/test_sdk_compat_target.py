@@ -595,11 +595,21 @@ def test_removal_warnings_are_picked_out():
 
 
 def _removal_source(tmp_path: Path) -> Path:
-    # Integer(int) is deprecated for removal since JDK 16, so JDK 17 already
-    # emits the [removal] warning the JDK 25 compile gave for ThreadDeath.
+    # The fixture declares its own forRemoval API rather than leaning on a JDK
+    # one: JDK APIs move in and out of forRemoval between releases (OpenJDK 25
+    # declares Integer(int) plain @Deprecated, a note not a [removal] warning),
+    # so a self-declared one warns the same on every JDK from 11 through 25.
+    # It sits in its own top-level class: javac does not warn on a use inside
+    # the declaring class.
+    _write_java(
+        tmp_path / "usersrc", "user/Doomed.java",
+        "package user;\nclass Doomed {\n"
+        "  @Deprecated(since = \"1\", forRemoval = true)\n"
+        "  static int gone() { return 1; }\n}\n",
+    )
     return _write_java(
         tmp_path / "usersrc", "user/Old.java",
-        "package user;\nclass Old { sdkstub.Present p; Integer i = new Integer(1); }\n",
+        "package user;\nclass Old { sdkstub.Present p; int i = Doomed.gone(); }\n",
     )
 
 
@@ -608,16 +618,18 @@ def test_framework_pass_fails_on_a_removal_warning(runtime, tmp_path):
     _stub_sdk_jar(tmp_path, runtime / sdk_builder._SDK_COMPAT_JAR_NAME, ["Present"])
     src = _removal_source(tmp_path)
     with pytest.raises(SdkBuildError) as exc:
-        sdk_builder._sdk_compat_check([src], [], "framework source", fail_on_removal=True)
+        sdk_builder._sdk_compat_check(
+            [src, src.with_name("Doomed.java")], [], "framework source", fail_on_removal=True)
     assert "deprecated for removal" in str(exc.value)
-    assert "[removal] Integer(int)" in str(exc.value)
+    assert "[removal] gone() in Doomed" in str(exc.value)
 
 
 @needs_javac
 def test_adapter_pass_still_only_prints_a_removal_warning(runtime, tmp_path, capsys):
     _stub_sdk_jar(tmp_path, runtime / sdk_builder._SDK_COMPAT_JAR_NAME, ["Present"])
     src = _removal_source(tmp_path)
-    assert sdk_builder._sdk_compat_check([src], [], "framework + adapter source") is True
+    assert sdk_builder._sdk_compat_check(
+        [src, src.with_name("Doomed.java")], [], "framework + adapter source") is True
     assert "[removal]" in capsys.readouterr().err
 
 
