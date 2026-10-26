@@ -138,7 +138,7 @@ A prior tooling pass incorrectly extrapolated from Heatmap's array form.
 Empirically confirmed 2026-05-21: emitting `[1, -1, 0]` for
 `relationship_mode: children` caused an Internal Server Error on dashboard
 load (MSSQL disk-latency widgets, `knowledge/context/attic/legacy-root-content/mssql-query-performance.yaml`).
-Heatmap and AlertList accept the array form; MetricChart does not.
+Heatmap and AlertList accept the array form; MetricChart does not (AlertList values: §AlertList).
 Fixed in `src/vcfcf_dashboards/render.py` `_metric_chart_widget()` — now emits
 scalar `-1` / `1` / `0`.
 
@@ -635,6 +635,39 @@ Criticality: 2=Warning, 3=Major, 4=Critical.
 the widget to specific alert definitions; always present in wire format, often
 `[]` (observed in four corpus dashboards: VM Details.json, Dell EMC Server
 Health.json, Workbench.json, Ping Response.json).
+
+`relationshipMode` is `{"relationshipMode": [ints]}`: parents `1`, children
+`-1`, self `0`. `[0]` is the resource's own alerts, `[-1]` its descendants
+only, `[-1, 0]` both. The widget editor offers Parent, Children and Self
+checkboxes and makes Self and Parent mutually exclusive, so it produces
+`[0]`, `[-1]`, `[1]`, `[1, -1]`, `[0, -1]`. `depth` must be 1 to 10: depth 0
+makes `problemalerts.action` throw `depth should be between 1 and 10` and the
+widget shows no list (the editor's depth field is min 1, max 10, disabled for
+self-only). Source:
+`knowledge/context/investigations/2026-10-26-alertlist-depth-semantics.md`
+(live replay, 9.0.2 and 8.18.6).
+
+Live replay covered `[0]`, `[-1]` and `[-1, 0]`. `[1]` (parents only) was
+not replayed; `[1, -1]` has reference backing (brockpeterson "Troubleshooting
+VMs v4") but no live run.
+
+Defaults differ on purpose: the editor's default for a new widget is
+Parent + Children (`[1, -1]`), while the factory renders `[-1, 0]` (Children +
+Self), which every factory and managed-pak AlertList has shipped with. Do not
+"fix" the factory default to match the editor; it would change which alerts
+every existing widget shows.
+
+Factory YAML: `relationship_mode:` takes `self`, `children`, `parents`, or a
+list of them (`[self, children]`); the renderer emits them in the order
+parents, children, self. Omitted means `[-1, 0]`. `self` with `parents` and
+`depth` outside 1 to 10 (or not a YAML integer) are load errors. With
+`relationship_mode: self` the depth is inert (the editor disables the field);
+author `depth: 1`.
+
+Extraction carries both values through verbatim: `1`, `-1` and `0` become
+their names, anything else (and any depth) is written as the source had it,
+so a value the YAML cannot express fails `validate` instead of being
+silently replaced.
 
 ---
 
