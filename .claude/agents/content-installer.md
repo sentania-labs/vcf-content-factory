@@ -107,12 +107,13 @@ Rules for pak installs:
    reads each bound Summary copy and prints `SUMMARY OK` or
    `SUMMARY INCOMPLETE <kind> <copy id> (<n> of <m> widgets loading)` as
    information. The Summary repair (wait for the source, rebind the
-   unfinished copy; 30 s poll, up to 660 s; exit 3 on NOT REBOUND) is
-   opt-in with `--summary-rebind` and runs only when the brief says so:
-   on 2026-10-24 the rebind call returned a server 500 on 9.0.2 and
-   8.18.7 (compliance build 98 record), cause under investigation.
-   Record every `MATERIALIZATION` and every `SUMMARY` line in the
-   install report.
+   unfinished copy; 30 s poll, up to 660 s; exit 3 on NOT REBOUND) runs
+   by default since #260; `--skip-summary-rebind` or
+   `VCFCF_SUMMARY_REBIND=0` turns it off, only when the brief says so.
+   The 2026-10-24 server 500 on 9.0.2 and 8.18 was the wrong request
+   form for those builds; the client now falls back to the single-map
+   form and says so. Record every `MATERIALIZATION` and every `SUMMARY`
+   line in the install report.
 5. **Live verification** (adapter logs, per-adapter log level) may
    require SSH to the appliance/collector — only when the access
    path is documented in `knowledge/context/investigations/`; a log-level
@@ -160,8 +161,11 @@ A dashboard whose YAML declares `summary_for` (one `"<AdapterKind>:<ResourceKind
 string, a comma-separated string, or a YAML list of them) is meant to render
 on the Summary tab of every listed object type. Content-zip imports cannot
 carry the binding, so after `sync` succeeds run
-`python3 -m vcfcf_dashboards bind-summary --profile <p> [--dashboard "<name>"]`
-(use `--dry-run` first). It resolves the installed dashboard by name, writes
+`python3 -m vcfcf_dashboards bind-summary --profile <p> --wait [--dashboard "<name>"]`
+(use `--dry-run` first). Never bind a dashboard that is still building:
+the Summary copy is cloned from it as it stands (#200). bind-summary
+refuses one (exit 2, nothing written) and `--wait` polls until it
+finishes (30 s, up to `--wait-timeout`, default 660 s). It resolves the installed dashboard by name, writes
 the association for every listed kind in one call, reads each back, and
 prints one `LIVE tabId` / template UUID line per kind; record every UUID in
 the install report, they are the only handles on the materialized copies.
