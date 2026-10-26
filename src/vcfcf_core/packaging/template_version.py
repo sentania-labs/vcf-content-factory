@@ -16,6 +16,9 @@ This list is the same one CLAUDE.md carries under "After tooling changes";
 keep the two in step.
 
 History (most recent first):
+  2026-10-26-1  install.ps1: post-import dashboard materialization check
+                (MATERIALIZATION lines, -SkipMaterializationCheck,
+                -MaterializationWait; issue #255)
   2026-10-24-1  install.py: post-import dashboard materialization check
                 (MATERIALIZATION lines, --skip-materialization-check,
                 --materialization-wait; issue #244). README footers name
@@ -27,4 +30,4 @@ History (most recent first):
   2026-08-24-2  install.ps1: uninstall residual-else sites warn and continue
 """
 
-CURRENT_TEMPLATE_VERSION = "2026-10-24-1"
+CURRENT_TEMPLATE_VERSION = "2026-10-26-1"

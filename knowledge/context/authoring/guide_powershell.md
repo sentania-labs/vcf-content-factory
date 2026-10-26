@@ -248,6 +248,36 @@ index first. Two traps while doing it:
 PowerShell unwraps single-element collections on function return. Fix:
 wrap in `@(...)` or use `Write-Output -NoEnumerate`.
 
+### `@($x)` over a `New-Object` `List[object]` can throw (issue #255)
+Measured under pwsh 7.5 on Linux while porting the materialization check:
+`@($list).Count`, where `$list` came from
+`New-Object System.Collections.Generic.List[object]` (a PSObject-wrapped
+list), threw `Argument types do not match` from the engine, both inside a
+function and at script scope, and with an empty list as well as one holding
+arrays. The same list built with `[System.Collections.Generic.List[object]]::new()`
+did not throw, and `foreach ($x in $list) { $n++ }` never did. Not verified
+on 5.1. In shipped code, build `List[object]` with `::new()`, and count a
+caller-supplied collection with a `foreach` rather than `@(...).Count`
+(`install.ps1:Invoke-MaterializationReport`). Remember `@($null).Count` is 1,
+so a null check is still needed in front of any `@()` count.
+
+### pwsh 7 turns ISO-8601 strings into `DateTime` (issue #255)
+Measured under pwsh 7.5.1: `'{"n":"2024-01-01T00:00:00Z"}' | ConvertFrom-Json`
+gives `n` as a `DateTime` that prints `01/01/2024 00:00:00`. 5.1 and Python
+keep the string. `-DateKind String` (pwsh 7.5+ only) turns that off; probe
+for it with `(Get-Command ConvertFrom-Json).Parameters.ContainsKey('DateKind')`
+rather than assuming it (`install.ps1:ConvertFrom-MatJson`). pwsh 7.0-7.4 have
+no switch for it.
+
+### Running the behaviour tests under 5.1
+The install.ps1 behaviour tests go through `tests/ps_runner.py`:
+`VCFCF_PS_EXE` picks the interpreter (default `pwsh`; `powershell` runs
+Windows PowerShell 5.1 on a Windows host), and `VCFCF_REQUIRE_PWSH=1` turns
+"interpreter not found" from a skip into an error, so a CI image without
+PowerShell cannot pass by skipping. Harnesses write results to a file and
+pin `[Console]::OutputEncoding` to UTF-8, because 5.1 writes the OEM code
+page to a redirected stdout.
+
 ### Typed collection parameters
 Typed params reject unwrapped scalars. Accept `[object[]]` or wrap at
 call site.
