@@ -16,7 +16,7 @@ pins one contract the library now exposes and the factory keeps on top:
   core loader with no minting callback: a source dashboard with no id gets
   an ERROR verdict and its YAML is left exactly as written (on main the
   factory loader minted a uuid into the file, leaving two ``id:`` lines);
-- the migrator gate: from a scratch site-packages holding only the built
+- the wheel-alone gate: from a scratch site-packages holding only the built
   wheel, with the environment cleared and an empty working directory, the
   offline read path turns a content-export zip into the same YAML the
   factory path produces for the same zip.
@@ -166,7 +166,7 @@ def test_round_trip_check_never_mints_into_the_emitted_yaml(tmp_path, capsys):
 
 
 # ---------------------------------------------------------------------------
-# The migrator gate: offline read path from the wheel alone
+# The wheel-alone gate: offline read path from the wheel alone
 # ---------------------------------------------------------------------------
 
 _OWNER = "b58a71ee-e909-5b40-a355-9e199e6f0f53"
@@ -207,8 +207,8 @@ def _export_zip_bytes() -> bytes:
 
 def unpack_export_zip(zip_path, dest):
     """Lay a content-export zip out as reverse_local's inputs, through the
-    library's own readers (review W3): ``_content_xml_from_export_zip``,
-    ``_dashboards_from_export_zip``, ``_supermetrics_from_export_zip`` and
+    library's own readers (review W3): ``content_xml_from_export_zip``,
+    ``dashboards_from_export_zip``, ``supermetrics_from_export_zip`` and
     ``_write_sm_yaml`` from ``vcfcf_core.extractor.extractor``; the stdlib
     only writes the files. Returns (dashboard_json_path, view_xml_dir,
     sm_yaml_dir). Shared by the bare-venv subprocess and the factory run, so
@@ -217,7 +217,7 @@ def unpack_export_zip(zip_path, dest):
     import json as _json
     from pathlib import Path as _Path
     from vcfcf_core.extractor.extractor import (
-        _content_xml_from_export_zip, _dashboards_from_export_zip, _supermetrics_from_export_zip, _write_sm_yaml,
+        content_xml_from_export_zip, dashboards_from_export_zip, supermetrics_from_export_zip, _write_sm_yaml,
     )
 
     dest = _Path(dest)
@@ -226,14 +226,14 @@ def unpack_export_zip(zip_path, dest):
     xml_dir.mkdir(parents=True)
     sm_dir.mkdir()
     outer = _Path(zip_path).read_bytes()
-    content_xml = _content_xml_from_export_zip(outer)
+    content_xml = content_xml_from_export_zip(outer)
     assert content_xml is not None, "no content.xml in the export"
     (xml_dir / "content.xml").write_bytes(content_xml)
-    dashboards = _dashboards_from_export_zip(outer)
+    dashboards = dashboards_from_export_zip(outer)
     assert len(dashboards) == 1, [d.get("name") for d in dashboards]
     dash_path = dest / "dashboard.json"
     dash_path.write_text(_json.dumps({"dashboards": dashboards}), encoding="utf-8")
-    for uid, sm in _supermetrics_from_export_zip(outer).items():
+    for uid, sm in supermetrics_from_export_zip(outer).items():
         assert sm["id"] == uid
         _write_sm_yaml(sm_dir / f"{uid}.yaml", sm, sm["formula"], policy_resource_kinds=[])
     return dash_path, xml_dir, sm_dir
@@ -244,35 +244,35 @@ class TestExportZipReaders:
     functions only run the export and hand the bytes over."""
 
     def test_dashboards_reader_merges_entries_and_skips_the_other_members(self):
-        from vcfcf_core.extractor.extractor import _dashboards_from_export_zip
+        from vcfcf_core.extractor.extractor import dashboards_from_export_zip
 
-        dashboards = _dashboards_from_export_zip(_export_zip_bytes())
+        dashboards = dashboards_from_export_zip(_export_zip_bytes())
         src = json.loads(DASH_JSON.read_text(encoding="utf-8"))
         assert [d["name"] for d in dashboards] == [d["name"] for d in src["dashboards"]]
         assert dashboards[0]["entries"] == src["entries"]
         assert len(dashboards[0]["widgets"]) == 3
 
     def test_supermetrics_reader_injects_ids_and_skips_configuration(self):
-        from vcfcf_core.extractor.extractor import _supermetrics_from_export_zip
+        from vcfcf_core.extractor.extractor import supermetrics_from_export_zip
 
-        sms = _supermetrics_from_export_zip(_export_zip_bytes())
+        sms = supermetrics_from_export_zip(_export_zip_bytes())
         assert len(sms) == 6
         assert all(sm["id"] == uid and sm["name"].startswith("[Fixture] SM ") for uid, sm in sms.items())
         assert "superMetrics" not in {k for sm in sms.values() for k in sm}
 
     def test_content_xml_reader_finds_the_nested_views_zip(self):
-        from vcfcf_core.extractor.extractor import _content_xml_from_export_zip
+        from vcfcf_core.extractor.extractor import content_xml_from_export_zip
 
-        assert _content_xml_from_export_zip(_export_zip_bytes()) == VIEWS_XML.read_bytes()
-        assert _content_xml_from_export_zip(b"not a zip") is None
+        assert content_xml_from_export_zip(_export_zip_bytes()) == VIEWS_XML.read_bytes()
+        assert content_xml_from_export_zip(b"not a zip") is None
 
     def test_readers_raise_value_error_on_unreadable_bytes(self):
-        from vcfcf_core.extractor.extractor import _dashboards_from_export_zip, _supermetrics_from_export_zip
+        from vcfcf_core.extractor.extractor import dashboards_from_export_zip, supermetrics_from_export_zip
 
         with pytest.raises(ValueError, match="failed to parse dashboard export zip"):
-            _dashboards_from_export_zip(b"not a zip")
+            dashboards_from_export_zip(b"not a zip")
         with pytest.raises(ValueError, match="failed to parse super metrics export zip"):
-            _supermetrics_from_export_zip(b"not a zip")
+            supermetrics_from_export_zip(b"not a zip")
 
     def test_live_export_functions_call_the_core_readers(self):
         import vcfcf_extractor.extractor as fac
@@ -280,8 +280,6 @@ class TestExportZipReaders:
 
         assert fac.dashboards_from_export_zip is core.dashboards_from_export_zip
         assert fac.supermetrics_from_export_zip is core.supermetrics_from_export_zip
-        # The underscore aliases still resolve through the wrapper (#165).
-        assert fac._dashboards_from_export_zip is core.dashboards_from_export_zip
         src = inspect.getsource(fac._export_dashboard_json)
         assert "dashboards_from_export_zip(outer_zip)" in src and "zipfile" not in src
         src = inspect.getsource(fac._export_supermetrics_full)
@@ -369,7 +367,7 @@ def core_wheel_site(tmp_path_factory) -> Path:
 
 @pytest.mark.slow
 def test_offline_reverse_from_the_wheel_alone_matches_the_factory_path(core_wheel_site, tmp_path):
-    """The 'migrator installs it by URL' gate (design §Gates): nothing from
+    """The 'installs from the wheel alone' gate (design §Gates): nothing from
     the factory on the path, environment cleared, empty cwd; the wheel turns
     the export zip into YAML byte-identical to the factory path's output."""
     zip_path = tmp_path / "export.zip"
