@@ -491,3 +491,165 @@ def test_dashboards_sync_walker_gets_the_renderers_resolver(monkeypatch, tmp_pat
     assert dash_cli.cmd_sync(args) == 0
     assert captured["xml_key"] == UUID_ACME
     assert [uid for uid, _ in client.enabled_calls] == [UUID_ACME]
+
+
+# --- review round (2026-10-26) ------------------------------------------------
+
+def _write_sm_formula(path: Path, sm_id, name: str, ref: str = "") -> None:
+    formula = (f'${{this, attribute=@supermetric:"{ref}"}}' if ref
+               else "${this, metric=cpu|usage_average}")
+    doc = {"id": sm_id, "name": name, "description": "d", "resource_kinds": RK,
+           "formula": formula}
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(yaml.safe_dump(doc, sort_keys=False), encoding="utf-8")
+
+
+def test_preflight_referent_walk_stays_in_the_referrers_pak(monkeypatch, tmp_path):
+    """W1: two paks define "Y" with different ids (and provenance cannot
+    tell paks apart).  p2's X references Y; the walk takes p2's Y."""
+    from vcfcf_common.dep_walker import supermetrics_used_by
+    from vcfcf_dashboards import sm_columns
+
+    _repo(tmp_path)
+    p1 = tmp_path / "content/sdk-adapters/p1/supermetrics"
+    p2 = tmp_path / "content/sdk-adapters/p2/supermetrics"
+    _write_sm_formula(p1 / "y.yaml", UUID_PAK_A, "Y")
+    _write_sm_formula(p2 / "y.yaml", UUID_PAK_B, "Y")
+    _write_sm_formula(p2 / "x.yaml", UUID_ACME_2, "X", ref="Y")
+    view = _load_view(_write_view(
+        tmp_path / "content/sdk-adapters/p2/views/v.yaml", "P2 View", "X"))
+    monkeypatch.chdir(tmp_path)
+    corpus = sm_columns.load_sm_corpus()
+    used, unresolved = supermetrics_used_by(
+        [view], [], corpus.defs, column_resolver=corpus.resolver())
+    assert unresolved == []
+    assert [s.id for s in used] == [UUID_ACME_2, UUID_PAK_B]
+
+
+def test_pak_view_never_falls_back_to_a_factory_sm(monkeypatch, tmp_path):
+    """N4: package / sync hold a pak view to the build-sdk rule (the pak's
+    own SMs only), where a third-party view may fall back."""
+    from vcfcf_dashboards import sm_columns
+
+    _repo(tmp_path)
+    _write_sm(tmp_path / "content/sdk-adapters/pak-a/supermetrics/s.yaml", UUID_PAK_A, SHARED)
+    pak_view = _load_view(_write_view(
+        tmp_path / "content/sdk-adapters/pak-a/views/v.yaml", "A View", FACTORY_ONLY))
+    tp_view = _load_view(_write_view(
+        tmp_path / "third_party/acme/views/v.yaml", "[Acme] View", FACTORY_ONLY))
+    monkeypatch.chdir(tmp_path)
+    resolver = sm_columns.load_sm_corpus().resolver()
+    assert resolver.resolve(pak_view, FACTORY_ONLY) is None
+    assert resolver.uuid_for(tp_view, FACTORY_ONLY) == UUID_FACTORY_ONLY
+    [(kind, msg)] = sm_columns.column_errors([pak_view], sm_columns.load_sm_corpus())
+    assert kind == "unresolved"
+    assert "'sdk-adapter:pak-a'" in msg and "'factory'" not in msg
+
+
+def test_symlinked_pak_keeps_its_content_set(tmp_path):
+    """N1: a pak symlinked into content/sdk-adapters/<name> from elsewhere
+    is still keyed by the link path."""
+    from vcfcf_dashboards import sm_columns
+
+    real = tmp_path / "elsewhere/pak-real"
+    _write_sm(real / "supermetrics/s.yaml", UUID_PAK_A, SHARED)
+    (tmp_path / "content/sdk-adapters").mkdir(parents=True)
+    (tmp_path / "content/sdk-adapters/pak-a").symlink_to(real)
+    sm = SimpleNamespace(
+        source_path=tmp_path / "content/sdk-adapters/pak-a/supermetrics/s.yaml",
+        provenance="")
+    assert sm_columns.content_set_of(sm) == "sdk-adapter:pak-a"
+
+
+def test_supermetrics_used_by_accepts_the_old_column_sms_with_a_warning():
+    """N6: the pre-#270 fourth parameter still works, keyword or positional."""
+    from vcfcf_common.dep_walker import supermetrics_used_by
+
+    sm = _ns_sm(UUID_ACME, SHARED, "acme")
+    sm.formula = "${this, metric=cpu|usage_average}"
+    view = _ns_view(f'supermetric:"{SHARED}"')
+    with pytest.warns(DeprecationWarning, match="column_sms"):
+        assert supermetrics_used_by([view], [], [sm], column_sms={SHARED: sm}) == ([sm], [])
+    with pytest.warns(DeprecationWarning, match="column_sms"):
+        assert supermetrics_used_by([view], [], [sm], {SHARED: sm}) == ([sm], [])
+
+
+# W2: vcfcf_dashboards validate checks name-form columns -------------------------
+
+def _validate(monkeypatch, tmp_path, sm_name: str) -> int:
+    from vcfcf_dashboards.cli import main
+
+    _write_view(tmp_path / "content/views/v.yaml",
+                "[VCF Content Factory] Column Probe View", sm_name)
+    monkeypatch.chdir(tmp_path)
+    return main([
+        "--views-dir", str(tmp_path / "content/views"),
+        "--dashboards-dir", str(tmp_path / "content/dashboards"),
+        "validate",
+    ])
+
+
+def test_validate_fails_an_unresolved_column(monkeypatch, tmp_path, capsys):
+    _repo(tmp_path)
+    assert _validate(monkeypatch, tmp_path, "Nowhere SM") == 1
+    err = capsys.readouterr().err
+    assert "SM-COLUMN:" in err and 'names super metric "Nowhere SM"' in err
+
+
+def test_validate_fails_an_ambiguous_column(monkeypatch, tmp_path, capsys):
+    """Two factory SMs share the name.  The SM loader rejects a duplicate
+    inside one directory (that is the did-not-load class), so the twin is
+    added to the corpus the validate check reads."""
+    from vcfcf_dashboards import sm_columns
+
+    _repo(tmp_path)
+    real_load = sm_columns.load_sm_corpus
+
+    def _with_twin(*a, **k):
+        corpus = real_load(*a, **k)
+        corpus.defs.append(SimpleNamespace(
+            id=UUID_ACME_2, name=SHARED, provenance="factory", source_path=None))
+        return corpus
+
+    monkeypatch.setattr(sm_columns, "load_sm_corpus", _with_twin)
+    assert _validate(monkeypatch, tmp_path, SHARED) == 1
+    err = capsys.readouterr().err
+    assert "SM-COLUMN:" in err and "ambiguous" in err
+
+
+def test_validate_fails_a_column_whose_set_did_not_load(monkeypatch, tmp_path, capsys):
+    _repo(tmp_path)
+    (tmp_path / "content/supermetrics/broken.yaml").write_text(
+        "name: [unclosed\n", encoding="utf-8")
+    assert _validate(monkeypatch, tmp_path, SHARED) == 1
+    err = capsys.readouterr().err
+    assert "SM-COLUMN:" in err and "did not load" in err
+
+
+def test_validate_only_warns_on_an_idless_sm(monkeypatch, tmp_path, capsys):
+    _repo(tmp_path)
+    sm_file = tmp_path / "content/supermetrics/idless.yaml"
+    _write_sm(sm_file, None, "Idless SM")
+    before = sm_file.read_bytes()
+    assert _validate(monkeypatch, tmp_path, "Idless SM") == 0
+    err = capsys.readouterr().err
+    assert "WARNING:" in err and "has no id yet" in err
+    assert "SM-COLUMN:" not in err
+    assert sm_file.read_bytes() == before
+
+
+def test_validate_passes_a_resolving_column(monkeypatch, tmp_path, capsys):
+    _repo(tmp_path)
+    assert _validate(monkeypatch, tmp_path, SHARED) == 0
+    assert "SM-COLUMN:" not in capsys.readouterr().err
+
+
+def test_validate_checks_third_party_views_on_the_full_corpus_run(monkeypatch, tmp_path, capsys):
+    from vcfcf_dashboards.cli import main
+
+    _repo(tmp_path)
+    _write_view(tmp_path / "third_party/acme/views/v.yaml", "[Acme] View", "Nowhere SM")
+    monkeypatch.chdir(tmp_path)
+    assert main(["validate"]) == 1
+    err = capsys.readouterr().err
+    assert "SM-COLUMN:" in err and '"[Acme] View"' in err

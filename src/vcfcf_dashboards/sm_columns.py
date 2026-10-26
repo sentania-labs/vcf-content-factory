@@ -7,9 +7,13 @@ supplies the factory-layout half the core may not know:
 
 - which content set a file belongs to (:func:`content_set_of`): the
   factory's ``content/``, one ``third_party/<slug>/`` project, or one
-  ``content/sdk-adapters/<name>/`` pak. A pak sits under ``content/`` and so
-  reads as ``"factory"`` provenance, which would let a pak SM and a factory
-  SM of the same name collide; the path tells them apart;
+  ``content/sdk-adapters/<name>/`` pak. Provenance cannot tell paks apart:
+  a pak repo has its own ``content/`` child, so the provenance root sniff
+  stops at the pak and its files read as ``""`` (``"factory"`` for a pak
+  without one), the same for every pak. The path tells them apart;
+- pak isolation: a pak view never falls back to a factory SM, matching
+  ``build-sdk`` / ``validate-sdk``, whose scope is the pak's bundled SMs
+  only (a pak ships nothing else);
 - the corpus: the SM YAML under a primary directory (``--supermetrics-dir``,
   default ``content/supermetrics``), ``content/supermetrics``, every
   ``third_party/*/supermetrics`` and every
@@ -44,17 +48,35 @@ def content_set_of(obj) -> str:
     ``"sdk-adapter:<name>"`` for a file under ``content/sdk-adapters/<name>/``,
     otherwise the object's ``provenance`` (``"factory"``, a third-party slug,
     or ``""`` for an object with no known place).
+
+    The path as given (made absolute, symlinks kept) is checked first, then
+    the symlink-resolved path: a pak symlinked into
+    ``content/sdk-adapters/<name>`` from elsewhere keeps its key.
     """
     src = getattr(obj, "source_path", None)
     if src:
+        candidates = [Path(src).absolute().parts]
         try:
-            parts = Path(src).resolve().parts
+            candidates.append(Path(src).resolve().parts)
         except OSError:
-            parts = Path(src).parts
-        for i in range(len(parts) - 3, -1, -1):
-            if parts[i] == "content" and parts[i + 1] == "sdk-adapters":
-                return f"sdk-adapter:{parts[i + 2]}"
+            pass
+        for parts in candidates:
+            key = _pak_key(parts)
+            if key:
+                return key
     return getattr(obj, "provenance", "") or ""
+
+
+def _pak_key(parts) -> str:
+    for i in range(len(parts) - 3, -1, -1):
+        if parts[i] == "content" and parts[i + 1] == "sdk-adapters":
+            return f"sdk-adapter:{parts[i + 2]}"
+    return ""
+
+
+def is_pak_set(key: str) -> bool:
+    """A pak's content set: isolated, no fallback to the factory set."""
+    return key.startswith("sdk-adapter:")
 
 
 def load_sm_dir_readonly(directory) -> Tuple[list, str, List[str]]:
@@ -122,7 +144,7 @@ class SmCorpus:
         if self._resolver is None:
             self._resolver = SmColumnResolver(
                 self.defs, set_of=content_set_of, unusable=self.idless,
-                broken_sets=self.broken_sets,
+                broken_sets=self.broken_sets, isolated=is_pak_set,
             )
         return self._resolver
 
@@ -159,8 +181,11 @@ def _dir_set(directory) -> str:
         source_path=probe, provenance=provenance_from_path(probe)))
 
 
-def column_errors(views, corpus: Optional[SmCorpus] = None) -> List[str]:
-    """Every ``supermetric:"<name>"`` column of ``views`` that does not bind
-    to exactly one renderable SM of the corpus; empty when all do."""
+def column_errors(views, corpus: Optional[SmCorpus] = None) -> List[Tuple[str, str]]:
+    """``(kind, message)`` for every ``supermetric:"<name>"`` column of
+    ``views`` that does not bind to exactly one renderable SM of the corpus;
+    empty when all do. ``kind`` is ``"unresolved"``, ``"ambiguous"``,
+    ``"broken"`` (its set's SM YAML did not load) or ``"unusable"`` (the SM
+    has no id yet)."""
     corpus = corpus if corpus is not None else load_sm_corpus()
-    return corpus.resolver().column_errors(views)
+    return corpus.resolver().column_problems(views)

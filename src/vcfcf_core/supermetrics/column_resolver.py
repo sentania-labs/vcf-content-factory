@@ -12,7 +12,9 @@ The rule (#270):
 
 1. the view's own content set first;
 2. then the fallback set (``"factory"`` by default), when it is a different
-   set: a third-party or pak view may name a factory SM;
+   set and the view's own set is not isolated (``isolated``): a third-party
+   view may name a factory SM; the factory isolates SDK-adapter paks, whose
+   build ships only the pak's own SMs;
 3. otherwise the name is unresolved.
 
 Two different SMs (different ids) sharing the name inside the set that
@@ -25,9 +27,15 @@ factory SM.
 
 The content set of an object is ``set_of(obj)``; the default is its
 ``provenance`` (``"factory"``, a third-party slug, or ``""``). The factory
-passes a key that also tells SDK-adapter paks apart (their files sit under
-``content/`` and so read as ``"factory"`` provenance); this module knows
-nothing about the repo layout.
+passes a key that also tells SDK-adapter paks apart (by provenance alone a
+pak's files read as ``"factory"`` or ``""``, the same for every pak); this
+module knows nothing about the repo layout.
+
+Every :class:`SmColumnResolutionError` carries a ``kind``: ``"ambiguous"``,
+``"broken"`` (a set that did not load), ``"unusable"`` (resolves, but must
+not be rendered, e.g. no id yet); :meth:`SmColumnResolver.column_problems`
+adds ``"unresolved"``. Callers grade by kind (validate warns on
+``"unusable"``, everything else is an error).
 
 Every consumer resolves through one instance, so they cannot disagree: the
 renderer (:meth:`SmColumnResolver.uuid_for`, passed as ``sm_resolver``),
@@ -50,7 +58,14 @@ DEFAULT_FALLBACK_SET = "factory"
 
 
 class SmColumnResolutionError(ValueError):
-    """A ``supermetric:"<name>"`` column cannot be bound to exactly one SM."""
+    """A ``supermetric:"<name>"`` column cannot be bound to exactly one SM.
+
+    ``kind`` is ``"ambiguous"``, ``"broken"`` or ``"unusable"`` (see the
+    module docstring)."""
+
+    def __init__(self, message: str, kind: str = "ambiguous") -> None:
+        super().__init__(message)
+        self.kind = kind
 
 
 def column_sm_name(attribute: str) -> Optional[str]:
@@ -87,6 +102,8 @@ class SmColumnResolver:
             the reason instead of emitting an id the instance does not know.
         broken_sets: ``{set key: reason}`` for content sets whose SM YAML did
             not load; a search that reaches one raises with the reason.
+        isolated: ``(set key) -> bool``; a view whose own set is isolated
+            never falls back (default: no set is isolated).
     """
 
     def __init__(
@@ -96,9 +113,11 @@ class SmColumnResolver:
         fallback_set: Optional[str] = DEFAULT_FALLBACK_SET,
         unusable: Optional[Mapping[str, str]] = None,
         broken_sets: Optional[Mapping[str, str]] = None,
+        isolated: Optional[Callable[[str], bool]] = None,
     ) -> None:
         self._set_of = set_of or _default_set_of
         self._broken = dict(broken_sets or {})
+        self._isolated = isolated or (lambda key: False)
         self._fallback = fallback_set
         self._unusable = {k.lower(): v for k, v in (unusable or {}).items()}
         # {(set, name): [sm, ...]} distinct by id, load order kept.
@@ -119,7 +138,8 @@ class SmColumnResolver:
     def _sets_for(self, view) -> List[str]:
         own = self._set_of(view)
         order = [own]
-        if self._fallback is not None and self._fallback != own:
+        if (self._fallback is not None and self._fallback != own
+                and not self._isolated(own)):
             order.append(self._fallback)
         return order
 
@@ -133,7 +153,8 @@ class SmColumnResolver:
                     f'view "{getattr(view, "name", "?")}" names super metric '
                     f'"{name}", which cannot be resolved: the super metric '
                     f"YAML of content set {_set_label(key)} did not load "
-                    f"({self._broken[key]})"
+                    f"({self._broken[key]})",
+                    kind="broken",
                 )
             cands = self._by_set_name.get((key, name), [])
             if len(cands) == 1:
@@ -162,7 +183,8 @@ class SmColumnResolver:
             raise SmColumnResolutionError(
                 f'view "{getattr(view, "name", "?")}" names super metric '
                 f'"{name}" ({_where(sm)}), which cannot be rendered: '
-                f"{reason or 'it has no id'}"
+                f"{reason or 'it has no id'}",
+                kind="unusable",
             )
         return sid
 
@@ -174,7 +196,13 @@ class SmColumnResolver:
         """One message per name-form column of ``views`` that does not bind
         to exactly one renderable SM. Empty means every such column resolves
         the way the renderer will resolve it."""
-        errors: List[str] = []
+        return [msg for _kind, msg in self.column_problems(views)]
+
+    def column_problems(self, views: Iterable) -> List[tuple]:
+        """``(kind, message)`` per name-form column of ``views`` that does not
+        bind to exactly one renderable SM; ``kind`` is ``"unresolved"`` or the
+        :class:`SmColumnResolutionError` kind."""
+        errors: List[tuple] = []
         for view in views:
             for col in getattr(view, "columns", None) or []:
                 name = column_sm_name(getattr(col, "attribute", "") or "")
@@ -187,12 +215,12 @@ class SmColumnResolver:
                 try:
                     uid = self.uuid_for(view, name)
                 except SmColumnResolutionError as exc:
-                    errors.append(f"{where}: {exc}")
+                    errors.append((exc.kind, f"{where}: {exc}"))
                     continue
                 if uid is None:
-                    errors.append(
+                    errors.append(("unresolved",
                         f'{where} names super metric "{name}", which is in no '
                         f"loaded super metric YAML of content set "
                         f"{self.describe_scope(view)}"
-                    )
+                    ))
         return errors

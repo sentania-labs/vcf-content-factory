@@ -91,8 +91,8 @@ def build_import_zip(
     """Assemble the nested import zip for ``views`` and ``dashboards``.
 
     ``sm_map`` (super metric name to uuid) resolves ``supermetric:"<name>"``
-    view columns; the caller supplies it (the factory scans its
-    ``content/supermetrics`` tree), this module never looks on disk.
+    view columns; the caller supplies it (a bundle's own SM list), this
+    module never looks on disk.
     ``sm_resolver`` (``(view, name) -> uuid | None``) replaces ``sm_map`` when
     the views come from more than one content set (issue #270); see
     ``render_view_def_fragments``.

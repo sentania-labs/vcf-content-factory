@@ -3,10 +3,10 @@ renderer's super metric lookup (M2 row 2).
 
 Before row 2 the renderer built this map itself, scanning
 ``content/supermetrics`` then ``supermetrics`` relative to the working
-directory inside a bare ``except``. The behaviour moved verbatim; these
-tests pin it so the move stays a move:
+directory. Row 2 moved that scan here; #270 removed it (no caller left).
+These tests pin:
 
-- unscoped: candidate order, first directory wins, all-or-nothing swallow;
+- unscoped: an empty map, whatever the working directory holds;
 - scoped: exactly the listed files, a load failure is a ``ValueError``
   naming the bundle and the real raiser.
 """
@@ -40,35 +40,17 @@ def _write(dir_: Path, fname: str, text: str) -> Path:
 
 
 class TestUnscoped:
-    def test_content_supermetrics_wins_over_bare_supermetrics(self, tmp_path, monkeypatch):
+    def test_no_scope_is_an_empty_map_even_with_a_cwd_tree(self, tmp_path, monkeypatch):
+        """The unscoped cwd scan was removed with #270: no in-repo caller was
+        left, and a flat cwd map is what let a third-party column bind to a
+        same-named factory SM."""
         _write(tmp_path / "content" / "supermetrics", "a.yaml",
                _sm_yaml("[VCF Content Factory] Map Probe A", _A))
         _write(tmp_path / "supermetrics", "b.yaml",
                _sm_yaml("[VCF Content Factory] Map Probe B", _B))
-        monkeypatch.chdir(tmp_path)
-        assert sm_id_map() == {"[VCF Content Factory] Map Probe A": _A}
-
-    def test_bare_supermetrics_is_the_fallback(self, tmp_path, monkeypatch):
-        _write(tmp_path / "supermetrics", "b.yaml",
-               _sm_yaml("[VCF Content Factory] Map Probe B", _B))
-        monkeypatch.chdir(tmp_path)
-        assert sm_id_map() == {"[VCF Content Factory] Map Probe B": _B}
-
-    def test_no_candidate_directory_is_an_empty_map(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
         assert sm_id_map() == {}
         assert sm_id_map(None) == {}
-
-    def test_one_bad_file_empties_the_whole_map(self, tmp_path, monkeypatch):
-        """All-or-nothing, as the old renderer scan was: ``load_dir`` raises
-        before returning its list, so the good sibling never lands either."""
-        _write(tmp_path / "content" / "supermetrics", "a.yaml",
-               _sm_yaml("[VCF Content Factory] Map Probe A", _A))
-        # No framework prefix: load_dir's default enforce_framework_prefix=True rejects it.
-        _write(tmp_path / "content" / "supermetrics", "bad.yaml",
-               _sm_yaml("Unprefixed Probe", _B))
-        monkeypatch.chdir(tmp_path)
-        assert sm_id_map() == {}
 
 
 class TestScoped:

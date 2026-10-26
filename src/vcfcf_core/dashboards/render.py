@@ -1113,8 +1113,8 @@ def render_view_def_fragments(
             ``supermetric:"<name>"`` column references. The caller builds it;
             this module never looks for SM YAML on disk. The factory's
             ``vcfcf_supermetrics.loader.sm_id_map`` produces it from a bundle
-            scope or from the repo's ``content/supermetrics`` tree. None is an
-            empty map.
+            or pak scope. None is an empty map. A render whose views come from
+            more than one content set uses ``sm_resolver`` instead.
         sm_scope_active: Bundle-scoped mode. Any ``supermetric:"<name>"``
             reference absent from ``sm_map`` raises ``ValueError`` with a
             message naming the view, the reference, and the bundle context.

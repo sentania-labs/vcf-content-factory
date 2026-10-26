@@ -136,15 +136,22 @@ name at load time without round-tripping to the server:
 
 Display names are unique inside one content set, not across sets: the
 factory's `content/`, each `third_party/<project>/`, and each
-`content/sdk-adapters/<pak>/` is its own set (a pak sits under `content/`
-but is keyed by its path, not by its `"factory"` provenance). A column
-resolves in this order (issue #270):
+`content/sdk-adapters/<pak>/` is its own set. A pak is keyed by its path
+(`sdk-adapter:<pak>`, symlinked paks included), because by provenance every
+pak reads the same (`""`, or `"factory"` for a pak without its own
+`content/` child). A column resolves in this order (issue #270):
 
 1. the view's own content set;
-2. then the factory set (`content/supermetrics`), so a third-party or pak
-   view may name a factory SM;
-3. otherwise the column is an error. Another third-party project's SMs are
-   never in reach.
+2. then the factory set (`content/supermetrics`), so a third-party view may
+   name a factory SM. A pak view never falls back: its build ships only the
+   pak's own SMs, so `package` / `sync` hold it to the same rule as
+   `build-sdk`;
+3. otherwise the column is an error. Another third-party project's (or
+   pak's) SMs are never in reach.
+
+The same rule picks the `@supermetric:"<name>"` formula referents the #154
+pre-import check walks: a referent resolves in the referring SM's own set,
+then the factory.
 
 Every failure is loud, before anything is imported or written: an
 unresolved name; two different SMs of that name in the set that answers
@@ -152,13 +159,34 @@ unresolved name; two different SMs of that name in the set that answers
 same-named factory SM); an SM whose YAML has no `id` yet (run validate to
 mint one).
 
+`vcfcf_dashboards validate` runs the same check (RULE-005) over the factory
+views and every `third_party/*/views`: unresolved, ambiguous and
+failed-to-load sets are `SM-COLUMN:` errors; an id-less SM is a WARNING
+there only, because `vcfcf_supermetrics validate` mints it. Pak views are
+checked by `validate-sdk`.
+
+**No minting at package or sync.** Before #270, `package` and `sync` loaded
+`content/supermetrics` with the minting loader, so they wrote an `id:` into
+a freshly authored, id-less SM YAML. They now load read-only and fail on a
+column that names one; run `python3 -m vcfcf_supermetrics validate` (or the
+project's validate) first, which the validate-before-install rule already
+requires.
+
+**Root-level `./supermetrics` is no longer read.** The removed unscoped map
+also scanned `supermetrics/` under the working directory when
+`content/supermetrics` was absent. The corpus is now only the directories
+listed below, so a column in a tree laid out with a root-level
+`supermetrics/` fails loudly as unresolved unless the run passes
+`--supermetrics-dir supermetrics` (sync).
+
 Where each path gets its SMs:
 
 - `vcfcf_dashboards package` / `sync` and the bundle views/dashboards
   handlers: the corpus is `--supermetrics-dir` (default
-  `content/supermetrics`), `content/supermetrics`, every
-  `third_party/*/supermetrics` and every `content/sdk-adapters/*/supermetrics`,
-  loaded read-only (`vcfcf_dashboards.sm_columns`). One resolver
+  `content/supermetrics`; `package` and `validate` always use the default),
+  `content/supermetrics`, every `third_party/*/supermetrics` and every
+  `content/sdk-adapters/*/supermetrics`, loaded read-only
+  (`vcfcf_dashboards.sm_columns`). One resolver
   (`vcfcf_core.supermetrics.column_resolver.SmColumnResolver`) feeds the
   renderer, the pre-import referent check (#154) and the post-import
   walker, so the three cannot disagree.

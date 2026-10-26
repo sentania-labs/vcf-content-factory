@@ -12,8 +12,8 @@ callbacks a caller may supply:
 
 ``load_dir`` takes its directory as a required argument and ``sm_id_map``
 only ever loads the files it is handed (``None`` is an empty map, never a
-scan); the factory wrapper keeps the old ``"supermetrics"`` default and the
-cwd scan.
+scan); the factory wrapper keeps the old ``"supermetrics"`` default (its
+cwd scan for ``sm_id_map(None)`` was removed with issue #270).
 """
 from __future__ import annotations
 
@@ -275,10 +275,9 @@ def sm_id_map(
     clear message.
 
     ``sm_scope=None`` is an empty map: the library never scans a directory
-    for SM YAML. The factory wrapper (``vcfcf_supermetrics.loader.sm_id_map``)
-    keeps the pre-row-2 renderer's unscoped mode on top, scanning
-    ``content/supermetrics`` then ``supermetrics`` under the working
-    directory.
+    for SM YAML. Two different SMs (different ids) sharing a display name in
+    the scope are a ``ValueError`` (issue #270): a ``supermetric:"<name>"``
+    column could not say which it means.
     """
     sm_map: dict[str, str] = {}
     if sm_scope is None:

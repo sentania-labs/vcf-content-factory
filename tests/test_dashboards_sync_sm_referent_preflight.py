@@ -446,7 +446,7 @@ def test_dashboard_sync_preflight_never_writes_sm_yaml(monkeypatch, tmp_path, ca
     """An id-less SM YAML, in an unrelated third_party project and in
     content/supermetrics, is byte-identical after the preflight: the check
     loads without minting ids.  The preflight stops this sync, so the
-    import path (whose sm_id_map() mints by the UUID contract) is not run."""
+    import path is not run (it never mints either, since #270)."""
     tp_file = tmp_path / "third_party/other/supermetrics/idless.yaml"
     tp_before = _write_raw(tp_file, _idless("[Other] Idless SM"))
     f_file = tmp_path / "content/supermetrics/zz_idless.yaml"

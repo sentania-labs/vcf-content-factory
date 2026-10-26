@@ -55,13 +55,14 @@ Public API — offline (no client required)
       super metric or a view instead of a dashboard.  Seeds first, then
       referents in discovery order; errors name the missing referent.
 
-  supermetrics_used_by(views, dashboards, all_sms, column_resolver=None) -> (list[SuperMetricDef], list[str])
+  supermetrics_used_by(views, dashboards, all_sms, column_resolver=None, *, column_sms=None) -> (list[SuperMetricDef], list[str])
       SMs in all_sms that view columns and dashboard widgets name, plus
       their @supermetric referents in all_sms, and the references all_sms
       could not resolve; feeds the pre-import referent check on the
       dashboards sync path (#154).  A supermetric:"<name>" column resolves
       through column_resolver (an SmColumnResolver, the one the renderer
       uses), scoped to the view's own content set then the factory (#270).
+      column_sms= (the old dict form) still works with a DeprecationWarning.
 
 Project-scope semantics
 -----------------------
@@ -94,8 +95,9 @@ Extraction helpers (importable for packaging use)
 from __future__ import annotations
 
 import re
+import warnings
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Callable, List, Optional, Set, Tuple
+from typing import TYPE_CHECKING, Callable, List, Mapping, Optional, Set, Tuple
 
 if TYPE_CHECKING:
     from ..supermetrics.loader import SuperMetricDef
@@ -516,6 +518,7 @@ def _walk_sm_crossrefs(
 def expand_sm_crossrefs(
     sms: "List",
     all_sms: "List",
+    resolve: "Optional[Callable[[str, object], object]]" = None,
 ) -> "Tuple[List, List[str]]":
     """Transitively add super metrics referenced by ``@supermetric:"<name>"``.
 
@@ -531,6 +534,14 @@ def expand_sm_crossrefs(
     lands in ``errors`` rather than raising, matching ``collect_deps``; the
     caller decides whether that is fatal (the discrete builder treats it as a
     hard failure, the same as the resolver would at emit time).
+
+    ``resolve(name, referrer)`` picks the SM a formula name means from the
+    referring SM's point of view; None (the default) picks among
+    ``all_sms`` by provenance (``_pick_sm_by_name``).  The dashboards sync
+    preflight passes its column resolver here, so a referent resolves in the
+    referrer's own content set and then the factory, the same rule as a
+    view column, and two SDK-adapter paks (which share one provenance) are
+    never confused (review W1 on #270).
     """
     by_name = _sm_candidates_by_name(all_sms)
     result: "List" = []
@@ -538,6 +549,8 @@ def expand_sm_crossrefs(
     errors: List[str] = []
 
     def _resolve(name: str, referrer) -> object:
+        if resolve is not None:
+            return resolve(name, referrer)
         return _pick_sm_by_name(
             by_name.get(name, []), getattr(referrer, "provenance", "")
         )
@@ -556,11 +569,23 @@ def expand_sm_crossrefs(
     return result, errors
 
 
+class _MapColumnResolver:
+    """The pre-#270 ``column_sms`` map behind the resolver interface."""
+
+    def __init__(self, column_sms) -> None:
+        self._map = dict(column_sms)
+
+    def resolve(self, view, name: str):
+        return self._map.get(name)
+
+
 def supermetrics_used_by(
     views: "List",
     dashboards: "List",
     all_sms: "List",
     column_resolver=None,
+    *,
+    column_sms: "Optional[Mapping[str, object]]" = None,
 ) -> "Tuple[List, List[str]]":
     """Super metrics in ``all_sms`` that ``views`` and ``dashboards`` use.
 
@@ -583,7 +608,14 @@ def supermetrics_used_by(
     factory, so the check reads the formula of the SM the import binds even
     when another set defines one of the same name.  When None, one is built
     over ``all_sms`` keyed by provenance.  An ambiguous name (or a set that
-    did not load) raises its ``SmColumnResolutionError``.
+    did not load) raises its ``SmColumnResolutionError``.  The same resolver
+    picks each seed's formula referents (``expand_sm_crossrefs``'s
+    ``resolve``), from the referring SM's own content set.
+
+    ``column_sms`` (``{name: SuperMetricDef}``, the pre-#270 fourth
+    parameter) is still accepted, keyword or positional, with a
+    ``DeprecationWarning``: a name-form column then resolves only through
+    that map, and formula referents by provenance, as before.
 
     Returns ``(supermetrics, unresolved)``: ``unresolved`` names every view
     column or widget whose SM is not in ``all_sms``, so its referents could
@@ -592,9 +624,25 @@ def supermetrics_used_by(
     from ..dashboards.render import _SM_COLUMN_REF_RE
     from ..supermetrics.column_resolver import SmColumnResolver
 
-    by_id = {(sm.id or "").lower(): sm for sm in all_sms if getattr(sm, "id", "")}
-    if column_resolver is None:
+    if isinstance(column_resolver, Mapping):  # positional pre-#270 column_sms
+        column_sms, column_resolver = column_resolver, None
+    crossref_resolve = None
+    if column_sms is not None:
+        warnings.warn(
+            "supermetrics_used_by(column_sms=...) is deprecated; pass "
+            "column_resolver=SmColumnResolver(...) (issue #270)",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        column_resolver = _MapColumnResolver(column_sms)
+    elif column_resolver is None:
         column_resolver = SmColumnResolver(all_sms)
+    if not isinstance(column_resolver, _MapColumnResolver):
+        crossref_resolve = (
+            lambda name, referrer: column_resolver.resolve(referrer, name)
+        )
+
+    by_id = {(sm.id or "").lower(): sm for sm in all_sms if getattr(sm, "id", "")}
     seeds: "List" = []
     seen: Set[str] = set()
     unresolved: List[str] = []
@@ -629,7 +677,7 @@ def supermetrics_used_by(
                 )
             else:
                 _add(sm)
-    expanded, _errors = expand_sm_crossrefs(seeds, all_sms)
+    expanded, _errors = expand_sm_crossrefs(seeds, all_sms, resolve=crossref_resolve)
     return expanded, unresolved
 
 

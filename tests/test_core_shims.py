@@ -23,8 +23,8 @@ defaults the core loaders dropped), and adds eight wrappers:
 (the repo-root sniff), ``vcfcf_packaging.describe`` (cache location, live
 refresh, ``make_cache``), ``vcfcf_packaging.audit`` (``run_dependency_audit``),
 ``vcfcf_supermetrics.loader``, ``vcfcf_customgroups.loader``,
-``vcfcf_reports.loader`` (minting, provenance, directory defaults, the
-unscoped ``sm_id_map`` scan) and ``vcfcf_packaging.loader`` (root sniff,
+``vcfcf_reports.loader`` (minting, provenance, directory defaults; the
+unscoped ``sm_id_map`` scan was removed with #270) and ``vcfcf_packaging.loader`` (root sniff,
 callbacks, ``bundles`` default). Every wrapper serves core names through
 module ``__getattr__`` (reads are identical objects; a write on the old
 path does NOT reach core, pinned below), and ``vcfcf_packaging.builder``
