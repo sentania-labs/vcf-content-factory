@@ -1627,11 +1627,61 @@ def rewrite_undefined_baseline(text: str) -> str:
     return f"{m.group(1)} or Undefined"
 
 
+def _strip_ps_comment(line: str, quote: Optional[str]) -> tuple:
+    """Cut a PowerShell ``#`` comment off one remediation line.
+
+    A ``#`` starts a comment when it is outside a string and starts a
+    token (first character, or preceded by whitespace), so
+    ``"<New VLAN#>"`` and ``...html#/doc`` are kept. ``quote`` is the
+    string state carried in from the previous line (PowerShell strings
+    may span lines); the state at the end of this line is returned with
+    the kept text. A backtick escapes the next character inside double
+    quotes; a doubled quote inside a string reads as close-then-reopen,
+    which leaves the state right.
+    """
+    i, n = 0, len(line)
+    while i < n:
+        ch = line[i]
+        if quote is None:
+            if ch in ("'", '"'):
+                quote = ch
+            elif ch == "#" and (i == 0 or line[i - 1].isspace()):
+                return line[:i].rstrip(), None, True
+        elif quote == '"' and ch == "`":
+            i += 1
+        elif ch == quote:
+            quote = None
+        i += 1
+    return line, quote, False
+
+
 def collapse_remediation(text: str) -> str:
-    """Collapse a multi-line PowerCLI remediation into a single line."""
+    """Collapse a multi-line PowerCLI remediation into a single line.
+
+    The lines are joined with `` ; ``, so a PowerShell ``#`` comment would
+    swallow every statement after it: a leading comment line turns the
+    whole recommendation into one comment, and a trailing ``# ...`` on a
+    statement comments out the statements that follow (#254,
+    vm.virtual-hardware). Comment-only lines are dropped and trailing
+    comments cut before the join; blank lines go too, so a dropped
+    comment leaves no empty `` ; `` segment. A remediation that is nothing but
+    comments (a commented-out vendor example) keeps its comment text,
+    since dropping it would leave an empty remediation. Text with no
+    ``#`` collapses exactly as before.
+    """
     if not text:
         return ""
-    s = text.replace("\r", " ").replace("\n", " ; ")
+    lines = text.replace("\r", " ").split("\n")
+    if "#" in text:
+        kept, quote, cut_any = [], None, False
+        for line in lines:
+            code, quote, cut = _strip_ps_comment(line, quote)
+            cut_any = cut_any or cut
+            if code.strip():
+                kept.append(code)
+        if cut_any and kept:
+            lines = kept
+    s = " ; ".join(lines)
     s = re.sub(r"\s+", " ", s).strip()
     return s
 
