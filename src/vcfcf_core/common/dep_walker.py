@@ -55,6 +55,12 @@ Public API — offline (no client required)
       super metric or a view instead of a dashboard.  Seeds first, then
       referents in discovery order; errors name the missing referent.
 
+  supermetrics_used_by(views, dashboards, all_sms, column_sms=None) -> (list[SuperMetricDef], list[str])
+      SMs in all_sms that view columns and dashboard widgets name, plus
+      their @supermetric referents in all_sms, and the references all_sms
+      could not resolve; feeds the pre-import referent check on the
+      dashboards sync path (#154).
+
 Project-scope semantics
 -----------------------
   project_scope=None         No scoping.  Resolves against the full corpus the same
@@ -512,6 +518,82 @@ def expand_sm_crossrefs(
         _accept(sm, "")
     _walk_sm_crossrefs(list(sms), _resolve, _accept, errors)
     return result, errors
+
+
+def supermetrics_used_by(
+    views: "List",
+    dashboards: "List",
+    all_sms: "List",
+    column_sms: "Optional[dict]" = None,
+) -> "Tuple[List, List[str]]":
+    """Super metrics in ``all_sms`` that ``views`` and ``dashboards`` use.
+
+    Seeds are the SMs a view column names (``sm_<uuid>`` or
+    ``supermetric:"<name>"``) and the SMs a dashboard widget metric key names
+    (``sm_<uuid>``); each seed's ``@supermetric:"<name>"`` formula referents
+    found in ``all_sms`` are added transitively (``expand_sm_crossrefs``).
+    The caller resolves the formula referents of the returned SMs against the
+    target instance (``check_sm_referents``), which is where a missing
+    referent is named (issue #154).
+
+    The name-form column token is matched with the renderer's own
+    ``_SM_COLUMN_REF_RE`` on the stripped attribute, so a column the renderer
+    resolves as a super metric (any token case, optional ``@``) is a seed
+    here too.
+
+    ``column_sms`` (``{name: SuperMetricDef}``) is the set the renderer will
+    resolve a ``supermetric:"<name>"`` column against for this import (the
+    SMs behind its ``sm_map``).  When given, a name-form column resolves
+    only through it, so the check reads the formula the import uses even
+    when another project defines an SM of the same name.  When None, the
+    name is picked from ``all_sms`` by the view's provenance.
+
+    Returns ``(supermetrics, unresolved)``: ``unresolved`` names every view
+    column or widget whose SM is not in ``all_sms``, so its referents could
+    not be checked from the repo; the caller decides how loud to be.
+    """
+    from ..dashboards.render import _SM_COLUMN_REF_RE
+
+    by_id = {(sm.id or "").lower(): sm for sm in all_sms if getattr(sm, "id", "")}
+    by_name = _sm_candidates_by_name(all_sms)
+    seeds: "List" = []
+    seen: Set[str] = set()
+    unresolved: List[str] = []
+
+    def _add(sm) -> None:
+        key = (getattr(sm, "id", "") or "").lower() or sm.name
+        if key not in seen:
+            seen.add(key)
+            seeds.append(sm)
+
+    view_refs, _ = extract_refs_from_views(views)
+    dash_refs, _ = extract_refs_from_dashboards(dashboards)
+    for ref in view_refs + dash_refs:
+        sm = by_id.get(ref.sm_id.lower())
+        if sm is None:
+            unresolved.append(f"{ref.source} references sm_{ref.sm_id.lower()}")
+        else:
+            _add(sm)
+    for view in views:
+        for col in view.columns:
+            m = _SM_COLUMN_REF_RE.match((col.attribute or "").strip())
+            if not m:
+                continue
+            if column_sms is not None:
+                sm = column_sms.get(m.group(1))
+            else:
+                sm = _pick_sm_by_name(
+                    by_name.get(m.group(1), []), getattr(view, "provenance", "")
+                )
+            if sm is None:
+                unresolved.append(
+                    f"view '{view.name}' col '{col.display_name}' references "
+                    f"super metric '{m.group(1)}'"
+                )
+            else:
+                _add(sm)
+    expanded, _errors = expand_sm_crossrefs(seeds, all_sms)
+    return expanded, unresolved
 
 
 def extract_view_names_from_dashboards(

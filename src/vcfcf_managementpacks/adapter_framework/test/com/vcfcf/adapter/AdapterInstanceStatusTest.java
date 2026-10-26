@@ -25,11 +25,17 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Issue #223: a cycle in which nothing could be collected sets the adapter
- * instance status (the account row), not only the objects'.
+ * instance status (the account row), not only the objects'. Issue #245: a
+ * failed child object gets a status the SDK accepts on a child, never one it
+ * refuses and drops.
  *
  * <p>No JUnit: call via {@code main()}. Drives the real
  * {@link VcfCfAdapter#onCollect} with a scripted collector; the test adapter
- * records {@code setResourceStatus} calls instead of reaching the platform.
+ * records {@code setResourceStatus} calls instead of reaching the platform,
+ * after asking the SDK's own gate ({@code AdapterBase.isValidStatusForResource},
+ * private, called reflectively) whether it would take the status. A status
+ * that gate refuses is recorded as refused and not applied, as the SDK does,
+ * so the test checks against whichever SDK jar is on the classpath.
  * Needs log4j at runtime for the adapter's logger ({@link LogCapture});
  * SKIPPED without it.
  */
@@ -43,6 +49,7 @@ public class AdapterInstanceStatusTest {
         testPureRules();
         testRedactCredentials();
         testFailureMessageIsRedacted();
+        testChildStatusRuleCoversEveryStatus();
         if (!LogCapture.available()) {
             skip("onCollect tests: log4j not on the runtime classpath"
                     + " (add a jar carrying it, e.g. adapter_runtime/lib/*)");
@@ -64,6 +71,18 @@ public class AdapterInstanceStatusTest {
             testDefaultCycleStartIsNoOp();
             testCycleStartErrorDoesNotStopCycle();
             testCycleStartFatalEndsCycle();
+            testGateIsTheSdks();
+            testFailedChildErrorIsMappedNotDropped();
+            testFailedChildDownIsMappedNotDropped();
+            testEveryChildFailsMapsChildrenAndRaisesInstance();
+            testEveryMappedStatusReachesTheChild();
+            testInterruptedChildIsNotRefused();
+            testSdkNotTakingStatusIsLogged();
+            testInstanceNotTakingStatusIsLogged();
+            testMoveSummaryIsOneLinePerCycle();
+            testOffListWarnOncePerStatus();
+            testFailedChildRecoversNextCycle();
+            testStackTraceOncePerFailureStreak();
         }
         report();
     }
@@ -128,6 +147,43 @@ public class AdapterInstanceStatusTest {
         String dm = VcfCfAdapter.adapterInstanceFailureMessage(d,
                 new IOException("Bearer abcdefghijkl rejected"));
         assertFalse("discovery reason redacted too: " + dm, dm.contains("abcdefghijkl"));
+    }
+
+    /**
+     * Issue #245: every status, null included, maps onto the SDK's child
+     * list, and onto the instance list for the instance; accepted ones are
+     * kept as they are.
+     */
+    private static void testChildStatusRuleCoversEveryStatus() {
+        List<ResourceStatusEnum> all = new ArrayList<>(Arrays.asList(ResourceStatusEnum.values()));
+        all.add(null);
+        for (ResourceStatusEnum st : all) {
+            ResourceStatusEnum child = VcfCfAdapter.childStatusFor(st);
+            assertTrue("child " + st + " -> " + child + " is on the SDK child list",
+                    ResourceStatusEnum.isResourceAllowedStatus(child));
+            if (st != null && ResourceStatusEnum.isResourceAllowedStatus(st)) {
+                assertEquals("child " + st + " kept", st, child);
+            } else {
+                assertEquals("child " + st + " -> NO_DATA_RECEIVING",
+                        ResourceStatusEnum.RESOURCE_STATUS_NO_DATA_RECEIVING, child);
+            }
+            ResourceStatusEnum inst = VcfCfAdapter.instanceStatusFor(st);
+            assertTrue("instance " + st + " -> " + inst + " is on the SDK instance list",
+                    ResourceStatusEnum.isAdapterAllowedStatus(inst));
+        }
+        assertFalse("ERROR is not on the SDK child list (the #245 premise)",
+                ResourceStatusEnum.isResourceAllowedStatus(ResourceStatusEnum.RESOURCE_STATUS_ERROR));
+        assertFalse("DOWN is not on the SDK child list (the #245 premise)",
+                ResourceStatusEnum.isResourceAllowedStatus(ResourceStatusEnum.RESOURCE_STATUS_DOWN));
+        ResourceConfig inst = new ResourceConfig(9000);
+        assertTrue("same object is the instance", VcfCfAdapter.isAdapterInstance(inst, inst));
+        assertTrue("same id is the instance",
+                VcfCfAdapter.isAdapterInstance(inst, new ResourceConfig(9000)));
+        assertFalse("other id is a child", VcfCfAdapter.isAdapterInstance(inst, new ResourceConfig(1)));
+        assertFalse("no instance: a child", VcfCfAdapter.isAdapterInstance(null, inst));
+        ResourceConfig noId = new ResourceConfig();
+        assertFalse("null id is a child even as the same object (SDK isAdapterInstResourceConfig)",
+                VcfCfAdapter.isAdapterInstance(noId, noId));
     }
 
     // -----------------------------------------------------------------------
@@ -230,6 +286,218 @@ public class AdapterInstanceStatusTest {
         assertFalse("healthy cycle: instance untouched", a.statuses.containsKey(a.instance));
         assertEquals("child collected", ResourceStatusEnum.RESOURCE_STATUS_DATA_RECEIVING,
                 a.statusOf(lastResources.get(0)));
+    }
+
+    // -----------------------------------------------------------------------
+    // Issue #245: a failed child is never refused and dropped
+    // -----------------------------------------------------------------------
+
+    /** The test adapter's gate is the SDK's: ERROR refused on a child, taken on the instance. */
+    private static void testGateIsTheSdks() throws Exception {
+        TestAdapter a = adapter();
+        ResourceConfig child = new ResourceConfig(1);
+        assertFalse("SDK refuses ERROR on a child",
+                a.setResourceStatus(child, ResourceStatusEnum.RESOURCE_STATUS_ERROR));
+        assertFalse("SDK refuses DOWN on a child",
+                a.setResourceStatus(child, ResourceStatusEnum.RESOURCE_STATUS_DOWN));
+        assertTrue("SDK takes NO_DATA_RECEIVING on a child",
+                a.setResourceStatus(child, ResourceStatusEnum.RESOURCE_STATUS_NO_DATA_RECEIVING));
+        assertTrue("SDK takes ERROR on the instance",
+                a.setResourceStatus(a.instance, ResourceStatusEnum.RESOURCE_STATUS_ERROR, "x"));
+    }
+
+    private static void testFailedChildErrorIsMappedNotDropped() throws Exception {
+        TestAdapter a = adapter();
+        a.collector.failing.add(1);
+        a.onCollect(a.instance, resources(1, 2));
+        assertEquals("nothing refused", 0, a.refused.size());
+        assertEquals("failed child shows NO_DATA_RECEIVING",
+                ResourceStatusEnum.RESOURCE_STATUS_NO_DATA_RECEIVING, a.statusOf(lastResources.get(0)));
+        assertEquals("healthy child shows DATA_RECEIVING",
+                ResourceStatusEnum.RESOURCE_STATUS_DATA_RECEIVING, a.statusOf(lastResources.get(1)));
+        assertTrue("the move is logged in the cycle summary", a.log.contains(
+                "1 failed object(s) set to RESOURCE_STATUS_NO_DATA_RECEIVING this cycle (first: ?/1)"));
+        assertTrue("summary says ERROR or DOWN on the instance",
+                a.log.contains("which turns ERROR or DOWN when every object in the cycle fails"));
+        assertFalse("partial failure: instance untouched", a.statuses.containsKey(a.instance));
+    }
+
+    private static void testFailedChildDownIsMappedNotDropped() throws Exception {
+        TestAdapter a = adapter();
+        a.collector.failing.add(1);
+        a.collector.mapTo = ResourceStatusEnum.RESOURCE_STATUS_DOWN;
+        a.onCollect(a.instance, resources(1, 2));
+        assertEquals("nothing refused", 0, a.refused.size());
+        assertEquals("DOWN child shows NO_DATA_RECEIVING",
+                ResourceStatusEnum.RESOURCE_STATUS_NO_DATA_RECEIVING, a.statusOf(lastResources.get(0)));
+    }
+
+    private static void testEveryChildFailsMapsChildrenAndRaisesInstance() throws Exception {
+        TestAdapter a = adapter();
+        a.collector.failing.addAll(Arrays.asList(1, 2));
+        a.onCollect(a.instance, resources(1, 2));
+        assertEquals("nothing refused", 0, a.refused.size());
+        for (ResourceConfig rc : lastResources) {
+            assertEquals("child " + rc.getResourceId() + " NO_DATA_RECEIVING",
+                    ResourceStatusEnum.RESOURCE_STATUS_NO_DATA_RECEIVING, a.statusOf(rc));
+        }
+        assertEquals("instance still ERROR (#223)", ResourceStatusEnum.RESOURCE_STATUS_ERROR,
+                a.statusOf(a.instance));
+    }
+
+    /** Whatever a pak maps an exception to, the child gets a status the SDK takes. */
+    private static void testEveryMappedStatusReachesTheChild() throws Exception {
+        for (ResourceStatusEnum st : ResourceStatusEnum.values()) {
+            TestAdapter a = adapter();
+            a.collector.failing.add(1);
+            a.collector.mapTo = st;
+            a.onCollect(a.instance, resources(1, 2));
+            assertEquals(st + ": nothing refused", 0, a.refused.size());
+            ResourceStatusEnum got = a.statusOf(lastResources.get(0));
+            assertTrue(st + ": child got " + got, got != null
+                    && ResourceStatusEnum.isResourceAllowedStatus(got));
+            if (st == ResourceStatusEnum.RESOURCE_STATUS_ERROR
+                    || st == ResourceStatusEnum.RESOURCE_STATUS_DOWN) {
+                assertTrue(st + ": the move is in the cycle summary",
+                        a.log.contains("1 failed object(s) set to RESOURCE_STATUS_NO_DATA_RECEIVING"));
+            } else if (got != st) {
+                assertTrue(st + ": the move is logged at WARN", a.log.lines().stream().anyMatch(
+                        l -> l.startsWith("WARN ") && l.contains(
+                                "status " + st.name() + " is not accepted on a child object")));
+            }
+        }
+    }
+
+    /** Review N1: the expected ERROR/DOWN move is one INFO line per cycle, not one per object. */
+    private static void testMoveSummaryIsOneLinePerCycle() throws Exception {
+        TestAdapter a = adapter();
+        a.collector.failing.addAll(Arrays.asList(1, 2, 3));
+        a.collector.downIds.add(2);
+        a.onCollect(a.instance, resources(1, 2, 3, 4));
+        assertEquals("one summary line", 1, countLines(a, "INFO", "failed object(s) set to", null));
+        assertTrue("summary counts all three", a.log.contains(
+                "3 failed object(s) set to RESOURCE_STATUS_NO_DATA_RECEIVING this cycle (first: ?/1)"));
+        assertEquals("no per-object move line", 0,
+                countLines(a, null, "is not accepted on a child object", null));
+        a.log.clear();
+        a.onCollect(a.instance, resources(4));
+        assertEquals("healthy cycle: no summary", 0,
+                countLines(a, null, "failed object(s) set to", null));
+    }
+
+    /** Review N1: an off-list pak mapping is warned once per status per instance, not every cycle. */
+    private static void testOffListWarnOncePerStatus() throws Exception {
+        TestAdapter a = adapter();
+        a.collector.failing.addAll(Arrays.asList(1, 2));
+        a.collector.mapTo = ResourceStatusEnum.RESOURCE_STATUS_UNKNOWN;
+        for (int cycle = 0; cycle < 3; cycle++) a.onCollect(a.instance, resources(1, 2, 3));
+        assertEquals("UNKNOWN warned once over 3 cycles and 6 failures", 1,
+                countLines(a, "WARN", "status RESOURCE_STATUS_UNKNOWN is not accepted", null));
+        assertEquals("children still NO_DATA_RECEIVING",
+                ResourceStatusEnum.RESOURCE_STATUS_NO_DATA_RECEIVING, a.statusOf(lastResources.get(1)));
+        a.collector.mapTo = ResourceStatusEnum.RESOURCE_STATUS_COLLECTOR_DOWN;
+        a.onCollect(a.instance, resources(1, 2, 3));
+        a.onCollect(a.instance, resources(1, 2, 3));
+        assertEquals("a second status gets its own single WARN", 1,
+                countLines(a, "WARN", "status RESOURCE_STATUS_COLLECTOR_DOWN is not accepted", null));
+    }
+
+    /** Review N5: NO_DATA_RECEIVING is not sticky; a child that recovers shows DATA_RECEIVING. */
+    private static void testFailedChildRecoversNextCycle() throws Exception {
+        TestAdapter a = adapter();
+        a.collector.failing.add(1);
+        a.onCollect(a.instance, resources(1, 2));
+        ResourceConfig child = lastResources.get(0);
+        assertEquals("cycle 1: failed child NO_DATA_RECEIVING",
+                ResourceStatusEnum.RESOURCE_STATUS_NO_DATA_RECEIVING, a.statusOf(child));
+        a.collector.failing.clear();
+        a.onCollect(a.instance, Arrays.asList(child, lastResources.get(1)));
+        assertEquals("cycle 2: recovered child DATA_RECEIVING",
+                ResourceStatusEnum.RESOURCE_STATUS_DATA_RECEIVING, a.statusOf(child));
+        assertEquals("nothing refused in either cycle", 0, a.refused.size());
+    }
+
+    /**
+     * Review follow-up 2: the stack trace at WARN once per failure streak; a
+     * one-line WARN plus the trace at DEBUG while it keeps failing; a new
+     * streak after success, or after the resource left a cycle, logs it again.
+     */
+    private static void testStackTraceOncePerFailureStreak() throws Exception {
+        TestAdapter a = adapter("DEBUG");
+        a.collector.failing.add(1);
+        for (int cycle = 0; cycle < 3; cycle++) a.onCollect(a.instance, resources(1, 2));
+        assertEquals("trace at WARN once in a 3-cycle streak", 1,
+                countLines(a, "WARN", "error collecting ?/1", true));
+        assertEquals("one-line WARN on cycles 2 and 3", 2,
+                countLines(a, "WARN", "error collecting ?/1", false));
+        assertTrue("streak length named", a.log.contains("(failed 3 cycles in a row; stack trace at DEBUG)"));
+        assertEquals("trace at DEBUG on cycles 2 and 3", 2,
+                countLines(a, "DEBUG", "stack trace for ?/1", true));
+
+        a.collector.failing.clear();
+        a.onCollect(a.instance, resources(1, 2));
+        a.collector.failing.add(1);
+        a.log.clear();
+        a.onCollect(a.instance, resources(1, 2));
+        assertEquals("after a success: new streak, trace at WARN again", 1,
+                countLines(a, "WARN", "error collecting ?/1", true));
+
+        a.onCollect(a.instance, resources(2));
+        a.log.clear();
+        a.onCollect(a.instance, resources(1, 2));
+        assertEquals("after leaving a cycle: streak forgotten, trace at WARN again", 1,
+                countLines(a, "WARN", "error collecting ?/1", true));
+    }
+
+    /**
+     * Captured lines at {@code level} (any level when null) containing
+     * {@code text}; {@code withTrace} true/false filters on an attached
+     * throwable, null ignores it.
+     */
+    private static int countLines(TestAdapter a, String level, String text, Boolean withTrace) {
+        int n = 0;
+        for (String l : a.log.lines()) {
+            if (level != null && !l.startsWith(level + " ")) continue;
+            if (!l.contains(text)) continue;
+            if (withTrace != null && withTrace != l.contains(" [thrown ")) continue;
+            n++;
+        }
+        return n;
+    }
+
+    private static void testInterruptedChildIsNotRefused() throws Exception {
+        TestAdapter a = adapter();
+        a.collector.interruptOn = 1;
+        try {
+            a.onCollect(a.instance, resources(1, 2));
+        } finally {
+            Thread.interrupted();
+        }
+        assertEquals("nothing refused", 0, a.refused.size());
+        assertEquals("interrupted child shows NO_DATA_RECEIVING",
+                ResourceStatusEnum.RESOURCE_STATUS_NO_DATA_RECEIVING, a.statusOf(lastResources.get(0)));
+    }
+
+    /** A status the SDK still does not take is logged, never silent. */
+    private static void testSdkNotTakingStatusIsLogged() throws Exception {
+        TestAdapter a = adapter();
+        a.takeNothing = true;
+        a.collector.failing.add(1);
+        a.onCollect(a.instance, resources(1, 2));
+        assertTrue("WARN names the status and object", a.log.contains(
+                "the SDK did not take status RESOURCE_STATUS_NO_DATA_RECEIVING for ?/1"));
+        assertTrue("WARN for the healthy object too", a.log.contains(
+                "the SDK did not take status RESOURCE_STATUS_DATA_RECEIVING for ?/2"));
+    }
+
+    private static void testInstanceNotTakingStatusIsLogged() throws Exception {
+        TestAdapter a = adapter();
+        a.takeNothing = true;
+        a.collector.failing.addAll(Arrays.asList(1, 2));
+        a.onCollect(a.instance, resources(1, 2));
+        assertTrue("WARN says the instance status was not taken", a.log.contains(
+                "the SDK did not take adapter instance status RESOURCE_STATUS_ERROR"));
+        assertFalse("no claim that it was set", a.log.contains("adapter instance set to"));
     }
 
     // -----------------------------------------------------------------------
@@ -355,6 +623,7 @@ public class AdapterInstanceStatusTest {
         ResourceStatusEnum mapTo;
         boolean stopAfterFirst;
         Integer wrapInterruptOn;
+        Integer interruptOn;
         TestAdapter owner;
         boolean rediscoveryAnswer;
         int needsRediscoveryCalls;
@@ -383,6 +652,9 @@ public class AdapterInstanceStatusTest {
                 throw new RuntimeException("read aborted",
                         new java.io.InterruptedIOException("interrupted"));
             }
+            if (interruptOn != null && interruptOn.equals(rc.getResourceId())) {
+                throw new InterruptedException("stop");
+            }
             if (failing.contains(rc.getResourceId())) {
                 throw new IOException(downIds.contains(rc.getResourceId())
                         ? "unreachable" : "Login failed (cached)");
@@ -399,6 +671,8 @@ public class AdapterInstanceStatusTest {
     public static class TestAdapter extends VcfCfAdapter<Object> {
         final Map<ResourceConfig, ResourceStatusEnum> statuses = new java.util.IdentityHashMap<>();
         final Map<ResourceConfig, String> messages = new java.util.IdentityHashMap<>();
+        final List<String> refused = new ArrayList<>();
+        boolean takeNothing;
         ScriptedCollector collector;
         ResourceConfig instance;
         LogCapture log;
@@ -441,15 +715,34 @@ public class AdapterInstanceStatusTest {
         }
 
         @Override
+        public ResourceConfig getAdapterInstResource() { return instance; }
+
+        /** The SDK's own child-versus-instance status check, from the jar on the classpath. */
+        boolean sdkTakes(ResourceConfig rc, ResourceStatusEnum st) {
+            try {
+                Method m = AdapterBase.class.getDeclaredMethod("isValidStatusForResource",
+                        ResourceConfig.class, ResourceStatusEnum.class);
+                m.setAccessible(true);
+                return (Boolean) m.invoke(this, rc, st);
+            } catch (ReflectiveOperationException e) {
+                throw new IllegalStateException("SDK gate not reachable: " + e, e);
+            }
+        }
+
+        @Override
         public boolean setResourceStatus(ResourceConfig rc, ResourceStatusEnum st) {
-            statuses.put(rc, st);
-            return true;
+            return setResourceStatus(rc, st, null);
         }
 
         @Override
         public boolean setResourceStatus(ResourceConfig rc, ResourceStatusEnum st, String msg) {
+            if (takeNothing) return false;
+            if (!sdkTakes(rc, st)) {
+                refused.add(rc.getResourceId() + ":" + st);
+                return false;
+            }
             statuses.put(rc, st);
-            messages.put(rc, msg);
+            if (msg != null) messages.put(rc, msg);
             return true;
         }
 
@@ -461,9 +754,13 @@ public class AdapterInstanceStatusTest {
     static List<ResourceConfig> lastResources;
 
     private static TestAdapter adapter() throws Exception {
+        return adapter("INFO");
+    }
+
+    private static TestAdapter adapter(String logLevel) throws Exception {
         TestAdapter a = allocate(TestAdapter.class);
         setField(VcfCfAdapter.class, a, "abortRequested", new AtomicBoolean(false));
-        a.log = LogCapture.create();
+        a.log = LogCapture.create(logLevel);
         Class<?> fi = Class.forName("com.vmware.vrops.logging.AdapterLoggerFactory");
         Object factory = Proxy.newProxyInstance(fi.getClassLoader(), new Class<?>[] {fi},
                 (p, m, args) -> m.getName().equals("getLogger") ? a.log.logger() : null);
@@ -471,6 +768,7 @@ public class AdapterInstanceStatusTest {
         // Field initializers do not run under allocateInstance.
         setField(TestAdapter.class, a, "statuses", new java.util.IdentityHashMap<>());
         setField(TestAdapter.class, a, "messages", new java.util.IdentityHashMap<>());
+        setField(TestAdapter.class, a, "refused", new ArrayList<>());
         a.events = new ArrayList<>();
         a.collector = new ScriptedCollector();
         a.collector.owner = a;

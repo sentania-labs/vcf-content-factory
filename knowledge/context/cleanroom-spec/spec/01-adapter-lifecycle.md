@@ -130,6 +130,17 @@ void    changeResourceState(ResourceConfig, DiscoveryResult.StateChangeEnum);
 void    changeResourceState(ResourceConfig, DiscoveryResult.StateChange);
 ```
 
+**Adapter instance only (factory issue #245, SDK bytecode, same on 8.18.7,
+9.0/2.2 and 9.1.1.0100).** Every `setResourceDown` and `setResourceError`
+overload works only on the adapter instance resource; on any other resource
+it returns `false` and logs `Setting down|error status to regular resource
+'<id>' is not allowed.` On the instance they become `setAdapterDown` /
+`setAdapterError`, which also set every monitored resource to
+NO_DATA_RECEIVING. `setResourceStatus` takes ERROR, DOWN and COLLECTOR_DOWN
+on the adapter instance only; a child object takes NONE, DATA_RECEIVING and
+NO_DATA_RECEIVING, and anything else returns `false`. Details: spec 19
+§Per-resource collection status, correction 2026-10-26.
+
 ### Querying configured resources
 ```
 Collection<ResourceConfig> getAllMonitoringResources();

@@ -91,7 +91,9 @@ onCollect(adapterInstance, resources):
             // per-resource status — REQUIRED for platform health UI:
             setResourceStatus(rc, RESOURCE_STATUS_DATA_RECEIVING)        // [API]
          catch (target unreachable):
-            setResourceDown(rc, now, reason)   // or RESOURCE_STATUS_DOWN
+            setResourceStatus(rc, RESOURCE_STATUS_NO_DATA_RECEIVING)
+            // NOT setResourceDown(rc, ...) / RESOURCE_STATUS_DOWN on a child:
+            // refused, see the 2026-10-26 correction below
          catch (reachable but no data):
             setResourceStatus(rc, RESOURCE_STATUS_NO_DATA_RECEIVING)
 
@@ -101,23 +103,43 @@ onCollect(adapterInstance, resources):
 ### Per-resource collection status `[API]`
 
 `CommonConstants$ResourceStatusEnum` (set via base
-`setResourceStatus(rc, …)` / `setResourceDown(rc, …)`, or
-`ResourceStatus.setStatus(…)`):
+`setResourceStatus(rc, …)`, `setResourceDown(rc, …)` (adapter instance
+only), or `ResourceStatus.setStatus(…)`). Which resource takes which status
+is in the "Settable on" column and the 2026-10-26 correction below:
 
-| Constant | Meaning | When to set |
-|---|---|---|
-| `RESOURCE_STATUS_DATA_RECEIVING` | healthy, data arrived this cycle | resource collected OK |
-| `RESOURCE_STATUS_OLD_DATA_RECEIVING` | stale data only | got data but older than cycle |
-| `RESOURCE_STATUS_NO_DATA_RECEIVING` | reachable, no data | resource yielded nothing |
-| `RESOURCE_STATUS_DOWN` | resource down | target reports/looks down |
-| `RESOURCE_STATUS_ERROR` | collection error | exception collecting this resource |
-| `RESOURCE_STATUS_NO_PARENT_MONITORING` | parent not monitored | dependency gap |
-| `RESOURCE_STATUS_COLLECTOR_DOWN` | collector-side failure | infra fault |
-| `RESOURCE_STATUS_UNKNOWN` / `_NONE` | indeterminate / unset | — |
+| Constant | Meaning | When to set | Settable on |
+|---|---|---|---|
+| `RESOURCE_STATUS_DATA_RECEIVING` | healthy, data arrived this cycle | resource collected OK | any resource |
+| `RESOURCE_STATUS_OLD_DATA_RECEIVING` | stale data only | got data but older than cycle | neither (refused on both lists) |
+| `RESOURCE_STATUS_NO_DATA_RECEIVING` | reachable, no data | resource yielded nothing; a failed child object | any resource |
+| `RESOURCE_STATUS_DOWN` | resource down | target reports/looks down (adapter instance only) | adapter instance only |
+| `RESOURCE_STATUS_ERROR` | collection error | collection failed (adapter instance only; a child shows NO_DATA_RECEIVING) | adapter instance only |
+| `RESOURCE_STATUS_NO_PARENT_MONITORING` | parent not monitored | dependency gap | neither (refused on both lists) |
+| `RESOURCE_STATUS_COLLECTOR_DOWN` | collector-side failure | infra fault (adapter instance only) | adapter instance only |
+| `RESOURCE_STATUS_UNKNOWN` / `_NONE` | indeterminate / unset | — | UNKNOWN: neither; NONE: any resource |
 
 `ResourceStatusEnum.isAdapterAllowedStatus(status)` `[API]` gates which
 statuses an adapter is permitted to set — **call it (or pre-validate)
 before setting**, since not all enum values are adapter-settable.
+
+**Correction 2026-10-26 (factory issue #245, SDK bytecode, identical on
+8.18.7, 9.0/2.2 and 9.1.1.0100).** The gate depends on the resource.
+`AdapterBase.setResourceStatus(rc, msg, status)` calls the private
+`isValidStatusForResource(rc, status)`: when `rc` is the adapter instance
+(`rc.getResourceId()` equals `getAdapterInstResourceId()`) it applies
+`isAdapterAllowedStatus` (NONE, ERROR, DOWN, DATA_RECEIVING,
+NO_DATA_RECEIVING, COLLECTOR_DOWN); for every other resource it applies
+`isResourceAllowedStatus` (NONE, DATA_RECEIVING, NO_DATA_RECEIVING only). A
+refused status logs `Setting status '<status>' to resource '<id>' is not
+allowed.` at WARN and returns `false`; nothing reaches the platform.
+`setResourceDown(rc, ...)` and `setResourceError(rc, ...)` on a child are
+refused the same way (`Setting down|error status to regular resource ... is
+not allowed.`); on the adapter instance they become `setAdapterDown` /
+`setAdapterError`, which set the instance DOWN or ERROR and every monitored
+resource NO_DATA_RECEIVING. So in the table above, ERROR, DOWN,
+OLD_DATA_RECEIVING, NO_PARENT_MONITORING, COLLECTOR_DOWN and UNKNOWN are
+settable on the adapter instance at most, never on a child object; a failed
+child shows NO_DATA_RECEIVING.
 
 ### What a complete-and-valid `CollectResult` must contain
 

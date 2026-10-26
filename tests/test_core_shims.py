@@ -141,8 +141,7 @@ WRAPPERS = [
       "_resource_kinds_from_formula", "_rewrite_formula", "_safe_filename",
       "supermetrics_from_export_zip", "_warn", "_write_dashboard_yaml", "_write_manifest",
       "_write_sm_yaml", "_write_view_yaml"),
-     ("_SM_UUID_TOKEN_RE", "_content_xml_from_export_zip", "_dashboards_from_export_zip",
-      "_supermetrics_from_export_zip", "_parse_view_def_element", "_parse_time_window", "_parse_controls_columns",
+     ("_SM_UUID_TOKEN_RE", "_parse_view_def_element", "_parse_time_window", "_parse_controls_columns",
       "_parse_column_value", "_to_yaml_str", "_emit_view_extras", "_metric_spec_to_yaml",
       "_widget_to_yaml_dict")),
 ]

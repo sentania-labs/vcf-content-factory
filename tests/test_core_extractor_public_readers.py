@@ -1,8 +1,7 @@
-"""vcfcf_core.extractor exports public names for the export-zip readers (#165).
+"""vcfcf_core.extractor exports public names for the export-zip readers.
 
-The migrator imported three underscore-private functions from
-vcfcf_core.extractor.extractor. They now have public names on the package,
-and the underscore names stay as aliases (the same objects) for one release.
+The three readers are public on the package; the underscore-prefixed names
+they once had are gone (issue #165).
 """
 from __future__ import annotations
 
@@ -36,20 +35,27 @@ def test_public_names_import_from_the_package():
         assert callable(getattr(pkg, name))
 
 
-def test_underscore_aliases_are_the_same_objects():
+def test_package_names_are_the_module_objects():
     import vcfcf_core.extractor as pkg
     import vcfcf_core.extractor.extractor as mod
 
     for name in PUBLIC:
-        assert getattr(mod, "_" + name) is getattr(mod, name) is getattr(pkg, name)
+        assert getattr(mod, name) is getattr(pkg, name)
 
 
-def test_factory_reexport_still_resolves():
+def test_underscore_names_are_gone():
+    import vcfcf_core.extractor.extractor as mod
+
+    for name in PUBLIC:
+        assert not hasattr(mod, "_" + name)
+
+
+def test_factory_reexport_resolves():
     import vcfcf_core.extractor as pkg
     import vcfcf_extractor.extractor as fac
 
-    assert fac._dashboards_from_export_zip is pkg.dashboards_from_export_zip
-    assert fac._supermetrics_from_export_zip is pkg.supermetrics_from_export_zip
+    assert fac.dashboards_from_export_zip is pkg.dashboards_from_export_zip
+    assert fac.supermetrics_from_export_zip is pkg.supermetrics_from_export_zip
 
 
 def test_public_reader_parses_a_content_xml_zip():

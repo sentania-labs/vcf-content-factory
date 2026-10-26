@@ -164,7 +164,8 @@ def normalize(input_path: str, output_path: str) -> int:
             title = (src.get("Description/Title") or "").strip()
             description = (src.get("Discussion") or "").strip()
             remediation = collapse_remediation(
-                src.get("PowerCLI Command Remediation Example") or "")
+                src.get("PowerCLI Command Remediation Example") or "",
+                control_id)
 
             out_rows.append({
                 "control_id": control_id,
