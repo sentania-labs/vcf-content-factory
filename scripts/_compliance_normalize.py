@@ -16,7 +16,7 @@ from __future__ import annotations
 import csv
 import re
 import sys
-from typing import Callable, Dict, Iterable, List, Optional
+from typing import Callable, Dict, Iterable, List, Optional, Tuple
 
 CANONICAL_HEADER: List[str] = [
     "control_id",
@@ -1627,17 +1627,47 @@ def rewrite_undefined_baseline(text: str) -> str:
     return f"{m.group(1)} or Undefined"
 
 
-def _strip_ps_comment(line: str, quote: Optional[str]) -> tuple:
-    """Cut a PowerShell ``#`` comment off one remediation line.
+# Characters after which a "#" starts a PowerShell comment: the start of a
+# token. Whitespace is checked separately.
+_PS_TOKEN_START = ";{(|"
+
+# Constructs the comment tokenizer below does not model: block comments,
+# here-strings, and the typographic quotes PowerShell accepts as string
+# delimiters. A remediation holding one is collapsed the old way and logged.
+_PS_UNMODELED = ("<#", "@\"", "@'", "\u201c", "\u201d", "\u201e",
+                 "\u2018", "\u2019", "\u201a", "\u201b")
+
+# Line ends and starts across which " ; " would break the statement
+# (a block or call left open, a pipeline or list continued, a closing
+# brace or paren, a block or clause that belongs to the line before):
+# those lines are joined with a single space instead.
+_PS_JOIN_OPEN_END = ("{", "(", "|", ",", "`")
+_PS_JOIN_CLOSE_START = ("{", "}", ")")
+_PS_JOIN_CLAUSE_RE = re.compile(r"(else|elseif|catch|finally)\b", re.I)
+# A line that is only an attribute, e.g. "[CmdletBinding()]": it belongs to
+# the param block or function on the next line.
+_PS_ATTRIBUTE_LINE_RE = re.compile(r"\[[A-Za-z_][\w.]*(\(.*\))?\]")
+
+
+def _split_ps_comment(
+        line: str, quote: Optional[str]) -> Tuple[str, Optional[str],
+                                                  Optional[str]]:
+    """Split one remediation line into code and a PowerShell ``#`` comment.
+
+    Returns ``(code, comment, quote)``: ``comment`` is the text after the
+    ``#`` (``None`` when the line has no comment) and ``quote`` the string
+    state at the end of the line, passed back in for the next line
+    because PowerShell strings may span lines.
 
     A ``#`` starts a comment when it is outside a string and starts a
-    token (first character, or preceded by whitespace), so
-    ``"<New VLAN#>"`` and ``...html#/doc`` are kept. ``quote`` is the
-    string state carried in from the previous line (PowerShell strings
-    may span lines); the state at the end of this line is returned with
-    the kept text. A backtick escapes the next character inside double
-    quotes; a doubled quote inside a string reads as close-then-reopen,
-    which leaves the state right.
+    token: first on the line, or after whitespace or one of ``; { ( |``.
+    So ``"<New VLAN#>"`` and ``...html#/doc`` are kept. A ``#`` directly
+    followed by a digit with code before it on the line is prose ("item
+    #3"), not a comment. ``#requires`` is treated as a comment like any
+    other ``#`` line; it means nothing in a pasted one-liner. A backtick
+    escapes the next character inside double quotes; a doubled quote
+    inside a string reads as close-then-reopen, which leaves the state
+    right.
     """
     i, n = 0, len(line)
     while i < n:
@@ -1645,45 +1675,123 @@ def _strip_ps_comment(line: str, quote: Optional[str]) -> tuple:
         if quote is None:
             if ch in ("'", '"'):
                 quote = ch
-            elif ch == "#" and (i == 0 or line[i - 1].isspace()):
-                return line[:i].rstrip(), None, True
+            elif ch == "#" and (i == 0 or line[i - 1].isspace()
+                                or line[i - 1] in _PS_TOKEN_START):
+                before = line[:i]
+                if not (i + 1 < n and line[i + 1].isdigit()
+                        and before.strip()):
+                    return before.rstrip(), line[i + 1:], None
         elif quote == '"' and ch == "`":
             i += 1
         elif ch == quote:
             quote = None
         i += 1
-    return line, quote, False
+    return line, None, quote
 
 
-def collapse_remediation(text: str) -> str:
+def _ps_block_comment(texts: List[str]) -> str:
+    """Render comment texts as one inline ``<# ... #>`` block comment.
+
+    A ``#>`` inside the text would close the block early, so it is
+    written ``# >``.
+    """
+    body = " ".join(t.strip().lstrip("#").strip() for t in texts)
+    body = re.sub(r"\s+", " ", body).strip().replace("#>", "# >")
+    return f"<# {body} #>" if body else ""
+
+
+def _join_ps_lines(lines: List[Tuple[str, str, str]]) -> str:
+    """Join ``(lead comment, code, trailing comment)`` lines into one.
+
+    Lines are joined with `` ; ``, or with a space where ``;`` would break
+    the statement: after code ending in ``{ ( | ,`` or a backtick (the
+    backtick, a line continuation, is dropped), after a line that is only
+    an attribute (``[CmdletBinding()]``), and before code starting
+    with ``{ } )`` or ``else``/``elseif``/``catch``/``finally``. The
+    decision reads the code only, never the block comments around it.
+    """
+    out, prev = "", ""
+    for lead, code, tail in lines:
+        glue = " ; "
+        if prev.endswith(_PS_JOIN_OPEN_END) or \
+                _PS_ATTRIBUTE_LINE_RE.fullmatch(prev) or \
+                code.startswith(_PS_JOIN_CLOSE_START) or \
+                _PS_JOIN_CLAUSE_RE.match(code):
+            glue = " "
+        if prev.endswith("`") and out.endswith("`"):
+            out = out[:-1].rstrip()
+        piece = " ".join(p for p in (lead, code, tail) if p)
+        out = piece if not out else out + glue + piece
+        prev = code
+    return out
+
+
+def _collapse_remediation_legacy(text: str) -> str:
+    """The pre-#254 collapse: every newline becomes `` ; ``."""
+    s = text.replace("\r", " ").replace("\n", " ; ")
+    return re.sub(r"\s+", " ", s).strip()
+
+
+def collapse_remediation(text: str, control_id: str = "") -> str:
     """Collapse a multi-line PowerCLI remediation into a single line.
 
-    The lines are joined with `` ; ``, so a PowerShell ``#`` comment would
+    Joining the lines with `` ; `` would let a PowerShell ``#`` comment
     swallow every statement after it: a leading comment line turns the
     whole recommendation into one comment, and a trailing ``# ...`` on a
     statement comments out the statements that follow (#254,
-    vm.virtual-hardware). Comment-only lines are dropped and trailing
-    comments cut before the join; blank lines go too, so a dropped
-    comment leaves no empty `` ; `` segment. A remediation that is nothing but
-    comments (a commented-out vendor example) keeps its comment text,
-    since dropping it would leave an empty remediation. Text with no
-    ``#`` collapses exactly as before.
+    vm.virtual-hardware). So each ``#`` comment is rewritten as an inline
+    ``<# ... #>`` block comment, which keeps the vendor's guidance next to
+    the code and still pastes and runs as one line: a run of comment
+    lines goes in front of the code line that follows it, a trailing
+    comment stays after its code, and comments after the last code line
+    are appended to it. In a remediation that had a comment, blank lines
+    are dropped too, so no empty `` ; `` segment is left behind (one with
+    no comment keeps them, as before). Lines are joined by
+    ``_join_ps_lines`` so an open block, call or pipeline is not cut by a
+    ``;``.
+
+    Left as the old `` ; `` join instead:
+    - a remediation that is nothing but comments (a commented-out vendor
+      example), since there is no code to run;
+    - a remediation holding a construct the tokenizer does not model
+      (``<#``, a here-string, typographic quotes); this is logged with
+      ``control_id``.
     """
     if not text:
         return ""
-    lines = text.replace("\r", " ").split("\n")
-    if "#" in text:
-        kept, quote, cut_any = [], None, False
-        for line in lines:
-            code, quote, cut = _strip_ps_comment(line, quote)
-            cut_any = cut_any or cut
-            if code.strip():
-                kept.append(code)
-        if cut_any and kept:
-            lines = kept
-    s = " ; ".join(lines)
-    s = re.sub(r"\s+", " ", s).strip()
-    return s
+    if any(tok in text for tok in _PS_UNMODELED):
+        log(f"WARNING: {control_id or '<unknown control>'}: remediation "
+            "holds a block comment, here-string or typographic quote; "
+            "comments left as they are")
+        return _collapse_remediation_legacy(text)
+    code_lines: List[Tuple[str, str, str]] = []
+    pending: List[str] = []  # comment lines waiting for the next code line
+    quote: Optional[str] = None
+    had_comment = False
+    for line in text.replace("\r", " ").split("\n"):
+        code, comment, quote = _split_ps_comment(line, quote)
+        had_comment = had_comment or comment is not None
+        if not code.strip():
+            if comment is not None:
+                pending.append(comment)
+            else:
+                code_lines.append(("", "", ""))  # blank line
+            continue
+        lead = _ps_block_comment(pending)
+        pending = []
+        tail = _ps_block_comment([comment]) if comment is not None else ""
+        code_lines.append((lead, code.strip(), tail))
+    if had_comment:
+        # A dropped comment must not leave an empty " ; " segment, so the
+        # blank lines go too; text with no comment keeps them as before.
+        code_lines = [c for c in code_lines if c[1]]
+    if not any(c[1] for c in code_lines):
+        return _collapse_remediation_legacy(text)
+    if pending:
+        lead, code, tail = code_lines[-1]
+        tail = " ".join(p for p in (tail, _ps_block_comment(pending)) if p)
+        code_lines[-1] = (lead, code, tail)
+    return re.sub(r"\s+", " ", _join_ps_lines(code_lines)).strip()
 
 
 def write_canonical(out_path: str, rows: Iterable[Dict[str, str]]) -> int:
@@ -1886,7 +1994,8 @@ def normalize_scg_source(input_path: str, output_path: str, *,
             description = (src.get(col["description"]) or "").strip()
             if reclass_caveat:
                 description = description + reclass_caveat
-            remediation = collapse_remediation(src.get(col["remediation"]) or "")
+            remediation = collapse_remediation(
+                src.get(col["remediation"]) or "", control_id)
 
             out_rows.append({
                 "control_id": control_id,
