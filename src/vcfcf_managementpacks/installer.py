@@ -62,11 +62,23 @@ except ImportError as _e:
 # Defaults
 # ---------------------------------------------------------------------------
 POLL_INTERVAL = 5          # seconds between status polls
-POLL_TIMEOUT = 300         # seconds before giving up — NOTE: subprocess wrappers that
-                           # invoke `vcfcf_managementpacks install` must set their own
-                           # subprocess timeout HIGHER than this value (suggest 400s).
-                           # A 300s subprocess timeout will race the poller and kill the
-                           # installer while it is still waiting for the server.
+POLL_TIMEOUT = 300         # uninstall: seconds before giving up
+#: Install: seconds the CLI polls isPakInstalling before it stops waiting.
+#: 1800 since 2026-10-26: compliance build 100 on devel_8_18 and devel_9_1
+#: was still installing at the old 300 s and finished minutes later.  Devel
+#: lines can be under contention.  Override: ``--install-timeout`` or
+#: :data:`INSTALL_TIMEOUT_ENV`.  Subprocess wrappers that invoke
+#: ``vcfcf_managementpacks install`` must set their own timeout HIGHER than
+#: this plus the post-install checks (up to 900 s), or they kill the CLI
+#: while the server is still installing.
+INSTALL_POLL_TIMEOUT = 1800
+#: Environment override for :data:`INSTALL_POLL_TIMEOUT` (whole seconds, > 0).
+INSTALL_TIMEOUT_ENV = "VCFCF_INSTALL_TIMEOUT_S"
+#: Exit code when the poll ran out while the server still reported
+#: ``isPakInstalling=true``: not a failure, the install is still running and
+#: the post-install checks did not run.  Distinct from 1 (install failed),
+#: 2 (usage) and 3 (installed, post-install check failed).
+INSTALL_STILL_RUNNING_RC = 4
 UPLOAD_POLL_INTERVAL = 3   # seconds between upload-progress polls
 #: (connect, read) timeout in seconds for one /ui/solution.action request.
 #: getIntegrations returns ~590 KB on a populated instance, so the read
@@ -93,6 +105,28 @@ def _warn(msg: str) -> None:
 
 def _info(msg: str) -> None:
     print(msg)
+
+
+def resolve_install_timeout(requested: Optional[int] = None) -> int:
+    """Install poll timeout in seconds: ``requested``, else
+    :data:`INSTALL_TIMEOUT_ENV`, else :data:`INSTALL_POLL_TIMEOUT`.  An env
+    value that is not a positive whole number warns and falls back to the
+    default."""
+    if requested is not None:
+        return int(requested)
+    raw = os.environ.get(INSTALL_TIMEOUT_ENV, "").strip()
+    if raw:
+        try:
+            value = int(raw)
+        except ValueError:
+            value = 0
+        if value > 0:
+            return value
+        _warn(
+            f"{INSTALL_TIMEOUT_ENV}={raw!r} is not a positive number of "
+            f"seconds; the install waits the default {INSTALL_POLL_TIMEOUT}s."
+        )
+    return INSTALL_POLL_TIMEOUT
 
 
 #: Raw PAK Manager error key for a refused unsigned pak (CaSA
@@ -1033,7 +1067,7 @@ def install_pak(
     skip_ssl_verify: bool = False,
     wait: bool = True,
     poll_interval: int = POLL_INTERVAL,
-    poll_timeout: int = POLL_TIMEOUT,
+    poll_timeout: Optional[int] = None,
     profile: Optional[str] = None,
     materialization_check: bool = True,
     materialization_wait: Optional[int] = None,
@@ -1065,14 +1099,20 @@ def install_pak(
            reports it.
 
     Returns 0, or ``post_install.POST_INSTALL_FAILED_RC`` (3) when the pak
-    installed but a post-install dashboard check failed. A failed install
-    exits 1 through ``_abort``.
+    installed but a post-install dashboard check failed, or
+    :data:`INSTALL_STILL_RUNNING_RC` (4) when ``poll_timeout`` ran out while
+    the server still reported the install running (the post-install checks
+    did not run). A failed install exits 1 through ``_abort``.
+
+    ``poll_timeout`` None resolves through :func:`resolve_install_timeout`
+    (env :data:`INSTALL_TIMEOUT_ENV`, default :data:`INSTALL_POLL_TIMEOUT`).
 
     Credentials resolve order: CLI flags > VCFOPS_USER/VCFOPS_PASSWORD env vars >
     legacy VCFOPS_ADMIN/VCFOPS_ADMINPASSWORD env vars (deprecated, warn).
     """
     p = Path(pak_path)
     installed = False
+    still_running = False
     if not p.exists():
         _abort(f"Pak file not found: {pak_path}")
     if not p.is_file():
@@ -1157,6 +1197,7 @@ def install_pak(
 
         # poll until done
         if wait:
+            poll_timeout = resolve_install_timeout(poll_timeout)
             _info(
                 f"[6/6] Waiting for install to complete "
                 f"(timeout {poll_timeout}s, poll every {poll_interval}s) ..."
@@ -1193,12 +1234,24 @@ def install_pak(
                 time.sleep(poll_interval)
 
             if not installed:
-                # Timeout
-                _abort(
-                    f"Install timed out after {poll_timeout}s. "
-                    f"Last known status: {last_state}\n"
-                    f"The install may still be running on the server. "
-                    f"Check Admin UI > Software Updates > Solutions."
+                # The poll ran out, the install did not fail: on 2026-10-26
+                # compliance 0.0.0.100 was still installing at 300 s on
+                # devel_8_18 and devel_9_1 and finished minutes later.
+                still_running = True
+                print(
+                    f"INSTALL STILL RUNNING: {server_name} {server_version} "
+                    f"(pakId={pak_id}) was still installing on {host} when the "
+                    f"{poll_timeout}s wait ran out. Last known status: "
+                    f"{last_state}\n"
+                    f"This is not a failure; do not reinstall. Check progress in "
+                    f"the Admin UI (Software Updates > Solutions) until it "
+                    f"shows version {server_version}. The post-install "
+                    f"dashboard materialization check and Summary repair did "
+                    f"NOT run, and no command runs them on their own against an "
+                    f"installed pak: check the pak's dashboards and Summary tabs "
+                    f"by hand, or next time pass a longer --install-timeout "
+                    f"(or {INSTALL_TIMEOUT_ENV}).",
+                    file=sys.stderr,
                 )
         else:
             _info(
@@ -1210,6 +1263,8 @@ def install_pak(
         # logout
         ui.logout()
 
+    if still_running:
+        return INSTALL_STILL_RUNNING_RC
     if not installed or not materialization_check:
         return 0
     # Post-install (issues #244, #200): the install finishing says nothing

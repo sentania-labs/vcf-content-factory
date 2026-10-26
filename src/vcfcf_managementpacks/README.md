@@ -47,11 +47,17 @@ the `isUnremovable` safety guard (mandatory; built-in paks are refused
 unless `--allow-builtin` is passed).
 
 **Subprocess timeout note**: the `install` command's internal completion
-poller defaults to 300 seconds (`POLL_TIMEOUT`).  If you invoke
+poller waits up to 1800 seconds (`INSTALL_POLL_TIMEOUT`; `--install-timeout`
+or `VCFCF_INSTALL_TIMEOUT_S` overrides it; it was 300 s until 2026-10-26,
+when two devel installs outlived it).  If you invoke
 `python3 -m vcfcf_managementpacks install` from a script or test harness
-via `subprocess`, set your subprocess timeout to at least 400 seconds —
-a subprocess timeout of 300s or less will race the internal poller and
-kill the process while an install is still in progress on the server.
+via `subprocess`, set your subprocess timeout above that wait plus the
+post-install checks below, or the harness kills the process while an
+install is still in progress on the server.  When the poller runs out with
+the server still reporting the install running, `install` prints
+`INSTALL STILL RUNNING` and exits 4: not a failure, do not reinstall, and
+the post-install checks below did not run (no command re-runs them on their
+own against an installed pak).  Uninstall keeps its 300 s poll (`POLL_TIMEOUT`).
 After the install, `install` checks that each dashboard the pak ships
 finished building (issue #244); when one is still building it waits once
 (180 s by default, `--materialization-wait`, capped at 900 s) before the

@@ -566,7 +566,8 @@ def cmd_install(args) -> int:
         return 2
 
     # installer.install_pak calls sys.exit(1) on fatal errors; a return is
-    # an installed pak: 0, or 3 when a post-install dashboard check failed.
+    # 0, 3 when the pak installed but a post-install dashboard check failed,
+    # or 4 when the wait ran out with the install still running.
     return install_pak(
         pak_path=args.pak_path,
         host=args.host,
@@ -574,6 +575,7 @@ def cmd_install(args) -> int:
         password=args.password,
         skip_ssl_verify=args.skip_ssl_verify,
         wait=args.wait,
+        poll_timeout=getattr(args, "install_timeout", None),
         profile=getattr(args, "profile", None),
         materialization_check=not getattr(args, "skip_materialization_check", False),
         materialization_wait=getattr(args, "materialization_wait", None),
@@ -584,6 +586,18 @@ def cmd_install(args) -> int:
 #: Environment switch for the Summary repair (issue #200): on by default,
 #: ``0``/``false``/``no``/``off`` turns it off.
 SUMMARY_REBIND_ENV = "VCFCF_SUMMARY_REBIND"
+
+
+def _positive_seconds(text: str) -> int:
+    """argparse type: a whole number of seconds greater than 0."""
+    try:
+        value = int(text)
+    except ValueError:
+        value = 0
+    if value <= 0:
+        raise argparse.ArgumentTypeError(
+            f"{text!r} is not a positive whole number of seconds")
+    return value
 
 
 def _summary_rebind_requested(args):
@@ -1321,6 +1335,17 @@ def build_parser() -> argparse.ArgumentParser:
         help="trigger install and return immediately without polling for completion",
     )
     pi.add_argument(
+        "--install-timeout",
+        type=_positive_seconds,
+        default=None,
+        metavar="SECONDS",
+        help=(
+            "Seconds to wait for the server to finish the install (default "
+            "1800, or VCFCF_INSTALL_TIMEOUT_S). When it runs out the install "
+            "is still running on the server: exit 4, not a failure."
+        ),
+    )
+    pi.add_argument(
         "--skip-materialization-check",
         action="store_true",
         default=False,
@@ -1373,7 +1398,13 @@ def build_parser() -> argparse.ArgumentParser:
         "that is not installed; or SUMMARY NOT REBOUND: a Summary tab still "
         "shows an unfinished copy, with the server's answer when the bind was "
         "refused). SUMMARY INCOMPLETE with --skip-summary-rebind is information "
-        "and leaves the exit code alone. Do not reinstall on 3."
+        "and leaves the exit code alone. Do not reinstall on 3. 4 the wait "
+        "(--install-timeout, default 1800 s) ran out while the server still "
+        "reported the install running (INSTALL STILL RUNNING): not a failure "
+        "and the post-install checks did not run; watch Admin UI > Software "
+        "Updates > Solutions until the new version shows, and check the pak's "
+        "dashboards and Summary tabs by hand (no command re-runs those checks "
+        "alone). Do not reinstall on 4."
     )
     add_profile_arg(pi, default="devel")
     pi.set_defaults(func=cmd_install)
