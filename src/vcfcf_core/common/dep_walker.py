@@ -55,6 +55,11 @@ Public API — offline (no client required)
       super metric or a view instead of a dashboard.  Seeds first, then
       referents in discovery order; errors name the missing referent.
 
+  supermetrics_used_by(views, dashboards, all_sms) -> list[SuperMetricDef]
+      SMs in all_sms that view columns and dashboard widgets name, plus
+      their @supermetric referents in all_sms; feeds the pre-import
+      referent check on the dashboards sync path (#154).
+
 Project-scope semantics
 -----------------------
   project_scope=None         No scoping.  Resolves against the full corpus the same
@@ -512,6 +517,53 @@ def expand_sm_crossrefs(
         _accept(sm, "")
     _walk_sm_crossrefs(list(sms), _resolve, _accept, errors)
     return result, errors
+
+
+_VIEW_SM_NAME_RE = re.compile(r'''supermetric:["'](.+?)["']''')
+
+
+def supermetrics_used_by(
+    views: "List",
+    dashboards: "List",
+    all_sms: "List",
+) -> "List":
+    """Super metrics in ``all_sms`` that ``views`` and ``dashboards`` use.
+
+    Seeds are the SMs a view column names (``sm_<uuid>`` or
+    ``supermetric:"<name>"``) and the SMs a dashboard widget metric key names
+    (``sm_<uuid>``); each seed's ``@supermetric:"<name>"`` formula referents
+    found in ``all_sms`` are added transitively (``expand_sm_crossrefs``).
+    A reference ``all_sms`` cannot resolve is left out, not reported: the
+    caller resolves the formula referents of the returned SMs against the
+    target instance (``check_sm_referents``), which is where a missing one is
+    named (issue #154).
+    """
+    by_id = {(sm.id or "").lower(): sm for sm in all_sms if getattr(sm, "id", "")}
+    by_name = _sm_candidates_by_name(all_sms)
+    seeds: "List" = []
+    seen: Set[str] = set()
+
+    def _add(sm) -> None:
+        if sm is None:
+            return
+        key = (getattr(sm, "id", "") or "").lower() or sm.name
+        if key not in seen:
+            seen.add(key)
+            seeds.append(sm)
+
+    view_refs, _ = extract_refs_from_views(views)
+    dash_refs, _ = extract_refs_from_dashboards(dashboards)
+    for ref in view_refs + dash_refs:
+        _add(by_id.get(ref.sm_id.lower()))
+    for view in views:
+        for col in view.columns:
+            m = _VIEW_SM_NAME_RE.search(col.attribute or "")
+            if m:
+                _add(_pick_sm_by_name(
+                    by_name.get(m.group(1), []), getattr(view, "provenance", "")
+                ))
+    expanded, _errors = expand_sm_crossrefs(seeds, all_sms)
+    return expanded
 
 
 def extract_view_names_from_dashboards(
