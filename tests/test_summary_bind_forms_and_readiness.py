@@ -81,11 +81,10 @@ def test_two_map_build_takes_one_call():
     assert c.association_form == "two-map"
 
 
-@pytest.mark.parametrize("refusal_status", [200, 500])
-def test_single_map_build_falls_back_and_remembers(refusal_status):
+def test_single_map_build_falls_back_and_remembers():
     """9.0.2 / 8.18: the two-map call NPEs (nothing written), the single-map
     call answers ok; the next call goes straight to the single-map form."""
-    s = _Session("single-map", status_on_refusal=refusal_status)
+    s = _Session("single-map")
     c = _client(s)
     c.associate_resource_kind_dashboards({KEY: f"{NAME}_::_{UUID}"}, {})
     assert len(s.posts) == 2
@@ -110,20 +109,50 @@ def test_remembered_form_that_stops_working_still_falls_back():
     assert c.association_form == "two-map"
 
 
-def test_both_forms_refused_raises_with_the_last_answer():
+@pytest.mark.parametrize("status,text", [
+    (500, ERRPANEL),                                   # not HTTP 200
+    (502, "Bad Gateway"),                              # proxy: the server may have written
+    (401, "Unauthorized"),
+    (200, "<html><form id='loginForm'>"),              # expired session: login page
+])
+def test_only_the_200_error_panel_falls_back(status, text):
+    """Retry safety is proven only for the HTTP 200 NPE panel (#260 review
+    W2): anything else raises after one write, never sending the other form."""
+    from vcfcf_dashboards.ui_client import UIClientError
+
+    class _Answer(_Session):
+        def post(self, url, data=None, headers=None, **kw):
+            self.posts.append(dict(data))
+            return _Resp(status, text)
+
+    s = _Answer("single-map")
+    c = _client(s)
+    with pytest.raises(UIClientError) as exc:
+        c.associate_resource_kind_dashboards({KEY: f"{NAME}_::_{UUID}"}, {})
+    assert len(s.posts) == 1 and "assignedAssociations" in s.posts[0]
+    assert exc.value.status == status
+    assert [a[0] for a in exc.value.answers] == ["two-map"]
+    assert c.association_form is None
+
+
+def test_both_forms_refused_keeps_every_answer():
     from vcfcf_dashboards.ui_client import UIClientError
 
     class _Never(_Session):
         def post(self, url, data=None, headers=None, **kw):
             self.posts.append(dict(data))
-            return _Resp(200, ERRPANEL)
+            return _Resp(200, ERRPANEL if len(self.posts) == 1 else ERRPANEL + " second")
 
     s = _Never("two-map")
     c = _client(s)
     with pytest.raises(UIClientError) as exc:
         c.associate_resource_kind_dashboards({KEY: f"{NAME}_::_{UUID}"}, {})
     assert len(s.posts) == 2
-    assert exc.value.status == 200 and exc.value.body == ERRPANEL
+    assert exc.value.status == 200
+    assert exc.value.body.startswith("[two-map] <script")
+    assert "| [single-map] <script" in exc.value.body
+    assert exc.value.answers[1][2].endswith("second")
+    assert [a[0] for a in exc.value.answers] == ["two-map", "single-map"]
     assert "two-map HTTP 200, single-map HTTP 200" in str(exc.value)
     assert c.association_form is None
 
@@ -338,6 +367,197 @@ def test_cli_wait_flags():
     args = build_parser().parse_args(["bind-summary", "--wait", "--wait-timeout", "120"])
     assert args.wait is True and args.wait_timeout == 120
     args = build_parser().parse_args(["bind-summary"])
-    assert args.wait is False and args.wait_timeout == 660
-    with pytest.raises(SystemExit):
-        build_parser().parse_args(["bind-summary", "--wait-timeout", "-1"])
+    assert args.wait is False and args.wait_timeout is None
+    assert build_parser().parse_args(["bind-summary", "--wait-timeout", "900"]).wait_timeout == 900
+    for bad in ("-1", "901", "x"):
+        with pytest.raises(SystemExit):
+            build_parser().parse_args(["bind-summary", "--wait-timeout", bad])
+
+
+def _cli_run(monkeypatch, argv, *, login_error=None):
+    import vcfcf_dashboards.cli as dcli
+
+    seen = {}
+
+    class _UIClient:
+        def login(self):
+            if login_error is not None:
+                raise login_error
+
+        def logout(self):
+            pass
+
+    monkeypatch.setattr(dcli, "_load", lambda args: ([], ["d"]))
+    monkeypatch.setattr(dcli.VCFOpsUIClient, "from_env",
+                        classmethod(lambda cls, profile=None, default_profile="devel": _UIClient()))
+    monkeypatch.setattr(dcli, "bind_summary",
+                        lambda ui, d, **kw: seen.update(kw) or 0)
+    return dcli.main(["bind-summary", *argv]), seen
+
+
+def test_cli_wait_timeout_without_wait_warns(monkeypatch, capsys):
+    rc, seen = _cli_run(monkeypatch, ["--wait-timeout", "30"])
+    assert rc == 0 and seen["wait"] is False
+    assert "--wait-timeout has no effect without --wait" in capsys.readouterr().err
+    rc, seen = _cli_run(monkeypatch, ["--wait"])
+    assert seen["wait_s"] == 660
+
+
+def test_cli_login_transport_error_is_exit_2(monkeypatch, capsys):
+    import requests
+
+    rc, seen = _cli_run(monkeypatch, [], login_error=requests.ConnectionError("refused"))
+    assert rc == 2 and seen == {}
+    assert "FAILED (UI login)" in capsys.readouterr().err
+
+
+# --- #260 review W1: a non-ok answer is read back before it is called a refusal -----------
+
+def test_non_ok_answer_with_a_moved_tab_is_a_written_bind(tmp_path):
+    from vcfcf_dashboards.summary_bind import bind_summary
+    from vcfcf_dashboards.ui_client import UIClientError
+
+    class _WritesButNotOk(FakeUI):
+        def associate_resource_kind_dashboards(self, assigned, reset=None):
+            self.associate_error = None
+            super().associate_resource_kind_dashboards(assigned, reset)
+            raise UIClientError("not ok (single-map HTTP 200)", status=200, body="done")
+
+    ui = _WritesButNotOk(installed={NAME: UUID}, current_template=NAME)
+    lines = []
+    rc = bind_summary(ui, [_load(tmp_path)], out=lines.append)
+    assert rc == 0, lines
+    assert any("WARNING" in l and "the write happened" in l for l in lines)
+    assert any(f"template UUID: {NEW}" in l for l in lines)
+
+
+def test_unreadable_tab_after_a_non_ok_answer_is_an_error(tmp_path):
+    from vcfcf_dashboards.summary_bind import bind_summary
+    from vcfcf_dashboards.ui_client import UIClientError
+
+    class _Blind(FakeUI):
+        def get_summary_tab_id(self, resource_kind_id):
+            if any(c[0] == "associate" for c in self.calls):
+                raise RuntimeError("HTTP 503")
+            return super().get_summary_tab_id(resource_kind_id)
+
+    ui = _Blind(installed={NAME: UUID}, associate_error=UIClientError("not ok"))
+    lines = []
+    assert bind_summary(ui, [_load(tmp_path)], out=lines.append) == 2
+    assert any("could not be read back" in l and "is unknown" in l for l in lines)
+
+
+def test_a_refused_dashboard_does_not_stop_the_run(tmp_path):
+    """#260 review N10: a refusal skips that dashboard only."""
+    from vcfcf_dashboards.loader import load_dashboard
+    from vcfcf_dashboards.summary_bind import bind_summary
+    from vcfcf_dashboards.ui_client import UIClientError
+    from test_dashboard_summary_for import _summary_dash, _write
+
+    other = "[VCF Content Factory] VM Summary"
+    a = _load(tmp_path)
+    b = load_dashboard(_write(tmp_path / "b.yaml", _summary_dash(
+        name=other, summary_for="VMWARE:VirtualMachine",
+        dash_id="1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d")))
+    b.validate({})
+
+    class _RefusesFirst(FakeUI):
+        def associate_resource_kind_dashboards(self, assigned, reset=None):
+            n = sum(1 for c in self.calls if c[0] == "associate")
+            self.associate_error = UIClientError("refused") if n == 0 else None
+            super().associate_resource_kind_dashboards(assigned, reset)
+
+    ui = _RefusesFirst(installed={NAME: UUID, other: "22222222-2222-4222-8222-222222222222"})
+    lines = []
+    assert bind_summary(ui, [a, b], out=lines.append) == 2
+    assert sum(1 for c in ui.calls if c[0] == "associate") == 2
+    assert any("VMWARE:VirtualMachine  template UUID:" in l for l in lines)
+
+
+# --- #260 review W3, N3, N4, N10: wait diagnosis, flag reading, poll guard, run budget ------
+
+def test_wait_ending_on_failed_reads_names_the_failure(tmp_path):
+    from vcfcf_dashboards.summary_bind import bind_summary
+
+    ui = _Settles([True], fail_on={2, 3, 4}, installed={NAME: UUID})
+    lines = []
+    rc = bind_summary(ui, [_load(tmp_path)], wait=True, wait_s=90, sleep=lambda s: None,
+                      out=lines.append)
+    assert rc == 2
+    err = [l for l in lines if "ERROR" in l][-1]
+    assert "could not be confirmed built after 90 s" in err
+    assert "the last read of the dashboard list failed (HTTP 503)" in err
+    assert "isLoading: true;" not in err
+
+
+def test_wait_ending_with_the_dashboard_gone_names_that(tmp_path):
+    from vcfcf_dashboards.summary_bind import bind_summary
+
+    class _Gone(_Settles):
+        def list_dashboards(self):
+            out = super().list_dashboards()
+            return out if self.list_calls == 1 else []
+
+    ui = _Gone([True], installed={NAME: UUID})
+    lines = []
+    assert bind_summary(ui, [_load(tmp_path)], wait=True, wait_s=60, sleep=lambda s: None,
+                        out=lines.append) == 2
+    assert any(f"{UUID} was not in the dashboard list at the last read" in l
+               for l in lines if "ERROR" in l)
+
+
+def test_wait_budget_is_for_the_whole_run(tmp_path):
+    from vcfcf_dashboards.loader import load_dashboard
+    from vcfcf_dashboards.summary_bind import bind_summary
+    from test_dashboard_summary_for import _summary_dash, _write
+
+    other = "[VCF Content Factory] VM Summary"
+    b = load_dashboard(_write(tmp_path / "b.yaml", _summary_dash(
+        name=other, summary_for="VMWARE:VirtualMachine",
+        dash_id="1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d")))
+    b.validate({})
+    ui = _Settles([True], installed={NAME: UUID, other: "22222222-2222-4222-8222-222222222222"})
+    slept = []
+    rc = bind_summary(ui, [_load(tmp_path), b], wait=True, wait_s=60, sleep=slept.append,
+                      out=lambda s: None)
+    assert rc == 2 and sum(slept) == 60
+
+
+@pytest.mark.parametrize("value,expected", [
+    (True, True), (False, False), ("true", True), ("FALSE", False),
+    (None, None), ("maybe", None), (1, None),
+])
+def test_loading_flag(value, expected):
+    from vcfcf_core.dashboards.summary_bind import loading_flag, source_loading
+
+    assert loading_flag(value) is expected
+    assert source_loading({"isLoading": value}) is expected
+    assert source_loading({}) is None
+
+
+def test_loading_widgets_reads_string_flags():
+    from vcfcf_core.dashboards.summary_bind import loading_widgets
+
+    cfg = {"dashboardConfig": {"tabConfigs": [{"id": UUID, "widgets": [
+        {"title": "A", "isLoading": "true"}, {"title": "B", "isLoading": "false"}]}]}}
+    assert loading_widgets(cfg, UUID) == ["A"]
+
+
+def test_null_isloading_is_refused(tmp_path):
+    from vcfcf_dashboards.summary_bind import bind_summary
+
+    class _Null(FakeUI):
+        def list_dashboards(self):
+            return [dict(e, isLoading=None) for e in super().list_dashboards()]
+
+    ui = _Null(installed={NAME: UUID})
+    assert bind_summary(ui, [_load(tmp_path)], out=lambda s: None) == 2
+    assert not any(c[0] == "associate" for c in ui.calls)
+
+
+def test_wait_needs_a_positive_poll(tmp_path):
+    from vcfcf_dashboards.summary_bind import bind_summary
+
+    with pytest.raises(ValueError):
+        bind_summary(FakeUI(installed={NAME: UUID}), [_load(tmp_path)], wait=True, poll_s=0,
+                     out=lambda s: None)

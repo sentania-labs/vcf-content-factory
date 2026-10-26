@@ -202,7 +202,12 @@ skipped, a bound directory with more than one dashboard skipped with a
 warning). With the repair off the check keeps the 180 s single re-check. A
 refused bind prints `SUMMARY NOT REBOUND` with the server's HTTP status and
 the first 200 characters of its answer (whitespace collapsed, session and
-credential values redacted), exit 3.
+credential values redacted), exit 3. A bind that is not answered `ok` is
+read back first: if the Summary tab moved, the write happened and the
+line is `SUMMARY REBOUND` with a note on the unexpected answer; if the tab
+cannot be read back, `SUMMARY NOT REBOUND` says the outcome is unknown.
+`SUMMARY REBOUND` and `SUMMARY NOT REBOUND` name the request form written
+with (`request form: two-map` / `single-map`) or the forms tried.
 
 Read-only reads on devel 9.0.2 on 2026-10-24 (about 12:20 AM) confirmed the
 shapes: `getSummaryTabId(002016vcfcf_complianceComplianceWorld)` returned

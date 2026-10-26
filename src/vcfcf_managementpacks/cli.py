@@ -604,8 +604,15 @@ def _summary_rebind_requested(args):
         return True
     if skip:
         return False
-    env = os.environ.get(SUMMARY_REBIND_ENV, "").strip().lower()
-    return env not in ("0", "false", "no", "off")
+    raw = os.environ.get(SUMMARY_REBIND_ENV, "")
+    env = raw.strip().lower()
+    if env in ("0", "false", "no", "off"):
+        return False
+    if env not in ("", "1", "true", "yes", "on"):
+        print(f"WARN: {SUMMARY_REBIND_ENV}={raw!r} is not one of 1/true/yes/on or "
+              f"0/false/no/off; the Summary repair stays on (the default).",
+              file=sys.stderr)
+    return True
 
 
 def cmd_pak_compare(args) -> int:

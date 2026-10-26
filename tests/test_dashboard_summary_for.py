@@ -552,17 +552,20 @@ class TestBindFlow:
         assert ui.templates[self.KEY] == "aaaaaaaa-1111-4222-8333-444444444444"
         assert any(f"current assignment: {self.NAME} 2" in l for l in lines)
 
-    def test_failed_associate_propagates(self, tmp_path):
+    def test_refused_associate_is_an_error_after_a_readback(self, tmp_path):
+        """A non-ok answer is read back before it is called a refusal (#260
+        review W1); an unchanged tab is a refusal, exit 2, nothing raised."""
         from vcfcf_dashboards.summary_bind import bind_summary
         from vcfcf_dashboards.ui_client import UIClientError
 
         ui = FakeUI(installed={self.NAME: self.UUID}, current_template=self.NAME,
                     associate_error=UIClientError("associateResourceKindDashboards failed"))
-        with pytest.raises(UIClientError):
-            bind_summary(ui, [_load(tmp_path)], out=lambda s: None)
-        # the pre-bind read happens; no readback after the refused write
+        lines: list[str] = []
+        rc = bind_summary(ui, [_load(tmp_path)], out=lines.append)
+        assert rc == 2
         names = [c[0] for c in ui.calls]
-        assert "get_summary_tab_id" not in names[names.index("associate"):]
+        assert names[names.index("associate") + 1:] == ["get_summary_tab_id"]
+        assert any("refused the association" in l and "nothing written" in l for l in lines)
         assert ui.templates[self.KEY] == "old-copy-uuid"
 
     def test_unbind_resets_with_the_kinds_own_default(self, tmp_path):

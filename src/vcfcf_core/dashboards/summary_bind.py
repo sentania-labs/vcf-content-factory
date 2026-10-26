@@ -144,12 +144,20 @@ def source_loading(entry) -> Optional[bool]:
     dashboard is still building (phase 2 of the import has not resolved its
     widgets), False once built, None when the entry is missing or carries no
     flag (state unknown; never read as built)."""
-    if not isinstance(entry, dict) or "isLoading" not in entry:
+    if not isinstance(entry, dict):
         return None
-    value = entry.get("isLoading")
+    return loading_flag(entry.get("isLoading"))
+
+
+def loading_flag(value) -> Optional[bool]:
+    """One ``isLoading`` value: ``True``/``"true"`` is True,
+    ``False``/``"false"`` is False, anything else (absent, null, another
+    string or type) is None, unknown, so it never reads as built."""
+    if isinstance(value, bool):
+        return value
     if isinstance(value, str):
-        return value.strip().lower() == "true"
-    return bool(value)
+        return {"true": True, "false": False}.get(value.strip().lower())
+    return None
 
 
 def loading_widgets(config, tab_id: str) -> Optional[list]:
@@ -167,9 +175,9 @@ def loading_widgets(config, tab_id: str) -> Optional[list]:
         return None
     names = []
     for w in tab.get("widgets") or []:
-        if isinstance(w, dict) and w.get("isLoading") is True:
+        if isinstance(w, dict) and loading_flag(w.get("isLoading")) is True:
             names.append(str(w.get("title") or w.get("key") or w.get("id") or "?"))
-    if not names and tab.get("isLoading") is True:
+    if not names and loading_flag(tab.get("isLoading")) is True:
         names.append("(dashboard)")
     return names
 

@@ -29,7 +29,7 @@ from .loader import (
     split_navigation_targets,
 )
 from .packager import build_import_zip
-from .summary_bind import WAIT_DEFAULT_S, WAIT_POLL_S, bind_summary
+from .summary_bind import WAIT_DEFAULT_S, WAIT_MAX_S, WAIT_POLL_S, bind_summary
 from .ui_client import UIClientError, VCFOpsUIClient
 
 DEFAULT_VIEWS = Path("content/views")
@@ -1034,6 +1034,9 @@ def cmd_bind_summary(args) -> int:
     the only handle on it).
     """
     validate_profile_arg(args)
+    wait_s = WAIT_DEFAULT_S if args.wait_timeout is None else args.wait_timeout
+    if args.wait_timeout is not None and not args.wait:
+        print("WARN: --wait-timeout has no effect without --wait.", file=sys.stderr)
     try:
         _views, dashboards = _load(args)
     except DashboardValidationError as e:
@@ -1045,12 +1048,12 @@ def cmd_bind_summary(args) -> int:
         profile, default = resolve_profile_from_args(args)
         ui = VCFOpsUIClient.from_env(profile=profile, default_profile=default)
         ui.login()
-    except UIClientError as e:
+    except (UIClientError, requests.RequestException) as e:
         print(f"FAILED (UI login): {e}", file=sys.stderr)
         return 2
     try:
         return bind_summary(ui, dashboards, only=args.dashboard, unbind=args.unbind,
-                            wait=args.wait, wait_s=args.wait_timeout)
+                            wait=args.wait, wait_s=wait_s)
     except (UIClientError, requests.RequestException) as e:
         print(f"FAILED: {e}", file=sys.stderr)
         return 2
@@ -1058,14 +1061,14 @@ def cmd_bind_summary(args) -> int:
         ui.logout()
 
 
-def _nonneg_int(text: str) -> int:
-    """argparse type: a whole number of seconds, 0 or more."""
+def _wait_seconds(text: str) -> int:
+    """argparse type: a whole number of seconds from 0 to WAIT_MAX_S."""
     try:
         value = int(text)
     except ValueError:
         raise argparse.ArgumentTypeError(f"not a whole number of seconds: {text!r}") from None
-    if value < 0:
-        raise argparse.ArgumentTypeError(f"must be 0 or more, got {value}")
+    if value < 0 or value > WAIT_MAX_S:
+        raise argparse.ArgumentTypeError(f"must be 0 to {WAIT_MAX_S}, got {value}")
     return value
 
 
@@ -1241,16 +1244,18 @@ def build_parser() -> argparse.ArgumentParser:
     )
     pbs.add_argument(
         "--wait-timeout",
-        type=_nonneg_int,
-        default=WAIT_DEFAULT_S,
+        type=_wait_seconds,
+        default=None,
         metavar="SECONDS",
-        help=f"with --wait, give up after this many seconds (default {WAIT_DEFAULT_S}: one "
-             f"10-minute importer tick plus a margin); still building then is an ERROR",
+        help=f"with --wait, the wait budget for the whole run, not per dashboard (default "
+             f"{WAIT_DEFAULT_S}: one 10-minute importer tick plus a margin; at most "
+             f"{WAIT_MAX_S}); a dashboard still building when it is spent is an ERROR",
     )
     pbs.epilog = ("Exit codes: 0 every kind bound (or reset); 1 nothing to do or the YAML "
                   "did not load; 2 any ERROR (a dashboard still building, not installed, "
                   "named twice, a kind not found, a refused or not-taken association, a "
-                  "UI login failure).")
+                  "UI login or transport failure). A refused association skips that "
+                  "dashboard only; the run goes on.")
     add_profile_arg(pbs, default="devel")
     pbs.set_defaults(func=cmd_bind_summary)
 

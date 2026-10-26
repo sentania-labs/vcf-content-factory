@@ -172,6 +172,14 @@ Server paging was checked for stability: 8 repeated runs of 6-group pages (activ
 
 No objects created. Every UI session logged out. Copies of class files, JS and replay JSON stay in the session scratchpad only.
 
+**Not retained (noted 2026-10-26, framework review of #260, W4).** That scratchpad is gone, and nothing below was kept in the repo or on `/mnt/holding`; the sha256 values above are truncated as recorded. To make the retry-safety argument checkable, a read-only appliance pass must capture, per build (9.0.2.0 Build 25429562 on devel, 8.18.6 Build 25423535 on devel_8_18, 9.1.1 Build 25794169 on devel_9_1), into `reference/docs/` (RULE-016):
+
+1. the full `sha256sum` of `/usr/lib/vmware-vcops/tomcat-web-app/webapps/ui/WEB-INF/classes/com/vmware/vcops/ui/action/DashboardAction.class`;
+2. `javap -c -p -l` of that class, trimmed to the method `associateResourceKindDashboards` (bytecode plus LineNumberTable and LocalVariableTable), verbatim;
+3. the request lines of `save()` in the bundled SPA's `js/dashboard/DashboardAssociateWindow.js` (and the minified bundle line on 9.1.1), verbatim.
+
+Three claims the factory code relies on rest on that text: the NPE comes before any lookup or write; a single-map entry is merged into the existing association map rather than replacing it (otherwise a one-kind bind would drop every other kind's Summary binding); a reset leaves the old template in place.
+
 ## Follow-ups
 
 - Tooling: `associate_resource_kind_dashboards` must send `dashboardAssociations` on builds that read it (9.0.2 Build 25429562, 8.18.6 Build 25423535) and the two-map shape on 9.1.1. Choosing by version string is fragile (the 9.1.1 appliance's `lastbuildversion.txt` reads "9.0.0.0"). A safer probe is the error itself: the two-map call NPEs and writes nothing, so a retry in the other shape is safe.

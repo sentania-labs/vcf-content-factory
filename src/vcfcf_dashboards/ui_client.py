@@ -46,6 +46,9 @@ class UIClientError(RuntimeError):
         super().__init__(message)
         self.status = status
         self.body = body
+        #: ``(form, status, body)`` per request form sent, for the
+        #: association call (#260); empty otherwise.
+        self.answers: list = []
 
 
 #: associateResourceKindDashboards request forms, in the order tried (#260).
@@ -73,6 +76,19 @@ def association_params(form: str, assigned: dict, reset: dict) -> dict:
         merged.update({k: f"{v}_::_null" for k, v in reset.items()})
         return {"dashboardAssociations": json.dumps(merged)}
     raise ValueError(f"unknown association form {form!r}")
+
+
+#: Marker of the generic Ext error panel Struts renders for an exception
+#: in a ``.action`` (the body of the refused binds on 9.0.2 and 8.18.7,
+#: 2026-10-24: ``var errorPanel = new Ext.Panel(...)``).
+ERROR_PANEL_MARKER = "errorPanel"
+
+
+def is_wrong_form_answer(status: int, text: str) -> bool:
+    """True only for the answer a build gives to the request form it does
+    not read: HTTP 200 with the generic error panel (the NPE on the first
+    line of the action, before any write)."""
+    return status == 200 and ERROR_PANEL_MARKER in (text or "")
 
 
 # The Struts read actions (resourceKind.action and friends) answer the
@@ -364,14 +380,25 @@ class VCFOpsUIClient:
 
         A build NPEs on the first line of the action when the parameter it
         reads is absent, before any lookup or write, and answers HTTP 200
-        with the generic error panel. So the call goes out in the two-map
-        form first (the form proven live on 9.1.1 and 9.2) and, on any
-        answer other than ``ok``, once more in the single-map form; the
-        form that answered ``ok`` is remembered on the client
-        (``association_form``) and tried first next time. The version
-        string is not used: the 9.1.1 appliance's lastbuildversion.txt
-        reads 9.0.0.0. Raises :class:`UIClientError` carrying the last
-        answer's status and body when neither form answers ``ok``.
+        with the generic Ext error panel. Only that answer (HTTP 200 and the
+        ``errorPanel`` marker in the body) is the proven "wrong form,
+        nothing written" signal, so only that answer sends the other form.
+        Any other answer that is not ``ok`` (a 4xx or 5xx, a login page, a
+        proxy timeout the server may have completed) raises at once,
+        without a second write. The call goes out in the two-map form first
+        (the form proven live on 9.1.1 and 9.2); the form that answered
+        ``ok`` is remembered on the client (``association_form``) and tried
+        first next time. The version string is not used: the 9.1.1
+        appliance's lastbuildversion.txt reads 9.0.0.0.
+
+        Raises :class:`UIClientError` when no form answers ``ok``. Its
+        ``answers`` lists ``(form, status, body)`` per form sent; ``status``
+        is the first form's status, and ``body`` carries each form's answer
+        (whitespace collapsed, form-labelled), so a caller quoting the
+        server shows every refusal, not only the last. A non-``ok`` answer
+        does not prove nothing was written (the single-map success body is
+        unread on 9.0.2 and 8.18): callers read ``getSummaryTabId`` back
+        before calling it a refusal.
         """
         assigned = dict(assigned or {})
         reset = dict(reset or {})
@@ -394,17 +421,18 @@ class VCFOpsUIClient:
             if resp.status_code < 400 and resp.text.strip() == "ok":
                 self.association_form = form
                 return
-            # A refused call answers HTTP 200 with the generic Ext error
-            # panel ("Internal Server Error"), so the status alone does not
-            # say it failed; keep both for the caller.
-            answers.append((form, resp))
-        tried = ", ".join(f"{form} HTTP {resp.status_code}" for form, resp in answers)
-        last = answers[-1][1]
-        raise UIClientError(
-            f"associateResourceKindDashboards failed in every request form ({tried}): "
-            f"{last.text[:200]!r}",
-            status=last.status_code, body=last.text,
+            answers.append((form, resp.status_code, resp.text))
+            if not is_wrong_form_answer(resp.status_code, resp.text):
+                break  # not the proven NPE panel: never send a second write
+        tried = ", ".join(f"{form} HTTP {status}" for form, status, _ in answers)
+        body = " | ".join(
+            f"[{form}] {' '.join(str(text or '').split())[:120]}" for form, _, text in answers)
+        exc = UIClientError(
+            f"associateResourceKindDashboards was not answered ok ({tried}): {body[:300]!r}",
+            status=answers[0][1], body=body,
         )
+        exc.answers = answers
+        raise exc
 
     def get_summary_tab_id(self, resource_kind_id: str) -> dict:
         """Return the raw ``getSummaryTabId`` answer for a resource kind id.

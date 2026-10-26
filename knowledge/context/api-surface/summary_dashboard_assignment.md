@@ -164,16 +164,31 @@ POST /ui/dashboard.action
 - A dashboard the caller cannot see is skipped silently and the action
   still takes the success path.
 - What the success answer's body is (`ok` on 9.1.1 and 9.2) has not been
-  read for this form; the factory treats only `ok` as success.
+  read for this form. The factory treats only `ok` as success, but never
+  calls a non-`ok` answer a refusal before reading `getSummaryTabId` back:
+  a moved tab is reported as "written, unexpected answer".
 
 Each build NPEs on the first line of the action when the parameter it
 reads is absent (`new JSONObject(null)`), before any lookup or write, and
 answers HTTP 200 with the generic error panel. That makes a retry in the
-other form safe on every build read. `VCFOpsUIClient.associate_resource_kind_dashboards`
-therefore sends the two-map form first, then the single-map form on any
-answer other than `ok`, and remembers the form that answered `ok` for the
-rest of the session (`association_form`). The version string is not used
-to choose. `getSummaryTabId` on 9.0.2 answers `{"tabId": "<uuid>"}` with no
+other form safe on every build read, **for that answer only**.
+`VCFOpsUIClient.associate_resource_kind_dashboards` therefore sends the
+two-map form first and the single-map form only when the first answer is
+HTTP 200 with the `errorPanel` marker in its body; any other non-`ok`
+answer (4xx, 5xx, a login page, a proxy timeout the server may have
+completed) raises after one write. It remembers the form that answered
+`ok` for the rest of the session (`association_form`), and a refusal
+carries every form's answer (`UIClientError.answers`). The version string
+is not used to choose. Two-map goes first, against #260's "single-map
+first", because it is the live-proven form and the newer lines read it;
+the cost is one NPE stack trace in `web.log` per new client on 9.0.2 and
+8.18.
+
+The bytecode, javap text and SPA excerpts behind this section were not
+kept (the investigation's "Clean-up" lists what has to be captured), so
+the NPE-before-write order, the merge-not-replace behaviour of a
+single-map entry and the reset leaving the template in place rest on the
+investigation's prose until they are. `getSummaryTabId` on 9.0.2 answers `{"tabId": "<uuid>"}` with no
 `isDashboard` key (summary_dashboard_pak_binding.md, 2026-10-24), so the
 factory reads a bound tab with `vcfcf_core.dashboards.summary_bind.summary_dashboard_tab`:
 an explicit `isDashboard` decides, otherwise only a UUID `tabId` counts.
@@ -401,8 +416,10 @@ Two routes carry the binding, one implementation each:
   `getDashboardConfig` is; the ERROR names the unfinished widgets; a list
   entry without `isLoading` is refused too, since a bind copies the source as
   it is and a copy of an unfinished dashboard never finishes, #200; with
-  `--wait` it re-checks every 30 s for up to `--wait-timeout`, default
-  660 s, then binds), computes each listed kind's resource kind id offline,
+  `--wait` it re-checks every 30 s, then binds; `--wait-timeout` is the
+  budget for the whole run, default 660 s, at most 900 s; a wait that ends
+  on a failed read or a dashboard gone from the list says so), computes
+  each listed kind's resource kind id offline,
   reads every kind's current assignment (one `getResourceKindList` per
   distinct adapter kind), writes ONE `associateResourceKindDashboards`
   call whose `assignedAssociations` map carries every kind

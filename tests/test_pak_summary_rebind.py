@@ -538,15 +538,22 @@ def test_ui_client_associate_failure_carries_status_and_body():
         text = "<html>Internal Server Error</html>"
 
     class _Session:
+        posts = 0
+
         def post(self, *a, **k):
+            self.posts += 1
             return _Resp()
 
     c = VCFOpsUIClient(host="ops.example", username="u", password="p")
-    c._session, c._csrf_token = _Session(), "tok"
+    session = _Session()
+    c._session, c._csrf_token = session, "tok"
     with pytest.raises(UIClientError) as exc:
         c.associate_resource_kind_dashboards({"resourceKind_x": "N_::_u"}, {})
+    # no error-panel marker: not the proven wrong-form answer, so no second write
+    assert session.posts == 1
     assert exc.value.status == 200
-    assert exc.value.body == "<html>Internal Server Error</html>"
+    assert exc.value.body == "[two-map] <html>Internal Server Error</html>"
+    assert exc.value.answers == [("two-map", 200, "<html>Internal Server Error</html>")]
     assert "HTTP 200" in str(exc.value)
 
 
@@ -581,3 +588,70 @@ def test_cli_both_switches_is_a_usage_error(monkeypatch, capsys):
                         lambda **kw: pytest.fail("must not install on a usage error"))
     assert mp_cli.main(["install", "x.pak", "--summary-rebind", "--skip-summary-rebind"]) == 2
     assert "contradict" in capsys.readouterr().err
+
+
+# --- #260 review: read back after a non-ok answer, name the request form -----------------
+
+class _FormUI(_UI):
+    association_form = "single-map"
+
+
+def test_rebound_line_names_the_request_form():
+    ui = _FormUI([{"tabId": OLD_CLONE}, {"tabId": NEW_CLONE}],
+                 {OLD_CLONE: _config(OLD_CLONE, True, [True] * 7),
+                  NEW_CLONE: _config(NEW_CLONE, False, [False] * 7, name=NAME + " 8")})
+    rc, out, err = _repair(ui)
+    assert rc == 0 and err == []
+    assert out[0].startswith("SUMMARY REBOUND:") and "(request form: single-map)" in out[0]
+
+
+def test_non_ok_answer_with_a_moved_tab_is_rebound_not_refused():
+    """The single-map success body is unread: a non-ok answer whose readback
+    shows a new copy was written, and is reported as such (W1)."""
+    from vcfcf_dashboards.ui_client import UIClientError
+
+    exc = UIClientError("not ok", status=200, body="[two-map] panel | [single-map] done")
+    exc.answers = [("two-map", 200, "panel"), ("single-map", 200, "done")]
+    ui = _UI([{"tabId": OLD_CLONE}, {"tabId": NEW_CLONE}],
+             {OLD_CLONE: _config(OLD_CLONE, True, [True] * 7),
+              NEW_CLONE: _config(NEW_CLONE, False, [False] * 7, name=NAME + " 8")},
+             assoc_raises=exc)
+    rc, out, err = _repair(ui)
+    assert rc == 0 and err == []
+    assert out[0].startswith("SUMMARY REBOUND:")
+    assert "was not answered ok" in out[0] and "so it was written" in out[0]
+    assert "(request forms tried: two-map, single-map)" in out[0]
+
+
+def test_non_ok_answer_and_unreadable_tab_is_not_rebound():
+    from vcfcf_dashboards.ui_client import UIClientError
+
+    class _Flaky(_UI):
+        reads = 0
+
+        def get_summary_tab_id(self, rkid):
+            self.reads += 1
+            if self.reads > 1:
+                raise RuntimeError("HTTP 503")
+            return super().get_summary_tab_id(rkid)
+
+    ui = _Flaky([{"tabId": OLD_CLONE}], {OLD_CLONE: _config(OLD_CLONE, True, [True] * 7)},
+                assoc_raises=UIClientError("not ok", status=502, body="Bad Gateway"))
+    rc, out, err = _repair(ui)
+    assert rc == pi.POST_INSTALL_FAILED_RC and out == []
+    assert err[0].startswith("WARNING: SUMMARY NOT REBOUND:")
+    assert "could not be read back" in err[0] and "is unknown" in err[0]
+    assert "HTTP 502" in err[0]
+
+
+def test_cli_unrecognised_env_value_warns_and_stays_on(monkeypatch, capsys):
+    from vcfcf_managementpacks import cli as mp_cli
+    from vcfcf_managementpacks import installer
+
+    seen = {}
+    monkeypatch.setenv("VCFCF_SUMMARY_REBIND", "fasle")
+    monkeypatch.setattr(installer, "install_pak", lambda **kw: seen.update(kw) or 0)
+    assert mp_cli.main(["install", "x.pak"]) == 0
+    assert seen["summary_rebind"] is True
+    err = capsys.readouterr().err
+    assert "VCFCF_SUMMARY_REBIND='fasle'" in err and "stays on" in err
