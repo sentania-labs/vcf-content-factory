@@ -42,6 +42,17 @@
 .PARAMETER SkipEnable
     (Install mode) Skip enabling super metrics on the Default Policy.
 
+.PARAMETER SkipMaterializationCheck
+    (Install mode) Skip the post-import check that each dashboard finished
+    building (one dashboard export plus an adapter-kind read). Default:
+    check, and exit 2 when a dashboard waits on an adapter that is not
+    installed. Same as install.py --skip-materialization-check.
+
+.PARAMETER MaterializationWait
+    (Install mode) Seconds to wait before the one re-check of dashboards
+    still building (default 180, or VCFCF_MATERIALIZATION_WAIT_S; capped at
+    900; 0 reports at once). Same as install.py --materialization-wait.
+
 .PARAMETER Install
     Install mode (default).
 
@@ -75,6 +86,10 @@ param(
     [string]$AuthSource = $env:VCFOPS_AUTH_SOURCE,
     [switch]$SkipSslVerify = ($env:VCFOPS_VERIFY_SSL -eq 'false'),
     [switch]$SkipEnable,
+    [switch]$SkipMaterializationCheck,
+    # Nullable so "not given" stays distinct from 0 and falls through to the
+    # VCFCF_MATERIALIZATION_WAIT_S override, as install.py's default=None does.
+    [Nullable[int]]$MaterializationWait = $null,
     [switch]$Install,
     [switch]$Uninstall,
     [switch]$Force
@@ -1939,6 +1954,532 @@ function Write-AdvisoryTrailer {
     foreach ($a in $Advisories) { Write-Host "  ATTENTION  $a" }
 }
 
+# ---------------------------------------------------------------------------
+# Post-import dashboard materialization check (issue #255, port of #244)
+#
+# A FINISHED dashboard import only covers phase 1: the record is written, and
+# each widget's settings are resolved later by a background pass.  A dashboard
+# waiting on an adapter that is not installed never finishes.  This is the
+# factory's vcfcf_core.dashboards.materialization classifier and the export
+# reader from vcfcf_core.extractor, deliberately re-stated rather than
+# imported: this script ships standalone inside every bundle zip.  It mirrors
+# install.py's _mat_* helpers line for line, and
+# tests/test_install_ps1_materialization.py pins it to the core classifier on
+# every state and every report sentence.  If one side changes, change both.
+#
+# Parity details that are easy to lose in a port:
+# - Sorting and set membership are ORDINAL (case-sensitive, culture-free),
+#   because Python's sorted() and set are.  Sort-Object and @{} are not.
+# - Every collection-returning function comma-wraps its return (see
+#   Get-PropList for why).
+# ---------------------------------------------------------------------------
+$script:MatComplete   = "complete"
+$script:MatSettling   = "settling"
+$script:MatIncomplete = "incomplete"
+$script:MatStalled    = "stalled"
+$script:MatAbsent     = "absent"
+
+# Same default, cap and environment override as the factory CLI.
+$script:MatWaitDefaultS = 180
+$script:MatWaitMaxS     = 900
+$script:MatWaitEnv      = "VCFCF_MATERIALIZATION_WAIT_S"
+
+function Get-MaterializationWait {
+    param($Requested = $null)
+    # -MaterializationWait, else VCFCF_MATERIALIZATION_WAIT_S, else 180;
+    # clamped to 0..900.  An unparseable env value falls back to the default.
+    $value = $null
+    if ($null -ne $Requested) { $value = [long]$Requested }
+    if ($null -eq $value) {
+        $raw = [string][System.Environment]::GetEnvironmentVariable($script:MatWaitEnv)
+        $raw = $raw.Trim()
+        if ($raw) {
+            $parsed = [long]0
+            if ([long]::TryParse($raw, [System.Globalization.NumberStyles]::AllowLeadingSign,
+                    [System.Globalization.CultureInfo]::InvariantCulture, [ref]$parsed)) {
+                $value = $parsed
+            } elseif ($raw -match '^[+-]?[0-9]+$') {
+                # Too large for a long: Python's int() still parses it, and
+                # the clamp below then lands on the matching bound.
+                if ($raw.StartsWith("-")) { $value = [long]0 } else { $value = [long]$script:MatWaitMaxS }
+            }
+        }
+    }
+    if ($null -eq $value) { $value = [long]$script:MatWaitDefaultS }
+    return [int][Math]::Max([long]0, [Math]::Min($value, [long]$script:MatWaitMaxS))
+}
+
+function Test-MatMapping {
+    param($Value)
+    # Python's isinstance(x, Mapping): a JSON object, never an array or scalar.
+    if ($null -eq $Value) { return $false }
+    if ($Value -is [System.Collections.IDictionary]) { return $true }
+    return ($Value -is [System.Management.Automation.PSCustomObject])
+}
+
+function Get-MatMembers {
+    param($Value)
+    # (name, value) pairs of a JSON object in document order, either shape.
+    $out = [System.Collections.Generic.List[object]]::new()
+    if ($Value -is [System.Collections.IDictionary]) {
+        foreach ($k in $Value.Keys) { $out.Add(@($k, $Value[$k])) }
+    } else {
+        foreach ($p in $Value.PSObject.Properties) { $out.Add(@($p.Name, $p.Value)) }
+    }
+    return ,$out.ToArray()
+}
+
+function Get-MatJsonArray {
+    param($Object, [string]$Name)
+    # The member as an array when it IS a JSON array (Python's isinstance(x,
+    # list)), otherwise an empty array.  Not built on Get-PropValue: its
+    # return unwraps a one-element array to the bare element, which would
+    # read a one-item list as "not a list".
+    $value = $null
+    if ($Object -is [System.Collections.IDictionary]) {
+        if ($Object.Contains($Name)) { $value = $Object[$Name] }
+    } elseif ($null -ne $Object) {
+        $prop = $Object.PSObject.Properties[$Name]
+        if ($null -ne $prop) { $value = $prop.Value }
+    }
+    if ($value -is [System.Array] -or $value -is [System.Collections.IList]) { return ,@($value) }
+    return ,@()
+}
+
+function ConvertFrom-DashboardExportZip {
+    param([byte[]]$ZipBytes)
+    # Dashboard objects from a DASHBOARDS export (one inner zip per owner).
+    # Throws "failed to parse dashboard export zip: ..." when the outer bytes
+    # are not a zip; an unreadable inner member is skipped.
+    $result = [System.Collections.Generic.List[object]]::new()
+    $outer = $null
+    try {
+        try {
+            $outerStream = New-Object System.IO.MemoryStream(,$ZipBytes)
+            $outer = New-Object System.IO.Compression.ZipArchive($outerStream, [System.IO.Compression.ZipArchiveMode]::Read)
+        } catch {
+            throw "failed to parse dashboard export zip: $($_.Exception.Message)"
+        }
+        foreach ($entry in $outer.Entries) {
+            $name = $entry.FullName
+            if (-not $name.StartsWith("dashboards/", [System.StringComparison]::Ordinal) -or
+                $name.EndsWith("/", [System.StringComparison]::Ordinal)) { continue }
+            $dj = $null
+            $inner = $null
+            try {
+                $buf = New-Object System.IO.MemoryStream
+                $es = $entry.Open()
+                try { $es.CopyTo($buf) } finally { $es.Dispose() }
+                $buf.Position = 0
+                $inner = New-Object System.IO.Compression.ZipArchive($buf, [System.IO.Compression.ZipArchiveMode]::Read)
+                $djEntry = $inner.GetEntry("dashboard/dashboard.json")
+                if ($null -eq $djEntry) { continue }
+                $js = $djEntry.Open()
+                try {
+                    # UTF-8 with BOM detection, the same decode json.loads(bytes) does.
+                    $reader = New-Object System.IO.StreamReader($js, [System.Text.Encoding]::UTF8, $true)
+                    $text = $reader.ReadToEnd()
+                } finally { $js.Dispose() }
+                $dj = $text | ConvertFrom-Json
+            } catch {
+                continue
+            } finally {
+                if ($null -ne $inner) { $inner.Dispose() }
+            }
+            if (-not (Test-MatMapping $dj)) { continue }
+            foreach ($dash in (Get-MatJsonArray $dj "dashboards")) {
+                if (Test-MatMapping $dash) { $result.Add($dash) }
+            }
+        }
+    } finally {
+        if ($null -ne $outer) { $outer.Dispose() }
+    }
+    return ,$result.ToArray()
+}
+
+function Get-MatPendingResources {
+    param($Dashboard)
+    $names = New-Object System.Collections.Generic.List[string]
+    $entryKeys = Get-PropValue $Dashboard "entryKeys"
+    if (-not (Test-MatMapping $entryKeys)) { return ,$names.ToArray() }
+    # Only a JSON array is walked, as Python's "for item in ... or []" over a
+    # list; any other shape yields no names there either.
+    foreach ($item in (Get-MatJsonArray $entryKeys "resource")) {
+        if (-not (Test-MatMapping $item)) { continue }
+        $raw = Get-PropValue $item "name"
+        $n = ""
+        if ($raw) { $n = ([string]$raw).Trim() }
+        if ($n -and -not $names.Contains($n)) { $names.Add($n) }
+    }
+    return ,$names.ToArray()
+}
+
+function Get-MatPendingKinds {
+    param($Dashboard)
+    $kinds = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::Ordinal)
+    $entryKeys = Get-PropValue $Dashboard "entryKeys"
+    if (-not (Test-MatMapping $entryKeys)) { return ,([string[]]@()) }
+    foreach ($member in (Get-MatMembers $entryKeys)) {
+        $value = $member[1]
+        if ($value -isnot [System.Array] -and $value -isnot [System.Collections.IList]) { continue }
+        foreach ($item in $value) {
+            if (-not (Test-MatMapping $item)) { continue }
+            $raw = Get-PropValue $item "adapterKindKey"
+            $ak = ""
+            if ($raw) { $ak = ([string]$raw).Trim() }
+            if ($ak) { $null = $kinds.Add($ak) }
+        }
+    }
+    $sorted = New-Object string[] $kinds.Count
+    $kinds.CopyTo($sorted)
+    [System.Array]::Sort($sorted, [System.StringComparer]::Ordinal)
+    return ,$sorted
+}
+
+function Test-MatIncomplete {
+    param($Dashboard)
+    # entryKeys non-null is the primary signal; an explicit importComplete:
+    # false (a real boolean, as Python's "is False") counts too.
+    # Read in place, not through Get-PropValue: its return would turn an
+    # empty JSON array (non-null in Python) into $null.
+    $entryKeys = $null
+    if ($Dashboard -is [System.Collections.IDictionary]) {
+        if ($Dashboard.Contains("entryKeys")) { $entryKeys = $Dashboard["entryKeys"] }
+    } elseif ($null -ne $Dashboard) {
+        $prop = $Dashboard.PSObject.Properties["entryKeys"]
+        if ($null -ne $prop) { $entryKeys = $prop.Value }
+    }
+    if ($null -ne $entryKeys) { return $true }
+    $ic = Get-PropValue $Dashboard "importComplete"
+    return ($ic -is [bool] -and -not $ic)
+}
+
+function Get-MatClassification {
+    param($Exported, $Wanted, $InstalledKinds)
+    # One status hashtable per (id -> name) in $Wanted, an ordered dictionary
+    # with an ordinal comparer.  $InstalledKinds $null means the adapter kinds
+    # could not be read: never stalled on a guess.
+    $byId = New-Object 'System.Collections.Generic.Dictionary[string,object]' ([System.StringComparer]::Ordinal)
+    foreach ($d in @($Exported)) {
+        if ($null -eq $d) { continue }
+        $rawId = Get-PropValue $d "id"
+        $did = ""
+        if ($rawId) { $did = ([string]$rawId).Trim().ToLowerInvariant() }
+        if ($did) { $byId[$did] = $d }
+    }
+    $installed = $null
+    if ($null -ne $InstalledKinds) {
+        $installed = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::Ordinal)
+        foreach ($k in $InstalledKinds) { $null = $installed.Add([string]$k) }
+    }
+    $out = [System.Collections.Generic.List[object]]::new()
+    foreach ($key in $Wanted.Keys) {
+        $did = ([string]$key).Trim().ToLowerInvariant()
+        $st = @{
+            Id = $did; Name = [string]$Wanted[$key]; State = $script:MatComplete
+            Pending = [string[]]@(); Missing = [string[]]@(); Resources = [string[]]@()
+            After = 0; KindsKnown = $true
+        }
+        $d = $null
+        if ($byId.ContainsKey($did)) { $d = $byId[$did] }
+        if ($null -eq $d) {
+            $st.State = $script:MatAbsent
+        } elseif (Test-MatIncomplete $d) {
+            $st.Pending = Get-MatPendingKinds $d
+            $missing = New-Object System.Collections.Generic.List[string]
+            foreach ($k in $st.Pending) {
+                if ($null -ne $installed -and -not $installed.Contains($k)) { $missing.Add($k) }
+            }
+            $st.Missing = $missing.ToArray()
+            $st.Resources = Get-MatPendingResources $d
+            $st.KindsKnown = ($null -ne $installed)
+            if ($missing.Count -gt 0) { $st.State = $script:MatStalled } else { $st.State = $script:MatSettling }
+        }
+        $out.Add($st)
+    }
+    return ,$out.ToArray()
+}
+
+function Complete-MatStatuses {
+    param($Statuses, [int]$After)
+    # Turn every remaining SETTLING into INCOMPLETE, stamping the wait.
+    foreach ($st in $Statuses) {
+        $st.After = [int]$After
+        if ($st.State -eq $script:MatSettling) { $st.State = $script:MatIncomplete }
+    }
+    return ,$Statuses
+}
+
+function Get-MatQuoted {
+    param($Names)
+    return ((@($Names) | ForEach-Object { "'$_'" }) -join ", ")
+}
+
+function Get-MatDescription {
+    param($Status)
+    # Same sentences as vcfcf_core.dashboards.materialization.describe_status.
+    $resources = ""
+    if (@($Status.Resources).Count -gt 0) {
+        $resources = " It also binds the resources $(Get-MatQuoted $Status.Resources)."
+    }
+    if ($Status.State -eq $script:MatStalled) {
+        $kinds = @($Status.Missing) -join ", "
+        $verb = "are"
+        if (@($Status.Missing).Count -eq 1) { $verb = "is" }
+        return ("dashboard '$($Status.Name)' is installed but cannot finish " +
+            "building: it is waiting on $kinds, which $verb not installed " +
+            "on this instance. Its widgets that use those resource kinds " +
+            "stay empty until the adapter is installed; re-importing does " +
+            "not help.$resources")
+    }
+    if ($Status.State -eq $script:MatIncomplete -or $Status.State -eq $script:MatSettling) {
+        $kinds = @($Status.Pending) -join ", "
+        if (-not $kinds) { $kinds = "(none named)" }
+        $res = ""
+        if (@($Status.Resources).Count -gt 0) {
+            $res = " and the resources $(Get-MatQuoted $Status.Resources)"
+        }
+        if ($Status.KindsKnown) {
+            $installedText = "Every adapter kind is installed, so it may still finish"
+        } else {
+            $installedText = ("The installed adapter kinds could not be read, so a missing " +
+                "adapter is not ruled out; it may still finish")
+        }
+        return ("dashboard '$($Status.Name)' had not finished building " +
+            "$($Status.After) s after the import. It waits on the " +
+            "adapter kinds $kinds$res. $installedText (the background pass " +
+            "can take about 20 minutes; opening it once in the UI is " +
+            "faster), but it does not always: a factory dashboard stayed " +
+            "incomplete for 19 days with every adapter installed. If it is " +
+            "still incomplete later, check that the named resources exist " +
+            "on this instance.")
+    }
+    if ($Status.State -eq $script:MatAbsent) {
+        return ("dashboard '$($Status.Name)' ($($Status.Id)) was in the import but is " +
+            "not on the instance afterwards. The importer can drop a whole " +
+            "dashboard silently (for example a widget type this Ops build " +
+            "lacks); check the instance.")
+    }
+    return ""
+}
+
+function Get-DashboardIdNames {
+    param([string]$DashJson, [string]$OwnerId)
+    # (id, name) pairs for the dashboards in a rendered dashboard.json, best
+    # effort; the name drops the namePath folder prefix.  Never throws: it
+    # runs after the import, where an exception would leave a partial install.
+    $out = [System.Collections.Generic.List[object]]::new()
+    try {
+        $data = ($DashJson -replace "PLACEHOLDER_USER_ID", $OwnerId) | ConvertFrom-Json
+        if (-not (Test-MatMapping $data)) { return ,$out.ToArray() }
+        foreach ($d in (Get-MatJsonArray $data "dashboards")) {
+            if (-not (Test-MatMapping $d)) { continue }
+            $id = Get-PropValue $d "id"
+            if (-not $id) { continue }
+            $rawName = Get-PropValue $d "name"
+            $name = [string]$id
+            if ($rawName) { $name = [string]$rawName }
+            $path = [string](Get-PropValue $d "namePath")
+            if ($path -and $name.StartsWith($path + "/", [System.StringComparison]::Ordinal)) {
+                $name = $name.Substring($path.Length + 1)
+            }
+            if ($name.Length -gt $script:AdvisoryNameMaxChars) {
+                $name = $name.Substring(0, $script:AdvisoryNameMaxChars) + "..."
+            }
+            $out.Add(@([string]$id, $name))
+        }
+    } catch {
+        return ,@()
+    }
+    return ,$out.ToArray()
+}
+
+function Export-DashboardsZip {
+    param([int]$TimeoutSeconds = 180)
+    # One CUSTOM DASHBOARDS export (read-only: it creates no content).  Used
+    # only by the advisory materialization check, so every failure throws
+    # instead of Write-Fail.  Same sequence as install.py
+    # Client.export_dashboards_zip: wait for any export in flight, snapshot
+    # startTime, POST, poll for a newer FINISHED run.
+    $deadline = [System.DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
+    while ($true) {
+        $g = Invoke-Api -Method GET -Path "/api/content/operations/export"
+        if ((Get-StatusCode $g) -eq 200) {
+            $st = [string](Get-PropValue $g "state")
+            if ($st -ne "RUNNING" -and $st -ne "INITIALIZED") { break }
+        }
+        if ([System.DateTime]::UtcNow -gt $deadline) { throw "timed out waiting for a prior export to finish" }
+        Start-Sleep -Seconds 2
+    }
+    $priorStart = [long]0
+    $g = Invoke-Api -Method GET -Path "/api/content/operations/export"
+    if ((Get-StatusCode $g) -eq 200) {
+        $raw = Get-PropValue $g "startTime"
+        if ($raw) { $priorStart = [long]$raw }
+    }
+    $r = Invoke-Api -Method POST -Path "/api/content/operations/export" `
+        -Body @{ scope = "CUSTOM"; contentTypes = @("DASHBOARDS") }
+    $sc = Get-StatusCode $r
+    if ($sc -ne 200 -and $sc -ne 202) {
+        $body = [string](Get-PropValue $r "__body")
+        if ($body.Length -gt 300) { $body = $body.Substring(0, 300) }
+        throw "dashboard export failed ($sc): $body"
+    }
+    $deadline = [System.DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
+    while ($true) {
+        $g = Invoke-Api -Method GET -Path "/api/content/operations/export"
+        $sc = Get-StatusCode $g
+        if ($sc -ne 200) { throw "export status failed ($sc)" }
+        $st = [string](Get-PropValue $g "state")
+        $startRaw = Get-PropValue $g "startTime"
+        $start = [long]0
+        if ($startRaw) { $start = [long]$startRaw }
+        if ($start -gt $priorStart -and $st.StartsWith("FINI", [System.StringComparison]::Ordinal)) { break }
+        if ([System.DateTime]::UtcNow -gt $deadline) { throw "dashboard export timed out; state=$st" }
+        Start-Sleep -Seconds 2
+    }
+    $zipParams = @{ Uri = "$script:BaseUrl/api/content/operations/export/zip"; Method = "GET"; UseBasicParsing = $true }
+    if ($script:Token) { $zipParams["Headers"] = @{ Authorization = "vRealizeOpsToken $script:Token" } }
+    if ($SkipSslVerify -and $PSVersionTable.PSVersion.Major -ge 6) { $zipParams["SkipCertificateCheck"] = $true }
+    $tmpZip = [System.IO.Path]::GetTempFileName()
+    try {
+        try {
+            Invoke-WebRequest @zipParams -OutFile $tmpZip
+        } catch {
+            throw "export zip download failed ($($_.Exception.Message))"
+        }
+        $bytes = [System.IO.File]::ReadAllBytes($tmpZip)
+    } finally {
+        Remove-Item -LiteralPath $tmpZip -Force -ErrorAction SilentlyContinue
+    }
+    return ,$bytes
+}
+
+function Get-AdapterKindKeys {
+    # Adapter-kind keys installed on the target (GET /api/adapterkinds).
+    $r = Invoke-Api -Method GET -Path "/api/adapterkinds"
+    $sc = Get-StatusCode $r
+    if ($sc -ne 200) { throw "adapterkinds read failed ($sc)" }
+    $keys = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::Ordinal)
+    foreach ($ak in (Get-PropList $r "adapter-kind")) {
+        if (-not (Test-MatMapping $ak)) { continue }
+        $k = Get-PropValue $ak "key"
+        if ($k) { $null = $keys.Add([string]$k) }
+    }
+    return ,$keys
+}
+
+function Read-MatState {
+    param($Wanted, $Ids, $KindsCache)
+    # One export read, classified.  The adapter kinds are read at most once
+    # per check, and only when a dashboard this run imported is incomplete;
+    # a failed read is cached as $null ("unknown"), never as "none".
+    try {
+        $exported = ConvertFrom-DashboardExportZip -ZipBytes (Export-DashboardsZip)
+    } catch {
+        throw $_.Exception.Message
+    }
+    if (-not $KindsCache.ContainsKey("Kinds")) {
+        $anyIncomplete = $false
+        foreach ($d in $exported) {
+            $rawId = Get-PropValue $d "id"
+            $lid = ""
+            if ($rawId) { $lid = ([string]$rawId).ToLowerInvariant() }
+            if ($Ids.Contains($lid) -and (Test-MatIncomplete $d)) { $anyIncomplete = $true; break }
+        }
+        if ($anyIncomplete) {
+            try {
+                $KindsCache["Kinds"] = Get-AdapterKindKeys
+            } catch {
+                $KindsCache["Kinds"] = $null
+            }
+        }
+    }
+    $kinds = $null
+    if ($KindsCache.ContainsKey("Kinds")) { $kinds = $KindsCache["Kinds"] }
+    return ,(Get-MatClassification -Exported $exported -Wanted $Wanted -InstalledKinds $kinds)
+}
+
+function Invoke-MaterializationCheck {
+    param($Dashboards, [int]$WaitSeconds, [scriptblock]$SleepFn = $null)
+    # Final status per imported dashboard: one export, at most one re-check.
+    # Throws when the first export fails; a failed re-check or adapter-kind
+    # read degrades (first read stands, or "not ruled out").
+    $wanted = New-Object System.Collections.Specialized.OrderedDictionary ([System.StringComparer]::Ordinal)
+    foreach ($pair in $Dashboards) { $wanted[[string]$pair[0]] = [string]$pair[1] }
+    $ids = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::Ordinal)
+    foreach ($key in $wanted.Keys) { $null = $ids.Add(([string]$key).ToLowerInvariant()) }
+    $kindsCache = @{}
+
+    $statuses = Read-MatState -Wanted $wanted -Ids $ids -KindsCache $kindsCache
+    $settling = @($statuses | Where-Object { $_.State -eq $script:MatSettling })
+    if ($settling.Count -eq 0 -or $WaitSeconds -le 0) {
+        return ,(Complete-MatStatuses -Statuses $statuses -After 0)
+    }
+    Write-Host ("MATERIALIZATION WAIT: $($settling.Count) dashboard(s) still building; " +
+        "re-checking once in $WaitSeconds s")
+    if ($null -ne $SleepFn) { $null = & $SleepFn $WaitSeconds } else { Start-Sleep -Seconds $WaitSeconds }
+    try {
+        $statuses = Read-MatState -Wanted $wanted -Ids $ids -KindsCache $kindsCache
+    } catch {
+        # The re-check is best effort: the first read stands.
+        return ,(Complete-MatStatuses -Statuses $statuses -After 0)
+    }
+    return ,(Complete-MatStatuses -Statuses $statuses -After $WaitSeconds)
+}
+
+function Invoke-MaterializationReport {
+    param($Dashboards, [switch]$Skip, $RequestedWait = $null, [scriptblock]$SleepFn = $null)
+    # Run the check and print its lines.  Returns @{ Warnings; Notes }.
+    # Warnings (STALLED: waiting on an adapter that is not installed) fail the
+    # install (exit 2).  Notes (INCOMPLETE, ABSENT, UNCHECKED) do not, but
+    # they print in the end-of-run attention list.
+    $result = @{
+        Warnings = [System.Collections.Generic.List[string]]::new()
+        Notes    = [System.Collections.Generic.List[string]]::new()
+    }
+    # Counted with a plain loop on purpose: "@($Dashboards).Count" throws
+    # "Argument types do not match" under pwsh 7.5 when the list was built
+    # with New-Object (a PSObject-wrapped List[object]); measured, see
+    # knowledge/context/authoring/guide_powershell.md.
+    if ($Skip.IsPresent) { return $result }
+    $count = 0
+    if ($null -ne $Dashboards) { foreach ($pair in $Dashboards) { $count++ } }
+    if ($count -eq 0) { return $result }
+    try {
+        $statuses = Invoke-MaterializationCheck -Dashboards $Dashboards `
+            -WaitSeconds (Get-MaterializationWait $RequestedWait) -SleepFn $SleepFn
+    } catch {
+        $line = ("MATERIALIZATION UNCHECKED: could not check whether the " +
+            "imported dashboards finished building: $($_.Exception.Message)")
+        Write-Host "WARNING: $line"
+        $result.Notes.Add($line)
+        return $result
+    }
+    $done = @($statuses | Where-Object { $_.State -eq $script:MatComplete }).Count
+    if ($done -gt 0) {
+        Write-Host "MATERIALIZATION OK: $done of $(@($statuses).Count) dashboard(s) finished building"
+    }
+    foreach ($st in $statuses) {
+        if ($st.State -eq $script:MatComplete) { continue }
+        $line = "MATERIALIZATION $($st.State.ToUpperInvariant()): $(Get-MatDescription $st)"
+        Write-Host "WARNING: $line"
+        if ($st.State -eq $script:MatStalled) { $result.Warnings.Add($line) } else { $result.Notes.Add($line) }
+    }
+    return $result
+}
+
+function Write-MaterializationTrailer {
+    param([object[]]$Notes)
+    # Printed in BOTH summary branches, before the advisory trailer, exactly
+    # as install.py's _print_advisories does.  Notes never touch the exit code.
+    if ($null -eq $Notes -or $Notes.Count -eq 0) { return }
+    Write-Host ""
+    Write-Host ("$($Notes.Count) dashboard(s) need a later look " +
+        "(installed, but not confirmed finished building):")
+    foreach ($n in $Notes) { Write-Host "  ATTENTION  $n" }
+}
+
 function New-ReportsZip {
     param([string]$ReportsXml, [string]$Marker, [string]$OwnerId)
     # Build inner reports.zip containing content.xml
@@ -2554,6 +3095,14 @@ function Install-Dashboard($Ctx) {
         $Ctx.Advisories.Add($advisory)
     } else {
         Write-Ok "Imported 1 dashboard"
+        # Post-import materialization check (#255) runs once at the end of
+        # the run.  A dashboard the import skipped is not what this run put on
+        # the instance, so it is not checked (same rule as install.py).
+        if ($Ctx.ContainsKey("ImportedDashboards") -and $null -ne $Ctx["ImportedDashboards"]) {
+            foreach ($pair in (Get-DashboardIdNames -DashJson $dashJson -OwnerId $Ctx.OwnerId)) {
+                $Ctx["ImportedDashboards"].Add($pair)
+            }
+        }
     }
 
     if ($nViews -gt 0) {
@@ -3156,6 +3705,12 @@ function Invoke-InstallBundle {
         Warnings   = $warnings
         Advisories = $advisories
         Names      = @()
+        # Shared with $GlobalCtx (same List object), so every bundle's
+        # dashboards land in one end-of-run materialization check.
+        ImportedDashboards = $null
+    }
+    if ($GlobalCtx.ContainsKey("ImportedDashboards")) {
+        $ctx.ImportedDashboards = $GlobalCtx["ImportedDashboards"]
     }
 
     foreach ($entry in $active) {
@@ -3244,6 +3799,9 @@ function Invoke-Install {
         Marker     = $marker
         OwnerId    = $ownerId
         Advisories = $allAdvisories
+        # (id, name) of every dashboard this run imported, for the
+        # end-of-run materialization check.
+        ImportedDashboards = [System.Collections.Generic.List[object]]::new()
     }
 
     $allWarnings = [System.Collections.Generic.List[string]]::new()
@@ -3254,11 +3812,23 @@ function Invoke-Install {
         foreach ($w in $warnings) { $allWarnings.Add($w) }
     }
 
+    # Post-import materialization check (#255, parity with install.py #244).
+    # STALLED lines join the warnings (exit 2); the rest are attention notes.
+    $mat = Invoke-MaterializationReport -Dashboards $globalCtx.ImportedDashboards `
+        -Skip:$SkipMaterializationCheck -RequestedWait $MaterializationWait
+    foreach ($w in $mat.Warnings) { $allWarnings.Add($w) }
+    $matNotes = $mat.Notes.ToArray()
+
     Write-Host ""
     if ($allWarnings.Count -gt 0) {
         Write-Host "Done with $($allWarnings.Count) warning(s):"
         foreach ($w in $allWarnings) { Write-Host "  WARN  $w" }
-        $enableWarns = @($allWarnings | Where-Object { $_ -like "*enable*" -or $_ -like "*resolve*" })
+        # Materialization lines are classified by their prefix, never by the
+        # substring test: a dashboard or resource name containing "enable" or
+        # "resolve" must not read as a super metric enable failure.
+        $enableWarns = @($allWarnings | Where-Object {
+            -not $_.StartsWith("MATERIALIZATION ", [System.StringComparison]::Ordinal) -and
+            ($_ -like "*enable*" -or $_ -like "*resolve*") })
         if ($enableWarns.Count -gt 0) {
             Write-Host "Content was imported but one or more super metrics could not be enabled."
         }
@@ -3269,10 +3839,11 @@ function Invoke-Install {
         Write-Host "  - View columns may show 'No data'"
         Write-Host "  - Newly enabled super metrics will report no values"
         Write-Host "This is expected. Refresh after ~5 minutes."
+        Write-MaterializationTrailer -Notes $matNotes
         Write-AdvisoryTrailer -Advisories $allAdvisories.ToArray()
         exit 2
     } else {
-        if ($allAdvisories.Count -gt 0) {
+        if ($allAdvisories.Count -gt 0 -or $matNotes.Count -gt 0) {
             # Not "below": the 5-minute NOTE block prints between this line
             # and the advisories, so the list is seven lines away, not
             # immediately under.  The ordering is deliberate (NOTE is
@@ -3289,6 +3860,7 @@ function Invoke-Install {
         Write-Host "  - View columns may show 'No data'"
         Write-Host "  - Newly enabled super metrics will report no values"
         Write-Host "This is expected. Refresh after ~5 minutes."
+        Write-MaterializationTrailer -Notes $matNotes
         Write-AdvisoryTrailer -Advisories $allAdvisories.ToArray()
     }
 }

@@ -248,6 +248,19 @@ index first. Two traps while doing it:
 PowerShell unwraps single-element collections on function return. Fix:
 wrap in `@(...)` or use `Write-Output -NoEnumerate`.
 
+### `@($x)` over a `New-Object` `List[object]` can throw (issue #255)
+Measured under pwsh 7.5 on Linux while porting the materialization check:
+`@($list).Count`, where `$list` came from
+`New-Object System.Collections.Generic.List[object]` (a PSObject-wrapped
+list), threw `Argument types do not match` from the engine, both inside a
+function and at script scope, and with an empty list as well as one holding
+arrays. The same list built with `[System.Collections.Generic.List[object]]::new()`
+did not throw, and `foreach ($x in $list) { $n++ }` never did. Not verified
+on 5.1. In shipped code, build `List[object]` with `::new()`, and count a
+caller-supplied collection with a `foreach` rather than `@(...).Count`
+(`install.ps1:Invoke-MaterializationReport`). Remember `@($null).Count` is 1,
+so a null check is still needed in front of any `@()` count.
+
 ### Typed collection parameters
 Typed params reject unwrapped scalars. Accept `[object[]]` or wrap at
 call site.
