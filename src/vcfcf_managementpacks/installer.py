@@ -1037,7 +1037,7 @@ def install_pak(
     profile: Optional[str] = None,
     materialization_check: bool = True,
     materialization_wait: Optional[int] = None,
-    summary_rebind: bool = False,
+    summary_rebind: bool = True,
 ) -> int:
     """Install a .pak file onto a VCF Ops instance via the /ui/ SPA Struts layer.
 
@@ -1059,10 +1059,10 @@ def install_pak(
       8:   post_install.report_pak_dashboards(): did each dashboard the pak
            ships finish building (issue #244)? Only with ``wait`` and
            ``materialization_check``. When the pak binds Summary dashboards
-           it reads each Summary copy and reports it; only with
-           ``summary_rebind`` (opt-in, default off) does it wait for the
-           sources and bind again any copy the server cloned before the
-           source finished (#200).
+           it waits for the sources and binds again any copy the server
+           cloned before the source finished (#200); with
+           ``summary_rebind=False`` it only reads each Summary copy and
+           reports it.
 
     Returns 0, or ``post_install.POST_INSTALL_FAILED_RC`` (3) when the pak
     installed but a post-install dashboard check failed. A failed install
