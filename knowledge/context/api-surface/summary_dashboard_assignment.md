@@ -103,9 +103,10 @@ built-in summary page a per-entry `defaultTemplateName` (for example
 `bind-summary` matches on `resourceKindId` and falls back to the
 (`adapterKind`, `resourceKind`) pair.
 
-Write (bulk; one call carries both maps, from the SPA's
-`DashboardAssociateWindow.save()` and the disassembled `DashboardAction`;
-provenance in the 2026-08-25 note at the end of this file):
+Write (bulk). **The request form depends on the build** (issue #260; see
+"Two request forms" below). The two-map form, from the 9.1.1/9.2 SPA's
+`DashboardAssociateWindow.save()` and the disassembled `DashboardAction`
+(provenance in the 2026-08-25 note at the end of this file):
 
 ```
 POST /ui/dashboard.action
@@ -122,9 +123,84 @@ ERRPANEL with HTTP 200. Binds go in `assignedAssociations`. Restore to the
 built-in page ("Use Default") goes in `resetAssociations`, whose value is
 the kind's **plain** `defaultTemplateName` (the per-entry one from
 `getResourceKindList` when present, e.g. `Host System Summary`; no
-`_::_null` suffix). The parameter name `dashboardAssociations` does not
-exist on any build and an earlier version of this section that used it was
-wrong.
+`_::_null` suffix). **Corrected 2026-10-24 (#260):** this section used to
+say `dashboardAssociations` exists on no build. That held for the builds
+measured on 2026-08-25 (a 9.0.0.0 pre-release and 9.2) and for 9.1.1, and
+is wrong for 9.0.2 Build 25429562 and 8.18.6 Build 25423535, which read
+only `dashboardAssociations`.
+
+### Two request forms (issue #260)
+
+Read 2026-10-24 from `DashboardAction.class` copied off each appliance
+(`javap -c -p -l`), the bundled SPA, and the `web.log` stack traces of the
+refused calls
+(`../investigations/2026-10-24-devel-summary-rebind-500-and-alertlist-gap.md`,
+part 1):
+
+| Build | Parameters the action reads | Reset value | Proven how |
+|---|---|---|---|
+| 8.18.6 Build 25423535 (devel_8_18) | `dashboardAssociations` only | `<templateName>_::_null` | bytecode and SPA (2026-10-26 evidence file); NPE stack trace of the two-map call. **The single-map call has not been sent live.** |
+| 9.0.2.0 Build 25429562 (devel) | `dashboardAssociations` only | `<templateName>_::_null` | bytecode and SPA (2026-10-26 evidence file; same method as 8.18.6); NPE stack trace of the two-map call. **The single-map call has not been sent live.** |
+| 9.1.1 Build 25794169 (devel_9_1; its `lastbuildversion.txt` reads 9.0.0.0) | `assignedAssociations` + `resetAssociations` | plain `<defaultTemplateName>` | bytecode and SPA (2026-10-26 evidence file); the two-map call is the one the factory has always sent |
+| 9.0.0.0 pre-release, 9.2.0.0 pre-release | `assignedAssociations` + `resetAssociations` | plain | 2026-08-25 note below: two empty maps answered `200 ok` live |
+
+The single-map request, from bytecode and SPA:
+
+```
+POST /ui/dashboard.action
+  mainAction=associateResourceKindDashboards
+  dashboardAssociations={"resourceKind_<resourceKindId>":"<dashboardName>_::_<dashboardUuid>",
+                         "resourceKind_<otherId>":"<templateName>_::_null", ...}
+  secureToken=<csrfToken>
+```
+
+- Bind: value `<name>_::_<uuid>`; the server splits on `_::_` (a value
+  without it throws), looks the dashboard up with the **caller's** userId,
+  calls the 4-argument `saveDashboardAsTemplate(uuid, name, SUMMARY,
+  userId)`, stores the new template id and deletes the kind's previous
+  template if it differs.
+- Reset: value `<templateName>_::_null`; the entry is removed from the
+  association map and the old template is **not** deleted.
+- A dashboard the caller cannot see is skipped silently and the action
+  still takes the success path.
+- What the success answer's body is (`ok` on 9.1.1 and 9.2) has not been
+  read for this form. The factory treats only `ok` as success, but never
+  calls a non-`ok` answer a refusal before reading `getSummaryTabId` back:
+  a moved tab is reported as "written, unexpected answer".
+
+Each build NPEs on the first line of the action when the parameter it
+reads is absent (`new JSONObject(null)`), before any lookup or write, and
+answers HTTP 200 with the generic error panel. That makes a retry in the
+other form safe on every build read, **for that answer only**.
+`VCFOpsUIClient.associate_resource_kind_dashboards` therefore sends the
+two-map form first and the single-map form only when the first answer is
+HTTP 200 with the `errorPanel` marker in its body; any other non-`ok`
+answer (4xx, 5xx, a login page, a proxy timeout the server may have
+completed) raises after one write. It remembers the form that answered
+`ok` for the rest of the session (`association_form`), and a refusal
+carries every form's answer (`UIClientError.answers`). The version string
+is not used to choose. Two-map goes first, against #260's "single-map
+first", because it is the live-proven form and the newer lines read it;
+the cost is one NPE stack trace in `web.log` per new client on 9.0.2 and
+8.18.
+
+Evidence (2026-10-26, all three builds): `../investigations/2026-10-26-dashboardaction-associate-evidence.md`
+(full `DashboardAction.class` hashes, the offsets below, conclusions; the
+verbatim `javap` and SPA text is local-only on the lab holding share).
+8.18.6 and 9.0.2 carry the same method instruction for instruction. The
+NPE precedes every write on every build (8.18.6/9.0.2 offsets 86 to 99,
+first write `saveDashboardAsTemplate` at 311; 9.1.1 offsets 92 to 119,
+first write at 333); a single-map entry is merged into the stored map,
+which is read whole, edited by key and written back whole (offsets 16,
+383/439, 489); a `_::_null` reset only removes the kind's entry (439) and
+leaves the template copy behind, orphaned. One limit on the retry
+argument: the error panel is rendered for any exception in the action, so
+a two-map call that throws mid-loop, after a copy was made, looks the
+same as the wrong-form answer. The single-map retry after it still writes
+nothing. `getSummaryTabId` on 9.0.2 answers `{"tabId": "<uuid>"}` with no
+`isDashboard` key (summary_dashboard_pak_binding.md, 2026-10-24), so the
+factory reads a bound tab with `vcfcf_core.dashboards.summary_bind.summary_dashboard_tab`:
+an explicit `isDashboard` decides, otherwise only a UUID `tabId` counts.
 
 ### The key is resourceKind, not adapter kind
 
@@ -244,9 +320,17 @@ Consequences, all of which any design must handle:
   the old one (`deleteDashboardTemplate(old)`) in the same call. The
   numeric suffixes on Broadcom's shipped names (`New Summary Page: vSAN
   Fault Domain 7`) come from the pak install path, not from this call.
-- **Unassigning through `resetAssociations` deletes the copy** when the
-  reset value's id matches the current one; `getSummaryTabId` then answers
-  `{"isDashboard": false}` (no `tabId` key).
+- **Unassigning through `resetAssociations` deletes the copy** only when
+  the reset value is `<name>_::_<id>` and the id matches the current one
+  (9.1.1 bytecode offsets 544 to 653,
+  `../investigations/2026-10-26-dashboardaction-associate-evidence.md`).
+  The value the SPA and the factory send is the plain template name, with
+  no `_::_`; for that value the action does not call
+  `deleteDashboardTemplate`. It moves the entry into a second "to remove"
+  map passed to `setDashboardAssociation`; whether that server-side call
+  deletes the copy is not visible in this class and has not been checked
+  (2026-10-26). On 8.18.6 and 9.0.2 a `_::_null` reset never deletes it.
+  `getSummaryTabId` then answers `{"isDashboard": false}` (no `tabId` key).
 - **The update story is therefore "assign again."** There is no in-place
   update and no client-side cleanup step.
 
@@ -261,7 +345,8 @@ that fallthrough as a privilege check. The only `getTemplateList` /
 (notification payloads) and are unrelated.
 
 Template lifecycle is owned entirely by `associateResourceKindDashboards`
-(replace on re-assign, delete on reset). Materialized templates remain
+(replace on re-assign; on reset, see "Assignment is COPY" above: the
+action itself deletes nothing for the values the SPA and factory send). Materialized templates remain
 readable only by UUID (`getDashboardConfig?tabId=<uuid>&isTemplate=true`);
 capture the UUID at assign time from `getSummaryTabId`. A separate
 enumeration path, if one exists, is still to be found.
@@ -335,22 +420,34 @@ Two routes carry the binding, one implementation each:
   (`summary_dashboard_pak_binding.md`). Tier 1 MPB paks do not bundle
   dashboards at all (`builder.py` writes an empty `content/dashboards/`).
 - **Post-import** (content-zip installs): `python3 -m vcfcf_dashboards
-  bind-summary --profile <p> [--dashboard <name>] [--unbind] [--dry-run]`,
+  bind-summary --profile <p> [--dashboard <name>] [--unbind] [--dry-run]
+  [--wait [--wait-timeout SECONDS]]`,
   implemented in `src/vcfcf_dashboards/summary_bind.py` over the
   `VCFOpsUIClient` methods `get_resource_kind_list`,
   `associate_resource_kind_dashboards(assigned, reset)` and
   `get_summary_tab_id` (`ui_client.py`; all send
   `X-Requested-With: XMLHttpRequest` plus `secureToken`). Per dashboard it
   resolves the installed dashboard **by name** (identity is the name,
-  `id_guard.py`), computes each listed kind's resource kind id offline,
+  `id_guard.py`; two installed dashboards with the name are an ERROR, nothing
+  written), refuses it while it is still building (issue #256: the
+  `getDashboardList` entry's `isLoading` is true, or a widget in its own
+  `getDashboardConfig` is; the ERROR names the unfinished widgets; a list
+  entry without `isLoading` is refused too, since a bind copies the source as
+  it is and a copy of an unfinished dashboard never finishes, #200; with
+  `--wait` it re-checks every 30 s, then binds; `--wait-timeout` is the
+  budget for the whole run, default 660 s, at most 900 s; a wait that ends
+  on a failed read or a dashboard gone from the list says so), computes
+  each listed kind's resource kind id offline,
   reads every kind's current assignment (one `getResourceKindList` per
   distinct adapter kind), writes ONE `associateResourceKindDashboards`
   call whose `assignedAssociations` map carries every kind
   (`{"resourceKind_<id>": "<name>_::_<uuid>", ...}`, with
   `resetAssociations` `{}`; the map takes many entries and the server
-  materializes one template copy per kind), then reads `getSummaryTabId`
-  back per kind: the bind counts only when every answer carries
-  `isDashboard: true` and a `tabId`, printed per kind as `LIVE tabId` /
+  materializes one template copy per kind; the client falls back to the
+  single `dashboardAssociations` map on 9.0.2 and 8.18, see "Two request
+  forms"), then reads `getSummaryTabId` back per kind: the bind counts only
+  when every answer shows a dashboard tab other than the one it showed
+  before the write, printed per kind as `LIVE tabId` /
   `template UUID` (that copy is what renders for that kind). A listed kind
   absent on the instance is printed as `ERROR` (dashboard name and kind)
   and left out of the map; the resolvable kinds are still bound and the
@@ -414,7 +511,8 @@ Lines 2071-2073 of the action read
 `request.getParameter("assignedAssociations")` and
 `request.getParameter("resetAssociations")`, then `new JSONObject(assigned)`.
 The string `dashboardAssociations` is not a request parameter on either
-build. The client sends `dashboardAssociations`, the server sees null,
+of these two builds (it is the only one on 9.0.2 GA and 8.18.6; see "Two
+request forms", issue #260). The client sends `dashboardAssociations`, the server sees null,
 NPE, and the Struts error interceptor renders the generic ERRPANEL with
 HTTP 200. The SPA's `save()` sends exactly:
 
@@ -433,7 +531,8 @@ value is the plain default template name (the SPA does not append
 `_::_null` there). Verified: the corrected shape with two empty maps
 returns `200 ok` on both builds; the same call with `dashboardAssociations`
 returns the ERRPANEL on both builds. The earlier "Write (bulk)" section
-above is therefore wrong on the parameter name and on the restore value.
+above was therefore wrong on the parameter name and on the restore value
+for these builds (and right for 9.0.2 GA and 8.18.6, #260).
 
 Server-side behaviour of the corrected call, from the bytecode (not yet
 exercised live):
@@ -447,7 +546,9 @@ exercised live):
   builds; the accumulation claim above describes older behaviour or the
   pak path, and should be re-verified before relying on it either way.
 - A reset entry removes the kind from the association map and deletes
-  its template if the reset value's id matches the current one.
+  its template if the reset value's id matches the current one. The
+  plain-name value the SPA sends carries no id, so this delete does not
+  fire for it (2026-10-26; see "Assignment is COPY" above).
 - Ids in `DataRetrieverUtils.ootbDashboardTemplateIds` (built-in
   templates) are stored as-is without copying.
 - Every change is audit-logged as `DASHBOARD_ASSOCIATE` with the raw

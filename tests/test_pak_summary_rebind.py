@@ -431,21 +431,36 @@ def _pak(tmp_path, props=None, extra_dir=None, two_in_world=False) -> Path:
     return p
 
 
-# --- opt-in repair (2026-10-24 live result: the bind is refused on 9.0.2 and 8.18.7) ---
+# --- repair on by default since #260 (the bind goes out in the form each build reads) ---
 
-def test_default_is_information_only(tmp_path, monkeypatch, capsys):
-    """Repair off by default: no long wait, no write, exit code untouched,
-    one SUMMARY line per bound kind with the copy id and the loading count."""
+def test_repair_is_on_by_default(tmp_path, monkeypatch, capsys):
+    """#200: with no switch the install waits for the source, then binds an
+    unfinished copy again; the server's clone-before-build order is undone."""
+    monkeypatch.delenv("VCFCF_MATERIALIZATION_WAIT_S", raising=False)
+    ui = _FullUI([[{"id": ID_WORLD, "isLoading": False}]],
+                 tab_answers=[{"tabId": OLD_CLONE}, {"tabId": NEW_CLONE}],
+                 configs={OLD_CLONE: _config(OLD_CLONE, True, [True] * 7),
+                          NEW_CLONE: _config(NEW_CLONE, False, [False] * 7, name=NAME + " 8")})
+    rc, _ = _report(tmp_path, ui, monkeypatch)
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert ui.assoc[0][0] == {f"resourceKind_{RKID}": f"{NAME}_::_{ID_WORLD}"}
+    assert f"SUMMARY REBOUND: vcfcf_compliance:ComplianceWorld now shows copy {NEW_CLONE}" in out
+
+
+def test_turned_off_is_information_only(tmp_path, monkeypatch, capsys):
+    """Repair turned off: no long wait, no write, exit code untouched, one
+    SUMMARY line per bound kind with the copy id and the loading count."""
     monkeypatch.delenv("VCFCF_MATERIALIZATION_WAIT_S", raising=False)
     ui = _FullUI([[{"id": ID_WORLD, "isLoading": False}]],
                  tab_answers=[{"tabId": OLD_CLONE}],
                  configs={OLD_CLONE: _config(OLD_CLONE, True, [True] * 7)})
-    rc, slept = _report(tmp_path, ui, monkeypatch)
+    rc, slept = _report(tmp_path, ui, monkeypatch, summary_rebind=False)
     out = capsys.readouterr().out
     assert rc == 0 and slept == [] and ui.assoc == []
     assert (f"SUMMARY INCOMPLETE vcfcf_compliance:ComplianceWorld {OLD_CLONE} "
             f"(7 of 7 widgets loading)") in out
-    assert "--summary-rebind or VCFCF_SUMMARY_REBIND=1" in out
+    assert "--skip-summary-rebind or VCFCF_SUMMARY_REBIND=0" in out
 
 
 def _info(ui):
@@ -523,27 +538,37 @@ def test_ui_client_associate_failure_carries_status_and_body():
         text = "<html>Internal Server Error</html>"
 
     class _Session:
+        posts = 0
+
         def post(self, *a, **k):
+            self.posts += 1
             return _Resp()
 
     c = VCFOpsUIClient(host="ops.example", username="u", password="p")
-    c._session, c._csrf_token = _Session(), "tok"
+    session = _Session()
+    c._session, c._csrf_token = session, "tok"
     with pytest.raises(UIClientError) as exc:
         c.associate_resource_kind_dashboards({"resourceKind_x": "N_::_u"}, {})
+    # no error-panel marker: not the proven wrong-form answer, so no second write
+    assert session.posts == 1
     assert exc.value.status == 200
-    assert exc.value.body == "<html>Internal Server Error</html>"
+    assert exc.value.body == "[two-map] <html>Internal Server Error</html>"
+    assert exc.value.answers == [("two-map", 200, "<html>Internal Server Error</html>")]
     assert "HTTP 200" in str(exc.value)
 
 
-@pytest.mark.parametrize("argv,env,expected,warns", [
-    ([], "", False, False),
-    (["--summary-rebind"], "", True, False),
-    ([], "1", True, False),
-    ([], "no", False, False),
-    (["--skip-summary-rebind"], "", False, True),
-    (["--skip-summary-rebind"], "1", False, True),
+@pytest.mark.parametrize("argv,env,expected", [
+    ([], "", True),
+    (["--summary-rebind"], "", True),
+    ([], "1", True),
+    ([], "no", False),
+    ([], "0", False),
+    ([], "OFF", False),
+    (["--summary-rebind"], "0", True),
+    (["--skip-summary-rebind"], "", False),
+    (["--skip-summary-rebind"], "1", False),
 ])
-def test_cli_summary_rebind_switch(monkeypatch, capsys, argv, env, expected, warns):
+def test_cli_summary_rebind_switch(monkeypatch, capsys, argv, env, expected):
     from vcfcf_managementpacks import cli as mp_cli
     from vcfcf_managementpacks import installer
 
@@ -552,7 +577,7 @@ def test_cli_summary_rebind_switch(monkeypatch, capsys, argv, env, expected, war
     monkeypatch.setattr(installer, "install_pak", lambda **kw: seen.update(kw) or 0)
     assert mp_cli.main(["install", "x.pak", *argv]) == 0
     assert seen["summary_rebind"] is expected
-    assert ("--skip-summary-rebind is deprecated" in capsys.readouterr().err) is warns
+    assert "deprecated" not in capsys.readouterr().err
 
 
 def test_cli_both_switches_is_a_usage_error(monkeypatch, capsys):
@@ -563,3 +588,70 @@ def test_cli_both_switches_is_a_usage_error(monkeypatch, capsys):
                         lambda **kw: pytest.fail("must not install on a usage error"))
     assert mp_cli.main(["install", "x.pak", "--summary-rebind", "--skip-summary-rebind"]) == 2
     assert "contradict" in capsys.readouterr().err
+
+
+# --- #260 review: read back after a non-ok answer, name the request form -----------------
+
+class _FormUI(_UI):
+    association_form = "single-map"
+
+
+def test_rebound_line_names_the_request_form():
+    ui = _FormUI([{"tabId": OLD_CLONE}, {"tabId": NEW_CLONE}],
+                 {OLD_CLONE: _config(OLD_CLONE, True, [True] * 7),
+                  NEW_CLONE: _config(NEW_CLONE, False, [False] * 7, name=NAME + " 8")})
+    rc, out, err = _repair(ui)
+    assert rc == 0 and err == []
+    assert out[0].startswith("SUMMARY REBOUND:") and "(request form: single-map)" in out[0]
+
+
+def test_non_ok_answer_with_a_moved_tab_is_rebound_not_refused():
+    """The single-map success body is unread: a non-ok answer whose readback
+    shows a new copy was written, and is reported as such (W1)."""
+    from vcfcf_dashboards.ui_client import UIClientError
+
+    exc = UIClientError("not ok", status=200, body="[two-map] panel | [single-map] done")
+    exc.answers = [("two-map", 200, "panel"), ("single-map", 200, "done")]
+    ui = _UI([{"tabId": OLD_CLONE}, {"tabId": NEW_CLONE}],
+             {OLD_CLONE: _config(OLD_CLONE, True, [True] * 7),
+              NEW_CLONE: _config(NEW_CLONE, False, [False] * 7, name=NAME + " 8")},
+             assoc_raises=exc)
+    rc, out, err = _repair(ui)
+    assert rc == 0 and err == []
+    assert out[0].startswith("SUMMARY REBOUND:")
+    assert "was not answered ok" in out[0] and "so it was written" in out[0]
+    assert "(request forms tried: two-map, single-map)" in out[0]
+
+
+def test_non_ok_answer_and_unreadable_tab_is_not_rebound():
+    from vcfcf_dashboards.ui_client import UIClientError
+
+    class _Flaky(_UI):
+        reads = 0
+
+        def get_summary_tab_id(self, rkid):
+            self.reads += 1
+            if self.reads > 1:
+                raise RuntimeError("HTTP 503")
+            return super().get_summary_tab_id(rkid)
+
+    ui = _Flaky([{"tabId": OLD_CLONE}], {OLD_CLONE: _config(OLD_CLONE, True, [True] * 7)},
+                assoc_raises=UIClientError("not ok", status=502, body="Bad Gateway"))
+    rc, out, err = _repair(ui)
+    assert rc == pi.POST_INSTALL_FAILED_RC and out == []
+    assert err[0].startswith("WARNING: SUMMARY NOT REBOUND:")
+    assert "could not be read back" in err[0] and "is unknown" in err[0]
+    assert "HTTP 502" in err[0]
+
+
+def test_cli_unrecognised_env_value_warns_and_stays_on(monkeypatch, capsys):
+    from vcfcf_managementpacks import cli as mp_cli
+    from vcfcf_managementpacks import installer
+
+    seen = {}
+    monkeypatch.setenv("VCFCF_SUMMARY_REBIND", "fasle")
+    monkeypatch.setattr(installer, "install_pak", lambda **kw: seen.update(kw) or 0)
+    assert mp_cli.main(["install", "x.pak"]) == 0
+    assert seen["summary_rebind"] is True
+    err = capsys.readouterr().err
+    assert "VCFCF_SUMMARY_REBIND='fasle'" in err and "stays on" in err

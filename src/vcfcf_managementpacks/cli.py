@@ -581,16 +581,17 @@ def cmd_install(args) -> int:
     )
 
 
-#: Environment switch for the opt-in Summary repair (issue #200).
+#: Environment switch for the Summary repair (issue #200): on by default,
+#: ``0``/``false``/``no``/``off`` turns it off.
 SUMMARY_REBIND_ENV = "VCFCF_SUMMARY_REBIND"
 
 
 def _summary_rebind_requested(args):
-    """Whether the opt-in Summary repair runs: ``--summary-rebind`` or
-    ``VCFCF_SUMMARY_REBIND=1``; off by default. ``--skip-summary-rebind`` is
-    a deprecated alias for the default (it keeps the repair off, even with
-    the env switch). Returns None, after an error line, when both flags are
-    given."""
+    """Whether the Summary repair (#200) runs. On by default since #260 (the
+    bind is now sent in the request form each build reads). ``--skip-summary-rebind``
+    or ``VCFCF_SUMMARY_REBIND=0`` turns it off; ``--summary-rebind`` turns
+    it on. A flag beats the env switch. Returns None, after an error line,
+    when both flags are given."""
     import os
 
     on_flag = bool(getattr(args, "summary_rebind", False))
@@ -599,13 +600,19 @@ def _summary_rebind_requested(args):
         print("ERROR: --summary-rebind and --skip-summary-rebind contradict each other; "
               "pass one.", file=sys.stderr)
         return None
+    if on_flag:
+        return True
     if skip:
-        print("WARN: --skip-summary-rebind is deprecated and has no effect: the Summary "
-              "repair is off by default (use --summary-rebind to turn it on).",
-              file=sys.stderr)
         return False
-    env_on = os.environ.get(SUMMARY_REBIND_ENV, "").strip().lower() in ("1", "true", "yes", "on")
-    return on_flag or env_on
+    raw = os.environ.get(SUMMARY_REBIND_ENV, "")
+    env = raw.strip().lower()
+    if env in ("0", "false", "no", "off"):
+        return False
+    if env not in ("", "1", "true", "yes", "on"):
+        print(f"WARN: {SUMMARY_REBIND_ENV}={raw!r} is not one of 1/true/yes/on or "
+              f"0/false/no/off; the Summary repair stays on (the default).",
+              file=sys.stderr)
+    return True
 
 
 def cmd_pak_compare(args) -> int:
@@ -1331,7 +1338,7 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Seconds to wait for dashboards still building after the install "
             "(default 180 with one re-check; 660, polled every 30 s, when the pak "
-            "binds a Summary dashboard and --summary-rebind is on; or "
+            "binds a Summary dashboard and the Summary repair is on; or "
             "VCFCF_MATERIALIZATION_WAIT_S; capped "
             "at 900; 0 reports them at once)."
         ),
@@ -1341,21 +1348,21 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         default=False,
         help=(
-            "Opt in (also VCFCF_SUMMARY_REBIND=1) to the Summary-tab repair for "
-            "issue #200: wait for each dashboard the pak binds in "
-            "dashboards.properties to finish building, then bind it again where "
-            "the server's Summary copy is unfinished. Off by default: on "
-            "2026-10-24 the server refused the bind on 9.0.2 and 8.18.7 (nothing "
-            "written) and 9.1.1 did not need it. Without it the install only "
-            "reads each bound copy and prints SUMMARY OK or SUMMARY INCOMPLETE "
-            "(n of m widgets loading) as information."
+            "The Summary-tab repair for issue #200, on by default (this flag "
+            "only overrides VCFCF_SUMMARY_REBIND=0): wait for each dashboard "
+            "the pak binds in dashboards.properties to finish building, then "
+            "bind it again where the server's Summary copy is unfinished."
         ),
     )
     pi.add_argument(
         "--skip-summary-rebind",
         action="store_true",
         default=False,
-        help="Deprecated, no effect: the Summary repair is already off by default.",
+        help=(
+            "Turn the Summary repair off (also VCFCF_SUMMARY_REBIND=0): the "
+            "install only reads each bound copy and prints SUMMARY OK or "
+            "SUMMARY INCOMPLETE (n of m widgets loading) as information."
+        ),
     )
     pi.epilog = (
         _creds_help
@@ -1363,10 +1370,10 @@ def build_parser() -> argparse.ArgumentParser:
         "failed or was refused (nothing to retry blindly: read the ERROR); 2 "
         "usage error; 3 the pak installed but a post-install dashboard check "
         "failed (MATERIALIZATION STALLED: a dashboard waits on an adapter "
-        "that is not installed; or, with --summary-rebind, SUMMARY NOT REBOUND: "
-        "a Summary tab still shows an unfinished copy, with the server's answer "
-        "when the bind was refused). SUMMARY INCOMPLETE without --summary-rebind "
-        "is information and leaves the exit code alone. Do not reinstall on 3."
+        "that is not installed; or SUMMARY NOT REBOUND: a Summary tab still "
+        "shows an unfinished copy, with the server's answer when the bind was "
+        "refused). SUMMARY INCOMPLETE with --skip-summary-rebind is information "
+        "and leaves the exit code alone. Do not reinstall on 3."
     )
     add_profile_arg(pi, default="devel")
     pi.set_defaults(func=cmd_install)

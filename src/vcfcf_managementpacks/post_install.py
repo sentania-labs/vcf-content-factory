@@ -27,14 +27,15 @@ A dashboard the list does not carry is ABSENT (the importer drops a whole
 dashboard silently on an unknown widget type, lesson
 ``unknown-widget-type-aborts-pak-dashboard-import.md``).
 
-Summary tabs (issue #200). The repair below is OFF by default
-(``--summary-rebind`` or ``VCFCF_SUMMARY_REBIND=1`` turns it on): on
-2026-10-24 it was refused by the server on devel 9.0.2 and 8.18.7
-(``associateResourceKindDashboards`` answered the generic "Internal Server
-Error" panel, nothing written) and not needed on 9.1.1. With it off, the
-install only reads each bound copy and prints ``SUMMARY OK`` or
-``SUMMARY INCOMPLETE`` as information. A pak's ``content/dashboards/dashboards.properties``
-makes the server's installer clone each bound dashboard into a SUMMARY
+Summary tabs (issue #200). The repair below is ON by default
+(``--skip-summary-rebind`` or ``VCFCF_SUMMARY_REBIND=0`` turns it off; then
+the install only reads each bound copy and prints ``SUMMARY OK`` or
+``SUMMARY INCOMPLETE`` as information). It was opt-in until issue #260: on
+2026-10-24 the server refused the bind on devel 9.0.2 and 8.18.7 because
+those builds read a single ``dashboardAssociations`` map, not the 9.1.1
+two-map form; the UI client now sends the form each build reads.
+
+A pak's ``content/dashboards/dashboards.properties`` makes the server's installer clone each bound dashboard into a SUMMARY
 template seconds after importing it. On 9.0.2 that clone is taken while the
 source's widgets are still unresolved, and nothing resolves a template
 afterwards, so the Summary tab shows stock widgets for good
@@ -456,8 +457,9 @@ def report_summary_copies(ui, bindings: List[PakBinding], *,
                 out(f"SUMMARY UNCHECKED {label}: could not read the Summary copy: {exc}")
     if incomplete:
         out("  (information only: the Summary tab shows a copy taken before the dashboard "
-            "finished building, issue #200. The repair is off by default; "
-            "--summary-rebind or VCFCF_SUMMARY_REBIND=1 turns it on.)")
+            "finished building, issue #200. The repair was turned off "
+            "(--skip-summary-rebind or VCFCF_SUMMARY_REBIND=0); run the install "
+            "without it to repair the copy.)")
 
 
 def template_state(config, tab_id: str) -> tuple:
@@ -496,6 +498,18 @@ def _resource_kind_id(adapter_kind: str, resource_kind: str) -> str:
     from vcfcf_core.dashboards.summary_bind import resource_kind_id
 
     return resource_kind_id(adapter_kind, resource_kind)
+
+
+def _forms_tried(ui, exc) -> str:
+    """`` (request form: <form>)`` for a REBOUND / NOT REBOUND line: the
+    form the client wrote with, else the forms the refused call tried
+    (#260; the evidence a live proof reads). Empty when neither is known."""
+    form = getattr(ui, "association_form", None)
+    if isinstance(form, str):
+        return f" (request form: {form})"
+    answers = getattr(exc, "answers", None) or []
+    forms = [a[0] for a in answers if isinstance(a, tuple) and a]
+    return f" (request forms tried: {', '.join(forms)})" if forms else ""
 
 
 def repair_summary_bindings(
@@ -569,35 +583,59 @@ def repair_summary_bindings(
                     if needs_fix:
                         rc = POST_INSTALL_FAILED_RC
                     continue
+                refused = None
                 try:
                     ui.associate_resource_kind_dashboards(
                         {f"resourceKind_{rkid}": f"{d.name}_::_{d.id}"}, {})
                 except Exception as exc:  # noqa: BLE001  report what the server said
-                    said = server_answer(exc, secrets)
+                    refused = exc
+                said = None
+                if refused is not None:
+                    said = server_answer(refused, secrets) or redact(str(refused), secrets)
+                # Read back even after a non-ok answer: a non-ok answer does not
+                # prove nothing was written (#260 W1).
+                try:
+                    answer = ui.get_summary_tab_id(rkid)
+                except Exception as rexc:  # noqa: BLE001
+                    if refused is None:
+                        raise
+                    err(f"WARNING: SUMMARY NOT REBOUND: {label}: binding '{d.name}' "
+                        f"({d.id}) again was not answered ok and the Summary tab could not "
+                        f"be read back ({redact(str(rexc), secrets)}), so whether it still "
+                        f"shows the unfinished copy {old} is unknown. Server answer: {said}"
+                        f"{_forms_tried(ui, refused)}")
+                    rc = POST_INSTALL_FAILED_RC
+                    continue
+                new = str(answer.get("tabId") or "") if isinstance(answer, dict) else ""
+                if refused is not None and (not new or new == old):
                     err(f"WARNING: SUMMARY NOT REBOUND: {label}: binding '{d.name}' "
                         f"({d.id}) again was refused, so the Summary tab still shows the "
-                        f"unfinished copy {old}. Server answer: "
-                        f"{said or redact(str(exc), secrets)}")
+                        f"unfinished copy {old}. Server answer: {said}"
+                        f"{_forms_tried(ui, refused)}")
                     rc = POST_INSTALL_FAILED_RC
                     continue
-                answer = ui.get_summary_tab_id(rkid)
-                new = str(answer.get("tabId") or "") if isinstance(answer, dict) else ""
                 if not new or new == old:
                     err(f"WARNING: SUMMARY NOT REBOUND: {label}: bound '{d.name}' ({d.id}) "
-                        f"again, but the Summary tab still points at {old or 'nothing'}.")
+                        f"again, but the Summary tab still points at {old or 'nothing'}"
+                        f"{_forms_tried(ui, None)}.")
                     rc = POST_INSTALL_FAILED_RC
                     continue
+                unexpected = (
+                    f" The bind call was not answered ok ({said}), but the Summary tab "
+                    f"moved, so it was written." if refused is not None else "")
                 new_state, _ = template_state(
                     ui.get_dashboard_config(new, is_template=True), new)
                 if new_state == CLONE_INCOMPLETE:
                     err(f"WARNING: SUMMARY NOT REBOUND: {label}: the new copy {new} of "
-                        f"'{d.name}' is unfinished too.")
+                        f"'{d.name}' is unfinished too{_forms_tried(ui, refused)}."
+                        f"{unexpected}")
                     rc = POST_INSTALL_FAILED_RC
                     continue
                 out(f"SUMMARY REBOUND: {label} now shows copy {new} of '{d.name}' ({d.id}); "
                     f"the installer's copy {old} was {state}. The previous copy may remain as "
-                    f"an unused template (the server deletes it on 9.2; not confirmed on "
-                    f"9.0.2). New copy state: {new_state}.")
+                    f"an unused template (the bind action deletes it on 9.2, and per the "
+                    f"bytecode on 9.0.2 and 8.18; not seen live there). New copy state: "
+                    f"{new_state}{_forms_tried(ui, refused)}.{unexpected}")
             except Exception as exc:  # noqa: BLE001  one kind's failure must not stop the rest
                 err(f"WARNING: SUMMARY UNCHECKED: {label}: could not check or repair the "
                     f"Summary tab for '{d.name}': {exc}")
@@ -614,7 +652,7 @@ def report_pak_dashboards(
     password: str,
     verify_ssl: bool,
     wait_s: Optional[int] = None,
-    summary_rebind: bool = False,
+    summary_rebind: bool = True,
     ui_factory: Optional[Callable[..., object]] = None,
     suite_factory: Optional[Callable[..., object]] = None,
     sleep: Callable[[float], None] = time.sleep,
@@ -624,7 +662,7 @@ def report_pak_dashboards(
     Returns 0, or :data:`POST_INSTALL_FAILED_RC` when a dashboard is
     STALLED (waiting on an adapter kind the target lacks) or a bound
     Summary tab is left showing an unfinished copy (#200). When the pak
-    binds Summary dashboards and ``summary_rebind`` is on (default off), the
+    binds Summary dashboards and ``summary_rebind`` is on (the default), the
     wait polls (default :data:`BOUND_SOURCE_WAIT_S`) and the Summary clones
     are checked and repaired; with it off they are only read and reported
     (:func:`report_summary_copies`), with no effect on the return code. Credentials are never printed. ``ui_factory(host, user, password, verify_ssl)`` and

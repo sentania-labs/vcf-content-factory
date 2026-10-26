@@ -427,12 +427,19 @@ class FakeUI:
     a bind materializes a copy whose UUID ``getSummaryTabId`` then returns
     with ``isDashboard: true``; an unbind (or no association) answers
     ``{"isDashboard": false}`` with NO ``tabId`` key at all.
+
+    ``loading`` is each listed dashboard's ``isLoading`` (``None`` omits the
+    key); ``widgets`` is the ``getDashboardConfig`` widget list of the
+    installed dashboard (#256).
     """
 
     def __init__(self, *, installed=None, current_template=None,
                  tab_after_bind="aaaaaaaa-1111-4222-8333-444444444444",
-                 associate_error=None, tab_answer=None):
+                 associate_error=None, tab_answer=None, loading=False, widgets=None):
         self.installed = installed if installed is not None else {}
+        self.loading = loading
+        self.widgets = widgets if widgets is not None else [
+            {"id": "w1", "key": "Scoreboard", "title": "Health", "isLoading": False}]
         self.current_template = current_template
         self.tab_after_bind = tab_after_bind
         self.associate_error = associate_error
@@ -446,7 +453,19 @@ class FakeUI:
 
     def list_dashboards(self):
         self.calls.append(("list_dashboards",))
-        return [{"id": uid, "name": name} for name, uid in self.installed.items()]
+        out = []
+        for name, uid in self.installed.items():
+            entry = {"id": uid, "name": name}
+            if self.loading is not None:
+                entry["isLoading"] = self.loading
+            out.append(entry)
+        return out
+
+    def get_dashboard_config(self, tab_id, *, is_template=False):
+        self.calls.append(("get_dashboard_config", tab_id, is_template))
+        return {"dashboardConfig": {"tabConfigs": [{
+            "id": tab_id, "name": "x", "isLoading": bool(self.loading),
+            "widgets": [dict(w) for w in self.widgets]}]}}
 
     def get_resource_kind_list(self, adapter_kind):
         """The captured wire shape, filtered by adapter kind the way the
@@ -528,19 +547,25 @@ class TestBindFlow:
         rc = bind_summary(ui, [_load(tmp_path)], out=lines.append)
         assert rc == 0
         kinds = [c[0] for c in ui.calls]
-        assert kinds == ["get_resource_kind_list", "list_dashboards", "associate", "get_summary_tab_id"]
+        assert kinds == ["get_resource_kind_list", "list_dashboards", "get_dashboard_config",
+                         "get_summary_tab_id", "associate", "get_summary_tab_id"]
         assert ui.templates[self.KEY] == "aaaaaaaa-1111-4222-8333-444444444444"
         assert any(f"current assignment: {self.NAME} 2" in l for l in lines)
 
-    def test_failed_associate_propagates(self, tmp_path):
+    def test_refused_associate_is_an_error_after_a_readback(self, tmp_path):
+        """A non-ok answer is read back before it is called a refusal (#260
+        review W1); an unchanged tab is a refusal, exit 2, nothing raised."""
         from vcfcf_dashboards.summary_bind import bind_summary
         from vcfcf_dashboards.ui_client import UIClientError
 
         ui = FakeUI(installed={self.NAME: self.UUID}, current_template=self.NAME,
                     associate_error=UIClientError("associateResourceKindDashboards failed"))
-        with pytest.raises(UIClientError):
-            bind_summary(ui, [_load(tmp_path)], out=lambda s: None)
-        assert not any(c[0] == "get_summary_tab_id" for c in ui.calls)
+        lines: list[str] = []
+        rc = bind_summary(ui, [_load(tmp_path)], out=lines.append)
+        assert rc == 2
+        names = [c[0] for c in ui.calls]
+        assert names[names.index("associate") + 1:] == ["get_summary_tab_id"]
+        assert any("refused the association" in l and "nothing written" in l for l in lines)
         assert ui.templates[self.KEY] == "old-copy-uuid"
 
     def test_unbind_resets_with_the_kinds_own_default(self, tmp_path):
@@ -683,10 +708,11 @@ class TestBindFlowManyKinds:
         assert rc == 0
         associates = [c for c in ui.calls if c[0] == "associate"]
         assert associates == [("associate", {k: f"{self.NAME}_::_{self.UUID}" for k in self.KEYS}, {})]
-        # one adapter-kind listing, one dashboard listing, three readbacks
+        # one adapter-kind listing, one dashboard listing, three reads before
+        # the write and three readbacks
         assert [c for c in ui.calls if c[0] == "get_resource_kind_list"] == [("get_resource_kind_list", "VMWARE")]
         assert [c[1] for c in ui.calls if c[0] == "get_summary_tab_id"] == [
-            "002006VMWAREHostSystem", "002006VMWAREVirtualMachine", "002006VMWAREDatastore"]
+            "002006VMWAREHostSystem", "002006VMWAREVirtualMachine", "002006VMWAREDatastore"] * 2
         joined = "\n".join(lines)
         for label in self.THREE:
             assert f"{label}  LIVE tabId: aaaaaaaa-1111-4222-8333-444444444444" in joined
@@ -730,7 +756,7 @@ class TestBindFlowManyKinds:
             self.KEYS[0]: f"{self.NAME}_::_{self.UUID}",
             self.KEYS[2]: f"{self.NAME}_::_{self.UUID}"}, {})]
         assert [c[1] for c in ui.calls if c[0] == "get_summary_tab_id"] == [
-            "002006VMWAREHostSystem", "002006VMWAREDatastore"]
+            "002006VMWAREHostSystem", "002006VMWAREDatastore"] * 2
         assert any(l.startswith("   ERROR: ") and self.NAME in l and "'NoSuchKind' not found" in l
                    for l in lines)
         joined = "\n".join(lines)

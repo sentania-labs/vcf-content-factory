@@ -162,18 +162,21 @@ not yet run on 9.0.2 and parked (stake:
 which is scoped to the user and returns `{}` for every template. Evidence:
 `../investigations/2026-10-13-compliance-summary-clone-config-loss.md`.
 
-### The factory's pak install: report by default, repair opt-in (issue #200)
+### The factory's pak install repairs the ordering (issue #200)
 
-By default `python3 -m vcfcf_managementpacks install` only **reports** each
-bound kind's Summary copy after the pak lands: `getSummaryTabId`, then
-`getDashboardConfig` with `isTemplate=true`, printing
-`SUMMARY OK <kind> <copy id> (0 of <m> widgets loading)` or
-`SUMMARY INCOMPLETE <kind> <copy id> (<n> of <m> widgets loading)`. No wait,
-no write, no exit-code change. The repair below is **opt-in**
-(`--summary-rebind` or `VCFCF_SUMMARY_REBIND=1`; `--skip-summary-rebind` is
-a deprecated no-op), because the server refused it live (next subsection).
-With it on, the install runs the binding step a second time, after the
-source has finished (`src/vcfcf_managementpacks/post_install.py`):
+The server clones the bound dashboard seconds after importing it, before the
+dashboard has finished building; a pak cannot reorder that. So after the pak
+lands, `python3 -m vcfcf_managementpacks install` waits for the bound
+dashboards to finish building and binds again any Summary copy the server
+cloned too early. This is **on by default** since issue #260 (the bind now
+goes out in the request form each build reads; it was opt-in while 9.0.2 and
+8.18 refused it). `--skip-summary-rebind` or `VCFCF_SUMMARY_REBIND=0` turns
+it off; then the install only **reports** each bound kind's Summary copy:
+`getSummaryTabId`, then `getDashboardConfig` with `isTemplate=true`,
+printing `SUMMARY OK <kind> <copy id> (0 of <m> widgets loading)` or
+`SUMMARY INCOMPLETE <kind> <copy id> (<n> of <m> widgets loading)`, with no
+wait, no write and no exit-code change. With the repair on
+(`src/vcfcf_managementpacks/post_install.py`):
 
 1. When the pak carries `dashboards.properties` and the repair is on, the
    post-install materialization wait polls `getDashboardList` every 30 s for up to
@@ -199,7 +202,12 @@ skipped, a bound directory with more than one dashboard skipped with a
 warning). With the repair off the check keeps the 180 s single re-check. A
 refused bind prints `SUMMARY NOT REBOUND` with the server's HTTP status and
 the first 200 characters of its answer (whitespace collapsed, session and
-credential values redacted), exit 3.
+credential values redacted), exit 3. A bind that is not answered `ok` is
+read back first: if the Summary tab moved, the write happened and the
+line is `SUMMARY REBOUND` with a note on the unexpected answer; if the tab
+cannot be read back, `SUMMARY NOT REBOUND` says the outcome is unknown.
+`SUMMARY REBOUND` and `SUMMARY NOT REBOUND` name the request form written
+with (`request form: two-map` / `single-map`) or the forms tried.
 
 Read-only reads on devel 9.0.2 on 2026-10-24 (about 12:20 AM) confirmed the
 shapes: `getSummaryTabId(002016vcfcf_complianceComplianceWorld)` returned
@@ -223,13 +231,17 @@ Compliance pak 0.0.0.98, installed with the repair on, 12:52 AM to 1:17 AM
 
 The source dashboard (`4e2c777e`) was finished on all three when the bind
 ran, and every previous copy was left behind (orphan templates, as
-documented above). **Open question:** why the UI bind action fails on 9.0.2
-and 8.18.7 when the same call worked on qa 9.2 (2026-08-25). The server
-logs were not read (the Support Logs read failed, no SSH path for devel).
-Until that is answered the repair stays off by default, the default install
-reports the unfinished copy, and the next run with `--summary-rebind`
-records what the server says. `vcfcf_dashboards bind-summary` does not yet
-refuse a still-building source (#256).
+documented above). **Answered 2026-10-24 (issue #260):** 9.0.2 Build
+25429562 and 8.18.6 Build 25423535 read a single `dashboardAssociations`
+map, not the two-map form the factory sent, so the action NPEd before
+writing anything (`summary_dashboard_assignment.md` "Two request forms";
+evidence `../investigations/2026-10-24-devel-summary-rebind-500-and-alertlist-gap.md`).
+The UI client now falls back to the single-map form and the repair is on by
+default. Not yet seen working: no single-map bind has been sent to 9.0.2 or
+8.18, and whether that build's 4-argument `saveDashboardAsTemplate` copy of
+a finished source comes out finished is unread; the repair reads the new
+copy back and prints `SUMMARY NOT REBOUND` (exit 3) if it is unfinished.
+`vcfcf_dashboards bind-summary` refuses a still-building source since #256.
 
 ### 9.0.2 WidgetType keys (complete list)
 

@@ -46,6 +46,49 @@ class UIClientError(RuntimeError):
         super().__init__(message)
         self.status = status
         self.body = body
+        #: ``(form, status, body)`` per request form sent, for the
+        #: association call (#260); empty otherwise.
+        self.answers: list = []
+
+
+#: associateResourceKindDashboards request forms, in the order tried (#260).
+ASSOCIATION_FORMS = ("two-map", "single-map")
+
+
+def association_params(form: str, assigned: dict, reset: dict) -> dict:
+    """The form fields that carry ``assigned`` and ``reset`` in one request
+    form (see :meth:`VCFOpsUIClient.associate_resource_kind_dashboards`).
+
+    ``"two-map"``: ``assignedAssociations`` and ``resetAssociations``, the
+    reset value the plain default template name. ``"single-map"``: one
+    ``dashboardAssociations`` map; a reset entry becomes
+    ``<defaultTemplateName>_::_null``, which the pre-9.1 action reads as
+    "remove this kind's association" (its SPA sends
+    ``templateName + "_::_" + tabId`` with a null tabId).
+    """
+    if form == "two-map":
+        return {
+            "assignedAssociations": json.dumps(dict(assigned)),
+            "resetAssociations": json.dumps(dict(reset)),
+        }
+    if form == "single-map":
+        merged = dict(assigned)
+        merged.update({k: f"{v}_::_null" for k, v in reset.items()})
+        return {"dashboardAssociations": json.dumps(merged)}
+    raise ValueError(f"unknown association form {form!r}")
+
+
+#: Marker of the generic Ext error panel Struts renders for an exception
+#: in a ``.action`` (the body of the refused binds on 9.0.2 and 8.18.7,
+#: 2026-10-24: ``var errorPanel = new Ext.Panel(...)``).
+ERROR_PANEL_MARKER = "errorPanel"
+
+
+def is_wrong_form_answer(status: int, text: str) -> bool:
+    """True only for the answer a build gives to the request form it does
+    not read: HTTP 200 with the generic error panel (the NPE on the first
+    line of the action, before any write)."""
+    return status == 200 and ERROR_PANEL_MARKER in (text or "")
 
 
 # The Struts read actions (resourceKind.action and friends) answer the
@@ -83,6 +126,10 @@ class VCFOpsUIClient:
         self._session: requests.Session | None = None
         self._csrf_token: str | None = None
         self._tid = 1  # monotonically increasing Ext.Direct transaction id
+        #: The associateResourceKindDashboards request form this instance
+        #: answered ``ok`` to (``"two-map"`` or ``"single-map"``); None
+        #: until a call succeeds (#260).
+        self.association_form: str | None = None
 
     @classmethod
     def from_env(cls, profile: str | None = None, *, default_profile: str = "devel") -> "VCFOpsUIClient":
@@ -271,8 +318,9 @@ class VCFOpsUIClient:
     # All three calls are the undocumented Struts UI layer documented in
     # knowledge/context/api-surface/summary_dashboard_assignment.md. No
     # Suite API exists for any of them. They may change between releases.
-    # Parameter names come from the disassembled DashboardAction (the
-    # 2026-08-25 note in that file), confirmed live on 9.1 and 9.2 dailies.
+    # Parameter names come from the disassembled DashboardAction: the
+    # 2026-08-25 note in that file (confirmed live on 9.1 and 9.2 dailies)
+    # and the 2026-10-24 per-build read for 9.0.2 and 8.18 (issue #260).
 
     def get_resource_kind_list(self, adapter_kind: str, limit: int = 2000) -> dict:
         """Return the raw ``getResourceKindList`` answer for one adapter kind
@@ -309,39 +357,82 @@ class VCFOpsUIClient:
     def associate_resource_kind_dashboards(
         self, assigned: dict[str, str], reset: dict[str, str] | None = None
     ) -> None:
-        """Bulk-write Summary-tab assignments (one call carries both maps).
+        """Bulk-write Summary-tab assignments in whichever form the build reads.
 
         ``assigned`` maps ``"resourceKind_<resourceKindId>"`` to
         ``"<dashboardName>_::_<dashboardUuid>"`` (bind). ``reset`` maps the
         same key to the kind's plain ``defaultTemplateName`` ("Use
-        Default"; no ``_::_null`` suffix). Both parameters are always sent,
-        as ``{}`` when empty: the server reads each with
-        ``request.getParameter`` and NPEs into the generic error panel
-        (HTTP 200) when either is absent. The server materializes an
-        independent template COPY of each bound dashboard and deletes the
-        kind's previous copy in the same call; the new copy's UUID is what
-        ``get_summary_tab_id`` returns afterwards.
+        Default"). The server materializes an independent template COPY of
+        each bound dashboard and deletes the kind's previous copy in the
+        same call; the new copy's UUID is what ``get_summary_tab_id``
+        returns afterwards.
+
+        Two request forms exist (issue #260; bytecode and SPA read per
+        build, knowledge/context/api-surface/summary_dashboard_assignment.md
+        "Two request forms"):
+
+        - ``"two-map"`` (9.1.1 Build 25794169, 9.2, a 9.0.0.0 pre-release):
+          ``assignedAssociations`` plus ``resetAssociations``, both always
+          sent (``{}`` when empty); reset values are the plain name.
+        - ``"single-map"`` (9.0.2 Build 25429562, 8.18.6 Build 25423535):
+          one ``dashboardAssociations`` map; a reset entry's value is
+          ``<defaultTemplateName>_::_null``.
+
+        A build NPEs on the first line of the action when the parameter it
+        reads is absent, before any lookup or write, and answers HTTP 200
+        with the generic Ext error panel. Only that answer (HTTP 200 and the
+        ``errorPanel`` marker in the body) is the proven "wrong form,
+        nothing written" signal, so only that answer sends the other form.
+        Any other answer that is not ``ok`` (a 4xx or 5xx, a login page, a
+        proxy timeout the server may have completed) raises at once,
+        without a second write. The call goes out in the two-map form first
+        (the form proven live on 9.1.1 and 9.2); the form that answered
+        ``ok`` is remembered on the client (``association_form``) and tried
+        first next time. The version string is not used: the 9.1.1
+        appliance's lastbuildversion.txt reads 9.0.0.0.
+
+        Raises :class:`UIClientError` when no form answers ``ok``. Its
+        ``answers`` lists ``(form, status, body)`` per form sent; ``status``
+        is the first form's status, and ``body`` carries each form's answer
+        (whitespace collapsed, form-labelled), so a caller quoting the
+        server shows every refusal, not only the last. A non-``ok`` answer
+        does not prove nothing was written (the single-map success body is
+        unread on 9.0.2 and 8.18): callers read ``getSummaryTabId`` back
+        before calling it a refusal.
         """
+        assigned = dict(assigned or {})
+        reset = dict(reset or {})
+        both = sorted(set(assigned) & set(reset))
+        if both:
+            raise ValueError(f"a kind cannot be bound and reset in one call: {both}")
         s, csrf = self._require_auth()
-        resp = s.post(
-            f"https://{self._host}/ui/dashboard.action",
-            data={
-                "mainAction": "associateResourceKindDashboards",
-                "assignedAssociations": json.dumps(dict(assigned or {})),
-                "resetAssociations": json.dumps(dict(reset or {})),
-                "secureToken": csrf,
-            },
-            headers=_UI_XHR_HEADERS,
-        )
-        if resp.status_code >= 400 or resp.text.strip() != "ok":
-            # On 9.0.2 and 8.18.7 a refused bind answers HTTP 200 with the
-            # generic Ext error panel ("Internal Server Error"), so the
-            # status alone does not say it failed; keep both for the caller.
-            raise UIClientError(
-                f"associateResourceKindDashboards failed (HTTP {resp.status_code}): "
-                f"{resp.text[:200]!r}",
-                status=resp.status_code, body=resp.text,
+        forms = [self.association_form] if self.association_form else []
+        forms += [f for f in ASSOCIATION_FORMS if f not in forms]
+        answers = []
+        for form in forms:
+            data = {"mainAction": "associateResourceKindDashboards"}
+            data.update(association_params(form, assigned, reset))
+            data["secureToken"] = csrf
+            resp = s.post(
+                f"https://{self._host}/ui/dashboard.action",
+                data=data,
+                headers=_UI_XHR_HEADERS,
             )
+            if resp.status_code < 400 and resp.text.strip() == "ok":
+                self.association_form = form
+                return
+            answers.append((form, resp.status_code, resp.text))
+            if not is_wrong_form_answer(resp.status_code, resp.text):
+                break  # not the proven NPE panel: never send a second write
+        tried = ", ".join(f"{form} HTTP {status}" for form, status, _ in answers)
+        body = " | ".join(
+            f"[{form}] {' '.join(str(text or '').split())[:120]}" for form, _, text in answers)
+        exc = UIClientError(
+            f"associateResourceKindDashboards was not answered ok ({tried}): {body[:300]!r}",
+            status=answers[0][1], body=body,
+        )
+        exc.answers = answers
+        raise exc
 
     def get_summary_tab_id(self, resource_kind_id: str) -> dict:
         """Return the raw ``getSummaryTabId`` answer for a resource kind id.
