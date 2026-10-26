@@ -32,6 +32,7 @@ from .ui_client import UIClientError, VCFOpsUIClient
 
 DEFAULT_VIEWS = Path("content/views")
 DEFAULT_DASHBOARDS = Path("content/dashboards")
+DEFAULT_SUPERMETRICS = Path("content/supermetrics")
 
 
 def _load(args) -> tuple[list, list]:
@@ -468,7 +469,7 @@ def cmd_sync(args) -> int:
     # is imported.  Read-only.
     if _check_sm_referents_before_import(
         client, views, dashboards,
-        supermetrics_dir=getattr(args, "supermetrics_dir", "content/supermetrics"),
+        supermetrics_dir=getattr(args, "supermetrics_dir", str(DEFAULT_SUPERMETRICS)),
     ):
         return 1
 
@@ -568,7 +569,7 @@ def cmd_sync(args) -> int:
         client,
         views=views,
         dashboards=dashboards,
-        supermetrics_dir=getattr(args, "supermetrics_dir", "supermetrics"),
+        supermetrics_dir=getattr(args, "supermetrics_dir", str(DEFAULT_SUPERMETRICS)),
         auto_enable_metrics=getattr(args, "auto_enable_metrics", False),
         skip_metric_check=getattr(args, "skip_metric_check", False),
     )
@@ -645,37 +646,63 @@ def report_materialization_statuses(statuses: list) -> int:
 
 
 def _load_repo_sms(supermetrics_dir: str) -> tuple[list, str]:
-    """Load the repo SM YAML under ``supermetrics_dir``.
+    """Load the SM YAML under ``supermetrics_dir``.
 
     Returns ``(defs, error)``: an absent directory is ``([], "")``, a load
-    failure is ``([], message)``.  Shared by the pre-import referent check
-    and the post-import walker so both see the same SM corpus.
+    failure is ``([], message)``.  Loaded without the framework-prefix rule
+    (a validate gate, RULE-006, not a sync gate), the way validate loads
+    ``third_party/*/supermetrics``, so a third-party SM directory loads.
+    Shared by the pre-import referent check and the post-import walker.
     """
     sm_dir = Path(supermetrics_dir)
     if not sm_dir.exists():
         return [], ""
     try:
         from vcfcf_supermetrics.loader import load_dir as _sm_load_dir
-        return _sm_load_dir(sm_dir), ""
+        return _sm_load_dir(sm_dir, enforce_framework_prefix=False), ""
     except Exception as e:  # noqa: BLE001  caller decides how loud to be
         return [], str(e)
+
+
+def _sm_corpus_dirs(supermetrics_dir: str) -> list[Path]:
+    """The extra SM directories the referent check reads besides
+    ``supermetrics_dir``: ``content/supermetrics`` (when ``supermetrics_dir``
+    points elsewhere) and every ``third_party/*/supermetrics/``, the same
+    corpus ``_navigation_corpus`` uses for dashboards.  A third-party view
+    may name a factory SM and the reverse, so either may seed the check.
+    """
+    candidates = [DEFAULT_SUPERMETRICS]
+    third_party = Path("third_party")
+    if third_party.is_dir():
+        candidates.extend(proj / "supermetrics" for proj in sorted(third_party.iterdir()))
+    seen = {Path(supermetrics_dir).resolve()}
+    dirs: list[Path] = []
+    for d in candidates:
+        if d.is_dir() and d.resolve() not in seen:
+            seen.add(d.resolve())
+            dirs.append(d)
+    return dirs
 
 
 def _check_sm_referents_before_import(
     client,
     views: list,
     dashboards: list,
-    supermetrics_dir: str = "content/supermetrics",
+    supermetrics_dir: str = str(DEFAULT_SUPERMETRICS),
 ) -> int:
     """Resolve the ``@supermetric:"<name>"`` referents of every super metric
     the synced views and dashboards use, before the import (issue #154).
 
-    The SMs come from the repo SM YAML (``supermetrics_dir``): the ones a
-    view column or dashboard widget names, plus their in-repo referents
-    transitively.  Each referent must resolve against the repo SM YAML or
-    the target instance.  Returns 1 (DEP-ERROR lines naming referrer and
-    referent) when one does not, or a target lookup failed; 0 otherwise.
-    Read-only: ``find_by_name`` lookups only.
+    The SM corpus is ``supermetrics_dir`` plus ``_sm_corpus_dirs``.  The SMs
+    a view column or dashboard widget names are taken from it, plus their
+    in-corpus referents transitively, and each referent must resolve
+    against the corpus or the target instance.  Returns 1 when one does not,
+    when a target lookup failed (DEP-ERROR lines naming referrer and
+    referent), or when ``supermetrics_dir`` exists but does not load (the
+    check cannot run, so nothing is imported); 0 otherwise.  An extra corpus
+    directory that does not load, or a column or widget whose SM is in no
+    loaded directory, is a WARN naming it.  Read-only: ``find_by_name``
+    lookups only.
     """
     try:
         from vcfcf_common.dep_walker import check_sm_referents, supermetrics_used_by
@@ -686,12 +713,29 @@ def _check_sm_referents_before_import(
     repo_sms, err = _load_repo_sms(supermetrics_dir)
     if err:
         print(
-            f"WARN  could not load super metric YAML from {supermetrics_dir}: {err}; "
-            f"super metric cross-references are not checked before the import",
+            f"ERROR: cannot check super metric references: the super metric "
+            f"YAML in {supermetrics_dir} does not load: {err}",
             file=sys.stderr,
         )
-        return 0
-    used = supermetrics_used_by(views, dashboards, repo_sms)
+        print("sync aborted before import; nothing was imported", file=sys.stderr)
+        return 1
+    for extra in _sm_corpus_dirs(supermetrics_dir):
+        more, extra_err = _load_repo_sms(str(extra))
+        if extra_err:
+            print(
+                f"WARN  could not load super metric YAML from {extra}: {extra_err}; "
+                f"super metrics defined there are not checked before the import",
+                file=sys.stderr,
+            )
+        repo_sms.extend(more)
+
+    used, unresolved = supermetrics_used_by(views, dashboards, repo_sms)
+    for ref in unresolved:
+        print(
+            f"WARN  {ref}, which is in no loaded super metric YAML; its "
+            f"@supermetric cross-references are not checked before the import",
+            file=sys.stderr,
+        )
     if not used:
         return 0
     walk = check_sm_referents(
@@ -716,7 +760,7 @@ def _run_dep_walker(
     client,
     views: list,
     dashboards: list,
-    supermetrics_dir: str = "supermetrics",
+    supermetrics_dir: str = str(DEFAULT_SUPERMETRICS),
     customgroups_dir: str = "customgroups",
     auto_enable_metrics: bool = False,
     skip_metric_check: bool = False,
@@ -1045,12 +1089,13 @@ def build_parser() -> argparse.ArgumentParser:
     ps = sub.add_parser("sync", help="build and import to VCF Ops")
     ps.add_argument(
         "--supermetrics-dir",
-        default="content/supermetrics",
+        default=str(DEFAULT_SUPERMETRICS),
         metavar="DIR",
         help=(
             "Path to the supermetrics/ YAML directory. Used to check the "
             "@supermetric cross-references of the super metrics the synced "
-            "views and dashboards use (before the import) and to build the SM "
+            "views and dashboards use (before the import, together with "
+            "content/supermetrics and third_party/*/supermetrics) and to build the SM "
             "name map for dependency check annotations. Default: content/supermetrics"
         ),
     )

@@ -55,10 +55,11 @@ Public API — offline (no client required)
       super metric or a view instead of a dashboard.  Seeds first, then
       referents in discovery order; errors name the missing referent.
 
-  supermetrics_used_by(views, dashboards, all_sms) -> list[SuperMetricDef]
+  supermetrics_used_by(views, dashboards, all_sms) -> (list[SuperMetricDef], list[str])
       SMs in all_sms that view columns and dashboard widgets name, plus
-      their @supermetric referents in all_sms; feeds the pre-import
-      referent check on the dashboards sync path (#154).
+      their @supermetric referents in all_sms, and the references all_sms
+      could not resolve; feeds the pre-import referent check on the
+      dashboards sync path (#154).
 
 Project-scope semantics
 -----------------------
@@ -519,33 +520,39 @@ def expand_sm_crossrefs(
     return result, errors
 
 
-_VIEW_SM_NAME_RE = re.compile(r'''supermetric:["'](.+?)["']''')
-
-
 def supermetrics_used_by(
     views: "List",
     dashboards: "List",
     all_sms: "List",
-) -> "List":
+) -> "Tuple[List, List[str]]":
     """Super metrics in ``all_sms`` that ``views`` and ``dashboards`` use.
 
     Seeds are the SMs a view column names (``sm_<uuid>`` or
     ``supermetric:"<name>"``) and the SMs a dashboard widget metric key names
     (``sm_<uuid>``); each seed's ``@supermetric:"<name>"`` formula referents
     found in ``all_sms`` are added transitively (``expand_sm_crossrefs``).
-    A reference ``all_sms`` cannot resolve is left out, not reported: the
-    caller resolves the formula referents of the returned SMs against the
-    target instance (``check_sm_referents``), which is where a missing one is
-    named (issue #154).
+    The caller resolves the formula referents of the returned SMs against the
+    target instance (``check_sm_referents``), which is where a missing
+    referent is named (issue #154).
+
+    The name-form column token is matched with the renderer's own
+    ``_SM_COLUMN_REF_RE`` on the stripped attribute, so a column the renderer
+    resolves as a super metric (any token case, optional ``@``) is a seed
+    here too.
+
+    Returns ``(supermetrics, unresolved)``: ``unresolved`` names every view
+    column or widget whose SM is not in ``all_sms``, so its referents could
+    not be checked from the repo; the caller decides how loud to be.
     """
+    from ..dashboards.render import _SM_COLUMN_REF_RE
+
     by_id = {(sm.id or "").lower(): sm for sm in all_sms if getattr(sm, "id", "")}
     by_name = _sm_candidates_by_name(all_sms)
     seeds: "List" = []
     seen: Set[str] = set()
+    unresolved: List[str] = []
 
     def _add(sm) -> None:
-        if sm is None:
-            return
         key = (getattr(sm, "id", "") or "").lower() or sm.name
         if key not in seen:
             seen.add(key)
@@ -554,16 +561,28 @@ def supermetrics_used_by(
     view_refs, _ = extract_refs_from_views(views)
     dash_refs, _ = extract_refs_from_dashboards(dashboards)
     for ref in view_refs + dash_refs:
-        _add(by_id.get(ref.sm_id.lower()))
+        sm = by_id.get(ref.sm_id.lower())
+        if sm is None:
+            unresolved.append(f"{ref.source} references sm_{ref.sm_id.lower()}")
+        else:
+            _add(sm)
     for view in views:
         for col in view.columns:
-            m = _VIEW_SM_NAME_RE.search(col.attribute or "")
-            if m:
-                _add(_pick_sm_by_name(
-                    by_name.get(m.group(1), []), getattr(view, "provenance", "")
-                ))
+            m = _SM_COLUMN_REF_RE.match((col.attribute or "").strip())
+            if not m:
+                continue
+            sm = _pick_sm_by_name(
+                by_name.get(m.group(1), []), getattr(view, "provenance", "")
+            )
+            if sm is None:
+                unresolved.append(
+                    f"view '{view.name}' col '{col.display_name}' references "
+                    f"super metric '{m.group(1)}'"
+                )
+            else:
+                _add(sm)
     expanded, _errors = expand_sm_crossrefs(seeds, all_sms)
-    return expanded
+    return expanded, unresolved
 
 
 def extract_view_names_from_dashboards(
