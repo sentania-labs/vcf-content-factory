@@ -1649,6 +1649,10 @@ _PS_JOIN_CLAUSE_RE = re.compile(r"(else|elseif|catch|finally)\b", re.I)
 _PS_ATTRIBUTE_LINE_RE = re.compile(r"\[[A-Za-z_][\w.]*(\(.*\))?\]")
 
 
+class _UnmodeledPowerShell(Exception):
+    """A remediation uses syntax the comment tokenizer does not model."""
+
+
 def _split_ps_comment(
         line: str, quote: Optional[str]) -> Tuple[str, Optional[str],
                                                   Optional[str]]:
@@ -1668,6 +1672,10 @@ def _split_ps_comment(
     escapes the next character inside double quotes; a doubled quote
     inside a string reads as close-then-reopen, which leaves the state
     right.
+
+    A ``$(`` subexpression inside a double-quoted string can hold its own
+    strings (``"a $("b # c") d"``), which a flat quote state misreads, so
+    it raises ``_UnmodeledPowerShell`` and the caller leaves the text alone.
     """
     i, n = 0, len(line)
     while i < n:
@@ -1683,6 +1691,8 @@ def _split_ps_comment(
                     return before.rstrip(), line[i + 1:], None
         elif quote == '"' and ch == "`":
             i += 1
+        elif quote == '"' and ch == "$" and line[i + 1:i + 2] == "(":
+            raise _UnmodeledPowerShell()
         elif ch == quote:
             quote = None
         i += 1
@@ -1754,8 +1764,8 @@ def collapse_remediation(text: str, control_id: str = "") -> str:
     - a remediation that is nothing but comments (a commented-out vendor
       example), since there is no code to run;
     - a remediation holding a construct the tokenizer does not model
-      (``<#``, a here-string, typographic quotes); this is logged with
-      ``control_id``.
+      (``<#``, a here-string, typographic quotes, a ``$( )`` subexpression
+      inside a double-quoted string); this is logged with ``control_id``.
     """
     if not text:
         return ""
@@ -1764,6 +1774,17 @@ def collapse_remediation(text: str, control_id: str = "") -> str:
             "holds a block comment, here-string or typographic quote; "
             "comments left as they are")
         return _collapse_remediation_legacy(text)
+    try:
+        return _collapse_remediation_modeled(text)
+    except _UnmodeledPowerShell:
+        log(f"WARNING: {control_id or '<unknown control>'}: remediation "
+            "holds a $( ) subexpression inside a double-quoted string; "
+            "comments left as they are")
+        return _collapse_remediation_legacy(text)
+
+
+def _collapse_remediation_modeled(text: str) -> str:
+    """collapse_remediation for text the tokenizer models."""
     code_lines: List[Tuple[str, str, str]] = []
     pending: List[str] = []  # comment lines waiting for the next code line
     quote: Optional[str] = None

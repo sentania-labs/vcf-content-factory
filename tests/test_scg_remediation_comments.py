@@ -74,6 +74,10 @@ _VM_VIRTUAL_HARDWARE_ROW = {
         "$vmObj.ExtensionData.ReconfigVM_Task($spec)"),
 }
 
+# Codex's PR #268 example, and a nested string with a "#" in it.
+_CODEX_SUBEXPRESSION = 'Write-Output "Values: $($items -join ", # ")"'
+_NESTED_SUBEXPRESSION = '"a $("b # c") d"'
+
 # The vendor's guidance stays, as inline block comments, and the
 # reconfigure call is code again.
 _VM_VIRTUAL_HARDWARE_WANT = (
@@ -181,12 +185,35 @@ def test_join_keeps_blocks_whole(raw, want):
     "$x = @'\n# x\n'@\nSet-B",
     "Write-Host “a # b”\nSet-B",
     "Write-Host ‘a # b’\nSet-B",
+    # A $( ) subexpression inside a double-quoted string can hold its own
+    # strings, which a flat quote state misreads (Codex, PR #268).
+    _CODEX_SUBEXPRESSION,
+    _NESTED_SUBEXPRESSION,
+    'Write-Output "x $(\nGet-Y # c\n)"\nSet-B',
 ])
 def test_unmodeled_constructs_left_unchanged_and_logged(raw, capsys):
     got = base.collapse_remediation(raw, "esx.example")
     assert got == base._collapse_remediation_legacy(raw)
     err = capsys.readouterr().err
     assert "esx.example" in err and "WARNING" in err
+
+
+@pytest.mark.parametrize("raw", [_CODEX_SUBEXPRESSION, _NESTED_SUBEXPRESSION])
+def test_subexpression_strings_come_out_unchanged(raw):
+    assert base.collapse_remediation(raw, "esx.example") == raw
+
+
+def test_subexpression_outside_a_string_is_still_modeled():
+    assert base.collapse_remediation("$n = $(Get-X) # count\nSet-B") == \
+        "$n = $(Get-X) <# count #> ; Set-B"
+
+
+@pytest.mark.skipif(shutil.which("pwsh") is None,
+                    reason="PowerShell not installed")
+@pytest.mark.parametrize("raw", [_CODEX_SUBEXPRESSION, _NESTED_SUBEXPRESSION])
+def test_subexpression_strings_still_parse(raw, tmp_path):
+    _assert_pwsh_parses(
+        tmp_path, [{"key": "case", "text": base.collapse_remediation(raw)}])
 
 
 # --- PowerShell parse check --------------------------------------------------
@@ -249,6 +276,11 @@ def test_rewritten_remediations_parse(tmp_path):
                 key.split(":", 1)[1] not in _VENDOR_DEFECTS:
             items.append({"key": key, "text": new})
     assert items
+    _assert_pwsh_parses(tmp_path, items)
+
+
+def _assert_pwsh_parses(tmp_path, items):
+    """Fail if pwsh's ParseInput reports an error for any item's text."""
     data, script = tmp_path / "items.json", tmp_path / "parse.ps1"
     data.write_text(json.dumps(items), encoding="utf-8")
     script.write_text(_PARSE_PS, encoding="utf-8")
