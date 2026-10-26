@@ -99,8 +99,13 @@ Rules for pak installs:
    pak operations on prod (`mainAction=remove`). Install ≠ remove.
 4. **Exit codes, duration and the Summary step (since 2026-10-24, #244
    and #200).** `install` exits 0 on success, 1 when the install itself
-   failed, and 3 when the pak installed but a post-install check failed.
-   On 3 do not reinstall: quote the CLI's end-of-run epilog verbatim.
+   failed, 3 when the pak installed but a post-install check failed, and
+   4 when the install was still running on the server when the wait ran
+   out (default 1800 s; `--install-timeout`). On 3 or 4 do not
+   reinstall: quote the CLI's end-of-run epilog verbatim. On 4 the
+   materialization check and Summary repair did not run; confirm the
+   version once the server finishes and check the pak's dashboards and
+   Summary tabs by hand.
    After the pak lands the CLI runs the materialization check on the
    pak's dashboards (up to 180 s; `--skip-materialization-check` turns
    it off). For a pak with `dashboards.properties` Summary bindings it
