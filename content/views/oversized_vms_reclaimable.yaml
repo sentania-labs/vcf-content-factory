@@ -7,9 +7,8 @@ description: >
   (summary|oversized == 1). Intended as Band D-1 of the Fleet Capacity &
   Rightsizing dashboard; receives ClusterComputeResource resourceId from the
   upstream cluster-selector widget to scope the list to the selected cluster.
-  Sort by vCPUs to Remove descending (biggest reclaim first), apply at the
-  dashboard widget level (sort_by_column: "vCPUs to Remove",
-  sort_by_dir: desc); view-level default sort is not a loader-supported field.
+  Default sort is vCPUs to Remove descending (biggest reclaim first), set on
+  the view itself, so every dashboard that embeds it opens in that order.
 subject:
   adapter_kind: VMWARE
   resource_kind: VirtualMachine
@@ -29,6 +28,7 @@ columns:
   # vCPUs the capacity engine recommends removing. Primary sort column.
   - attribute: summary|oversized|vcpus
     display_name: "vCPUs to Remove"
+    sort: desc
 
   # Memory to reclaim. Source unit is KB; unit: "gb" instructs the renderer
   # to emit preferredUnitId="gb" so VCF Ops converts KB→GB natively.
