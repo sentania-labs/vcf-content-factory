@@ -103,13 +103,15 @@ Rules for pak installs:
    On 3 do not reinstall: quote the CLI's end-of-run epilog verbatim.
    After the pak lands the CLI runs the materialization check on the
    pak's dashboards (up to 180 s; `--skip-materialization-check` turns
-   it off) and, for a pak with `dashboards.properties` Summary bindings,
-   reads each bound Summary copy and prints `SUMMARY OK` or
+   it off). For a pak with `dashboards.properties` Summary bindings it
+   then runs the Summary repair by default (since #260): wait for each
+   source, read the bound copy, rebind an unfinished one (30 s poll, up
+   to 660 s), printing `SUMMARY OK` / `SUMMARY REBOUND` or exiting 3 on
+   `SUMMARY NOT REBOUND`. `--skip-summary-rebind` or
+   `VCFCF_SUMMARY_REBIND=0` turns the repair off, only when the brief
+   says so; the check then prints `SUMMARY OK` or
    `SUMMARY INCOMPLETE <kind> <copy id> (<n> of <m> widgets loading)` as
-   information. The Summary repair (wait for the source, rebind the
-   unfinished copy; 30 s poll, up to 660 s; exit 3 on NOT REBOUND) runs
-   by default since #260; `--skip-summary-rebind` or
-   `VCFCF_SUMMARY_REBIND=0` turns it off, only when the brief says so.
+   information.
    The 2026-10-24 server 500 on 9.0.2 and 8.18 was the wrong request
    form for those builds; the client now falls back to the single-map
    form and says so. Record every `MATERIALIZATION` and every `SUMMARY`
