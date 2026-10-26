@@ -1,0 +1,396 @@
+[
+  {
+    "config": {
+      "alertAction": [],
+      "alertDefinitions": [],
+      "alertImpact": [],
+      "criticalityLevel": [
+        2,
+        3,
+        4
+      ],
+      "customFilter": {
+        "excludedResources": null,
+        "filter": [],
+        "includedResources": null
+      },
+      "depth": 4,
+      "filterMode": "tagPicker",
+      "mode": "all",
+      "refreshContent": {
+        "refreshContent": false
+      },
+      "refreshInterval": 300,
+      "relationshipMode": {
+        "relationshipMode": [
+          -1,
+          0
+        ]
+      },
+      "resource": [],
+      "selfProvider": {
+        "selfProvider": false
+      },
+      "state": [],
+      "status": [
+        0
+      ],
+      "tagFilter": null,
+      "title": "Open Compliance Alerts",
+      "type": [
+        "15_21"
+      ]
+    },
+    "title": "Open Compliance Alerts"
+  },
+  {
+    "config": {
+      "alertAction": [],
+      "alertDefinitions": [],
+      "alertImpact": [],
+      "criticalityLevel": [
+        2,
+        3,
+        4
+      ],
+      "customFilter": {
+        "excludedResources": null,
+        "filter": [],
+        "includedResources": null
+      },
+      "depth": 1,
+      "filterMode": "tagPicker",
+      "mode": "all",
+      "refreshContent": {
+        "refreshContent": false
+      },
+      "refreshInterval": 300,
+      "relationshipMode": {
+        "relationshipMode": [
+          -1,
+          0
+        ]
+      },
+      "resource": [],
+      "selfProvider": {
+        "selfProvider": false
+      },
+      "state": [],
+      "status": [],
+      "tagFilter": null,
+      "title": "Failing Controls on Selected Host",
+      "type": [
+        "15_21"
+      ]
+    },
+    "title": "Failing Controls on Selected Host"
+  },
+  {
+    "config": {
+      "alertAction": [],
+      "alertDefinitions": [],
+      "alertImpact": [],
+      "criticalityLevel": [
+        2,
+        3,
+        4
+      ],
+      "customFilter": {
+        "excludedResources": null,
+        "filter": [],
+        "includedResources": null
+      },
+      "depth": 5,
+      "filterMode": "tagPicker",
+      "mode": "all",
+      "refreshContent": {
+        "refreshContent": false
+      },
+      "refreshInterval": 300,
+      "relationshipMode": {
+        "relationshipMode": [
+          -1,
+          0
+        ]
+      },
+      "resource": [
+        {
+          "resourceId": "resource:id:0_::_",
+          "resourceName": "vSphere World"
+        }
+      ],
+      "selfProvider": {
+        "selfProvider": false
+      },
+      "state": [],
+      "status": [],
+      "tagFilter": null,
+      "title": "Fleet Compliance Alerts",
+      "type": [
+        "15_21"
+      ]
+    },
+    "title": "Fleet Compliance Alerts"
+  },
+  {
+    "config": {
+      "alertAction": [],
+      "alertDefinitions": [],
+      "alertImpact": [],
+      "criticalityLevel": [
+        2,
+        3,
+        4
+      ],
+      "customFilter": {
+        "excludedResources": null,
+        "filter": [],
+        "includedResources": null
+      },
+      "depth": 4,
+      "filterMode": "tagPicker",
+      "mode": "all",
+      "refreshContent": {
+        "refreshContent": false
+      },
+      "refreshInterval": 300,
+      "relationshipMode": {
+        "relationshipMode": [
+          -1,
+          0
+        ]
+      },
+      "resource": [],
+      "selfProvider": {
+        "selfProvider": false
+      },
+      "state": [],
+      "status": [],
+      "tagFilter": null,
+      "title": "Failing Controls on Selected Object",
+      "type": [
+        "15_21"
+      ]
+    },
+    "title": "Failing Controls on Selected Object"
+  },
+  {
+    "config": {
+      "alertAction": [],
+      "alertDefinitions": [],
+      "alertImpact": [],
+      "criticalityLevel": [
+        2,
+        3,
+        4
+      ],
+      "customFilter": {
+        "excludedResources": null,
+        "filter": [],
+        "includedResources": null
+      },
+      "depth": 1,
+      "filterMode": "tagPicker",
+      "mode": "all",
+      "refreshContent": {
+        "refreshContent": false
+      },
+      "refreshInterval": 300,
+      "relationshipMode": {
+        "relationshipMode": [
+          -1,
+          0
+        ]
+      },
+      "resource": [],
+      "selfProvider": {
+        "selfProvider": false
+      },
+      "state": [],
+      "status": [],
+      "tagFilter": null,
+      "title": "Failing Controls on Selected VM",
+      "type": [
+        "15_21"
+      ]
+    },
+    "title": "Failing Controls on Selected VM"
+  },
+  {
+    "config": {
+      "alertAction": [],
+      "alertDefinitions": [],
+      "alertImpact": [],
+      "criticalityLevel": [
+        2,
+        3,
+        4
+      ],
+      "customFilter": {
+        "excludedResources": null,
+        "filter": [],
+        "includedResources": null
+      },
+      "depth": 4,
+      "filterMode": "tagPicker",
+      "mode": "all",
+      "refreshContent": {
+        "refreshContent": false
+      },
+      "refreshInterval": 300,
+      "relationshipMode": {
+        "relationshipMode": [
+          -1,
+          0
+        ]
+      },
+      "resource": [],
+      "selfProvider": {
+        "selfProvider": false
+      },
+      "state": [],
+      "status": [],
+      "tagFilter": null,
+      "title": "Open Compliance Alerts",
+      "type": [
+        "15_21"
+      ]
+    },
+    "title": "Open Compliance Alerts"
+  },
+  {
+    "config": {
+      "alertAction": [],
+      "alertDefinitions": [],
+      "alertImpact": [],
+      "criticalityLevel": [
+        2,
+        3,
+        4
+      ],
+      "customFilter": {
+        "excludedResources": null,
+        "filter": [],
+        "includedResources": null
+      },
+      "depth": 1,
+      "filterMode": "tagPicker",
+      "mode": "all",
+      "refreshContent": {
+        "refreshContent": false
+      },
+      "refreshInterval": 300,
+      "relationshipMode": {
+        "relationshipMode": [
+          -1,
+          0
+        ]
+      },
+      "resource": [],
+      "selfProvider": {
+        "selfProvider": false
+      },
+      "state": [],
+      "status": [],
+      "tagFilter": null,
+      "title": "Performance Alerts",
+      "type": [
+        "15_19",
+        "16_19",
+        "17_19",
+        "18_19",
+        "19_19"
+      ]
+    },
+    "title": "Performance Alerts"
+  },
+  {
+    "config": {
+      "alertAction": [],
+      "alertDefinitions": [],
+      "alertImpact": [],
+      "criticalityLevel": [
+        2,
+        3,
+        4
+      ],
+      "customFilter": {
+        "excludedResources": null,
+        "filter": [],
+        "includedResources": null
+      },
+      "depth": 1,
+      "filterMode": "tagPicker",
+      "mode": "all",
+      "refreshContent": {
+        "refreshContent": false
+      },
+      "refreshInterval": 300,
+      "relationshipMode": {
+        "relationshipMode": [
+          -1,
+          0
+        ]
+      },
+      "resource": [],
+      "selfProvider": {
+        "selfProvider": false
+      },
+      "state": [],
+      "status": [
+        0
+      ],
+      "tagFilter": null,
+      "title": "Active Alerts (for selected VM)",
+      "type": []
+    },
+    "title": "Active Alerts (for selected VM)"
+  },
+  {
+    "config": {
+      "alertAction": [],
+      "alertDefinitions": [],
+      "alertImpact": [],
+      "criticalityLevel": [
+        2,
+        3,
+        4
+      ],
+      "customFilter": {
+        "excludedResources": null,
+        "filter": [],
+        "includedResources": null
+      },
+      "depth": 1,
+      "filterMode": "tagPicker",
+      "mode": "all",
+      "refreshContent": {
+        "refreshContent": false
+      },
+      "refreshInterval": 300,
+      "relationshipMode": {
+        "relationshipMode": [
+          -1,
+          0
+        ]
+      },
+      "resource": [],
+      "selfProvider": {
+        "selfProvider": false
+      },
+      "state": [],
+      "status": [],
+      "tagFilter": null,
+      "title": "Performance Alerts",
+      "type": [
+        "15_19",
+        "16_19",
+        "17_19",
+        "18_19",
+        "19_19",
+        "20_19"
+      ]
+    },
+    "title": "Performance Alerts"
+  }
+]
