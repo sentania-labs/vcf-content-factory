@@ -2,8 +2,8 @@
 content-export parsers and YAML writers from the extractor, and the offline
 export-to-YAML path reverse_local).
 
-Public API: the three content-export zip readers, used by the migrator
-(sentania-labs/vcf-cf-migrator) to read a saved export (issue #165).
+Public API: the three content-export zip readers, which turn a saved
+content-export zip into bytes / dicts with no instance involved.
 """
 from .extractor import (
     content_xml_from_export_zip,

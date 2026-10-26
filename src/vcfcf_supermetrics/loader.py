@@ -82,15 +82,34 @@ def sm_id_map(sm_scope: Optional[Iterable[Path]] = None, bundle_context: Optiona
             on_missing_id=_mint_id_into_file, provenance_of=_provenance_of,
         )
     sm_map: dict[str, str] = {}
+    for sm in _unscoped_sm_defs(load_dir):
+        sm_map[sm.name] = sm.id
+    return sm_map
+
+
+def _unscoped_sm_defs(load) -> List[SuperMetricDef]:
+    """The SMs the unscoped ``sm_id_map()`` resolves names against: the
+    first of ``content/supermetrics`` and ``supermetrics`` under the working
+    directory that is a directory, loaded with ``load``; any error is an
+    empty list (the map's all-or-nothing contract)."""
     try:
         for candidate in (Path("content/supermetrics"), Path("supermetrics")):
             if candidate.is_dir():
-                for sm in load_dir(candidate):
-                    sm_map[sm.name] = sm.id
-                break
+                return list(load(candidate))
     except Exception:
         pass
-    return sm_map
+    return []
+
+
+def unscoped_sm_defs_readonly() -> List[SuperMetricDef]:
+    """The SMs behind the unscoped ``sm_id_map()``, from the same directory
+    with the same rules, loaded without writing (``load_dir_readonly``).
+
+    A check that must resolve a ``supermetric:"<name>"`` view column to the
+    SM the renderer will use (``build_import_zip(..., sm_map=sm_id_map())``)
+    takes the SM of that name from this list.
+    """
+    return _unscoped_sm_defs(load_dir_readonly)
 
 
 def load_dir(directory: str | Path = "supermetrics", enforce_framework_prefix: bool = True) -> List[SuperMetricDef]:
@@ -98,6 +117,27 @@ def load_dir(directory: str | Path = "supermetrics", enforce_framework_prefix: b
         directory,
         enforce_framework_prefix=enforce_framework_prefix,
         on_missing_id=_mint_id_into_file,
+        provenance_of=_provenance_of,
+    )
+
+
+def _preview_id(path: Path) -> str:
+    """A stable stand-in id for an id-less SM YAML, never written to it:
+    uuid5 of the resolved path.  Lets a read-only load keep an id-less SM
+    (its formula is still checked) without the file changing."""
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, Path(path).resolve().as_uri()))
+
+
+def load_dir_readonly(
+    directory: str | Path, enforce_framework_prefix: bool = True,
+) -> List[SuperMetricDef]:
+    """``load_dir`` that never writes: an id-less YAML gets a ``_preview_id``
+    in memory instead of a minted id in the file.  For checks (sync
+    preflights) that read the corpus but must not change it."""
+    return _core.load_dir(
+        directory,
+        enforce_framework_prefix=enforce_framework_prefix,
+        on_missing_id=_preview_id,
         provenance_of=_provenance_of,
     )
 
