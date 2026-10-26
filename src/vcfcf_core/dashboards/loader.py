@@ -1415,7 +1415,16 @@ class AlertListConfig:
         alert_impact:  List of impact strings. [] = all. ["health"], etc.
         alert_action:  List of action values. Usually [].
         mode:          "all" (default).
-        depth:         Resource traversal depth. Default 1.
+        depth:         Resource traversal depth, 1 to 10. Default 1. The
+                       server rejects 0 ("depth should be between 1 and
+                       10") and the widget renders no list.
+        relationship_mode: Wire ``config.relationshipMode`` array, built
+                       from YAML ``relationship_mode`` names: parents=1,
+                       children=-1, self=0, emitted in that order.
+                       Default ``[-1, 0]`` (children plus self). Self and
+                       parents together are rejected (the widget editor
+                       makes them mutually exclusive). See
+                       knowledge/context/investigations/2026-10-26-alertlist-depth-semantics.md.
     """
     criticality: List[int] = field(default_factory=lambda: [2, 3, 4])
     alert_types: List[str] = field(default_factory=list)
@@ -1426,6 +1435,7 @@ class AlertListConfig:
     mode: str = "all"
     depth: int = 1
     alert_definitions: List[str] = field(default_factory=list)
+    relationship_mode: List[int] = field(default_factory=lambda: [-1, 0])
     # When True, emit selfProvider:false + resource:[{resourceId:"resource:id:0_::_",
     # resourceName:"vSphere World"}] instead of the standard self-provider shape.
     # This mirrors the sdwan ProblemAlertsList corpus pattern and is required when
@@ -2349,6 +2359,82 @@ def split_navigation_targets(dashboards: Iterable["Dashboard"]) -> "tuple[List[s
                         f"{nav.dashboard!r}, which is not in this import"
                     )
     return outside, external
+
+
+# AlertList ``relationship_mode`` names -> wire ints, in render order
+# (parents, children, self). Order matches the existing default [-1, 0]
+# and Heatmap's [1, -1, 0]. Source: the 9.0.2 widget editor
+# (Ext.vcops.dashboard.widget.editor.AlertList), replayed live in
+# knowledge/context/investigations/2026-10-26-alertlist-depth-semantics.md.
+_ALERT_LIST_RELATIONSHIP_MODES = (("parents", 1), ("children", -1), ("self", 0))
+_ALERT_LIST_DEPTH_MIN = 1
+_ALERT_LIST_DEPTH_MAX = 10
+
+
+def _parse_alert_list_relationship_mode(w: dict) -> List[int]:
+    """Parse an AlertList ``relationship_mode`` into the wire int array.
+
+    Accepts a single name or a list of names from ``self``, ``children``,
+    ``parents``. Omitted means ``[-1, 0]`` (children plus self), the value
+    the renderer always emitted before this option existed.
+    """
+    wid = w.get("id", "?")
+    raw = w.get("relationship_mode")
+    if raw is None:
+        return [-1, 0]
+    names = [raw] if isinstance(raw, str) else raw
+    if not isinstance(names, list) or not names:
+        raise DashboardValidationError(
+            f"widget {wid!r}: AlertList relationship_mode must be one of "
+            f"'self', 'children', 'parents' or a non-empty list of them, "
+            f"got {raw!r}"
+        )
+    valid = dict(_ALERT_LIST_RELATIONSHIP_MODES)
+    chosen = set()
+    for n in names:
+        key = n.strip().lower() if isinstance(n, str) else n
+        if key not in valid:
+            raise DashboardValidationError(
+                f"widget {wid!r}: AlertList relationship_mode entry {n!r} "
+                f"is not one of 'self', 'children', 'parents'"
+            )
+        if key in chosen:
+            raise DashboardValidationError(
+                f"widget {wid!r}: AlertList relationship_mode lists {key!r} twice"
+            )
+        chosen.add(key)
+    if "self" in chosen and "parents" in chosen:
+        raise DashboardValidationError(
+            f"widget {wid!r}: AlertList relationship_mode cannot combine "
+            f"'self' and 'parents' (the widget editor makes them mutually "
+            f"exclusive); use [self, children], [parents, children], or one alone"
+        )
+    return [v for k, v in _ALERT_LIST_RELATIONSHIP_MODES if k in chosen]
+
+
+def _parse_alert_list_depth(w: dict) -> int:
+    """Parse an AlertList ``depth``; the server accepts only 1 to 10."""
+    wid = w.get("id", "?")
+    raw = w.get("depth", 1)
+    if isinstance(raw, bool):
+        raw = None
+    try:
+        depth = int(raw)
+        if isinstance(raw, float) and raw != depth:
+            raise ValueError
+    except (TypeError, ValueError):
+        raise DashboardValidationError(
+            f"widget {wid!r}: AlertList depth must be an integer from "
+            f"{_ALERT_LIST_DEPTH_MIN} to {_ALERT_LIST_DEPTH_MAX}, got {w.get('depth')!r}"
+        )
+    if not _ALERT_LIST_DEPTH_MIN <= depth <= _ALERT_LIST_DEPTH_MAX:
+        raise DashboardValidationError(
+            f"widget {wid!r}: AlertList depth must be from "
+            f"{_ALERT_LIST_DEPTH_MIN} to {_ALERT_LIST_DEPTH_MAX}, got {depth}. "
+            f"The server rejects anything else ('depth should be between 1 "
+            f"and 10') and the widget renders no list."
+        )
+    return depth
 
 
 def _parse_navigations(w: dict) -> List["Navigation"]:
@@ -3326,9 +3412,10 @@ def load_dashboard(
             specs = _parse_metric_specs(raw_metrics)
             metric_chart_config = MetricChartConfig(metrics=specs)
 
-        # --- Parse relationship_mode (MetricChart only for now) ---
+        # --- Parse relationship_mode (MetricChart scalar; AlertList's
+        # array form is parsed with its config below) ---
         raw_rm = w.get("relationship_mode")
-        if raw_rm is not None:
+        if raw_rm is not None and widget_type != "AlertList":
             rm_str = str(raw_rm).strip().lower()
             if rm_str not in ("children", "parents"):
                 raise DashboardValidationError(
@@ -3338,7 +3425,7 @@ def load_dashboard(
             if widget_type != "MetricChart":
                 raise DashboardValidationError(
                     f"widget {w.get('id', '?')!r}: relationship_mode is only "
-                    f"supported on MetricChart widgets, got type {widget_type!r}"
+                    f"supported on MetricChart and AlertList widgets, got type {widget_type!r}"
                 )
             relationship_mode: Optional[str] = rm_str
         else:
@@ -3398,8 +3485,9 @@ def load_dashboard(
                 alert_impact=[str(a).strip() for a in (w.get("alert_impact") or [])],
                 alert_action=list(w.get("alert_action") or []),
                 mode=str(w.get("mode", "all") or "all").strip(),
-                depth=int(w.get("depth", 1)),
+                depth=_parse_alert_list_depth(w),
                 alert_definitions=list(raw_alert_defs),
+                relationship_mode=_parse_alert_list_relationship_mode(w),
                 pin_to_world=bool(w.get("pin_to_world", False)),
             )
 

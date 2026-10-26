@@ -345,15 +345,38 @@ Always specify the pin target.
 
 ### Relationship traversal
 
-MetricChart and Heatmap support parent/child traversal:
+MetricChart and AlertList take `relationship_mode` in YAML; Heatmap's
+array is fixed by the renderer.
 
 ```yaml
 - id: vm_metrics
   type: MetricChart
-  relationship_mode: -1    # -1=children, 0=none, 1=parents
+  relationship_mode: children    # children or parents; omit for none
 ```
 
-MetricChart uses a scalar; Heatmap and AlertList accept array form.
+MetricChart renders a scalar (`-1` children, `1` parents, `0` when
+omitted).
+
+AlertList takes one name or a list from `self`, `children`, `parents`,
+and renders the int array (`self` 0, `children` -1, `parents` 1):
+
+```yaml
+- id: host_alerts
+  type: AlertList
+  relationship_mode: self        # the object's own alerts only
+  depth: 1                       # 1 to 10; 0 makes the server throw
+```
+
+- Omitted means `[self, children]`, wire `[-1, 0]`: the object's alerts
+  plus its descendants' to `depth`.
+- `children` alone drops the object's own alerts.
+- `self` and `parents` together are a load error (the widget editor
+  makes them exclusive).
+- AlertList `depth` outside 1 to 10 is a load error: the server rejects
+  it and the widget shows no list.
+
+Source:
+`knowledge/context/investigations/2026-10-26-alertlist-depth-semantics.md`.
 
 ---
 

@@ -138,7 +138,7 @@ A prior tooling pass incorrectly extrapolated from Heatmap's array form.
 Empirically confirmed 2026-05-21: emitting `[1, -1, 0]` for
 `relationship_mode: children` caused an Internal Server Error on dashboard
 load (MSSQL disk-latency widgets, `knowledge/context/attic/legacy-root-content/mssql-query-performance.yaml`).
-Heatmap and AlertList accept the array form; MetricChart does not.
+Heatmap and AlertList accept the array form; MetricChart does not (AlertList values: §AlertList).
 Fixed in `src/vcfcf_dashboards/render.py` `_metric_chart_widget()` — now emits
 scalar `-1` / `1` / `0`.
 
@@ -635,6 +635,22 @@ Criticality: 2=Warning, 3=Major, 4=Critical.
 the widget to specific alert definitions; always present in wire format, often
 `[]` (observed in four corpus dashboards: VM Details.json, Dell EMC Server
 Health.json, Workbench.json, Ping Response.json).
+
+`relationshipMode` is `{"relationshipMode": [ints]}`: parents `1`, children
+`-1`, self `0`. `[0]` is the resource's own alerts, `[-1]` its descendants
+only, `[-1, 0]` both. The widget editor offers Parent, Children and Self
+checkboxes and makes Self and Parent mutually exclusive, so it produces
+`[0]`, `[-1]`, `[1]`, `[1, -1]`, `[0, -1]`. `depth` must be 1 to 10: depth 0
+makes `problemalerts.action` throw `depth should be between 1 and 10` and the
+widget shows no list (the editor's depth field is min 1, max 10, disabled for
+self-only). Source:
+`knowledge/context/investigations/2026-10-26-alertlist-depth-semantics.md`
+(live replay, 9.0.2 and 8.18.6).
+
+Factory YAML: `relationship_mode:` takes `self`, `children`, `parents`, or a
+list of them (`[self, children]`); the renderer emits them in the order
+parents, children, self. Omitted means `[-1, 0]`. `self` with `parents` and
+`depth` outside 1 to 10 are load errors.
 
 ---
 

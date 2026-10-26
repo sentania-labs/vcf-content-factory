@@ -1904,6 +1904,11 @@ def _alert_list_widget(w: Widget) -> dict:
         use the same resource shape; adapted for AlertList per investigation
         knowledge/context/investigations/2026-05-29-compliance-dashboard-render-failures.md.
 
+    ``relationshipMode`` is an int array (parents=1, children=-1, self=0);
+    default ``[-1, 0]``. ``depth`` is 1 to 10 (the loader enforces it; the
+    server throws on 0). See
+    knowledge/context/investigations/2026-10-26-alertlist-depth-semantics.md.
+
     Wire format reference: knowledge/context/api-surface/widget_types_survey.md §AlertList.
     """
     cfg = w.alert_list_config
@@ -1928,7 +1933,7 @@ def _alert_list_widget(w: Widget) -> dict:
             "refreshInterval": 300,
             "resource": resource_obj,
             "refreshContent": {"refreshContent": False},
-            "relationshipMode": {"relationshipMode": [-1, 0]},
+            "relationshipMode": {"relationshipMode": list(cfg.relationship_mode)},
             "selfProvider": self_provider_obj,
             "title": w.title,
             "mode": cfg.mode,

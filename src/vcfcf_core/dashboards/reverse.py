@@ -992,6 +992,24 @@ def _parse_alert_list_config(cfg: dict, dash_name: str, local_id: str) -> AlertL
     alert_action = list(cfg.get("alertAction") or [])
     mode = str(cfg.get("mode") or "all").strip()
     depth = int(cfg.get("depth") or 1)
+    # relationshipMode is {"relationshipMode": [ints]} (parents=1,
+    # children=-1, self=0). Keep a value the loader would accept; anything
+    # else falls back to the renderer default [-1, 0].
+    rm_raw = (cfg.get("relationshipMode") or {}).get("relationshipMode") \
+        if isinstance(cfg.get("relationshipMode"), dict) else None
+    relationship_mode = [-1, 0]
+    if isinstance(rm_raw, list) and rm_raw:
+        try:
+            ints = {int(v) for v in rm_raw}
+        except (TypeError, ValueError):
+            ints = set()
+        if ints and ints <= {1, -1, 0} and not {0, 1} <= ints and len(ints) == len(rm_raw):
+            relationship_mode = [v for v in (1, -1, 0) if v in ints]
+        else:
+            _warn(
+                f"dashboard {dash_name!r} widget {local_id!r}: AlertList "
+                f"relationshipMode {rm_raw!r} not representable; using [-1, 0]"
+            )
     return AlertListConfig(
         criticality=criticality,
         alert_types=alert_types,
@@ -1001,6 +1019,7 @@ def _parse_alert_list_config(cfg: dict, dash_name: str, local_id: str) -> AlertL
         alert_action=alert_action,
         mode=mode,
         depth=depth,
+        relationship_mode=relationship_mode,
     )
 
 

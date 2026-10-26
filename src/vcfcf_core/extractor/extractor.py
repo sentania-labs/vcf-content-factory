@@ -1012,6 +1012,9 @@ def _widget_to_yaml_dict(widget, view_name_map: dict) -> dict:
                 d["status"] = cfg.status
             d["mode"] = cfg.mode
             d["depth"] = cfg.depth
+            if cfg.relationship_mode != [-1, 0]:
+                names = {1: "parents", -1: "children", 0: "self"}
+                d["relationship_mode"] = [names[v] for v in cfg.relationship_mode]
         else:
             _warn(f"widget '{w.local_id}' (AlertList): no config; emitting best-effort shape")
 
