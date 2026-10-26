@@ -166,7 +166,7 @@ def test_round_trip_check_never_mints_into_the_emitted_yaml(tmp_path, capsys):
 
 
 # ---------------------------------------------------------------------------
-# The wheel-alone gate: offline read path from the wheel alone
+# The wheel-alone gate: offline read path
 # ---------------------------------------------------------------------------
 
 _OWNER = "b58a71ee-e909-5b40-a355-9e199e6f0f53"
@@ -367,7 +367,7 @@ def core_wheel_site(tmp_path_factory) -> Path:
 
 @pytest.mark.slow
 def test_offline_reverse_from_the_wheel_alone_matches_the_factory_path(core_wheel_site, tmp_path):
-    """The 'installs from the wheel alone' gate (design §Gates): nothing from
+    """The wheel-alone gate (knowledge/designs/tooling-core-carveout-v1.md §Gates): nothing from
     the factory on the path, environment cleared, empty cwd; the wheel turns
     the export zip into YAML byte-identical to the factory path's output."""
     zip_path = tmp_path / "export.zip"
