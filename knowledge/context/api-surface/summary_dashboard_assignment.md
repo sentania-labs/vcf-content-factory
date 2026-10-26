@@ -139,9 +139,9 @@ part 1):
 
 | Build | Parameters the action reads | Reset value | Proven how |
 |---|---|---|---|
-| 8.18.6 Build 25423535 (devel_8_18) | `dashboardAssociations` only | `<templateName>_::_null` | bytecode, SPA, NPE stack trace of the two-map call. **The single-map call has not been sent live.** |
-| 9.0.2.0 Build 25429562 (devel) | `dashboardAssociations` only | `<templateName>_::_null` | same as 8.18.6. **The single-map call has not been sent live.** |
-| 9.1.1 Build 25794169 (devel_9_1; its `lastbuildversion.txt` reads 9.0.0.0) | `assignedAssociations` + `resetAssociations` | plain `<defaultTemplateName>` | bytecode, SPA; the two-map call is the one the factory has always sent |
+| 8.18.6 Build 25423535 (devel_8_18) | `dashboardAssociations` only | `<templateName>_::_null` | bytecode and SPA (2026-10-26 evidence file); NPE stack trace of the two-map call. **The single-map call has not been sent live.** |
+| 9.0.2.0 Build 25429562 (devel) | `dashboardAssociations` only | `<templateName>_::_null` | bytecode and SPA (2026-10-26 evidence file; same method as 8.18.6); NPE stack trace of the two-map call. **The single-map call has not been sent live.** |
+| 9.1.1 Build 25794169 (devel_9_1; its `lastbuildversion.txt` reads 9.0.0.0) | `assignedAssociations` + `resetAssociations` | plain `<defaultTemplateName>` | bytecode and SPA (2026-10-26 evidence file); the two-map call is the one the factory has always sent |
 | 9.0.0.0 pre-release, 9.2.0.0 pre-release | `assignedAssociations` + `resetAssociations` | plain | 2026-08-25 note below: two empty maps answered `200 ok` live |
 
 The single-map request, from bytecode and SPA:
@@ -184,11 +184,20 @@ first", because it is the live-proven form and the newer lines read it;
 the cost is one NPE stack trace in `web.log` per new client on 9.0.2 and
 8.18.
 
-The bytecode, javap text and SPA excerpts behind this section were not
-kept (the investigation's "Clean-up" lists what has to be captured), so
-the NPE-before-write order, the merge-not-replace behaviour of a
-single-map entry and the reset leaving the template in place rest on the
-investigation's prose until they are. `getSummaryTabId` on 9.0.2 answers `{"tabId": "<uuid>"}` with no
+Evidence (2026-10-26, all three builds): `../investigations/2026-10-26-dashboardaction-associate-evidence.md`
+(full `DashboardAction.class` hashes, the offsets below, conclusions; the
+verbatim `javap` and SPA text is local-only on the lab holding share).
+8.18.6 and 9.0.2 carry the same method instruction for instruction. The
+NPE precedes every write on every build (8.18.6/9.0.2 offsets 86 to 99,
+first write `saveDashboardAsTemplate` at 311; 9.1.1 offsets 92 to 119,
+first write at 333); a single-map entry is merged into the stored map,
+which is read whole, edited by key and written back whole (offsets 16,
+383/439, 489); a `_::_null` reset only removes the kind's entry (439) and
+leaves the template copy behind, orphaned. One limit on the retry
+argument: the error panel is rendered for any exception in the action, so
+a two-map call that throws mid-loop, after a copy was made, looks the
+same as the wrong-form answer. The single-map retry after it still writes
+nothing. `getSummaryTabId` on 9.0.2 answers `{"tabId": "<uuid>"}` with no
 `isDashboard` key (summary_dashboard_pak_binding.md, 2026-10-24), so the
 factory reads a bound tab with `vcfcf_core.dashboards.summary_bind.summary_dashboard_tab`:
 an explicit `isDashboard` decides, otherwise only a UUID `tabId` counts.
@@ -311,9 +320,17 @@ Consequences, all of which any design must handle:
   the old one (`deleteDashboardTemplate(old)`) in the same call. The
   numeric suffixes on Broadcom's shipped names (`New Summary Page: vSAN
   Fault Domain 7`) come from the pak install path, not from this call.
-- **Unassigning through `resetAssociations` deletes the copy** when the
-  reset value's id matches the current one; `getSummaryTabId` then answers
-  `{"isDashboard": false}` (no `tabId` key).
+- **Unassigning through `resetAssociations` deletes the copy** only when
+  the reset value is `<name>_::_<id>` and the id matches the current one
+  (9.1.1 bytecode offsets 544 to 653,
+  `../investigations/2026-10-26-dashboardaction-associate-evidence.md`).
+  The value the SPA and the factory send is the plain template name, with
+  no `_::_`; for that value the action does not call
+  `deleteDashboardTemplate`. It moves the entry into a second "to remove"
+  map passed to `setDashboardAssociation`; whether that server-side call
+  deletes the copy is not visible in this class and has not been checked
+  (2026-10-26). On 8.18.6 and 9.0.2 a `_::_null` reset never deletes it.
+  `getSummaryTabId` then answers `{"isDashboard": false}` (no `tabId` key).
 - **The update story is therefore "assign again."** There is no in-place
   update and no client-side cleanup step.
 
@@ -328,7 +345,8 @@ that fallthrough as a privilege check. The only `getTemplateList` /
 (notification payloads) and are unrelated.
 
 Template lifecycle is owned entirely by `associateResourceKindDashboards`
-(replace on re-assign, delete on reset). Materialized templates remain
+(replace on re-assign; on reset, see "Assignment is COPY" above: the
+action itself deletes nothing for the values the SPA and factory send). Materialized templates remain
 readable only by UUID (`getDashboardConfig?tabId=<uuid>&isTemplate=true`);
 capture the UUID at assign time from `getSummaryTabId`. A separate
 enumeration path, if one exists, is still to be found.
@@ -528,7 +546,9 @@ exercised live):
   builds; the accumulation claim above describes older behaviour or the
   pak path, and should be re-verified before relying on it either way.
 - A reset entry removes the kind from the association map and deletes
-  its template if the reset value's id matches the current one.
+  its template if the reset value's id matches the current one. The
+  plain-name value the SPA sends carries no id, so this delete does not
+  fire for it (2026-10-26; see "Assignment is COPY" above).
 - Ids in `DataRetrieverUtils.ootbDashboardTemplateIds` (built-in
   templates) are stored as-is without copying.
 - Every change is audit-logged as `DASHBOARD_ASSOCIATE` with the raw

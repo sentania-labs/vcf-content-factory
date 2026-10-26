@@ -56,6 +56,8 @@ java.lang.NullPointerException
 
 `DashboardAction.class` copied from `/usr/lib/vmware-vcops/tomcat-web-app/webapps/ui/WEB-INF/classes/com/vmware/vcops/ui/action/` on each appliance.
 
+Full hashes and the offset-level reading for all three builds: `2026-10-26-dashboardaction-associate-evidence.md`.
+
 | Build | sha256 of DashboardAction.class | Parameters read | Line of the throw |
 |---|---|---|---|
 | devel 9.0.2.0 Build 25429562 | `2c9c838b...e51d67` | `dashboardAssociations` only | 2607 = `new JSONObject(dashboardAssociations)` (LineNumberTable: line 2606 is the `getParameter`, 2607 the constructor) |
@@ -172,13 +174,7 @@ Server paging was checked for stability: 8 repeated runs of 6-group pages (activ
 
 No objects created. Every UI session logged out. Copies of class files, JS and replay JSON stay in the session scratchpad only.
 
-**Not retained (noted 2026-10-26, framework review of #260, W4).** That scratchpad is gone, and nothing below was kept in the repo or on `/mnt/holding`; the sha256 values above are truncated as recorded. To make the retry-safety argument checkable, a read-only appliance pass must capture, per build (9.0.2.0 Build 25429562 on devel, 8.18.6 Build 25423535 on devel_8_18, 9.1.1 Build 25794169 on devel_9_1), into `reference/docs/` (RULE-016):
-
-1. the full `sha256sum` of `/usr/lib/vmware-vcops/tomcat-web-app/webapps/ui/WEB-INF/classes/com/vmware/vcops/ui/action/DashboardAction.class`;
-2. `javap -c -p -l` of that class, trimmed to the method `associateResourceKindDashboards` (bytecode plus LineNumberTable and LocalVariableTable), verbatim;
-3. the request lines of `save()` in the bundled SPA's `js/dashboard/DashboardAssociateWindow.js` (and the minified bundle line on 9.1.1), verbatim.
-
-Three claims the factory code relies on rest on that text: the NPE comes before any lookup or write; a single-map entry is merged into the existing association map rather than replacing it (otherwise a one-kind bind would drop every other kind's Summary binding); a reset leaves the old template in place.
+**Not retained, then recaptured (2026-10-26, framework review of #260, W4).** The 2026-10-24 scratchpad is gone. A read-only pass on 2026-10-26 recaptured all three builds: `2026-10-26-dashboardaction-associate-evidence.md` (full hashes, the offsets each claim rests on, the conclusions; the verbatim `javap` and SPA text is local-only on the lab holding share, out of the public repo). Every class hash matches the prefix in the table above. 8.18.6 and 9.0.2 carry the same method instruction for instruction. Of the three claims the factory relies on, the NPE comes before any write (all three builds), a single-map entry merges into the stored map, and a `_::_null` reset removes the binding but leaves the template copy; one caveat (the error panel is not specific to the missing parameter) and one correction (9.1.1's plain-name reset is not shown to delete the copy) are in that file.
 
 ## Follow-ups
 
