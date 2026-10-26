@@ -91,6 +91,23 @@ that is the intended gate.
 - 1.0.16 is the installer and ThreadDeath round (factory #242); this kit
   carries both.
 
+## Behavior since 1.0.19
+
+- A child object whose collect fails now shows `NO_DATA_RECEIVING` (#245).
+  The SDK accepts only `NONE`, `DATA_RECEIVING` and `NO_DATA_RECEIVING` on a
+  child object, the same on 8.18.7, 9.0 and 9.1.1; `ERROR` and `DOWN` only on
+  the adapter instance. Before this kit, the `ERROR` or `DOWN` that
+  `mapCollectException` returns (or the `ERROR` default) was refused by the
+  SDK on the child, and the object kept its last status. The framework now
+  moves any status a child cannot take to `NO_DATA_RECEIVING` and logs the
+  move. `ERROR` and `DOWN` still count as failures, so a cycle where every
+  object fails still sets the account row to `ERROR` (or `DOWN`), as since
+  1.0.14.
+- A status the SDK does not take (`setResourceStatus` returns `false`) is
+  logged at WARN for objects and for the adapter instance, instead of being
+  ignored.
+- No pak source change. Rebuild every pak on this kit to pick it up.
+
 ## Behavior since 1.0.18
 
 - The pak is compiled with `javac --release 11` instead of `-source 11

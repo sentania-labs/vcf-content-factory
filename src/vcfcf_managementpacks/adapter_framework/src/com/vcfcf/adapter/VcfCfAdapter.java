@@ -46,8 +46,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
  *   <li>Full {@code onConfigure / onDescribe / onTest / onDiscover / onCollect}
  *       orchestration backed by clean-room VCF-CF SPI interfaces
  *       ({@link VcfCfTester}, {@link VcfCfDiscoverer}, {@link VcfCfCollector}).</li>
- *   <li>Per-resource collection status every cycle via the
- *       {@link ResourceStatusEnum#isAdapterAllowedStatus} gate (§1).</li>
+ *   <li>Per-resource collection status every cycle, moved onto the list the
+ *       SDK accepts for that resource: {@link ResourceStatusEnum#isResourceAllowedStatus}
+ *       for a child object, {@link ResourceStatusEnum#isAdapterAllowedStatus}
+ *       for the adapter instance (§1, issue #245).</li>
  *   <li>New-resource registration through
  *       {@link #registerNewResource(ResourceKey)} during collect (§2).</li>
  *   <li>Relationship emission via {@link #addRelationshipsToCurrentCycle(Relationships)}
@@ -843,6 +845,14 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
      * adapter instance gets that status with a one-line reason (for example
      * a cached login failure). A cycle cut short by a stop or an interrupt
      * sets nothing. Before this, the account kept showing "Collecting".
+     *
+     * <p><strong>Failed child objects (issue #245).</strong> ERROR or DOWN
+     * from {@link VcfCfCollector#mapCollectException} (or its {@code null}
+     * default) is shown on the failed object as NO_DATA_RECEIVING, the
+     * failure status the SDK accepts on a child on 8.18.7, 9.0 and 9.1.1;
+     * the cycle still counts it as ERROR or DOWN for the adapter instance
+     * rule above. Before this the SDK refused it and the object kept its old
+     * status.
      */
     @Override
     @SuppressWarnings("unchecked")
@@ -870,7 +880,8 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
         VcfCfCollector<C> collector = getCollector();
         if (collector == null) {
             for (ResourceConfig rc : resources) {
-                setStatusSafe(rc, ResourceStatusEnum.RESOURCE_STATUS_NO_DATA_RECEIVING);
+                setStatusSafe(adapterInstance, rc,
+                        ResourceStatusEnum.RESOURCE_STATUS_NO_DATA_RECEIVING);
             }
             return;
         }
@@ -966,13 +977,17 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
                 }
 
                 // §1: REQUIRED per-resource status every cycle.
-                setStatusSafe(rc, ResourceStatusEnum.RESOURCE_STATUS_DATA_RECEIVING);
+                setStatusSafe(adapterInstance, rc,
+                        ResourceStatusEnum.RESOURCE_STATUS_DATA_RECEIVING);
 
             } catch (InterruptedException ie) {
                 Thread.currentThread().interrupt();
                 logWarn("onCollect: interrupted collecting " + rcLabel(rc)
                         + " — aborting cycle");
-                setStatusSafe(rc, ResourceStatusEnum.RESOURCE_STATUS_ERROR);
+                // Issue #245: ERROR is refused on a child; NO_DATA_RECEIVING
+                // is the failed-object status the SDK accepts.
+                setStatusSafe(adapterInstance, rc,
+                        ResourceStatusEnum.RESOURCE_STATUS_NO_DATA_RECEIVING);
                 outcome.cut = true;
                 break;
             } catch (Exception e) {
@@ -982,7 +997,10 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
                 ResourceStatusEnum status = collector.mapCollectException(e);
                 ResourceStatusEnum effective =
                         status != null ? status : ResourceStatusEnum.RESOURCE_STATUS_ERROR;
-                setStatusSafe(rc, effective);
+                // Issue #245: a child shows ERROR or DOWN as NO_DATA_RECEIVING
+                // (setStatusSafe); the cycle still counts it as ERROR or DOWN,
+                // so an all-failed cycle raises the adapter instance (#223).
+                setStatusSafe(adapterInstance, rc, effective);
                 outcome.recordFailure(effective, e);
             }
         }
@@ -3133,26 +3151,103 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
         ResourceStatusEnum status = adapterInstanceStatus(outcome, discoveryFailure);
         if (status == null || adapterInstance == null) return;
         String msg = adapterInstanceFailureMessage(outcome, discoveryFailure);
+        boolean accepted;
         try {
-            setResourceStatus(adapterInstance, status, msg);
+            accepted = setResourceStatus(adapterInstance, status, msg);
         } catch (RuntimeException e) {
             logWarn("onCollect: could not set the adapter instance status: " + e);
+            return;
+        }
+        if (!accepted) {
+            logWarn("onCollect: the SDK did not take adapter instance status "
+                    + status.name() + " (refused, or no collect result this cycle): " + msg);
             return;
         }
         logWarn("onCollect: adapter instance set to " + status.name() + ": " + msg);
     }
 
     /**
-     * Set per-resource status, validating with
-     * {@link ResourceStatusEnum#isAdapterAllowedStatus(ResourceStatusEnum)}.
-     * Falls back to {@code RESOURCE_STATUS_ERROR} if the status is not
-     * adapter-settable (guards against accidental use of platform-only statuses).
+     * The status a child object (any resource but the adapter instance) is
+     * given for {@code requested} (issue #245). The SDK's
+     * {@code AdapterBase.setResourceStatus} checks a child against
+     * {@link ResourceStatusEnum#isResourceAllowedStatus} (NONE,
+     * DATA_RECEIVING, NO_DATA_RECEIVING on 8.18.7, 9.0 and 9.1.1 alike) and
+     * refuses anything else, returning false. So a status the child list does
+     * not hold, ERROR and DOWN included, becomes NO_DATA_RECEIVING, which is
+     * also what the SDK's own {@code setAdapterError} / {@code setAdapterDown}
+     * give every monitored object. {@code null} counts as ERROR. Visible to
+     * tests.
      */
-    private void setStatusSafe(ResourceConfig rc, ResourceStatusEnum status) {
-        ResourceStatusEnum safe = ResourceStatusEnum.isAdapterAllowedStatus(status)
-                ? status
-                : ResourceStatusEnum.RESOURCE_STATUS_ERROR;
-        setResourceStatus(rc, safe);
+    static ResourceStatusEnum childStatusFor(ResourceStatusEnum requested) {
+        if (requested != null && ResourceStatusEnum.isResourceAllowedStatus(requested)) {
+            return requested;
+        }
+        return ResourceStatusEnum.RESOURCE_STATUS_NO_DATA_RECEIVING;
+    }
+
+    /**
+     * The status the adapter instance is given for {@code requested}: itself
+     * when {@link ResourceStatusEnum#isAdapterAllowedStatus} holds it,
+     * otherwise ERROR. Visible to tests.
+     */
+    static ResourceStatusEnum instanceStatusFor(ResourceStatusEnum requested) {
+        if (requested != null && ResourceStatusEnum.isAdapterAllowedStatus(requested)) {
+            return requested;
+        }
+        return ResourceStatusEnum.RESOURCE_STATUS_ERROR;
+    }
+
+    /**
+     * True when {@code rc} is the adapter instance resource: the same object,
+     * or the same resource id (the SDK's own test compares ids). Visible to
+     * tests.
+     */
+    static boolean isAdapterInstance(ResourceConfig adapterInstance, ResourceConfig rc) {
+        if (rc == null || adapterInstance == null) return false;
+        if (rc == adapterInstance) return true;
+        Integer id = rc.getResourceId();
+        return id != null && id.equals(adapterInstance.getResourceId());
+    }
+
+    /**
+     * Set a resource's status from {@link #onCollect}, never letting the SDK
+     * drop it (issue #245). The status is first moved onto the list the SDK
+     * accepts for that resource: {@link #childStatusFor} for a child,
+     * {@link #instanceStatusFor} for the adapter instance. A move is logged
+     * (INFO for ERROR or DOWN on a child, the expected case; WARN for any
+     * other status, which is a pak mapping the platform cannot show). If the
+     * SDK still does not take the status ({@code setResourceStatus} returns
+     * false, for example with no collect result), that is logged at WARN.
+     */
+    private void setStatusSafe(ResourceConfig adapterInstance, ResourceConfig rc,
+            ResourceStatusEnum status) {
+        boolean instance = isAdapterInstance(adapterInstance, rc);
+        ResourceStatusEnum safe = instance ? instanceStatusFor(status) : childStatusFor(status);
+        if (safe != status) {
+            String line = "onCollect: " + rcLabel(rc) + ": status "
+                    + (status == null ? "null" : status.name())
+                    + " is not accepted on " + (instance ? "the adapter instance" : "a child object")
+                    + " by the SDK; set " + safe.name() + " instead";
+            if (!instance && (status == ResourceStatusEnum.RESOURCE_STATUS_ERROR
+                    || status == ResourceStatusEnum.RESOURCE_STATUS_DOWN)) {
+                logInfo(line + " (the adapter instance turns " + status.name()
+                        + " when every object in the cycle fails)");
+            } else {
+                logWarn(line);
+            }
+        }
+        boolean accepted;
+        try {
+            accepted = setResourceStatus(rc, safe);
+        } catch (RuntimeException e) {
+            logWarn("onCollect: could not set status " + safe.name() + " on "
+                    + rcLabel(rc) + ": " + e);
+            return;
+        }
+        if (!accepted) {
+            logWarn("onCollect: the SDK did not take status " + safe.name() + " for "
+                    + rcLabel(rc) + " (refused, or no collect result this cycle)");
+        }
     }
 
     /** Human-readable label for a ResourceConfig for log messages. */
