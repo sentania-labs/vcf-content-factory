@@ -98,9 +98,24 @@ Rules for pak installs:
 3. **RULE-009 boundary:** never run remove/deactivate/destructive
    pak operations on prod (`mainAction=remove`). Install ≠ remove.
 4. **Exit codes, duration and the Summary step (since 2026-10-24, #244
-   and #200).** `install` exits 0 on success, 1 when the install itself
-   failed, and 3 when the pak installed but a post-install check failed.
-   On 3 do not reinstall: quote the CLI's end-of-run epilog verbatim.
+   and #200; 1800 s install wait and exit 4 since 2026-10-26).** `install` exits 0 on success, 1 when the install itself
+   failed, 3 when the pak installed but a post-install check failed, and
+   4 when the install was still running on the server when the wait ran
+   out (default 1800 s; `--install-timeout`). On 3 or 4 do not
+   reinstall: quote the CLI's end-of-run epilog verbatim, including the
+   `INSTALL STILL RUNNING` line on 4. On 4 the materialization check and
+   Summary repair did not run; confirm the version once the server
+   finishes and check the pak's dashboards and Summary tabs by hand.
+   **Running it:** a pak install can take the full wait plus up to 900 s
+   of post-install checks (about 46 minutes worst case), and your Bash
+   tool kills a foreground command at 600 s. So start the install with
+   `run_in_background`, writing to a log you name and appending its exit
+   code: `( python3 -m vcfcf_managementpacks install ... ; echo
+   "INSTALL-EXIT $?" ) > <log> 2>&1`. Then wait for it in the same turn
+   with repeated foreground calls of `timeout 570 tail -n +1 -f <log> |
+   grep -m1 '^INSTALL-EXIT'` (exit 124 means not yet: call it again).
+   Never end your turn while the install runs, and never run the install
+   itself in the foreground.
    After the pak lands the CLI runs the materialization check on the
    pak's dashboards (up to 180 s; `--skip-materialization-check` turns
    it off). For a pak with `dashboards.properties` Summary bindings it
