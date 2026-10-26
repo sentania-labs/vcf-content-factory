@@ -91,26 +91,6 @@ that is the intended gate.
 - 1.0.16 is the installer and ThreadDeath round (factory #242); this kit
   carries both.
 
-## Behavior since 1.0.15
-
-- `build-sdk` and `validate-sdk` take `--sdk-compat-jar <path to
-  vrops-adapters-sdk-9.1.1.0100.jar>` (or `VCFCF_SDK_COMPAT_JAR`) to compile
-  the framework and adapter a second time against the VCF Ops 9.1.1.0100 SDK
-  jar on JDK 25+, and `--require-sdk-compat` (or
-  `VCFCF_SDK_COMPAT_REQUIRED=1`) to fail instead of warn when that check
-  cannot run; the pak itself is still compiled against the 2.2 jar.
-- The default is a skip: with no 9.1.1.0100 jar, or no JDK 25+ (looked for
-  on PATH, `JAVA_HOME`, `JAVA_HOME_<N>_X64`, or set
-  `VCFCF_SDK_COMPAT_JAVAC=/path/to/javac`), a plain `build-sdk` prints a
-  warning box and checks nothing against 9.1.1. A `--release` build under
-  GitHub Actions also emits a `::warning::` annotation.
-- The primary compile takes exactly one SDK jar: a second
-  `vrops-adapters-sdk*.jar` beside it in `adapter_runtime/` now stops the
-  build.
-
-Version note: 1.0.13 is the defect-gate round (PR #246) and 1.0.14 the
-adapter-framework round (PR #248); this is 1.0.15.
-
 ## Behavior since 1.0.18
 
 - The pak is compiled with `javac --release 11` instead of `-source 11
@@ -136,6 +116,28 @@ adapter-framework round (PR #248); this is 1.0.15.
   list of 8.18.7, 9.0, 9.1.1.0100>` narrows the lines a run must cover. A
   required pak build that supplies only the 9.1.1 jar now fails naming
   8.18.7 instead of passing.
+- The 1.0.16 `[removal]` gate on the framework's own pass now runs on
+  every leg; the framework-plus-adapter pass still only prints them.
 
 Version note: 1.0.16 is the installer/shims round and 1.0.17 the
 adapter-framework designs round; this is 1.0.18.
+
+## Behavior since 1.0.15
+
+- `build-sdk` and `validate-sdk` take `--sdk-compat-jar <path to
+  vrops-adapters-sdk-9.1.1.0100.jar>` (or `VCFCF_SDK_COMPAT_JAR`) to compile
+  the framework and adapter a second time against the VCF Ops 9.1.1.0100 SDK
+  jar on JDK 25+, and `--require-sdk-compat` (or
+  `VCFCF_SDK_COMPAT_REQUIRED=1`) to fail instead of warn when that check
+  cannot run; the pak itself is still compiled against the 2.2 jar.
+- The default is a skip: with no 9.1.1.0100 jar, or no JDK 25+ (looked for
+  on PATH, `JAVA_HOME`, `JAVA_HOME_<N>_X64`, or set
+  `VCFCF_SDK_COMPAT_JAVAC=/path/to/javac`), a plain `build-sdk` prints a
+  warning box and checks nothing against 9.1.1. A `--release` build under
+  GitHub Actions also emits a `::warning::` annotation.
+- The primary compile takes exactly one SDK jar: a second
+  `vrops-adapters-sdk*.jar` beside it in `adapter_runtime/` now stops the
+  build.
+
+Version note: 1.0.13 is the defect-gate round (PR #246) and 1.0.14 the
+adapter-framework round (PR #248); this is 1.0.15.

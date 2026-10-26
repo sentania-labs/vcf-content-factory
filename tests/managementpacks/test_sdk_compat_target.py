@@ -664,8 +664,9 @@ def _removal_source(tmp_path: Path) -> Path:
 
 
 @needs_javac
-def test_framework_pass_fails_on_a_removal_warning(runtime, tmp_path):
-    _stub_sdk_jar(tmp_path, runtime / sdk_builder._SDK_COMPAT_JAR_NAME, ["Present"])
+def test_framework_pass_fails_on_a_removal_warning(runtime, tmp_path, monkeypatch):
+    jar = _stub_sdk_jar(tmp_path, runtime / sdk_builder._SDK_COMPAT_JAR_NAME, ["Present"])
+    _register_lines(monkeypatch, {"9.1.1.0100": jar})
     src = _removal_source(tmp_path)
     with pytest.raises(SdkBuildError) as exc:
         sdk_builder._sdk_compat_check(
@@ -675,8 +676,9 @@ def test_framework_pass_fails_on_a_removal_warning(runtime, tmp_path):
 
 
 @needs_javac
-def test_adapter_pass_still_only_prints_a_removal_warning(runtime, tmp_path, capsys):
-    _stub_sdk_jar(tmp_path, runtime / sdk_builder._SDK_COMPAT_JAR_NAME, ["Present"])
+def test_adapter_pass_still_only_prints_a_removal_warning(runtime, tmp_path, monkeypatch, capsys):
+    jar = _stub_sdk_jar(tmp_path, runtime / sdk_builder._SDK_COMPAT_JAR_NAME, ["Present"])
+    _register_lines(monkeypatch, {"9.1.1.0100": jar})
     src = _removal_source(tmp_path)
     assert sdk_builder._sdk_compat_check(
         [src, src.with_name("Doomed.java")], [], "framework + adapter source") is True
