@@ -122,14 +122,62 @@ Because UUIDs live in the YAML, the loader can resolve references by
 name at load time without round-tripping to the server:
 
 - **Views/dashboards referencing a super metric**: YAML uses
-  `attribute: supermetric:"<name>"`; loader looks up the super metric
-  YAML by name, reads its `id`, emits `sm_<id>`.
+  `attribute: supermetric:"<name>"`; the renderer looks up the super
+  metric YAML by name, reads its `id`, emits `sm_<id>`. The name is
+  scoped to the view's content set (issue #270), see below.
 - **Super metric formulas referencing another super metric**: YAML
   uses `@supermetric:"<name>"` inside the formula string. This one is
   **not** resolved at validate time: it is rewritten to
   `Super Metric|sm_<id>` at emit/push time by
   `vcfcf_supermetrics.crossref` (see the section above), which fails
   loudly if the referenced name doesn't resolve.
+
+### Which super metric a `supermetric:"<name>"` column means
+
+Display names are unique inside one content set, not across sets: the
+factory's `content/`, each `third_party/<project>/`, and each
+`content/sdk-adapters/<pak>/` is its own set (a pak sits under `content/`
+but is keyed by its path, not by its `"factory"` provenance). A column
+resolves in this order (issue #270):
+
+1. the view's own content set;
+2. then the factory set (`content/supermetrics`), so a third-party or pak
+   view may name a factory SM;
+3. otherwise the column is an error. Another third-party project's SMs are
+   never in reach.
+
+Every failure is loud, before anything is imported or written: an
+unresolved name; two different SMs of that name in the set that answers
+(ambiguous); a set whose SM YAML did not load (no silent fall-through to a
+same-named factory SM); an SM whose YAML has no `id` yet (run validate to
+mint one).
+
+Where each path gets its SMs:
+
+- `vcfcf_dashboards package` / `sync` and the bundle views/dashboards
+  handlers: the corpus is `--supermetrics-dir` (default
+  `content/supermetrics`), `content/supermetrics`, every
+  `third_party/*/supermetrics` and every `content/sdk-adapters/*/supermetrics`,
+  loaded read-only (`vcfcf_dashboards.sm_columns`). One resolver
+  (`vcfcf_core.supermetrics.column_resolver.SmColumnResolver`) feeds the
+  renderer, the pre-import referent check (#154) and the post-import
+  walker, so the three cannot disagree.
+- Bundle and discrete builds: the bundle's own SM list (`sm_id_map` over
+  `bundle.sm_paths`); two different SMs of one name in that list are an
+  error.
+- SDK pak builds and `validate-sdk`: only the pak's
+  `bundled_content.supermetrics`, an empty scope when it bundles none; a
+  column naming any other SM fails the build (no fallback to
+  `content/supermetrics`, which the pak does not ship).
+
+The post-import walker (`walk_and_check`, `vcfcf_dashboards sync`) treats a
+name-form column as a super metric reference (issue #266): it is bound
+through the same resolver and checked and enabled on the Default Policy
+like an `sm_<uuid>` column, and it is never sent to the describe endpoint as
+an OOTB metric. A name the repo does not know is looked up on the target by
+name. Bundle and pak installers (`install.py`, `install.ps1`, the pak
+installer) do not walk columns: the shipped view XML already carries
+`sm_<uuid>`, and the bundle's own SMs are enabled from its manifest.
 
 ## Cross-reference syntax quick reference
 
@@ -140,7 +188,7 @@ validate or sync time.
 | From → To | YAML syntax | Loader output | When resolved |
 |---|---|---|---|
 | SM formula → other SM | `@supermetric:"<exact name>"` | `Super Metric|sm_<uuid>` | **emit/push** (`crossref`), not `validate` |
-| View column → SM | `supermetric:"<exact name>"` in `attribute:` | `sm_<uuid>` in `attributeKey` | `validate` (dashboard loader) |
+| View column → SM | `supermetric:"<exact name>"` in `attribute:` | `sm_<uuid>` in `attributeKey` | render (package / sync / build), scoped to the view's content set then the factory (see above) |
 | Dashboard widget → View | `view: "<exact view name>"` | view UUID in widget config | `validate` (dashboard loader) |
 | Dashboard widget → Dashboard (drill-down) | `navigations: [{dashboard: "<exact dashboard name>", widgets: [<target local ids>]}]` | `dashboardNavigations`: target dashboard UUID plus target widget UUIDs | `validate` (dashboards CLI, against `content/dashboards/` + `third_party/*/dashboards/`) and render; a bundle must carry every target. Raw `dashboard_id: <uuid>` only for dashboards the factory does not own. See `../wire-formats/dashboard_navigations.md` |
 | Alert → Symptom | `name: "<exact symptom name>"` in symptom set | symptom definition ID | `sync` (alert installer, via `GET /api/symptomdefinitions`) |

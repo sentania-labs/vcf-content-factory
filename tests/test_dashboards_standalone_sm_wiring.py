@@ -3,9 +3,10 @@ view columns after M2 row 2.
 
 The renderer no longer scans ``content/supermetrics`` itself; the
 standalone CLI (``cmd_package``) and the bundle sync ``ViewsHandler`` pass
-``sm_id_map()`` into ``build_import_zip``. A dropped ``sm_map=`` would
-raise (unresolved reference), not render blank, but nothing else proves the
-map reaches the zip. Both tests load a view with an SM column, point the
+the content-set resolver (``sm_columns``, issue #270) into
+``build_import_zip``. A dropped ``sm_resolver=`` would raise (unresolved
+reference), not render blank, but nothing else proves the resolver reaches
+the zip. Both tests load a view with an SM column, point the
 working directory at a ``content/supermetrics`` tree under ``tmp_path``,
 and read ``Super Metric|sm_<uuid>`` back out of ``views.zip/content.xml``.
 
@@ -18,8 +19,6 @@ import uuid
 import zipfile
 from pathlib import Path
 from types import SimpleNamespace
-
-import pytest
 
 from vcfcf_dashboards import cli as dash_cli
 from vcfcf_dashboards import handler as dash_handler
@@ -112,5 +111,8 @@ def test_cmd_package_without_sm_tree_reports_the_unresolved_reference(tmp_path, 
         views_dir="content/views", dashboards_dir="content/dashboards",
         output=str(tmp_path / "out.zip"),
     )
-    with pytest.raises(ValueError, match="could not be resolved to a UUID"):
-        dash_cli.cmd_package(args)
+    assert dash_cli.cmd_package(args) == 1
+    err = capsys.readouterr().err
+    assert f'names super metric "{_SM_NAME}"' in err
+    assert "in no loaded super metric YAML" in err
+    assert not (tmp_path / "out.zip").exists()

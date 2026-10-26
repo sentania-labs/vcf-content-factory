@@ -55,11 +55,13 @@ Public API — offline (no client required)
       super metric or a view instead of a dashboard.  Seeds first, then
       referents in discovery order; errors name the missing referent.
 
-  supermetrics_used_by(views, dashboards, all_sms, column_sms=None) -> (list[SuperMetricDef], list[str])
+  supermetrics_used_by(views, dashboards, all_sms, column_resolver=None) -> (list[SuperMetricDef], list[str])
       SMs in all_sms that view columns and dashboard widgets name, plus
       their @supermetric referents in all_sms, and the references all_sms
       could not resolve; feeds the pre-import referent check on the
-      dashboards sync path (#154).
+      dashboards sync path (#154).  A supermetric:"<name>" column resolves
+      through column_resolver (an SmColumnResolver, the one the renderer
+      uses), scoped to the view's own content set then the factory (#270).
 
 Project-scope semantics
 -----------------------
@@ -123,6 +125,9 @@ class SmRef:
     sm_id: str
     name: str  # may be empty if only UUID available
     source: str
+    # The token that named the SM, for messages: "@supermetric" (a formula
+    # cross-reference) or "supermetric" (a view column, issue #266).
+    token: str = "@supermetric"
 
 
 @dataclass
@@ -280,8 +285,26 @@ def extract_refs_from_supermetrics(
 
 def extract_refs_from_views(
     views: "List[ViewDef]",
+    column_resolver=None,
 ) -> Tuple[List[SmRef], List[MetricRef]]:
-    """Extract SM and OOTB metric references from view column attributes."""
+    """Extract SM and OOTB metric references from view column attributes.
+
+    A ``supermetric:"<name>"`` column (any token case, optional ``@``, the
+    renderer's ``_SM_COLUMN_REF_RE``) is a super metric reference, never an
+    OOTB metric (issue #266).  ``column_resolver`` (an
+    ``SmColumnResolver``, the one the renderer used) binds it to the SM of
+    the view's own content set, then the factory; the ref carries that SM's
+    id and name.  When there is no resolver, or the name is not in it, the
+    ref carries the name only and the live walker looks it up on the target
+    by name.  An ambiguous name, or a content set whose SM YAML did not
+    load, propagates the resolver's ``SmColumnResolutionError``: the caller
+    checked the columns before the import, so reaching here with one is a
+    bug, not a lookup to guess at.
+    A malformed name-form token (``supermetric: "x"``) yields nothing: the
+    renderer rejects it, so no column of that shape reaches the instance.
+    """
+    from ..supermetrics.column_resolver import SM_COLUMN_PREFIX_RE, column_sm_name
+
     sm_refs: List[SmRef] = []
     metric_refs: List[MetricRef] = []
     for v in views:
@@ -289,12 +312,25 @@ def extract_refs_from_views(
         rk = v.resource_kind or ""
         for col in v.columns:
             attr = col.attribute.strip()
+            source = f"view '{v.name}' col '{col.display_name}'"
+            if SM_COLUMN_PREFIX_RE.match(attr):
+                name = column_sm_name(attr)
+                if name is None:
+                    continue
+                sm = column_resolver.resolve(v, name) if column_resolver is not None else None
+                sm_refs.append(SmRef(
+                    sm_id=((getattr(sm, "id", "") or "").lower() if sm is not None else ""),
+                    name=name,
+                    source=source,
+                    token="supermetric",
+                ))
+                continue
             sm_uuid = _extract_sm_uuid(attr)
             if sm_uuid:
                 sm_refs.append(SmRef(
                     sm_id=sm_uuid,
                     name="",
-                    source=f"view '{v.name}' col '{col.display_name}'",
+                    source=source,
                 ))
             elif attr and not attr.startswith("Super Metric|"):
                 # Plain OOTB metric key — strip namespace prefix if present
@@ -524,7 +560,7 @@ def supermetrics_used_by(
     views: "List",
     dashboards: "List",
     all_sms: "List",
-    column_sms: "Optional[dict]" = None,
+    column_resolver=None,
 ) -> "Tuple[List, List[str]]":
     """Super metrics in ``all_sms`` that ``views`` and ``dashboards`` use.
 
@@ -541,21 +577,24 @@ def supermetrics_used_by(
     resolves as a super metric (any token case, optional ``@``) is a seed
     here too.
 
-    ``column_sms`` (``{name: SuperMetricDef}``) is the set the renderer will
-    resolve a ``supermetric:"<name>"`` column against for this import (the
-    SMs behind its ``sm_map``).  When given, a name-form column resolves
-    only through it, so the check reads the formula the import uses even
-    when another project defines an SM of the same name.  When None, the
-    name is picked from ``all_sms`` by the view's provenance.
+    ``column_resolver`` (an ``SmColumnResolver``) is the resolver the
+    renderer uses for this import (issue #270): a ``supermetric:"<name>"``
+    column resolves through it, the view's own content set first, then the
+    factory, so the check reads the formula of the SM the import binds even
+    when another set defines one of the same name.  When None, one is built
+    over ``all_sms`` keyed by provenance.  An ambiguous name (or a set that
+    did not load) raises its ``SmColumnResolutionError``.
 
     Returns ``(supermetrics, unresolved)``: ``unresolved`` names every view
     column or widget whose SM is not in ``all_sms``, so its referents could
     not be checked from the repo; the caller decides how loud to be.
     """
     from ..dashboards.render import _SM_COLUMN_REF_RE
+    from ..supermetrics.column_resolver import SmColumnResolver
 
     by_id = {(sm.id or "").lower(): sm for sm in all_sms if getattr(sm, "id", "")}
-    by_name = _sm_candidates_by_name(all_sms)
+    if column_resolver is None:
+        column_resolver = SmColumnResolver(all_sms)
     seeds: "List" = []
     seen: Set[str] = set()
     unresolved: List[str] = []
@@ -567,6 +606,9 @@ def supermetrics_used_by(
             seeds.append(sm)
 
     view_refs, _ = extract_refs_from_views(views)
+    # Name-form columns are resolved through column_resolver in the loop
+    # below; keep only the sm_<uuid> column refs here.
+    view_refs = [r for r in view_refs if r.token != "supermetric"]
     dash_refs, _ = extract_refs_from_dashboards(dashboards)
     for ref in view_refs + dash_refs:
         sm = by_id.get(ref.sm_id.lower())
@@ -579,12 +621,7 @@ def supermetrics_used_by(
             m = _SM_COLUMN_REF_RE.match((col.attribute or "").strip())
             if not m:
                 continue
-            if column_sms is not None:
-                sm = column_sms.get(m.group(1))
-            else:
-                sm = _pick_sm_by_name(
-                    by_name.get(m.group(1), []), getattr(view, "provenance", "")
-                )
+            sm = column_resolver.resolve(view, m.group(1))
             if sm is None:
                 unresolved.append(
                     f"view '{view.name}' col '{col.display_name}' references "
