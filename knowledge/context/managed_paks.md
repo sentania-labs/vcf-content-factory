@@ -178,9 +178,13 @@ experiemnts that we shouldn't worry about for now. I'm not sure how we
 handle/mark this so it doesn't keep coming up."
 
 Three repos, one experiment: the Java rewrite of
-vmbro/VCF-Operations-vCommunity and its three-adapter split. Open issues and
-the unsigned-pak README PRs on those repos stay as they are; nothing further
-is scheduled. The GitHub repos are not archived; that is Scott's call.
+vmbro/VCF-Operations-vCommunity and its three-adapter split. The three
+unsigned-pak README PRs were squash-merged 2026-10-26 on Scott's word
+("just merge the outstanding work on them"); no open PRs remain, open
+issues stay as they are, nothing further is scheduled. The GitHub repos
+are not archived; that is Scott's call, and archiving is the one step that
+makes retirement visible to every tool, since an archived repo refuses
+merges and carries the flag in every listing.
 
 #### vcommunity
 

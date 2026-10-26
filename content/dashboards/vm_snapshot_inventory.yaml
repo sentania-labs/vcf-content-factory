@@ -6,15 +6,9 @@ description: 'Fleet-wide VM snapshot inventory. Row 1 answers "how bad is it?" w
   fan-out; see content/views/vm_snapshot_inventory.yaml for the ghost-row and Creator/Description-disabled-by-default
   caveats).
 
-  Sort note: the view''s own note recommends sorting the embedded table by the flat
-  "Total Snapshot Space (GB)" column descending as the best available proxy (the instanced
-  Age column has no single attribute key and cannot be a sort target). However, initial
-  sort order for View widgets is not a loader/wire-format-supported field in this
-  framework (see knowledge/context/authoring/view_dashboard_design_guide.md, "What
-  views and dashboards cannot do", Initial sort order in YAML is not configurable,
-  same limitation noted in oversized_vms_reclaimable.yaml and the other views that
-  carry this comment). The dashboard cannot force this sort at import time; users
-  set it in the UI on first view.
+  Sort: the view opens sorted by Total Snapshot Space (GB) descending, so the VMs
+  holding the most snapshot space come first, with each VM''s snapshots grouped
+  together. The admin can re-sort by clicking any column header.
 
   '
 id: 9c6a3e0a-2c1b-4d7e-9b0a-9f4b6a2e5d13
