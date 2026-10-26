@@ -287,11 +287,6 @@ public class CertificateReviewTest {
         throw (T) t;
     }
 
-    /** The error Thread.stop throws, made by name (the type is deprecated for removal). */
-    static Error threadKill() throws Exception {
-        return (Error) Class.forName("java.lang.ThreadDeath").getDeclaredConstructor().newInstance();
-    }
-
     /** JDK shape: the handshake exception caused by the name check's CertificateException. */
     static Exception jdkNameMismatch() {
         Exception e = new javax.net.ssl.SSLHandshakeException(
@@ -841,6 +836,9 @@ public class CertificateReviewTest {
 
     private static void testWrappersRethrowThreadKillAndVmError() throws Exception {
         for (Throwable fatal : new Throwable[] {threadKill(), new StackOverflowError("sim")}) {
+            if (fatal == null) {
+                continue;  // a JDK without java.lang.ThreadDeath: nothing can throw it
+            }
             String kind = fatal.getClass().getSimpleName();
             MessageHookAdapter a = allocate(MessageHookAdapter.class);
             a.toThrow = fatal;
