@@ -26,12 +26,17 @@
 #      adapter's own repo; Broadcom JARs are not available in public CI and
 #      must not ship in the buildkit tarball.
 #   5. Run build-buildkit to assemble the tarball (jar-free, see buildkit.py).
-#   6. Create the versioned GitHub Release and attach the tarball and its
-#      SHA-256 sidecar (<tarball>.sha256, sha256sum format).
+#   6. Create the versioned GitHub Release and attach the tarball, its
+#      SHA-256 sidecar (<tarball>.sha256, sha256sum format) and SHA256SUMS
+#      (same format; the stable name a pinned consumer verifies against).
 #   7. Maintain the floating sdk-buildkit-v1 release (clobber tarball and
 #      sidecar, prune stale ones, retag).
 #
 # Consumers verify a download with: sha256sum -c sdk-buildkit-X.Y.Z.tgz.sha256
+# Pak repos pinning an exact kit (sdk-buildkit-vX.Y.Z) commit that release's
+# SHA256SUMS and run sha256sum -c against the committed copy, so a replaced
+# asset fails the build. SHA256SUMS is on the versioned release only; the
+# floating release keeps just the tarball and its sidecar.
 #
 # Note: no JDK setup step — nothing compiles in this workflow.
 
@@ -46,6 +51,14 @@ on:
 
 permissions:
   contents: write   # needed for gh release create / edit / upload
+
+# Per-ref: serializes re-runs of the same version tag and never cancels a
+# publish half way. It does NOT serialize two different version tags; those
+# can still both reach the floating step, which therefore only moves the
+# floating release forward (see "Maintain floating major release").
+concurrency:
+  group: publish-buildkit-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   publish-buildkit:
@@ -71,6 +84,16 @@ jobs:
         with:
           # Fetch full history so the builder can generate CHANGELOG from git log
           fetch-depth: 0
+
+      - name: Refuse a tag that is not on main
+        # A versioned release is what pak repos pin, so a tag pushed from a
+        # stray branch must not mint a pinnable kit.
+        run: |
+          git fetch --no-tags origin main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::${GITHUB_REF_NAME} (${GITHUB_SHA}) is not on main; refusing to publish."
+            exit 1
+          fi
 
       - name: Set up Python 3.11
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
@@ -143,6 +166,17 @@ jobs:
           test -f "${{ steps.ver.outputs.tarball }}.sha256"
           sha256sum -c "${{ steps.ver.outputs.tarball }}.sha256"
 
+      - name: Write SHA256SUMS for the versioned release
+        # Pinned consumers commit this file and verify the exact kit against
+        # it. Written fresh here (one line, the tarball), checked, and
+        # compared with the builder's sidecar, so it can only name the
+        # tarball this run uploads.
+        run: |
+          cd dist/
+          sha256sum "${{ steps.ver.outputs.tarball }}" > SHA256SUMS
+          sha256sum -c SHA256SUMS
+          test "$(awk '{print $1}' SHA256SUMS)" = "$(awk '{print $1}' "${{ steps.ver.outputs.tarball }}.sha256")"
+
       - name: Create versioned GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -159,6 +193,7 @@ jobs:
           gh release create "${{ github.ref_name }}" \
             "dist/${{ steps.ver.outputs.tarball }}" \
             "dist/${{ steps.ver.outputs.tarball }}.sha256" \
+            "dist/SHA256SUMS" \
             --repo "${{ github.repository }}" \
             --title "sdk-buildkit v${{ steps.ver.outputs.version }}" \
             --notes-file /tmp/release-notes.md
@@ -171,6 +206,19 @@ jobs:
         run: |
           FLOATING="${{ steps.ver.outputs.floating_tag }}"
           TARBALL="dist/${{ steps.ver.outputs.tarball }}"
+          VERSION="${{ steps.ver.outputs.version }}"
+          MAJOR="${{ steps.ver.outputs.major }}"
+
+          # Only move forward: a re-run of an older tag, or an older tag whose
+          # run finishes after a newer one, must not pull the floating major
+          # back. Compare against every published vMAJOR.Y.Z tag.
+          git fetch --tags --force origin
+          HIGHEST="$(git tag -l "sdk-buildkit-v${MAJOR}.*.*" | sed 's/^sdk-buildkit-v//' \
+            | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)"
+          if [ "$HIGHEST" != "$VERSION" ]; then
+            echo "v${VERSION} is not the highest ${FLOATING} release (v${HIGHEST}); leaving ${FLOATING} where it is."
+            exit 0
+          fi
 
           # Re-point the floating tag to this commit (force-create locally,
           # then force-push — safe because this is a managed floating pointer,

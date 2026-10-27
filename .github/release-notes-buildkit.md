@@ -37,10 +37,28 @@ tarball (see redistribution survey 2026-06-09).
 - **Floating major**: `@FLOATING_TAG@`
   (always points at the latest backwards-compatible release of this major)
 
+To pin, download this release's `SHA256SUMS` once, commit it to the pak
+repo (for example `ci/sdk-buildkit.SHA256SUMS`), and verify every download
+against the committed copy, never one fetched alongside the tarball:
+
+```yaml
+- name: Download and verify the pinned buildkit
+  env:
+    GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  run: |
+    gh release download @REF_NAME@ \
+      --repo sentania-labs/vcf-content-factory \
+      --pattern 'sdk-buildkit-@VERSION@.tgz'
+    sha256sum -c ci/sdk-buildkit.SHA256SUMS
+    tar xzf sdk-buildkit-@VERSION@.tgz
+```
+
 ## Checksum
 
 Each release carries `sdk-buildkit-<version>.tgz.sha256` (sha256sum
-format) next to the tarball. Download both and run `sha256sum -c` before
+format) next to the tarball. Versioned releases since 1.0.21 also carry
+`SHA256SUMS` (same format), the file an exact pin commits. Download the
+tarball and its `.sha256` sidecar and run `sha256sum -c` before
 extracting. A pattern of `sdk-buildkit-*.tgz` alone does not fetch the
 checksum file.
 
