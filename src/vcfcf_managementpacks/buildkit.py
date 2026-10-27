@@ -89,7 +89,7 @@ from typing import Optional
 # Version constant: bump when kit contents change in a meaningful way
 # ---------------------------------------------------------------------------
 
-BUILDKIT_VERSION = "1.0.19"
+BUILDKIT_VERSION = "1.0.20"
 
 # ---------------------------------------------------------------------------
 # Source paths (relative to this file's parent = vcfcf_managementpacks/)
@@ -198,10 +198,10 @@ _IMPORT_REWRITES: dict[str, list[tuple[str, str]]] = {
             r"from vcfcf_dashboards\.render import render_view_def_fragments",
             "from .dashboard_render import render_view_def_fragments",
         ),
-        # from vcfcf_supermetrics import crossref as _crossref  (module-level;
+        # from vcfcf_core.supermetrics import crossref as _crossref  (module-level;
         # the shared @supermetric:"<name>" formula cross-reference resolver)
         (
-            r"from vcfcf_supermetrics import crossref as _crossref",
+            r"from vcfcf_core\.supermetrics import crossref as _crossref",
             "from . import sm_crossref as _crossref",
         ),
         # from vcfcf_supermetrics.loader import sm_id_map as _sm_id_map  (inline at
