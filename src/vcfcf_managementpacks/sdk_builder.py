@@ -2580,54 +2580,13 @@ def _write_outer_pak(
     reports = reports or []
     recommendations = recommendations or []
 
-    # --- Alert→symptom cross-reference validation ---
-    # Every symptom referenced by any alert must appear in the bundled symptoms
-    # list.  Both sides derive SymptomDefinition IDs from the same formula
-    # (_symptom_id in vcfcf_alerts/render.py), so the IDs are consistent by
-    # construction — what we validate here is that the referenced name exists
-    # so the render doesn't produce a dangling ref.
-    if alerts:
-        from vcfcf_alerts.render import _symptom_id as _compute_symptom_id
-        symptom_names: set = {s.name for s in symptoms}
-        for alert in alerts:
-            sets = (alert.symptom_sets or {}).get("sets") or []
-            for s in sets:
-                for sym_ref in (s.get("symptoms") or []):
-                    sym_name = sym_ref.get("name", "")
-                    if sym_name and sym_name not in symptom_names:
-                        # Determine the slug-form ID the renderer would generate
-                        # as a fallback hint (actual ID may be SymptomDefinition-<uuid>
-                        # if the symptom YAML carries an id: field).
-                        expected_id = _compute_symptom_id(alert.adapter_kind, sym_name)
-                        raise SdkBuildError(
-                            f"Alert '{alert.name}' references symptom "
-                            f"'{sym_name}' (SymptomDefinition-<uuid> or fallback "
-                            f"'{expected_id}') "
-                            f"but that symptom is not listed in "
-                            f"bundled_content.symptoms.  Add the symptom YAML "
-                            f"path to bundled_content.symptoms in adapter.yaml, "
-                            f"or remove the reference from the alert."
-                        )
-
-    # --- Alert→recommendation cross-reference validation ---
-    # Every [VCF Content Factory] recommendation referenced by any bundled alert
-    # must appear in the bundled recommendations list.  Non-factory-prefix names
-    # are treated as built-in references and are not validated here (same policy
-    # as resolve_alert_recommendations in vcfcf_alerts/loader.py).
-    if alerts:
-        recommendation_by_name = {r.name: r for r in recommendations}
-        for alert in alerts:
-            for rec_ref in (getattr(alert, "recommendations", None) or []):
-                rec_name = rec_ref.name if hasattr(rec_ref, "name") else str(rec_ref)
-                if rec_name.startswith("[VCF Content Factory]") and rec_name not in recommendation_by_name:
-                    raise SdkBuildError(
-                        f"Alert '{alert.name}' references recommendation "
-                        f"'{rec_name}' but that recommendation is not listed in "
-                        f"bundled_content.recommendations in adapter.yaml.  "
-                        f"Add the recommendation YAML path to "
-                        f"bundled_content.recommendations, or remove the reference "
-                        f"from the alert."
-                    )
+    # --- Alert→symptom / alert→recommendation cross-reference validation ---
+    # Shared with validate-sdk and the build-sdk pre-compile pass
+    # (check_bundled_content_references); repeated here so a direct caller
+    # of _write_outer_pak cannot emit a dangling reference.
+    _ref_errors = check_bundled_content_references(symptoms, alerts, recommendations)
+    if _ref_errors:
+        raise SdkBuildError("\n".join(_ref_errors))
 
     has_bundled_content = bool(views or dashboards or supermetrics or symptoms or alerts or reports or recommendations)
 
@@ -4160,6 +4119,14 @@ def build_sdk_pak(project_dir: Path, output_dir: Optional[Path] = None,
         raise SdkBuildError("\n".join(_naming_errors))
     for _w in _naming_warnings:
         print(f"  build-sdk: warning: {_w}", file=sys.stderr)
+    # Bundled symptom/alert/recommendation references and describe.xml
+    # conformance: the same check validate-sdk runs, before the compile.
+    _content_errors = check_bundled_content(project, (
+        bundled_views, bundled_dashboards, bundled_supermetrics, bundled_symptoms,
+        bundled_alerts, bundled_reports, bundled_recommendations,
+    ), project_dir / "describe.xml")
+    if _content_errors:
+        raise SdkBuildError("\n".join(_content_errors))
 
     # Resolve owning-adapter binding info for content renderers.
     # owning_adapter_kind — the pak's adapter_kind key (e.g. "vcfcf_compliance").
@@ -4551,6 +4518,318 @@ def _validate_describe_symptom_sets(describe_xml: Path) -> List[str]:
     return errors
 
 
+# ---------------------------------------------------------------------------
+# Bundled symptom / alert checks (shared by validate-sdk and build-sdk)
+# ---------------------------------------------------------------------------
+
+def _bundled_src(obj) -> str:
+    """Return the YAML path a bundled object came from, or its name."""
+    src = getattr(obj, "source_path", None) or getattr(obj, "source_file", None)
+    return str(src) if src else f"'{getattr(obj, 'name', '?')}'"
+
+
+def check_bundled_content_references(symptoms: list, alerts: list,
+                                     recommendations: list) -> List[str]:
+    """Return an error per alert reference the pak does not bundle.
+
+    Every symptom an alert's symptom sets name must be in
+    ``bundled_content.symptoms``; every ``[VCF Content Factory]``
+    recommendation it names must be in ``bundled_content.recommendations``
+    (other names are built-ins, the same policy as
+    ``resolve_alert_recommendations`` in the alerts loader).  validate-sdk,
+    build-sdk's pre-compile pass and ``_write_outer_pak`` all call this one
+    function, so the two commands cannot drift apart.
+    """
+    errors: List[str] = []
+    if not alerts:
+        return errors
+    from vcfcf_alerts.render import _symptom_id as _compute_symptom_id
+    symptom_names = {s.name for s in (symptoms or [])}
+    recommendation_names = {r.name for r in (recommendations or [])}
+    for alert in alerts:
+        sets = (alert.symptom_sets or {}).get("sets") or []
+        for s in sets:
+            for sym_ref in (s.get("symptoms") or []):
+                sym_name = sym_ref.get("name", "")
+                if sym_name and sym_name not in symptom_names:
+                    # The renderer's slug-form fallback ID, as a hint (the
+                    # real ID is SymptomDefinition-<uuid> when the symptom
+                    # YAML carries an id: field).
+                    expected_id = _compute_symptom_id(alert.adapter_kind, sym_name)
+                    errors.append(
+                        f"Alert '{alert.name}' ({_bundled_src(alert)}) references "
+                        f"symptom '{sym_name}' (SymptomDefinition-<uuid> or "
+                        f"fallback '{expected_id}') but that symptom is not "
+                        f"listed in bundled_content.symptoms.  Add the symptom "
+                        f"YAML path to bundled_content.symptoms in adapter.yaml, "
+                        f"or remove the reference from the alert."
+                    )
+        for rec_ref in (getattr(alert, "recommendations", None) or []):
+            rec_name = rec_ref.name if hasattr(rec_ref, "name") else str(rec_ref)
+            if (rec_name.startswith("[VCF Content Factory]")
+                    and rec_name not in recommendation_names):
+                errors.append(
+                    f"Alert '{alert.name}' ({_bundled_src(alert)}) references "
+                    f"recommendation '{rec_name}' but that recommendation is "
+                    f"not listed in bundled_content.recommendations in "
+                    f"adapter.yaml.  Add the recommendation YAML path to "
+                    f"bundled_content.recommendations, or remove the reference "
+                    f"from the alert."
+                )
+    return errors
+
+
+# Key groups the platform adds to resources of every adapter kind, so a
+# symptom may name them although no describe.xml declares them.  Evidence:
+# the reference corpus and knowledge/context/adapter_describe_cache, where
+# the MSSQL management pack's statkeys carry badge|, System Attributes| and
+# OnlineCapacityAnalytics| (a non-VMware kind, so platform-generated).
+# "Capacity Analytics Generated" is the UI display name of
+# OnlineCapacityAnalytics, not a key; it gets its own hint below.
+_PLATFORM_METRIC_GROUPS = (
+    "badge", "System Attributes", "Super Metric", "OnlineCapacityAnalytics",
+)
+_PLATFORM_PROPERTY_GROUPS = ("System Properties",)
+_PLATFORM_DISPLAY_GROUPS = {"Capacity Analytics Generated": "OnlineCapacityAnalytics"}
+
+_EXPR_ADAPTER_KIND_RE = re.compile(r"adapterkind\s*=\s*([^,}\s]+)", re.IGNORECASE)
+
+
+def _describe_attribute_index(describe_xml: Path) -> dict:
+    """Index describe.xml for the bundled symptom checks.
+
+    Returns ``{"adapter_kind": str, "kinds": {resource_kind: {key: "metric" |
+    "property"}}, "foreign_adapter_kinds": set}``.  A key is the
+    ``|``-joined ResourceGroup path plus the ResourceAttribute key, the same
+    form a symptom condition names; ComputedMetric keys count as metrics.
+    ``foreign_adapter_kinds`` holds every other adapter kind describe.xml
+    names (an ``adapterKind`` attribute, e.g. a stitched SymptomDefinition on
+    VMWARE HostSystem, or ``adapterkind=`` in a ComputedMetric expression).
+
+    Raises ET.ParseError / OSError when the file cannot be read.
+    """
+    root = ET.parse(describe_xml).getroot()
+    own = root.get("key", "")
+    kinds: Dict[str, Dict[str, str]] = {}
+    foreign: set = set()
+
+    def _walk_attrs(elem, prefix: str, out: Dict[str, str]) -> None:
+        for child in elem:
+            name = _xml_local_name(child.tag)
+            if name == "ResourceGroup":
+                gkey = child.get("key", "")
+                _walk_attrs(child, f"{prefix}{gkey}|" if gkey else prefix, out)
+            elif name == "ResourceAttribute":
+                akey = child.get("key", "")
+                if akey:
+                    is_prop = child.get("isProperty", "false").lower() == "true"
+                    out[prefix + akey] = "property" if is_prop else "metric"
+            elif name == "ComputedMetrics":
+                for cm in child:
+                    if _xml_local_name(cm.tag) == "ComputedMetric" and cm.get("key"):
+                        out.setdefault(prefix + cm.get("key"), "metric")
+
+    for elem in root.iter():
+        name = _xml_local_name(elem.tag)
+        if name == "ResourceKind" and elem.get("key"):
+            attrs: Dict[str, str] = {}
+            _walk_attrs(elem, "", attrs)
+            kinds[elem.get("key")] = attrs
+        ak = elem.get("adapterKind")
+        if ak and ak != own:
+            foreign.add(ak)
+        expr = elem.get("expression")
+        if expr:
+            for m in _EXPR_ADAPTER_KIND_RE.finditer(expr):
+                if m.group(1) != own:
+                    foreign.add(m.group(1))
+    return {"adapter_kind": own, "kinds": kinds, "foreign_adapter_kinds": foreign}
+
+
+def _strip_instance_names(key: str) -> str:
+    """``Group:inst|attr`` -> ``Group|attr`` (instanced metric keys)."""
+    parts = key.split("|")
+    return "|".join([p.split(":", 1)[0] for p in parts[:-1]] + parts[-1:])
+
+
+def check_bundled_content_against_describe(
+    project: SdkProjectDef,
+    symptoms: list,
+    alerts: list,
+    describe_xml: Path,
+) -> List[str]:
+    """Check bundled symptoms and alerts against the pak's describe.xml.
+
+    Each bundled symptom on this pak's adapter kind must name a resource kind
+    describe.xml declares, a condition key declared on that resource kind,
+    and a condition type that matches the declaration (``metric_static`` /
+    ``metric_dynamic`` on a metric, ``property`` on an ``isProperty="true"``
+    attribute).  Each bundled alert on this pak's adapter kind must name a
+    declared resource kind, and every symptom in a ``defined_on: SELF`` set
+    must sit on the alert's own adapter and resource kind.  PARENT, CHILD,
+    DESCENDANT and ANCESTOR sets evaluate a related object, whose kind is a
+    runtime relationship describe.xml does not declare, so those symptoms are
+    checked only on their own.
+
+    Foreign-kind content: a symptom or alert on another adapter kind (e.g.
+    VMWARE HostSystem, where the pak pushes metrics onto vSphere objects, or
+    a built-in VMWARE metric the pak's alert watches) is accepted when this
+    pak names that kind: in adapter.yaml ``content_foreign_adapter_kinds``
+    (the explicit opt-in), in describe.xml, or as a ``cross_mp_edges``
+    ``foreign_adapter_kind``.  Its keys live in the other adapter's
+    describe, which this pak does not carry, so they are not checked.  Any
+    other adapter kind is an error (almost always a typo).
+
+    Returns a list of error strings (empty = clean).
+    """
+    errors: List[str] = []
+    if not symptoms and not alerts:
+        return errors
+    try:
+        index = _describe_attribute_index(describe_xml)
+    except (ET.ParseError, OSError) as exc:
+        return [f"describe.xml could not be parsed for the bundled symptom check: {exc}"]
+
+    own = project.adapter_kind
+    kinds = index["kinds"]
+    foreign = set(index["foreign_adapter_kinds"])
+    for edge in (getattr(project, "cross_mp_edges", None) or []):
+        if edge.foreign_adapter_kind:
+            foreign.add(edge.foreign_adapter_kind)
+    foreign.update(getattr(project, "content_foreign_adapter_kinds", None) or [])
+    foreign.discard(own)
+
+    def _adapter_kind_error(what: str, obj) -> Optional[str]:
+        ak = obj.adapter_kind
+        if ak == own or ak in foreign:
+            return None
+        known = f"; foreign kinds it names: {', '.join(sorted(foreign))}" if foreign else ""
+        return (
+            f"{what} '{obj.name}' ({_bundled_src(obj)}): adapter_kind '{ak}' is "
+            f"not this pak's adapter kind '{own}'{known}.  If the content "
+            f"really targets {ak} objects, list it in adapter.yaml: "
+            f"content_foreign_adapter_kinds: [{ak}].  Otherwise fix the "
+            f"adapter_kind."
+        )
+
+    def _resource_kind_error(what: str, obj) -> Optional[str]:
+        if obj.resource_kind in kinds:
+            return None
+        return (
+            f"{what} '{obj.name}' ({_bundled_src(obj)}): resource_kind "
+            f"'{obj.resource_kind}' is not a ResourceKind in describe.xml "
+            f"(adapter kind '{own}'; declared: {', '.join(sorted(kinds)) or 'none'})."
+        )
+
+    for sym in (symptoms or []):
+        err = _adapter_kind_error("Symptom", sym)
+        if err:
+            errors.append(err)
+            continue
+        if sym.adapter_kind != own:
+            continue  # stitched onto a foreign kind; keys not declared here
+        err = _resource_kind_error("Symptom", sym)
+        if err:
+            errors.append(err)
+            continue
+        cond = sym.condition or {}
+        ctype = cond.get("type", "")
+        key = str(cond.get("key", "") or "")
+        want = "property" if ctype == "property" else "metric"
+        lookup = _strip_instance_names(key)
+        declared = kinds[sym.resource_kind]
+        have = declared.get(lookup)
+        platform = False
+        if have is None:
+            group = lookup.split("|", 1)[0] if "|" in lookup else ""
+            if group in _PLATFORM_METRIC_GROUPS:
+                have, platform = "metric", True
+            elif group in _PLATFORM_PROPERTY_GROUPS:
+                have, platform = "property", True
+        if have is None:
+            elsewhere = sorted(rk for rk, attrs in kinds.items() if lookup in attrs)
+            if elsewhere:
+                hint = (
+                    f" It is declared on {', '.join(elsewhere)}; set resource_kind "
+                    f"to the kind that carries it."
+                )
+            elif group in _PLATFORM_DISPLAY_GROUPS:
+                hint = (
+                    f" '{group}' is the display name; the key group is "
+                    f"'{_PLATFORM_DISPLAY_GROUPS[group]}'."
+                )
+            else:
+                hint = (
+                    f" Platform key groups accepted without a declaration: "
+                    f"{', '.join(_PLATFORM_METRIC_GROUPS)} (metrics), "
+                    f"{', '.join(_PLATFORM_PROPERTY_GROUPS)} (properties)."
+                )
+            errors.append(
+                f"Symptom '{sym.name}' ({_bundled_src(sym)}): condition key "
+                f"'{key}' is not declared on resource kind '{sym.resource_kind}' "
+                f"in describe.xml.{hint}"
+            )
+            continue
+        if have != want:
+            errors.append(
+                f"Symptom '{sym.name}' ({_bundled_src(sym)}): condition type "
+                f"'{ctype}' needs a {want}, but key '{key}' on resource kind "
+                + (f"'{sym.resource_kind}' is a platform {have} ('{group}' group)"
+                   if platform else
+                   f"'{sym.resource_kind}' is declared in describe.xml as a {have}"
+                   + (" (isProperty=\"true\")" if have == "property"
+                      else " (no isProperty=\"true\")"))
+                + ("; use type: property." if have == "property"
+                   else "; use type: metric_static or metric_dynamic.")
+            )
+
+    symptom_by_name = {s.name: s for s in (symptoms or [])}
+    for alert in (alerts or []):
+        err = _adapter_kind_error("Alert", alert)
+        if err:
+            errors.append(err)
+        elif alert.adapter_kind == own:
+            err = _resource_kind_error("Alert", alert)
+            if err:
+                errors.append(err)
+        sets = (alert.symptom_sets or {}).get("sets") or []
+        for i, s in enumerate(sets):
+            if (s.get("defined_on") or "SELF").upper() != "SELF":
+                continue
+            for sym_ref in (s.get("symptoms") or []):
+                sym = symptom_by_name.get(sym_ref.get("name", ""))
+                if sym is None:
+                    continue  # unbundled: check_bundled_content_references reports it
+                if (sym.adapter_kind, sym.resource_kind) != (alert.adapter_kind, alert.resource_kind):
+                    errors.append(
+                        f"Alert '{alert.name}' ({_bundled_src(alert)}): "
+                        f"symptom_sets.sets[{i}] is defined_on SELF, so symptom "
+                        f"'{sym.name}' must be on the alert's kind "
+                        f"{alert.adapter_kind}/{alert.resource_kind}, but it is on "
+                        f"{sym.adapter_kind}/{sym.resource_kind}.  Move the "
+                        f"symptom to the alert's resource kind, or use "
+                        f"defined_on PARENT/CHILD/DESCENDANT/ANCESTOR if it "
+                        f"evaluates a related object."
+                    )
+    return errors
+
+
+def check_bundled_content(project: SdkProjectDef, bundled: tuple,
+                          describe_xml: Path) -> List[str]:
+    """Run every bundled symptom/alert/recommendation check; return errors.
+
+    ``bundled`` is the tuple ``_load_bundled_content`` returns.  The one
+    entry point validate-sdk and build-sdk share.
+    """
+    _views, _dash, _sms, symptoms, alerts, _reports, recommendations = bundled
+    errors = check_bundled_content_references(symptoms, alerts, recommendations)
+    if describe_xml.is_file():
+        errors.extend(check_bundled_content_against_describe(
+            project, symptoms, alerts, describe_xml,
+        ))
+    return errors
+
+
 def validate_sdk_project(project_dir: Path) -> List[str]:
     """Validate a Tier 2 adapter project without building.
 
@@ -4601,6 +4880,9 @@ def validate_sdk_project(project_dir: Path) -> List[str]:
         errors.extend(_naming_errors)
         for _w in _naming_warnings:
             print(f"  validate-sdk: warning: {_w}", file=sys.stderr)
+        # Bundled symptom/alert/recommendation references and describe.xml
+        # conformance: the same check build-sdk runs.
+        errors.extend(check_bundled_content(project, _bundled, describe_xml))
         if bundled_views:
             # Build sm_scope from bundled SM source paths so that view columns
             # using supermetric:"<name>" resolve against adapter-local SMs, not

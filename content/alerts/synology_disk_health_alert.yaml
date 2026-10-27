@@ -17,7 +17,7 @@ description: >
 adapter_kind: mpb_synology_dsm
 resource_kind: disk
 type: 17              # Hardware
-sub_type: 1           # Availability
+sub_type: 18          # Availability
 wait_cycles: 1
 cancel_cycles: 1
 criticality: SYMPTOM_BASED

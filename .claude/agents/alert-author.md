@@ -29,8 +29,11 @@ Read `knowledge/context/authoring/guide_content_authoring.md` §Interview discip
 Track-specific examples:
 
 **Infer (don't ask):**
-- Type/sub_type from the symptom's nature (CPU/memory/perf → 16/3;
-  capacity → 16/2; hardware → 17/x).
+- Type/sub_type from the symptom's nature (CPU/memory/perf → 16/19;
+  capacity → 16/20; hardware → 17/x). `sub_type` is one of 18
+  Availability, 19 Performance, 20 Capacity, 21 Compliance, 22
+  Configuration; anything else fails validation
+  (`knowledge/context/wire-formats/alertdef_symptomset_import.md`).
 - Criticality matching the highest-severity symptom (CRITICAL
   symptom → CRITICAL alert).
 - Impact badge from sub_type (Performance → HEALTH; Capacity →
@@ -92,7 +95,7 @@ description: >
 adapter_kind: VMWARE
 resource_kind: VirtualMachine
 type: 16              # Virtualization/Hypervisor
-sub_type: 3           # Performance
+sub_type: 19          # Performance (18-22 only)
 wait_cycles: 1
 cancel_cycles: 1
 criticality: CRITICAL
@@ -111,8 +114,8 @@ recommendations:
 ```
 
 Alert types: 15=Application, 16=Virtualization, 17=Hardware,
-18=Storage, 19=Network. Subtypes: 1=Availability, 2=Capacity,
-3=Performance, 4=Compliance, 5=Configuration.
+18=Storage, 19=Network. Subtypes: 18=Availability, 19=Performance,
+20=Capacity, 21=Compliance, 22=Configuration (nothing else validates).
 
 The `recommendations:` field is a list of `{name, priority}`
 references to standalone recommendation YAML files under

@@ -11,7 +11,7 @@ description: >
 adapter_kind: mpb_synology_dsm
 resource_kind: storage_pool
 type: 18              # Storage
-sub_type: 1           # Availability
+sub_type: 18          # Availability
 wait_cycles: 1
 cancel_cycles: 1
 criticality: CRITICAL
