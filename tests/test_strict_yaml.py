@@ -235,7 +235,7 @@ def test_alert_loader_rejects_duplicate_key(tmp_path: Path):
         resource_kind: VirtualMachine
         criticality: IMMEDIATE
         type: 16
-        sub_type: 3
+        sub_type: 19
         symptom_sets: []
     """)
     p = tmp_path / "bad_alert.yaml"

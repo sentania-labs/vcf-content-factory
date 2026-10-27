@@ -12,7 +12,7 @@ adapter_kind: VMWARE
 resource_kind: VirtualMachine
 
 type: 15              # Application
-sub_type: 20          # Workload
+sub_type: 20          # Capacity
 wait_cycles: 1
 cancel_cycles: 1
 criticality: SYMPTOM_BASED

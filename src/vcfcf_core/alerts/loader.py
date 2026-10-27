@@ -12,7 +12,7 @@ YAML schema (see .claude/agents/alert-author.md for the full spec):
     adapter_kind: VMWARE
     resource_kind: VirtualMachine
     type: 16          # 15=Application, 16=Virtualization, 17=Hardware, 18=Storage, 19=Network
-    sub_type: 3       # 1=Availability, 2=Capacity, 3=Performance, 4=Compliance, 5=Configuration
+    sub_type: 19      # 18=Availability, 19=Performance, 20=Capacity, 21=Compliance, 22=Configuration
     wait_cycles: 1
     cancel_cycles: 1
     criticality: CRITICAL   # CRITICAL, IMMEDIATE, WARNING, INFO, SYMPTOM_BASED
@@ -110,13 +110,21 @@ RELATIONS = {"SELF", "PARENT", "CHILD", "DESCENDANT", "ANCESTOR"}
 OPERATORS = {"ALL", "ANY"}
 THRESHOLD_TYPES = {"COUNT", "PERCENT", "ANY", "ALL"}
 
-# Alert type and subtype: the API schema accepts any int32 — no enum
-# constraint in the OpenAPI spec.  The author agent prompt lists common
-# values (types 15-19, subtypes 1-5) but real content (e.g. brockpeterson
-# reference) uses sub_type=20 (Workload).  We validate only that these are
-# positive integers, not that they fall in any specific set.
+# Alert type: the REST schema accepts any int32 (no enum in the OpenAPI
+# spec), so only a positive integer is required.
 VALID_TYPES = None   # any positive int accepted
-VALID_SUBTYPES = None  # any positive int accepted
+# Alert subtype: the vendor alertDefinitionSchema.xsd (integration SDK,
+# reference/references/vmware-vcf-operations-integration-sdk) and the
+# internal API's BuilderAlertSubType both enumerate exactly these five; the
+# reference corpus and the compliance pak use only 18-22.  The 1-5 values
+# this loader once documented are not subtypes the platform defines.
+VALID_SUBTYPES = {
+    18: "Availability",
+    19: "Performance",
+    20: "Capacity",
+    21: "Compliance",
+    22: "Configuration",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -176,7 +184,7 @@ class AlertDef:
     impact_badge: str       # HEALTH, RISK, EFFICIENCY
     symptom_sets: dict      # raw symptom_sets dict from YAML
     type: int = 16
-    sub_type: int = 3
+    sub_type: int = 19
     wait_cycles: int = 1
     cancel_cycles: int = 1
     description: str = ""
@@ -215,9 +223,11 @@ class AlertDef:
                 f"{self.name}: type must be a positive integer; "
                 f"got {self.type!r}"
             )
-        if not isinstance(self.sub_type, int) or self.sub_type < 1:
+        if not isinstance(self.sub_type, int) or self.sub_type not in VALID_SUBTYPES:
+            allowed = ", ".join(f"{k}={v}" for k, v in VALID_SUBTYPES.items())
+            src = f"{self.source_path}: " if self.source_path else ""
             raise AlertValidationError(
-                f"{self.name}: sub_type must be a positive integer; "
+                f"{src}{self.name}: sub_type must be one of {allowed}; "
                 f"got {self.sub_type!r}"
             )
         if self.wait_cycles < 1:
@@ -515,6 +525,21 @@ def resolve_alert_recommendations(
 # Alert file / dir loading
 # ---------------------------------------------------------------------------
 
+
+def _sub_type(raw):
+    """``sub_type`` from YAML: 19 (Performance) only when absent or null.
+
+    An explicit value, 0 included, is kept so ``validate`` rejects it.  An
+    integer string ("19") becomes the int; anything else (a bool, a float,
+    other text) is returned as-is and fails the enum check.
+    """
+    if raw is None:
+        return 19
+    if isinstance(raw, str) and raw.strip().lstrip("-").isdigit():
+        return int(raw.strip())
+    return raw
+
+
 def load_file(path: str | Path, enforce_framework_prefix: bool = True) -> AlertDef:
     path = Path(path)
     try:
@@ -572,7 +597,7 @@ def load_file(path: str | Path, enforce_framework_prefix: bool = True) -> AlertD
         adapter_kind=str(data.get("adapter_kind", "") or "").strip(),
         resource_kind=str(data.get("resource_kind", "") or "").strip(),
         type=int(data.get("type", 16) or 16),
-        sub_type=int(data.get("sub_type", 3) or 3),
+        sub_type=_sub_type(data.get("sub_type")),
         wait_cycles=int(data.get("wait_cycles", 1) or 1),
         cancel_cycles=int(data.get("cancel_cycles", 1) or 1),
         criticality=wire_criticality,

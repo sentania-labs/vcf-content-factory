@@ -30,6 +30,13 @@ Schema (all fields):
                            validate-sdk enforces it: an error when the key is
                            declared, a warning when it is absent, so a pak that
                            predates the key keeps validating until it declares.
+    content_foreign_adapter_kinds: list (optional) adapter kinds other than
+                           this pak's that bundled symptoms and alerts may
+                           target (e.g. [VMWARE] for an alert on a vSphere
+                           metric).  validate-sdk / build-sdk reject bundled
+                           content on any other adapter kind unless describe.xml
+                           or cross_mp_edges already names it.  Non-empty
+                           strings, no duplicates, not this pak's own kind.
 """
 from __future__ import annotations
 
@@ -202,6 +209,8 @@ class SdkProjectDef:
     # default as a warning, not an error.
     content_naming: str = CONTENT_NAMING_DEFAULT
     content_naming_declared: bool = False
+    # Opt-in: other adapter kinds bundled symptoms/alerts may target.
+    content_foreign_adapter_kinds: List[str] = field(default_factory=list)
 
     @property
     def pak_filename(self) -> str:
@@ -357,6 +366,10 @@ def load_sdk_project(path: Path) -> SdkProjectDef:
             f"{', '.join(CONTENT_NAMING_VALUES)}; got {content_naming!r}"
         )
 
+    content_foreign_adapter_kinds = _parse_content_foreign_adapter_kinds(
+        raw, adapter_kind, where,
+    )
+
     return SdkProjectDef(
         name=name,
         version=version,
@@ -370,4 +383,35 @@ def load_sdk_project(path: Path) -> SdkProjectDef:
         cross_mp_edges=cross_mp_edges,
         content_naming=content_naming,
         content_naming_declared=content_naming_declared,
+        content_foreign_adapter_kinds=content_foreign_adapter_kinds,
     )
+
+
+def _parse_content_foreign_adapter_kinds(raw: dict, adapter_kind: str,
+                                         where: str) -> List[str]:
+    """Parse the optional ``content_foreign_adapter_kinds`` list."""
+    entries = raw.get("content_foreign_adapter_kinds")
+    if entries is None:
+        return []
+    key = "content_foreign_adapter_kinds"
+    if not isinstance(entries, list):
+        raise SdkProjectError(
+            f"{where}: '{key}' must be a list of adapter kind keys; "
+            f"got {type(entries).__name__}"
+        )
+    out: List[str] = []
+    for i, entry in enumerate(entries):
+        if not isinstance(entry, str) or not entry.strip():
+            raise SdkProjectError(
+                f"{where}: {key}[{i}] must be a non-empty string; got {entry!r}"
+            )
+        kind = entry.strip()
+        if kind == adapter_kind:
+            raise SdkProjectError(
+                f"{where}: {key}[{i}] is this pak's own adapter_kind "
+                f"{kind!r}; list only other adapter kinds"
+            )
+        if kind in out:
+            raise SdkProjectError(f"{where}: {key} lists {kind!r} twice")
+        out.append(kind)
+    return out

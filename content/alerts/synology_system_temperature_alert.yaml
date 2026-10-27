@@ -12,7 +12,7 @@ description: >
 adapter_kind: mpb_synology_dsm
 resource_kind: synology_diskstation
 type: 17              # Hardware
-sub_type: 3           # Performance
+sub_type: 19          # Performance
 wait_cycles: 1
 cancel_cycles: 1
 criticality: SYMPTOM_BASED
