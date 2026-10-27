@@ -1,8 +1,8 @@
 """build-buildkit must run with only PyYAML installed.
 
 The Publish sdk-buildkit workflow (.github/workflows/publish-buildkit.yml)
-installs nothing but PyYAML, by design. Tags sdk-buildkit-v1.0.13 to
-v1.0.19 published nothing: #248 added ``_factory_source_commit()``, which
+installs nothing but PyYAML, by design. No kit published since 1.0.12;
+the v1.0.19 tag's publish failed: #248 added ``_factory_source_commit()``, which
 imports ``sdk_builder``, whose module-level
 ``from vcfcf_supermetrics import crossref`` ran ``vcfcf_supermetrics/__init__``,
 which imported the REST client and so ``requests``. Every unit test runs in
