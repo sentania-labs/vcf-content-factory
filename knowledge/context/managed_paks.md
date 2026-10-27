@@ -181,10 +181,12 @@ Three repos, one experiment: the Java rewrite of
 vmbro/VCF-Operations-vCommunity and its three-adapter split. The three
 unsigned-pak README PRs were squash-merged 2026-10-26 on Scott's word
 ("just merge the outstanding work on them"); no open PRs remain, open
-issues stay as they are, nothing further is scheduled. The GitHub repos
-are not archived; that is Scott's call, and archiving is the one step that
-makes retirement visible to every tool, since an archived repo refuses
-merges and carries the flag in every listing.
+issues stay as they are, nothing further is scheduled. Scott, verbatim (2026-10-27): "how many times do I have to ask you to
+drop the vcommunity ports?" All three GitHub repos were archived that day,
+and the local clones were moved out of `content/sdk-adapters/` to
+`/mnt/holding/vcf-content-factory/retired-paks/` (clean, nothing unpushed),
+so no sweep of that folder finds them. Do not re-clone, survey, release,
+or mention them; they are done.
 
 #### vcommunity
 
