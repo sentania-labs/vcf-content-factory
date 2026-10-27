@@ -73,7 +73,10 @@ try:
 except ImportError:
     _YAML_AVAILABLE = False
 
-from vcfcf_supermetrics import crossref as _crossref
+# From vcfcf_core, not vcfcf_supermetrics: this module is imported by
+# build-buildkit (_factory_source_commit), which runs with only PyYAML
+# installed, and the wrapper package's import chain reaches requests.
+from vcfcf_core.supermetrics import crossref as _crossref
 
 from .sdk_project import (
     CONTENT_NAMING_DEFAULT,
