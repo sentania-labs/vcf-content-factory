@@ -77,6 +77,11 @@ class TraversalEdge:
     parent_key: str
     child_key: str
 
+    @property
+    def is_self(self) -> bool:
+        """True for the self-edge a ``/recursive`` path level implies."""
+        return self.parent_key == self.child_key
+
 
 @dataclass
 class AdapterDocModel:
@@ -128,37 +133,74 @@ def _load_properties(project_dir: Path) -> Dict[str, str]:
     return props
 
 
+# Path-level modifiers the vendor grammar allows at the end of a ResourcePath
+# segment (knowledge/context/cleanroom-spec/spec/07-relationships-cross-mp.md):
+#   /recursive  the level repeats: the kind nests under itself (vSphere
+#               ``HostFolder::child/recursive``, UniFi ``UniFiSwitch::child/recursive``)
+#   /preferred  pick this path when several reach the same kind; no topology
+#               of its own, so the docs only strip it.
+_PATH_MODIFIERS = ("recursive", "preferred")
+
+
+def _split_path_modifiers(token: str) -> Tuple[str, set]:
+    """Strip trailing ``/recursive`` and ``/preferred`` from a segment token.
+
+    Only known modifiers are stripped, so a ``/`` that is part of a name is
+    left alone. Returns (token without modifiers, set of modifier names).
+    """
+    mods: set = set()
+    while True:
+        head, sep, tail = token.rpartition("/")
+        if sep and tail.strip() in _PATH_MODIFIERS:
+            mods.add(tail.strip())
+            token = head
+        else:
+            return token, mods
+
+
 def _parse_traversal_paths(spec_kind_elem, ns: str) -> List[TraversalEdge]:
     """Parse ResourcePath elements → ordered list of unique TraversalEdge pairs.
 
     Path format:
-      ak::rk1||ak::rk2::child||ak::rk3::child||...
+      ak::rk1||ak::rk2::child||ak::rk3::child/recursive||...
 
     Each consecutive pair rk(i) → rk(i+1) produces an edge (if not already seen).
     The adapter-instance root is skipped; it appears in describe.xml as type=7.
+
+    A ``/recursive`` level adds the self-edge rk → rk right after the edge
+    into it, so the tree, diagram and Parent(s) column show that the kind
+    nests under itself. ``/preferred`` is stripped and otherwise ignored.
+    Paths without modifiers parse exactly as before.
     """
     edges: List[TraversalEdge] = []
     seen: set = set()
+
+    def _add(parent: str, child: str) -> None:
+        pair = (parent, child)
+        if pair not in seen:
+            seen.add(pair)
+            edges.append(TraversalEdge(parent_key=parent, child_key=child))
 
     for rp in spec_kind_elem.iter(f"{ns}ResourcePath"):
         path_str = rp.get("path", "")
         # Split on "||" to get segments
         segments = path_str.split("||")
-        # Each segment: "adapterKind::resourceKind" or "adapterKind::resourceKind::child"
-        rk_keys = []
+        # Each segment: "adapterKind::resourceKind" or
+        # "adapterKind::resourceKind::child", optionally ending in
+        # "/recursive" and/or "/preferred"
+        levels: List[Tuple[str, bool]] = []  # (resource kind key, recursive)
         for seg in segments:
             parts = seg.split("::")
             if len(parts) >= 2:
-                rk_keys.append(parts[1])  # resource kind key
+                parts[-1], mods = _split_path_modifiers(parts[-1])
+                levels.append((parts[1], "recursive" in mods))  # resource kind key
 
-        # Build consecutive pairs
-        for i in range(len(rk_keys) - 1):
-            parent = rk_keys[i]
-            child = rk_keys[i + 1]
-            pair = (parent, child)
-            if pair not in seen:
-                seen.add(pair)
-                edges.append(TraversalEdge(parent_key=parent, child_key=child))
+        # Build consecutive pairs, plus the self-edge of each recursive level
+        for i, (rk, recursive) in enumerate(levels):
+            if i > 0:
+                _add(levels[i - 1][0], rk)
+            if recursive:
+                _add(rk, rk)
 
     return edges
 
@@ -319,7 +361,8 @@ def _tree_roots(model: AdapterDocModel) -> List[str]:
     Excludes the adapter-instance kind (type=7).
     """
     all_parents = {e.parent_key for e in model.edges}
-    all_children = {e.child_key for e in model.edges}
+    # A recursive self-edge does not make a kind a child of something else.
+    all_children = {e.child_key for e in model.edges if not e.is_self}
     # Roots appear as parents but not as children
     roots = [k for k in all_parents if k not in all_children]
     if not roots:
@@ -359,6 +402,8 @@ def _assign_depth(model: AdapterDocModel) -> Dict[str, int]:
         else:
             depth[node] = d
         for child in children.get(node, []):
+            if child == node:
+                continue  # recursive self-edge: same row, and no endless loop
             queue.append((child, d + 1))
 
     # Adapter-instance kinds: depth = -1
@@ -390,6 +435,13 @@ def _render_tree_md(model: AdapterDocModel) -> str:
         prefix = "  " * indent + "- "
         lines.append(f"{prefix}**{label}** (`{key}`)")
         for child in children.get(key, []):
+            if child == key:
+                # /recursive level: draw one self-nested line, never descend
+                lines.append(
+                    f"{'  ' * (indent + 1)}- **{label}** (`{key}`) "
+                    f"*(recursive: nests under itself)*"
+                )
+                continue
             _walk(child, indent + 1)
 
     for root in roots:
@@ -553,6 +605,28 @@ _NODE_H_PER_KEY = 18   # extra height per identifier key line
 _H_GAP = 60            # horizontal gap between nodes in same row
 _V_GAP = 90            # vertical gap between rows
 _MARGIN = 40           # canvas margin
+# A /recursive self-loop hooks over the node's top-right corner: it leaves the
+# top edge, reaches right of the node and comes back into the right edge. It
+# stays clear of the top-center inbound arrow and of the mid-height line a
+# same-row edge draws, and its reach fits inside _H_GAP and _MARGIN.
+_SELF_LOOP_INSET = 36  # loop start, measured left from the node's right edge
+_SELF_LOOP_RISE = 16   # how far the loop climbs above the node
+_SELF_LOOP_REACH = 16  # how far the loop reaches right of the node
+_SELF_LOOP_DROP = 18   # where the loop re-enters the right edge, below the top
+
+
+def _self_loop_points(x: float, y: float, w: float) -> List[Tuple[float, float]]:
+    """Absolute points of the self-loop for a node at (x, y) with width w."""
+    xr = x + w
+    xs = xr - _SELF_LOOP_INSET
+    xo = xr + _SELF_LOOP_REACH
+    return [
+        (xs, y),
+        (xs, y - _SELF_LOOP_RISE),
+        (xo, y - _SELF_LOOP_RISE),
+        (xo, y + _SELF_LOOP_DROP),
+        (xr + 2, y + _SELF_LOOP_DROP),
+    ]
 
 
 def _stable_id(seed: str) -> str:
@@ -808,6 +882,24 @@ def generate_excalidraw(model: AdapterDocModel) -> dict:
         px, py, pw, ph = positions[p]
         cx, cy, cw, ch = positions[c]
 
+        if edge.is_self:
+            # /recursive level: a loop over the node's top-right corner
+            pts = _self_loop_points(px, py, pw)
+            (sx, sy), (ex, ey) = pts[0], pts[-1]
+            arrow = _excalidraw_element_arrow(
+                elem_id=_stable_id(f"arrow:{p}->{c}"),
+                start_x=sx, start_y=sy, end_x=ex, end_y=ey,
+                start_binding=rect_ids.get(p),
+                end_binding=rect_ids.get(c),
+            )
+            xs = [pt[0] for pt in pts]
+            ys = [pt[1] for pt in pts]
+            arrow["width"] = max(xs) - min(xs)
+            arrow["height"] = max(ys) - min(ys)
+            arrow["points"] = [[ptx - sx, pty - sy] for ptx, pty in pts]
+            elements.append(arrow)
+            continue
+
         # Arrow from bottom-center of parent to top-center of child
         start_x = px + pw / 2
         start_y = py + ph
@@ -905,6 +997,16 @@ def generate_svg(model: AdapterDocModel) -> str:
             continue
         px, py, pw, ph = positions[p]
         cx, cy, cw, ch = positions[c]
+
+        if edge.is_self:
+            # /recursive level: a loop over the node's top-right corner
+            pts = _self_loop_points(px, py, pw)
+            path = "M " + " L ".join(f"{ptx:.1f},{pty:.1f}" for ptx, pty in pts)
+            svg_parts.append(
+                f'<path d="{path}" fill="none" stroke="#374151" stroke-width="1.5" '
+                f'marker-end="url(#arrow)"/>'
+            )
+            continue
 
         # Arrow: bottom-center of parent → top-center of child
         x1 = px + pw / 2
