@@ -3463,7 +3463,14 @@ function Install-Alerts($Ctx) {
     foreach ($alertData in $alerts) {
         $name = $alertData.name
         # Build wire format with resolved symptom IDs
-        $wire = ConvertTo-AlertWire -AlertData $alertData -SymptomMap $symptomMap
+        try {
+            $wire = ConvertTo-AlertWire -AlertData $alertData -SymptomMap $symptomMap
+        } catch {
+            $warn = "Alert '$name' wire conversion failed: $($_.Exception.Message)"
+            Write-Warn $warn
+            $Ctx.Warnings.Add($warn)
+            continue
+        }
         if (-not $wire) {
             Write-Warn "Alert '$name': could not resolve symptom references"
             $Ctx.Warnings.Add("Alert '$name': symptom resolution failed")
@@ -3499,8 +3506,46 @@ function Install-Alerts($Ctx) {
     }
 }
 
+# Alert subType enum.  Restated from vcfcf_core.alerts.loader.VALID_SUBTYPES
+# (and install.py's _ALERT_SUBTYPES) because this script ships standalone;
+# tests/test_install_alert_subtype.py pins the copies in step.  Wire format:
+# knowledge/context/wire-formats/alertdef_symptomset_import.md
+# section "Alert subType enum".
+function Get-AlertSubType {
+    param($AlertData)
+    # 19 (Performance) only when absent or null.  An integer string becomes
+    # the int; anything outside 18-22 (0, a bool, a float, other text) throws
+    # so the caller skips the alert with a warning, as validate would reject it.
+    $raw = Get-PropValue $AlertData "sub_type"
+    if ($null -eq $raw) { return 19 }
+    $value = $null
+    if ($raw -is [string]) {
+        # \d is any Unicode decimal digit, as Python's int() accepts, so
+        # U+0661 U+0669 (Arabic-Indic 19) agrees with the loader.  Digits are summed
+        # by hand because [long] parses ASCII only; the sum stops once it is
+        # out of range, so an over-Int64 string gets the enum message below
+        # instead of a cast error.
+        $t = $raw.Trim()
+        if ($t -match '^-?\d+$') {
+            $n = 0
+            foreach ($ch in $t.TrimStart('-').ToCharArray()) {
+                $n = $n * 10 + [System.Globalization.CharUnicodeInfo]::GetDecimalDigitValue($ch)
+                if ($n -gt 1000) { break }
+            }
+            $value = if ($t.StartsWith('-')) { -$n } else { $n }
+        }
+    } elseif ($raw -is [int] -or $raw -is [long]) {
+        $value = [long]$raw
+    }
+    if ($null -eq $value -or $value -lt 18 -or $value -gt 22) {
+        throw "sub_type must be one of 18=Availability, 19=Performance, 20=Capacity, 21=Compliance, 22=Configuration; got '$raw'"
+    }
+    return [int]$value
+}
+
 function ConvertTo-AlertWire {
     param($AlertData, [hashtable]$SymptomMap)
+    $subType = Get-AlertSubType $AlertData
     $ss = $AlertData.symptom_sets
     $topOp = if ($ss.operator) { $ss.operator.ToUpper() } else { "ALL" }
     $wireSets = @()
@@ -3519,9 +3564,13 @@ function ConvertTo-AlertWire {
             symptomSetOperator = if ($op -eq "ALL") { "AND" } else { "OR" }
             symptomDefinitionIds = $symptomIds
         }
-        if ($definedOn -ne "SELF" -and $s.threshold_type) {
-            $wireSet["aggregation"] = $s.threshold_type
-            if ($null -ne $s.threshold_value) { $wireSet["value"] = [double]$s.threshold_value }
+        # Both threshold fields are optional in the loader; a direct read of
+        # an absent one throws under StrictMode.
+        $thresholdType = Get-PropValue $s "threshold_type"
+        $thresholdValue = Get-PropValue $s "threshold_value"
+        if ($definedOn -ne "SELF" -and $thresholdType) {
+            $wireSet["aggregation"] = $thresholdType
+            if ($null -ne $thresholdValue) { $wireSet["value"] = [double]$thresholdValue }
         }
         $wireSets += $wireSet
     }
@@ -3540,7 +3589,7 @@ function ConvertTo-AlertWire {
         waitCycles = if ($AlertData.wait_cycles) { $AlertData.wait_cycles } else { 1 }
         cancelCycles = if ($AlertData.cancel_cycles) { $AlertData.cancel_cycles } else { 1 }
         type = if ($AlertData.type) { $AlertData.type } else { 16 }
-        subType = if ($AlertData.sub_type) { $AlertData.sub_type } else { 3 }
+        subType = $subType
         states = @($state)
     }
 }

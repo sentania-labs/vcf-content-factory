@@ -481,6 +481,26 @@ def test_null_defaults_and_integer_string_is_accepted(tmp_path, raw):
     assert load_file(p).sub_type == 19
 
 
+@pytest.mark.parametrize("raw", ['"\u00b2"', '"--19"'])
+def test_isdigit_only_sub_type_string_gets_the_enum_error(tmp_path, raw):
+    """isdigit() passes these but int() refuses them: the enum error, not a ValueError."""
+    from vcfcf_core.alerts.loader import AlertValidationError, load_file
+    p = tmp_path / "a.yaml"
+    p.write_text(_alert("A", "ProbeSwitch", ["S"]).replace("sub_type: 18", f"sub_type: {raw}"),
+                 encoding="utf-8")
+    with pytest.raises(AlertValidationError, match="sub_type must be one of"):
+        load_file(p)
+
+
+def test_unicode_digit_sub_type_string_is_accepted(tmp_path):
+    """int() reads any Unicode decimal digits, so Arabic-Indic "19" is 19."""
+    from vcfcf_core.alerts.loader import load_file
+    p = tmp_path / "a.yaml"
+    p.write_text(_alert("A", "ProbeSwitch", ["S"]).replace(
+        "sub_type: 18", 'sub_type: "\u0661\u0669"'), encoding="utf-8")
+    assert load_file(p).sub_type == 19
+
+
 def test_omitted_sub_type_defaults_to_a_valid_value(tmp_path):
     from vcfcf_core.alerts.loader import load_file
     p = tmp_path / "a.yaml"

@@ -2310,8 +2310,46 @@ def _install_alerts(ctx: Dict) -> None:
             _ok(f"Created: {name}")
 
 
+# Alert subType enum.  Restated from vcfcf_core.alerts.loader.VALID_SUBTYPES
+# because this script ships standalone in distribution zips and cannot import
+# the factory (tests/test_install_alert_subtype.py pins the two in step).
+# Wire format: knowledge/context/wire-formats/alertdef_symptomset_import.md
+# section "Alert subType enum".
+_ALERT_SUBTYPES = {
+    18: "Availability",
+    19: "Performance",
+    20: "Capacity",
+    21: "Compliance",
+    22: "Configuration",
+}
+_ALERT_SUBTYPE_DEFAULT = 19
+
+
+def _alert_sub_type(raw: Any) -> int:
+    """``subType`` for an alert payload, with the core loader's rules.
+
+    19 (Performance) only when absent or null; an integer string becomes the
+    int; anything outside 18-22 (0, a bool, a float, other text) raises
+    ValueError so the caller skips the alert with a warning, as ``validate``
+    would have rejected it.
+    """
+    if raw is None:
+        return _ALERT_SUBTYPE_DEFAULT
+    value = raw
+    if isinstance(raw, str) and raw.strip().lstrip("-").isdigit():
+        try:
+            value = int(raw.strip())
+        except ValueError:  # isdigit() passes superscripts and "--19"; int() does not
+            pass
+    if isinstance(value, bool) or not isinstance(value, int) or value not in _ALERT_SUBTYPES:
+        allowed = ", ".join(f"{k}={v}" for k, v in _ALERT_SUBTYPES.items())
+        raise ValueError(f"sub_type must be one of {allowed}; got {raw!r}")
+    return value
+
+
 def _alert_to_wire(alert_data: dict, symptom_map: Dict[str, str]) -> dict:
     """Convert the stored alert payload to API wire format with resolved symptom IDs."""
+    sub_type = _alert_sub_type(alert_data.get("sub_type"))
     ss = alert_data.get("symptom_sets") or {}
     top_op = (ss.get("operator") or "ALL").upper()
     sets = ss.get("sets") or []
@@ -2367,7 +2405,7 @@ def _alert_to_wire(alert_data: dict, symptom_map: Dict[str, str]) -> dict:
         "waitCycles": alert_data.get("wait_cycles", 1),
         "cancelCycles": alert_data.get("cancel_cycles", 1),
         "type": alert_data.get("type", 16),
-        "subType": alert_data.get("sub_type", 3),
+        "subType": sub_type,
         "states": [state],
     }
 
