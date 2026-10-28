@@ -147,6 +147,38 @@ adapter-framework designs round; this is 1.0.18.
 
 Version note: this is 1.0.19, after 1.0.18.
 
+## Behavior since 1.0.22
+
+- Vanished objects are marked not existing (unifi#20). For a pak with
+  `discoverOnCollect()` on, a resource the platform knows that
+  `enumerateResources` has not delivered for 12 consecutive complete cycles
+  is marked with `changeResourceState(rc, NOTEXIST)`, as the vSphere, vSAN
+  and NSX adapters do. VCF Ops then shows it as Not Existing and deletes it
+  after the Deleted Objects retention setting. Before this kit a removed
+  device stayed Data Receiving with frozen values forever.
+- Nothing is counted or marked in a cycle whose enumeration threw or
+  delivered nothing, that was stopped, or in which every object failed.
+  The adapter instance and its kind are never marked. By default a kind
+  counts as read only when the enumeration delivered at least one object of
+  it, so an optional sub-tree that failed in full (UniFi Protect down) is
+  left alone.
+- New hooks on the adapter base: `notExistingMissedCycles()` (default 12,
+  0 turns it off), `kindsReadThisCycle()` (name the kinds read in full this
+  cycle, for a sub-tree that can fail in part or so the last object of a
+  kind can be marked) and `notExistingExcludedKinds()` (synthetic and
+  aggregate kinds, and kinds registered outside `enumerateResources`).
+- A marked object is no longer collected while it stays missing. When the
+  enumeration delivers it again it is sent `START`; whether VCF Ops returns
+  it to Started on that is not yet verified on a live instance.
+- Logging: one INFO line per cycle for objects marked, and one for objects
+  sent `START` (count and first object).
+- The miss counts are in memory: a collector restart delays a mark, never
+  makes one early.
+- No pak source change is required. Rebuild every pak on this kit to pick
+  it up, and check the pak's kinds against the hooks above first.
+
+Version note: open PR #281 holds 1.0.21; this is 1.0.22.
+
 ## Behavior since 1.0.15
 
 - `build-sdk` and `validate-sdk` take `--sdk-compat-jar <path to

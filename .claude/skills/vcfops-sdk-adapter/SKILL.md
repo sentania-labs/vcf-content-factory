@@ -209,6 +209,37 @@ the cycle continues, except a `VirtualMachineError` or a thread kill. Do not mar
 `needsRediscovery` in new code; the framework still calls it exactly once
 per cycle so older paks keep working.
 
+## Vanished objects: NOT_EXISTING, optional kinds
+
+Since buildkit 1.0.22 (unifi#20), a pak with `discoverOnCollect()` true
+gets the Broadcom behaviour for free: a resource the platform knows that
+`enumerateResources` has not delivered for 12 consecutive complete cycles
+is marked `NOTEXIST` with `changeResourceState`, and the platform deletes
+it after its retention setting. No marking on a cycle whose enumeration
+threw, delivered nothing, was stopped, or failed the adapter instance.
+The adapter instance and its kind are never marked. What the pak decides:
+
+- **Optional or partly read sub-trees.** By default a kind counts as read
+  only when the enumeration delivered at least one resource of it, so a
+  whole optional sub-tree that failed (UniFi Protect down: no NVR, no
+  camera) is never marked. If a sub-tree can fail in part (the NVR read,
+  the camera list did not), or you want the last object of a kind to be
+  marked, override `kindsReadThisCycle()`: record in a field during
+  `enumerateResources` which kinds were read in full, return them. Leave a
+  kind out whenever its read failed. An empty set marks nothing.
+- **Synthetic and aggregate kinds**, and any kind registered outside
+  `enumerateResources` (from `collect()` or `rediscover()`): list them in
+  `notExistingExcludedKinds()`, or they can be marked while still alive.
+- **Threshold.** `notExistingMissedCycles()`, default 12 (the platform's
+  `implicitNotExistingMissedCycles`). Return 0 to opt out.
+- **Do not** set `NO_DATA_RECEIVING` or skip a vanished object yourself:
+  NO_DATA_RECEIVING means "present, no data". Keep the `collect()`
+  "absent from snapshot" path cheap; once marked, the framework stops
+  collecting the object.
+
+Hand-rolled `needsRediscovery`/`rediscover` discovery gets none of this.
+Evidence: `knowledge/context/sdk/vanished_object_lifecycle.md`.
+
 ## Environment-wide totals: ComputedMetrics on the pak singleton
 
 A number that spans every adapter instance (fleet counts, a weighted

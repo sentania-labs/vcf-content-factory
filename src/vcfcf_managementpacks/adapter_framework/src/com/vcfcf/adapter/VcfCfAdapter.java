@@ -244,6 +244,14 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
      */
     private volatile Set<String> warnedStatusMoves;
 
+    /**
+     * Per resource id: consecutive complete cycles missing from the
+     * enumeration, and whether it has been marked NOT_EXISTING (unifi#20).
+     * In memory only, so a restart starts every count at zero. Created
+     * lazily: see {@link #vanishTracker()}.
+     */
+    private volatile Map<Integer, VanishEntry> vanishTracker;
+
     // -----------------------------------------------------------------------
     // Constructors
     // -----------------------------------------------------------------------
@@ -548,6 +556,104 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
                 + "or set discoverOnCollect() back to false and hand-roll "
                 + "VcfCfCollector.needsRediscovery() / rediscover() instead. "
                 + "See knowledge/context/framework_v2_migration.md §22.");
+    }
+
+    // -----------------------------------------------------------------------
+    // Vanished objects: NOT_EXISTING marking (unifi#20)
+    // -----------------------------------------------------------------------
+
+    /**
+     * Default for {@link #notExistingMissedCycles()}: 12, the default of the
+     * collector property {@code implicitNotExistingMissedCycles} that
+     * Broadcom's generic third-party runtime ({@code DockerizedAdapterWrapper}
+     * in {@code alive_platform.jar}) uses for the same job.
+     * Evidence: {@code knowledge/context/sdk/vanished_object_lifecycle.md} §2.
+     */
+    public static final int DEFAULT_NOT_EXISTING_MISSED_CYCLES = 12;
+
+    /**
+     * How many consecutive complete cycles a resource must be missing from
+     * {@link #enumerateResources(ResourceSink)} before the framework marks it
+     * not existing (unifi#20). Default
+     * {@link #DEFAULT_NOT_EXISTING_MISSED_CYCLES}. Return 0 or less to turn
+     * the marking off for this adapter.
+     *
+     * <p><strong>What the framework does.</strong> Only for an adapter with
+     * {@link #discoverOnCollect()} {@code true}. After a complete cycle it
+     * takes every resource the platform knows for this adapter instance
+     * ({@code adapterCache.getMonitoringResources()} plus
+     * {@code getStoppedResources()}), drops the ones this cycle's enumeration
+     * delivered, and counts a miss for each of the rest. At the threshold it
+     * calls {@code changeResourceState(rc, DiscoveryResult.StateChangeEnum.NOTEXIST)}
+     * with the platform's own {@code ResourceConfig}, as the vSphere, vSAN and
+     * NSX adapters do. The platform then shows the object as
+     * {@code NOT_EXISTING} and deletes it after the
+     * {@code DELETED_OBJECTS_RETENTION_IN_HOURS} global setting. A resource
+     * the enumeration delivers again has its count cleared.
+     *
+     * <p><strong>What is never marked.</strong> The adapter instance; a kind
+     * in {@link #notExistingExcludedKinds()}; a kind not in
+     * {@link #kindsReadThisCycle()}; a resource of another adapter kind.
+     *
+     * <p><strong>Cycles that count nothing.</strong> The enumeration threw (or
+     * {@code rediscover} did), it delivered no resource at all, the cycle was
+     * stopped or interrupted, or the cycle failed the adapter instance (every
+     * collected resource failed). Such a cycle neither adds a miss nor marks.
+     *
+     * <p>The counts live in memory: a collector restart or a new adapter
+     * instance starts them again from zero, which delays a mark and never
+     * makes one early.
+     */
+    protected int notExistingMissedCycles() {
+        return DEFAULT_NOT_EXISTING_MISSED_CYCLES;
+    }
+
+    /**
+     * The resource kinds this cycle's {@link #enumerateResources(ResourceSink)}
+     * read in full (unifi#20). Called once per cycle, on the collection
+     * thread, right after {@code enumerateResources} returns without
+     * throwing. Only resources of these kinds can collect a miss this cycle.
+     *
+     * <p><strong>Default: {@code null}</strong>, meaning the kinds of the
+     * resources the enumeration delivered this cycle. So a kind with no
+     * resource this cycle is treated as not read, and its resources are
+     * neither counted nor marked. That covers an optional sub-tree whose read
+     * failed (UniFi Protect: when the bootstrap fails, no NVR and no camera is
+     * delivered, so neither kind is read), but it also means the last
+     * resource of a kind is never marked.
+     *
+     * <p><strong>Override</strong> when that is not enough:
+     * <ul>
+     *   <li>A sub-tree that can be read partly (one call for the NVR, another
+     *       for its cameras) must leave out a kind whose read failed even when
+     *       some resources of it were delivered.</li>
+     *   <li>To let the last resource of a kind be marked, name the kind when
+     *       its read succeeded and returned nothing.</li>
+     * </ul>
+     * Record what was read in a field during {@code enumerateResources} and
+     * return it here. An empty set marks nothing this cycle. Anything this
+     * method throws is logged at WARN and the cycle marks nothing.
+     *
+     * @return the kinds read in full this cycle, or {@code null} for the
+     *         kinds delivered this cycle
+     */
+    protected Set<String> kindsReadThisCycle() {
+        return null;
+    }
+
+    /**
+     * Resource kinds the framework never marks not existing (unifi#20).
+     * Default: none. List the adapter's synthetic and aggregate kinds here
+     * (a world, a per-site summary object): kinds the adapter makes up rather
+     * than reads from the source, and any kind registered outside
+     * {@link #enumerateResources(ResourceSink)}. The adapter instance is never
+     * marked whatever this returns. Anything this method throws is logged at
+     * WARN and the cycle marks nothing.
+     *
+     * @return the kinds never to mark; {@code null} or empty for none
+     */
+    protected Set<String> notExistingExcludedKinds() {
+        return Collections.emptySet();
     }
 
     // -----------------------------------------------------------------------
@@ -875,6 +981,15 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
      * status. The move is one INFO line per cycle. A failed collect logs its
      * stack trace at WARN on the first failure of a streak only; while the
      * object keeps failing, one WARN line per cycle and the trace at DEBUG.
+     *
+     * <p><strong>Vanished objects (unifi#20).</strong> With
+     * {@link #discoverOnCollect()} on, a resource the platform knows that is
+     * missing from {@link #enumerateResources} for
+     * {@link #notExistingMissedCycles()} consecutive complete cycles is
+     * marked {@code NOTEXIST}; see that method for the rules and guards. A
+     * marked object is not collected while it stays missing, and is sent
+     * {@code START} when the enumeration delivers it again. One INFO line per
+     * cycle for each (count and first object).
      */
     @Override
     @SuppressWarnings("unchecked")
@@ -933,9 +1048,17 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
         // Failure posture: loud (propagates InterruptedException to abort cycle;
         // other exceptions are logged WARN and collection continues with the
         // existing resource set — same non-fatal posture as step 1a above).
+        // unifi#20: what the enumeration delivered, kept only when it returned
+        // without throwing; null otherwise.
+        Enumerated enumerated = null;
         if (discoverOnCollect()) {
+            Enumerated delivered = new Enumerated();
             try {
-                enumerateResources(this::registerNewResource);
+                enumerateResources(rc -> {
+                    delivered.add(rc);
+                    registerNewResource(rc);
+                });
+                enumerated = delivered;
             } catch (InterruptedException ie) {
                 Thread.currentThread().interrupt();
                 logWarn("onCollect: interrupted during collect-path discovery "
@@ -951,16 +1074,32 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
 
         if (isAbortRequested()) return;
 
+        // unifi#20: an object marked NOT_EXISTING that the enumeration
+        // delivers again is sent START (needs only that positive sighting).
+        if (enumerated != null) {
+            restoreReappeared(enumerated);
+        }
+
         // §1 step 2: per-resource gather.
         MetricDataCache cache = this.metricCache;
         CycleOutcome outcome = new CycleOutcome();
         Set<Object> seenThisCycle = new HashSet<>();
+        int skippedNotExisting = 0;
 
         for (ResourceConfig rc : resources) {
             if (isAbortRequested() || Thread.currentThread().isInterrupted()) {
                 Thread.currentThread().interrupt();
                 outcome.cut = true;
                 break;
+            }
+
+            // unifi#20: an object this instance marked NOT_EXISTING and the
+            // enumeration has not delivered since is not collected: setting
+            // DATA_RECEIVING on it is what kept a removed object's
+            // availability at 1.0 (vanished_object_lifecycle.md §3).
+            if (isMarkedNotExisting(rc)) {
+                skippedNotExisting++;
+                continue;
             }
 
             outcome.attempted++;
@@ -1063,6 +1202,21 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
         if (!outcome.cut && !isAbortRequested()
                 && !Thread.currentThread().isInterrupted()) {
             reportAdapterInstanceFailure(adapterInstance, outcome, discoveryFailure);
+        }
+
+        if (skippedNotExisting > 0) {
+            logDebugLine("onCollect: " + skippedNotExisting + " object(s) marked"
+                    + " NOT_EXISTING were not collected this cycle");
+        }
+
+        // unifi#20: count misses and mark NOT_EXISTING only after a complete,
+        // successful cycle: the enumeration returned, nothing (rediscover
+        // included) failed discovery, the cycle was not cut, and the adapter
+        // instance is not failing.
+        if (enumerated != null && discoveryFailure == null && !outcome.cut
+                && !isAbortRequested() && !Thread.currentThread().isInterrupted()
+                && adapterInstanceStatus(outcome, discoveryFailure) == null) {
+            markVanished(adapterInstance, enumerated);
         }
 
         // §8: flush deduplicated data into the CollectResult at end of cycle.
@@ -3358,6 +3512,319 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
             logWarn("onCollect: the SDK did not take status " + safe.name() + " for "
                     + rcLabel(rc) + " (refused, or no collect result this cycle)");
         }
+    }
+
+    // -----------------------------------------------------------------------
+    // Vanished objects: NOT_EXISTING marking (unifi#20)
+    //
+    // SDK calls relied on (javap, identical in vrops-adapters-sdk-8.18.7,
+    // -2.2 and -9.1.1.0100; knowledge/context/sdk/vanished_object_lifecycle.md):
+    //   AdapterBase.changeResourceState(ResourceConfig, DiscoveryResult$StateChangeEnum)
+    //   DiscoveryResult$StateChangeEnum: NOTEXIST, START, STOP, START_MAINTENANCE, STOP_MAINTENANCE
+    //   protected final AdapterCache AdapterBase.adapterCache
+    //   AdapterCache.getMonitoringResources() / getStoppedResources(): Collection<ResourceConfig>
+    // changeResourceState writes into collectResult.getDiscoveryResult(true), so it
+    // works from onCollect, and refuses (ERROR log) a config with no resource id:
+    // always pass the platform's own ResourceConfig. The platform keys its
+    // cache by ResourceKey (equals is ResourceKey.compareTo), so presence is
+    // ResourceKey equality here too.
+    // -----------------------------------------------------------------------
+
+    /** Returned by {@link #hook} when a pak hook threw. */
+    private static final Set<String> HOOK_FAILED =
+            Collections.unmodifiableSet(new HashSet<String>());
+
+    /** What one cycle's enumeration delivered: resource keys and kinds. */
+    static final class Enumerated {
+        final Set<ResourceKey> keys = new HashSet<>();
+        final Set<String> kinds = new HashSet<>();
+
+        void add(ResourceConfig rc) {
+            ResourceKey key = rc == null ? null : rc.getResourceKey();
+            if (key == null) return;
+            keys.add(key);
+            if (key.getResourceKind() != null) kinds.add(key.getResourceKind());
+        }
+    }
+
+    /** One tracked resource in {@link #vanishTracker}. */
+    static final class VanishEntry {
+        ResourceKey key;
+        int misses;
+        boolean marked;
+        /** Known to the platform only as a stopped resource when marked. */
+        boolean stoppedWhenMarked;
+    }
+
+    private Map<Integer, VanishEntry> vanishTracker() {
+        Map<Integer, VanishEntry> m = vanishTracker;
+        if (m == null) {
+            synchronized (this) {
+                m = vanishTracker;
+                if (m == null) {
+                    m = new ConcurrentHashMap<>();
+                    vanishTracker = m;
+                }
+            }
+        }
+        return m;
+    }
+
+    /**
+     * The resources the platform is monitoring for this adapter instance,
+     * copied, or {@code null} without an adapter cache. Seam for tests.
+     */
+    Collection<ResourceConfig> platformMonitoringResources() {
+        com.integrien.alive.common.adapter3.AdapterCache c = adapterCache;
+        return c == null ? null : new ArrayList<>(c.getMonitoringResources());
+    }
+
+    /**
+     * The resources the platform has stopped for this adapter instance,
+     * copied, or {@code null} without an adapter cache. Seam for tests.
+     */
+    Collection<ResourceConfig> platformStoppedResources() {
+        com.integrien.alive.common.adapter3.AdapterCache c = adapterCache;
+        return c == null ? null : new ArrayList<>(c.getStoppedResources());
+    }
+
+    /**
+     * Monitoring plus stopped resources by resource id, or {@code null} when
+     * they cannot be read. Ids known only as stopped go into
+     * {@code stoppedOnly} when it is not null.
+     */
+    private Map<Integer, ResourceConfig> platformKnown(Set<Integer> stoppedOnly) {
+        Collection<ResourceConfig> monitoring;
+        Collection<ResourceConfig> stopped;
+        try {
+            monitoring = platformMonitoringResources();
+            stopped = platformStoppedResources();
+        } catch (RuntimeException e) {
+            logWarn("onCollect: could not read the platform's resources for this adapter"
+                    + " instance; no NOT_EXISTING change this cycle: " + e);
+            return null;
+        }
+        if (monitoring == null && stopped == null) return null;
+        Map<Integer, ResourceConfig> out = new java.util.LinkedHashMap<>();
+        if (monitoring != null) {
+            for (ResourceConfig rc : monitoring) {
+                if (rc != null && rc.getResourceId() != null) out.put(rc.getResourceId(), rc);
+            }
+        }
+        if (stopped != null) {
+            for (ResourceConfig rc : stopped) {
+                if (rc == null || rc.getResourceId() == null
+                        || out.containsKey(rc.getResourceId())) {
+                    continue;
+                }
+                out.put(rc.getResourceId(), rc);
+                if (stoppedOnly != null) stoppedOnly.add(rc.getResourceId());
+            }
+        }
+        return out;
+    }
+
+    /** True when this instance marked {@code rc} NOT_EXISTING and has not seen it since. */
+    private boolean isMarkedNotExisting(ResourceConfig rc) {
+        Map<Integer, VanishEntry> m = vanishTracker;
+        if (m == null || rc == null || rc.getResourceId() == null) return false;
+        VanishEntry e = m.get(rc.getResourceId());
+        return e != null && e.marked;
+    }
+
+    /**
+     * A tracked resource the enumeration delivered again: its miss count
+     * ends, and if it was marked NOT_EXISTING it is sent {@code START}.
+     *
+     * <p>{@code START} is the one {@code DiscoveryResult$StateChangeEnum}
+     * value (NOTEXIST, START, STOP, START_MAINTENANCE, STOP_MAINTENANCE; javap,
+     * the same in 8.18.7, 2.2 and 9.1.1.0100) that names a return to started,
+     * sent with {@code AdapterBase.changeResourceState(ResourceConfig,
+     * DiscoveryResult$StateChangeEnum)}. Whether the platform takes a
+     * NOT_EXISTING resource back to STARTED on it is UNKNOWN: no Broadcom
+     * adapter checked sends it for this (vanished_object_lifecycle.md, "What
+     * is missing"); a live check on devel is owed. The enumeration also
+     * re-registers the resource through {@code addNewResource} every cycle,
+     * the other candidate path in that doc. The SDK counts START in
+     * {@code numberOfNotExistingResources} too (it increments for every
+     * value). A resource that was known only as stopped when marked is not
+     * sent START, so a stop made in the UI is not undone; neither is one the
+     * platform no longer lists.
+     */
+    private void restoreReappeared(Enumerated enumerated) {
+        Map<Integer, VanishEntry> tracker = vanishTracker;
+        if (tracker == null || tracker.isEmpty()) return;
+        Map<Integer, ResourceConfig> known = null;
+        boolean knownRead = false;
+        int restored = 0;
+        String first = null;
+        java.util.Iterator<Map.Entry<Integer, VanishEntry>> it = tracker.entrySet().iterator();
+        while (it.hasNext()) {
+            Map.Entry<Integer, VanishEntry> en = it.next();
+            VanishEntry e = en.getValue();
+            if (e.key == null || !enumerated.keys.contains(e.key)) continue;
+            it.remove();
+            if (!e.marked || e.stoppedWhenMarked) continue;
+            if (!knownRead) {
+                known = platformKnown(null);
+                knownRead = true;
+            }
+            ResourceConfig rc = known == null ? null : known.get(en.getKey());
+            if (rc == null) continue;
+            if (changeStateSafe(rc, DiscoveryResult.StateChangeEnum.START)) {
+                restored++;
+                if (first == null) first = rcLabel(rc);
+            }
+        }
+        if (restored > 0) {
+            logInfo("onCollect: " + restored + " object(s) marked NOT_EXISTING are back in the"
+                    + " enumeration and were sent START this cycle (first: " + first + ")");
+        }
+    }
+
+    /**
+     * Count a miss for every markable platform resource this cycle's
+     * enumeration did not deliver, and mark NOT_EXISTING those at the
+     * threshold. Called only after a complete, successful cycle; see
+     * {@link #notExistingMissedCycles()}.
+     */
+    private void markVanished(ResourceConfig adapterInstance, Enumerated enumerated) {
+        Integer thresholdHook = hook("notExistingMissedCycles", this::notExistingMissedCycles, 0);
+        int threshold = thresholdHook == null ? 0 : thresholdHook;
+        if (threshold <= 0) return;
+        // DockerizedAdapterWrapper precedent: no implicit marking on an empty result.
+        if (enumerated.keys.isEmpty()) return;
+        Set<String> declared = hook("kindsReadThisCycle", this::kindsReadThisCycle, HOOK_FAILED);
+        if (declared == HOOK_FAILED) return;
+        Set<String> read = declared != null ? declared : enumerated.kinds;
+        if (read.isEmpty()) return;
+        Set<String> excluded =
+                hook("notExistingExcludedKinds", this::notExistingExcludedKinds, HOOK_FAILED);
+        if (excluded == HOOK_FAILED) return;
+        if (excluded == null) excluded = Collections.emptySet();
+
+        Set<Integer> stoppedOnly = new HashSet<>();
+        Map<Integer, ResourceConfig> known = platformKnown(stoppedOnly);
+        if (known == null) return;
+        String ownKind = adapterKindKey;
+        if ((ownKind == null || ownKind.isEmpty()) && adapterInstance != null
+                && adapterInstance.getResourceKey() != null) {
+            ownKind = adapterInstance.getResourceKey().getAdapterKind();
+        }
+        ResourceConfig platformInstance = platformInstanceSafe();
+
+        Map<Integer, VanishEntry> tracker = vanishTracker();
+        // Counts of resources the platform no longer lists end; marks stay
+        // so a resource that comes back can still be sent START.
+        tracker.entrySet().removeIf(en -> !en.getValue().marked && !known.containsKey(en.getKey()));
+
+        int marked = 0;
+        String first = null;
+        for (Map.Entry<Integer, ResourceConfig> en : known.entrySet()) {
+            ResourceConfig rc = en.getValue();
+            if (!markable(rc, adapterInstance, platformInstance, ownKind, read, excluded)) {
+                continue;
+            }
+            Integer id = en.getKey();
+            ResourceKey key = rc.getResourceKey();
+            if (enumerated.keys.contains(key)) {
+                tracker.remove(id);
+                continue;
+            }
+            VanishEntry e = tracker.computeIfAbsent(id, k -> new VanishEntry());
+            if (e.marked) continue;
+            e.key = key;
+            e.misses++;
+            if (e.misses < threshold) continue;
+            if (changeStateSafe(rc, DiscoveryResult.StateChangeEnum.NOTEXIST)) {
+                e.marked = true;
+                e.stoppedWhenMarked = stoppedOnly.contains(id);
+                marked++;
+                if (first == null) first = rcLabel(rc);
+            }
+        }
+        if (marked > 0) {
+            logInfo("onCollect: " + marked + " object(s) marked NOT_EXISTING this cycle, missing"
+                    + " from the enumeration for " + threshold + " consecutive complete cycles"
+                    + " (first: " + first + ")");
+        }
+    }
+
+    /**
+     * Whether a platform resource may collect a miss: it has an id and a
+     * key, it is not the adapter instance (by id, by key, or by kind), its
+     * kind was read this cycle and is not excluded, and it belongs to this
+     * adapter kind. Visible to tests.
+     */
+    static boolean markable(ResourceConfig rc, ResourceConfig adapterInstance,
+            ResourceConfig platformInstance, String ownAdapterKind,
+            Set<String> readKinds, Set<String> excludedKinds) {
+        if (rc == null || rc.getResourceId() == null) return false;
+        ResourceKey key = rc.getResourceKey();
+        if (key == null || key.getResourceKind() == null) return false;
+        for (ResourceConfig inst : new ResourceConfig[] {adapterInstance, platformInstance}) {
+            if (inst == null) continue;
+            if (isAdapterInstance(inst, rc)) return false;
+            ResourceKey ik = inst.getResourceKey();
+            if (ik != null && (ik.equals(key) || (ik.getResourceKind() != null
+                    && ik.getResourceKind().equalsIgnoreCase(key.getResourceKind())))) {
+                return false;
+            }
+        }
+        String kind = key.getResourceKind();
+        if (!readKinds.contains(kind) || excludedKinds.contains(kind)) return false;
+        String ak = key.getAdapterKind();
+        return ownAdapterKind == null || ak == null || ownAdapterKind.equalsIgnoreCase(ak);
+    }
+
+    /** {@link AdapterBase#getAdapterInstResource()}, or null if it throws. */
+    private ResourceConfig platformInstanceSafe() {
+        try {
+            return getAdapterInstResource();
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+
+    /** {@code changeResourceState}, logged at WARN and false if it throws. */
+    private boolean changeStateSafe(ResourceConfig rc, DiscoveryResult.StateChangeEnum state) {
+        try {
+            changeResourceState(rc, state);
+            return true;
+        } catch (RuntimeException e) {
+            logWarn("onCollect: could not send state " + state + " for " + rcLabel(rc) + ": " + e);
+            return false;
+        }
+    }
+
+    /**
+     * Call a pak hook for the NOT_EXISTING pass. Anything it throws is
+     * logged at WARN and {@code onFailure} returned, except
+     * {@link VirtualMachineError} and a thread kill, which are rethrown; an
+     * interrupt has its status restored.
+     */
+    private <T> T hook(String name, java.util.function.Supplier<T> call, T onFailure) {
+        try {
+            return call.get();
+        } catch (VirtualMachineError fatal) {
+            throw fatal;
+        } catch (Throwable t) {
+            if (isThreadKill(t)) {
+                throw (Error) t;
+            }
+            if (t instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
+            logWarn("onCollect: " + name + "() failed; no NOT_EXISTING marking this cycle: "
+                    + t, t);
+            return onFailure;
+        }
+    }
+
+    /** DEBUG line, framework-internal (private: no clash with a pak's logDebug). */
+    private void logDebugLine(String message) {
+        com.integrien.alive.common.adapter3.Logger l = adapterLogger();
+        if (l.isDebugEnabled()) l.debug(message);
     }
 
     /** Human-readable label for a ResourceConfig for log messages. */
