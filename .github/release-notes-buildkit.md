@@ -171,7 +171,7 @@ Version note: this is 1.0.19, after 1.0.18.
   `SuiteApiStitchClient`) gain `pushPropertiesBatch`, `pushStatsBatch` and
   `pushBatch`, which push onto many foreign resources through
   `POST /api/resources/properties` and `POST /api/resources/stats`: two
-  calls per batch instead of two per object. Evidence: wire shape from spec + vendor examples; stats landing proven on 8.18.7; properties landing and 9.0/9.1 landing to be proven live before a pak adopts.
+  calls per batch instead of two per object. Evidence: wire shape from spec + vendor examples; both batches proven landing live on 8.18.7, 9.0.2 and 9.1.1 (properties with a changed value).
   **Opt-in: a pak that keeps calling `pushProperties` / `pushStats` per
   object builds and behaves exactly as before.**
 - `pushBatch(properties, stats, timestamp)` sends properties, then stats.

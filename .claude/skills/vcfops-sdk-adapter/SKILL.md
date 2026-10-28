@@ -144,7 +144,7 @@ cycle and calls `stitcher.pushBatch(props, stats, ts)`: properties go
 first, then stats, in requests of at most 100 resources and about 1 MB
 (`pushPropertiesBatch` / `pushStatsBatch` take `maxResources, maxBytes`
 when that is wrong for the pak). Cost drops from two calls per object to
-two per batch. Evidence status: wire shape from spec + vendor examples; stats landing proven on 8.18.7; properties landing and 9.0/9.1 landing to be proven live before a pak adopts. It never throws; count
+two per batch. Evidence status: wire shape from spec + vendor examples; both batches proven landing live on 8.18.7, 9.0.2 and 9.1.1 (properties with a changed value). It never throws; count
 from the returned `SuiteApiBatchResult` (sent, batchesOk, batchesFailed,
 fellBack, skipped, dropped, stopped; `isClean()`) rather than grepping the
 log. A batch refused with a 4xx other than 401/429 is re-sent per id to
