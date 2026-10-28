@@ -35,6 +35,13 @@ YAML schema (terse, expanded to wire JSON by `to_wire()`):
           - { relation: DESCENDANT, name: "[Custom] X", op: EQ }
         tag:
           - { category: "Environment", op: EQ, value: "production" }
+      # "Every object of this kind": explicit opt-in, no conditions allowed.
+      - resource_kind: "(Custom) Application"
+        adapter_kind: Container
+        all_of_kind: true
+
+A rule must carry at least one condition unless it sets
+`all_of_kind: true`, which cannot be combined with any condition.
 
 Multiple `rules[]` entries are OR'd together; condition rules
 within one rule entry are AND'd.
@@ -168,14 +175,33 @@ class CustomGroupDef:
             raise CustomGroupValidationError(
                 f"{tag}: adapter_kind is required"
             )
-        # At least one condition list must be non-empty.
-        if not any(
+        # `all_of_kind: true` is the explicit opt-in for a rule with no
+        # conditions ("every object of this kind"). Without it, at least
+        # one condition list must be non-empty, so a forgotten condition
+        # still fails. Live-proven wire (empty condition lists, 201 on
+        # POST /api/resources/groups): see
+        # knowledge/context/wire-formats/view_widget_all_objects_of_kind.md.
+        all_of_kind = rule.get("all_of_kind", False)
+        if not isinstance(all_of_kind, bool):
+            raise CustomGroupValidationError(
+                f"{tag}: all_of_kind must be true or false, "
+                f"got {all_of_kind!r}"
+            )
+        has_conditions = any(
             rule.get(k)
             for k in ("stat", "property", "name", "relationship", "tag")
-        ):
+        )
+        if all_of_kind and has_conditions:
+            raise CustomGroupValidationError(
+                f"{tag}: all_of_kind: true cannot be combined with "
+                f"conditions (stat/property/name/relationship/tag); "
+                f"drop the conditions or drop all_of_kind"
+            )
+        if not all_of_kind and not has_conditions:
             raise CustomGroupValidationError(
                 f"{tag}: must contain at least one condition "
-                f"(stat/property/name/relationship/tag)"
+                f"(stat/property/name/relationship/tag), or set "
+                f"all_of_kind: true to match every object of this kind"
             )
         for c in rule.get("stat") or []:
             self._require_keys(tag + ".stat", c, ("key", "op", "value"))
