@@ -590,6 +590,89 @@ exactly once per cycle (pinned by `AdapterInstanceStatusTest`), so paks
 that mark the cycle start there (UniFi build 14, Synology build 31) keep
 working until they move to the hook.
 
+### Vanished objects: NOT_EXISTING (unifi#20, buildkit 1.0.22)
+
+Evidence: `knowledge/context/sdk/vanished_object_lifecycle.md`. Before
+1.0.22 nothing in the framework told the platform an object was gone, so a
+removed device stayed `DATA_RECEIVING` with frozen properties forever (the
+UniFi camera case), and the deleted-object retention settings never applied
+to it.
+
+**Opt-in (framework review B1).** Nothing is counted or marked unless the
+pak overrides `kindsReadThisCycle()` to return the kinds its
+`enumerateResources` read in full this cycle. The default is `null`, which
+marks nothing, so no pak changes behaviour on 1.0.22 until it opts in. That
+a kind was delivered is not proof it was read in full. unifi swallows a
+per-site `stat/device` failure (`failedSites`) and still delivers the same
+kinds from the other sites, and synology skips a share whose NFS probe
+failed (`nfsProbeFailed`) while delivering the other exports. The Broadcom
+adapters decide completeness themselves in the same way: vSAN treats the
+objects of a failed vCenter as present, and NSX skips the step when its
+instance is down.
+
+**Mechanism.** Only for `discoverOnCollect()` adapters that opted in.
+`onCollect` records the `ResourceKey`s `enumerateResources` delivers. After
+a complete cycle it diffs them against `adapterCache.getMonitoringResources()`
+plus `getStoppedResources()`, for the declared kinds only, and counts a miss
+per absent resource. At `notExistingMissedCycles()` consecutive misses it
+calls `changeResourceState(rc, DiscoveryResult.StateChangeEnum.NOTEXIST)`
+with the platform's own `ResourceConfig`. The default is 12, from the
+`DockerizedAdapterWrapper` / `implicitNotExistingMissedCycles` precedent,
+and 0 turns marking off. The threshold counts cycles, not time: an hour at
+5 minutes, 12 minutes at 1 minute. Presence is `ResourceKey` equality (adapter
+kind, resource kind, uniqueness identifiers), the key the platform's own
+cache map uses. Logging is one INFO line per cycle with the count and first
+object.
+
+**Guards (a cycle that fails one counts nothing and marks nothing).**
+- The enumeration (or `rediscover`) threw.
+- The enumeration delivered no resource.
+- The cycle was stopped or interrupted.
+- Every collected resource failed (the #223 adapter instance rule).
+- The platform resource list could not be read.
+- A pak hook threw.
+
+A sighting resets the count even on a guarded cycle.
+
+**Never marked.**
+- The adapter instance, matched by id, key or kind, against both the
+  `onCollect` argument and `getAdapterInstResource()`.
+- Kinds in `notExistingExcludedKinds()`: synthetic and aggregate kinds, and
+  any kind registered outside `enumerateResources`.
+- Kinds not declared read this cycle.
+- Resources of another adapter kind.
+
+Kind sets compare ignoring case.
+
+**First opt-in sweeps orphans (review W3).** Every object the platform
+still holds under a key no current enumeration produces is counted from the
+first opted-in cycle. Examples are synology objects from before build 34's
+DiskStation re-key and unifi `<mac>_0` ports from before #23. They are
+marked about 12 cycles later and deleted by retention (6 hours on 9.0 devel,
+168 hours by default). Correct, but irreversible.
+
+**After the mark.**
+- A marked object that `onCollect` is still handed is not collected.
+  Setting `DATA_RECEIVING` on it is what kept the removed camera's
+  availability at 1.0.
+- If the enumeration delivers it again while the platform still lists it,
+  it is sent `StateChangeEnum.START`, unless it was known only as a stopped
+  resource when marked.
+- The SDK's `AdapterCache.processNotExistingResponse` drops a resource when
+  the platform echoes a NOTEXIST back (evidence doc §1). After that there is
+  no platform `ResourceConfig` to send START with, and the object can return
+  only through normal discovery (the enumeration's `addNewResource`). That
+  case is logged at INFO.
+- **UNVERIFIED:** neither path is established live. A devel check is owed
+  before a pak opts in: mark one throwaway object, re-deliver it, and watch
+  START and `addNewResource`.
+
+**State is in memory.** Counts and marks belong to the adapter instance
+object. A collector restart starts counts at zero, which gives a later mark
+and never an early one. A tracked entry, marked or not, is dropped as soon
+as the platform no longer lists its resource (review W2), with one INFO line
+per cycle for marked ones.
+
 ### Logging — UPDATED (componentLogger added)
 
 Use `logInfo()` / `logWarn()` / `logError()` helpers on `VcfCfAdapter`
@@ -1143,6 +1226,9 @@ Empirical basis: `knowledge/context/investigations/suiteapi_ambient_auth_devel_2
 
 | Date | Change |
 |---|---|
+| 2026-10-28 | **Ambient credential: no file decrypt on a Cloud Proxy (compliance#58).** `AmbientCredential.load(AdapterConfig)`: when the explicit override is not set and the injected per-instance credential is absent, a collector whose `/usr/lib/vmware-vcops/user/conf/collector/collector.properties` has `isUnifiedCloudProxy=true`, or `httpRelayEnabled=true` where `isUnifiedCloudProxy` is absent (8.18; an explicit `false` wins, review N1) (`AmbientCredential.isCloudProxy`) gets an `IOException` naming the proxy, and no file candidate is read and `Crypt` is never called. Before, Test Connection on the 9.1 devel proxy decrypted `automationuser.properties`, and the platform `Crypt.decrypt_impl_v2` logged "pad block corrupted" at ERROR, returned null, and the login then 401'd. The file identities are dead on a proxy anyway (DEF-006). A null return from `Crypt.decrypt` is now an `IOException` naming the file, not a credential with no password. Detection evidence (six devel nodes on three lines, platform bytecode, why `remote=true` is not used): `knowledge/context/sdk/cloud_proxy_detection.md`. New `AmbientCredentialTest` cases: detection on the six nodes' property lines, and the proxy path never reaching `Crypt`; a mutation that disables the check reproduces the `Crypt` call. **Versioning:** second item of `BUILDKIT_VERSION` `1.0.22`. **Adapter adoption:** none needed. Compliance's `testSuiteApi` already logs one WARN with no stack (`getSimpleName(): getMessage()`); after a rebuild it carries the proxy message instead of the 401. Collection on a proxy is unchanged (injected credential). |
+| 2026-10-28 | **Vanished objects can be marked NOT_EXISTING, opt-in per kind (unifi#20).** `VcfCfAdapter.onCollect`, for `discoverOnCollect()` adapters that override `kindsReadThisCycle()`, diffs the platform's monitoring plus stopped resources of the declared kinds against what `enumerateResources` delivered. After `notExistingMissedCycles()` consecutive complete cycles missing (default 12, cycles not time) it calls `changeResourceState(rc, NOTEXIST)` with the platform's `ResourceConfig`; see §Vanished objects. New protected hooks: `notExistingMissedCycles()`, `kindsReadThisCycle()` (default `null` = mark nothing) and `notExistingExcludedKinds()`, plus the constant `DEFAULT_NOT_EXISTING_MISSED_CYCLES`. Marked objects are not collected while missing. One is sent `START` on return only while the platform still lists it; otherwise it returns through discovery (`AdapterCache.processNotExistingResponse` drops it), with an INFO line. Tracked entries the platform no longer lists are released. New test `adapter_framework/test/.../VanishedResourceTest.java` (65 checks: same kind from two parents with one unread, the default marks nothing, eviction, no START once unlisted, kinds ignoring case). Framework review `knowledge/context/reviews/framework/adapter-framework-vanished-objects-2026-10-28.md`: B1 (opt-in), W1 to W4 and N3/N4 fixed in this round. **Versioning:** `BUILDKIT_VERSION` `1.0.22`. Open PR #281 holds 1.0.21 and must merge and publish first, so `sdk-buildkit-v1` never moves backwards. **Adapter adoption:** no pak changes behaviour until it opts in. compliance enumerates only its world and has nothing to opt in. unifi: before opting in, track `failedSites` (leave the device kinds out of the read set when any site failed) and per-device `port_table`/`radio_table_stats` gaps, and name `UniFiCamera`/`UniFiNvr` only when the Protect read succeeded. Decide whether the synthetic per-site `UniFiWirelessAggregate` goes in `notExistingExcludedKinds()`. synology: leave `SynologyNfsExport` out when `nfsProbeFailed` is non-empty, and handle the optional UPS and SSD cache the same way. On first opt-in both sweep their legacy-keyed orphans (synology pre-build-34 keys, unifi `<mac>_0` ports), marked about 12 cycles later and deleted by retention. Run the live START/re-registration check on devel before the first pak opts in. |
+| 2026-10-27 | **Buildkit 1.0.21: pinnable kit release, `-proc:none` on every compile path (template#18, compliance#29, sdk-runtime#1).** Every `sdk_builder` javac command (`_compile`, the framework jar in `_ensure_framework_jar`, each `_sdk_compat_leg`) already passed `-proc:none` (since 1.0.11 / #184); the factory-only `adapter_framework/build-framework.sh` primary compile did not, and now does. Guard: `tests/managementpacks/test_javac_proc_none.py` puts a jar registering an annotation processor whose `init()` throws on each path's classpath (adapter compile, framework jar, compat leg, `build-framework.sh`) and requires the compile to succeed; a control shows the fixture fires without the flag on JDK < 23 (JDK 23+ no longer runs classpath processors by default), and static checks require one `-proc:none` per `--release` javac command in `sdk_builder.py` and in the kit's rewritten copy. The Publish sdk-buildkit workflow attaches a `SHA256SUMS` asset (sha256sum format, the tarball's line) to each versioned `sdk-buildkit-vX.Y.Z` release, so a pak repo can pin an exact kit and check it against a committed checksum; the floating `sdk-buildkit-v1` release is unchanged (tarball plus `.sha256` sidecar). **Versioning:** `BUILDKIT_VERSION` `1.0.21`; the first kit cut with `SHA256SUMS`, so it is the earliest exact version a pak repo can pin that way. **Adapter adoption:** none required; the kit's compile commands are unchanged from 1.0.20 and a built pak is identical. Pak repos that want the pin (template#18, compliance#29) switch from `sdk-buildkit-v1` to `sdk-buildkit-v1.0.21` and verify the tarball against a committed `SHA256SUMS`. The floating step moves `sdk-buildkit-v1` only when this version is the highest *published* (non-draft) `v1.Y.Z` release, not the highest tag, so a higher tag whose publish failed or was refused by the main-ancestry gate cannot freeze it (Codex review on #281). Because #283 merged first, the 1.0.21 kit cut from main also carries the bundled-content checks and the 18-22 `sub_type` rule (row below). |
 | 2026-10-27 | **SDK bundled content: validate-sdk runs build-sdk's reference checks, and both check symptoms and alerts against describe.xml; alert `sub_type` must be 18-22.** `check_bundled_content` in `sdk_builder.py` is the one entry point both commands call (build-sdk before the compile; `_write_outer_pak` keeps the reference half for direct callers). Reference half: an alert naming a symptom not in `bundled_content.symptoms`, or a `[VCF Content Factory]` recommendation not in `bundled_content.recommendations`, now fails validate-sdk too (it failed only build-sdk). describe.xml half: a bundled symptom on the pak's adapter kind must name a declared ResourceKind, a condition key declared on that kind (ResourceGroup path `|` attribute key; ComputedMetric keys count as metrics; `Group:instance|attr` matches `Group|attr`), and `metric_static`/`metric_dynamic` on a metric, `property` on an `isProperty="true"` attribute. A key declared only on another kind names that kind in the error. Platform key groups need no declaration: `badge`, `System Attributes`, `Super Metric`, `OnlineCapacityAnalytics` (metrics) and `System Properties` (properties); evidence is the reference corpus and `adapter_describe_cache/MSSQL` statkeys (a non-VMware pak carrying `badge|`, `System Attributes|`, `OnlineCapacityAnalytics|`). `Capacity Analytics Generated` is the display name of `OnlineCapacityAnalytics`, not a key, and is rejected with that hint; an unknown key's error lists the allowlist. A bundled alert on the pak's kind must name a declared ResourceKind, and each symptom in a `defined_on: SELF` set must share the alert's adapter and resource kind; PARENT/CHILD/DESCENDANT/ANCESTOR sets are not kind-checked (the relation is runtime, describe.xml does not declare it). **Foreign adapter kinds:** a bundled symptom or alert on another adapter kind (stitched metrics on VMWARE HostSystem, or an alert on a built-in vSphere metric) is accepted when the pak names that kind: in the new adapter.yaml opt-in `content_foreign_adapter_kinds: [VMWARE]` (list of non-empty strings, no duplicates, not the pak's own kind; `sdk_project` validates it), in describe.xml (an `adapterKind` attribute or `adapterkind=` in a ComputedMetric expression), or as a `cross_mp_edges` `foreign_adapter_kind`. Prefer the opt-in: `cross_mp_edges` is a docs stanza and would publish a relationship that does not exist. Foreign-kind keys are not checked (they live in the other adapter's describe). Any other adapter kind is an error naming the opt-in. `sub_type` (in `vcfcf_core.alerts.loader`, so factory alerts and pak alerts alike): 18 Availability, 19 Performance, 20 Capacity, 21 Compliance, 22 Configuration, per the vendor `alertDefinitionSchema.xsd`; 19 only when the key is absent or null (was 3), an explicit 0 or non-integer fails. Guard: `tests/managementpacks/test_sdk_bundled_content_checks.py`. Built pak bytes unchanged: the checks only read. **Versioning:** the kit ships `sdk_builder.py`, `sdk_project.py` and `alerts_loader.py`, so pak CI gets these checks only from the next `BUILDKIT_VERSION` (not bumped here; #281 holds 1.0.21). **Adapter adoption:** unifi is the only pak these checks read: its 14 symptoms and 8 alerts (sub_type 18/19/20) pass. compliance, synology and template bundle no symptoms or alerts (compliance's 146 stitched VMWARE symptoms and 144 alerts live in describe.xml, outside `bundled_content`), so the checks do not read them. No pak needs `content_foreign_adapter_kinds` today. |
 | 2026-10-27 | **Buildkit 1.0.20: `build-buildkit` runs with only PyYAML again.** No kit has published since 1.0.12: the sdk-buildkit-v1.0.19 tag (1.0.13 to 1.0.18 were never tagged) failed in the Publish sdk-buildkit workflow (PyYAML only, by design) with `No module named 'requests'`. Chain: `_factory_source_commit()` (added in #248, the 1.0.14 bump) imports `sdk_builder`, whose module-level `from vcfcf_supermetrics import crossref` ran `vcfcf_supermetrics/__init__`, which imported the REST client and so `requests`. `sdk_builder` now imports the resolver from `vcfcf_core.supermetrics` (the kit rewrite rule follows it), and `vcfcf_supermetrics` and `vcfcf_customgroups` resolve their clients lazily by module `__getattr__`, as `vcfcf_common` already did. Guard: `tests/managementpacks/test_buildkit_without_requests.py` runs the real `build-buildkit` CLI, the kit it produces, and every `vcfcf_*` package import in a subprocess whose `sys.meta_path` refuses `requests`. Kit contents otherwise unchanged from 1.0.19 source. **Versioning:** `BUILDKIT_VERSION` `1.0.20`; the `sdk-buildkit-v1.0.19` tag exists but its publish failed, and 1.0.13 to 1.0.18 were never tagged, so 1.0.20 is the first published kit since 1.0.12 and `sdk-buildkit-v1` jumps from 1.0.12 straight to 1.0.20, carrying every 1.0.13 to 1.0.19 change at once. **Adapter adoption:** pak repos following `sdk-buildkit-v1` get all the unpublished adoption notes above on their next build: rebuild every Tier 2 pak (needed by 1.0.14 framework logging/account status, 1.0.16 ThreadDeath removal, 1.0.18 `ManagedHttpClient` 8.18 fix, 1.0.19 #245 failed-child status); visible after the rebuild: helper log lines under the adapter class's name, ERROR for an account whose every resource fails, the framework version at configure, the 1.0.17 Test Connection certificate wording, and NO_DATA_RECEIVING for an object whose collect fails; #270: `build-sdk` / `validate-sdk` resolve `supermetric:"<name>"` view columns only against the pak's `bundled_content.supermetrics` and reject duplicate names there (no shipped pak trips it); the kit now ships `defect_gate.py` (#226), adopted per pak repo; the 9.1.1 and per-line compile legs (#211, #252) reach pak CI only when each repo's `build-pak-on-tag.yml` passes the jars. No source change is required by any of them; this row's own fix changes nothing in a built pak. |
 | 2026-10-26 | **SDK builds: `supermetric:"<name>"` view columns resolve only against the pak's bundled SMs; duplicate SM names in that scope are rejected (issue #270).** Factory `build-sdk` / `validate-sdk` no longer fall back to the factory's `content/supermetrics` when a pak bundles no SMs: the scope is always `bundled_content.supermetrics` (an empty list when there are none), so a view column naming any other SM fails the build. Factory now matches the kit, which has used an empty map since M2 row 3; no fallback either way. `sm_id_map` (core, so also the kit's `sm_loader.py`) rejects two different bundled SMs sharing one display name instead of letting the last one loaded win. All seven SDK paks with an `adapter.yaml` (compliance, synology, template, unifi, vcommunity, vcommunity-os, vcommunity-vsphere) validate clean on the factory CLI and the standalone kit; no pak names an unbundled SM or bundles a duplicate name, so the emitted view XML is unchanged. **Versioning:** no `BUILDKIT_VERSION` bump (stays 1.0.19): the kit's only change is the duplicate-name rejection, which no pak trips, and an adopted kit builds byte-identical paks; a bump would ask every pak repo to re-vendor for no output change. **Adapter adoption:** none. |

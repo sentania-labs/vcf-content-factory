@@ -209,6 +209,44 @@ the cycle continues, except a `VirtualMachineError` or a thread kill. Do not mar
 `needsRediscovery` in new code; the framework still calls it exactly once
 per cycle so older paks keep working.
 
+## Vanished objects: NOT_EXISTING, opt-in per kind
+
+Since buildkit 1.0.22 (unifi#20) the framework can mark a resource the
+platform knows but `enumerateResources` no longer delivers as `NOTEXIST`
+(`changeResourceState`), and the platform deletes it after its retention
+setting. **It is opt-in: a pak marks nothing until it overrides
+`kindsReadThisCycle()`**, and no pak changes behaviour on 1.0.22 until it
+does. Only `discoverOnCollect()` paks. What the pak decides:
+
+- **Which kinds were read in full this cycle.** Record during
+  `enumerateResources` and return them from `kindsReadThisCycle()`. Leave a
+  kind out whenever any part of its read failed, even if objects of it were
+  delivered: one UniFi site whose device list failed still leaves switches
+  from the other sites, one Synology share whose NFS probe failed still
+  leaves other exports. A whole optional sub-tree that failed (UniFi
+  Protect) is left out the same way. Name a kind whose read succeeded and
+  returned nothing, so its last object can be marked. `null` or an empty
+  set marks nothing.
+- **Synthetic and aggregate kinds**, and any kind registered outside
+  `enumerateResources` (from `collect()` or `rediscover()`): list them in
+  `notExistingExcludedKinds()`. Kinds compare ignoring case.
+- **Threshold.** `notExistingMissedCycles()`, default 12 *cycles*, not time
+  (an hour at 5 minutes, 12 minutes at 1 minute). Return 0 to opt out.
+- **Before the first opt-in**, check what the platform holds for the pak:
+  every legacy-keyed orphan (old identifier schemes) is marked about 12
+  cycles later and then deleted with its history. Correct, but it cannot be
+  undone.
+- **Do not** set `NO_DATA_RECEIVING` or skip a vanished object yourself:
+  NO_DATA_RECEIVING means "present, no data". Once marked, the framework
+  stops collecting the object.
+
+No marking on a cycle whose enumeration threw, delivered nothing, was
+stopped, or failed the adapter instance; never the adapter instance or its
+kind. A marked object that comes back is sent `START` only while the
+platform still lists it; the SDK cache usually drops it first, and then it
+returns through normal discovery. Neither is verified live yet.
+Evidence: `knowledge/context/sdk/vanished_object_lifecycle.md`.
+
 ## Environment-wide totals: ComputedMetrics on the pak singleton
 
 A number that spans every adapter instance (fleet counts, a weighted

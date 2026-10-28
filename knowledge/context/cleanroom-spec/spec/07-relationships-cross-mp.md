@@ -206,7 +206,7 @@ Per level (between `||`s):
 - **`::child`** — (optional, after the kind) — parent→child traversal
 - **`::~child`** — (optional, after the kind) — **inverse** (child→parent)
 - **`/recursive`** — (optional, end of segment) — descend recursively at this level
-- **`/preferred`** — (optional, end of segment) — prefer this segment when multiple paths are available
+- **`/preferred`** — (optional, end of segment) — runtime meaning UNCONFIRMED. "Prefer this segment when multiple paths are available" is a reading of the name, not evidence. What is known (SDK `TraversalSpecUtil.validateResKindPath`, bytecode identical in 8.18.7 and 9.1.1; UniFi build 18, 2026-10-28): it is parsed separately from `/recursive`, and is rejected on the first or last level, together with `/skip`, or before a wildcard level
 
 ### Example: intra-MP path
 
