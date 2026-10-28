@@ -23,13 +23,21 @@ Covers:
   6. Same-row and upward diagram edges: routed through lanes between rows,
      so no horizontal edge segment runs through a node (UniFi Gateway >
      Switch, Synology SSD Cache > Disk shapes).
+  7. ``::~child`` inverts its edge (that kind is the parent, as in Synology's
+     ``VMWARE::Datastore::~child``); top-level order is the pak's own roots
+     in describe.xml order, then foreign roots sorted; output is
+     byte-identical across processes with different hash seeds.
 """
 from __future__ import annotations
 
+import os
 import re
+import subprocess
+import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
+import vcfcf_managementpacks
 from vcfcf_managementpacks.docs_gen import (
     _assign_depth,
     _layout_nodes,
@@ -365,3 +373,77 @@ class TestLayoutAndDiagrams:
         assert generate_svg(a) == generate_svg(b)
         assert generate_excalidraw(a) == generate_excalidraw(b)
         assert generate_inventory_tree_md(a) == generate_inventory_tree_md(b)
+
+
+# Synology shape with the foreign ::~child parent, plus a second foreign
+# parent and a second own root, so ordering has something to decide.
+_INVERSE = [
+    "ak::Site||ak::Pool::child||ak::Volume::child||VMWARE::Zeta::~child",
+    "ak::Site||ak::Pool::child||ak::Volume::child||ak::Disk::child||VMWARE::Alpha::~child",
+    "ak::Gateway||ak::Port::child",
+]
+
+
+class TestInverseChild:
+    def test_inverse_segment_is_the_parent(self) -> None:
+        assert _pairs(["ak::Site||ak::Lun::child||VMWARE::Datastore::~child"]) == [
+            ("Site", "Lun"),
+            ("Datastore", "Lun"),
+        ]
+
+    def test_path_continues_from_the_inverse_level(self) -> None:
+        assert _pairs(["ak::A||ak::B::~child||ak::C::child"]) == [("B", "A"), ("B", "C")]
+
+    def test_inverse_with_recursive(self) -> None:
+        assert _pairs(["ak::A||ak::B::~child/recursive"]) == [("B", "A"), ("B", "B")]
+
+    def test_roots_own_in_describe_order_then_foreign_sorted(self, tmp_path: Path) -> None:
+        # Edge order meets Gateway after Site, Zeta before Alpha; describe.xml
+        # lists Site before Gateway.
+        assert _tree_roots(_model(tmp_path, _INVERSE)) == ["Site", "Gateway", "Alpha", "Zeta"]
+
+    def test_foreign_parent_tree_and_parents_column(self, tmp_path: Path) -> None:
+        model = _model(tmp_path, _INVERSE)
+        assert _tree_lines(model) == [
+            "- **Site** (`Site`)",
+            "  - **Pool** (`Pool`)",
+            "    - **Volume** (`Volume`)",
+            "      - **Disk** (`Disk`)",
+            "- **Gateway** (`Gateway`)",
+            "  - **Port** (`Port`)",
+            "- **Alpha** (`Alpha`)",
+            f"  - **Disk** (`Disk`) {_SEE_ABOVE}",
+            "- **Zeta** (`Zeta`)",
+            f"  - **Volume** (`Volume`) {_SEE_ABOVE}",
+        ]
+        tree = generate_inventory_tree_md(model)
+        assert "| `Volume` | Volume | - | Pool, Zeta |" in tree
+        assert "| `Disk` | Disk | - | Volume, Alpha |" in tree
+
+    def test_foreign_parent_does_not_pull_pak_kinds_up(self, tmp_path: Path) -> None:
+        depth = _assign_depth(_model(tmp_path, _INVERSE))
+        assert (depth["Site"], depth["Pool"], depth["Volume"], depth["Disk"]) == (0, 1, 2, 3)
+
+    def test_byte_identical_across_hash_seeds(self, tmp_path: Path) -> None:
+        project = tmp_path / "proj"
+        _model(tmp_path, _INVERSE + _UNIFI_LIKE + _SYNOLOGY_LIKE, "proj")
+        src = str(Path(vcfcf_managementpacks.__file__).resolve().parents[1])
+        script = (
+            "import sys; from pathlib import Path; "
+            "from vcfcf_managementpacks.docs_gen import generate_docset; "
+            "generate_docset(Path(sys.argv[1]))"
+        )
+        outputs = []
+        for seed in ("1", "2", "3"):
+            env = dict(os.environ, PYTHONHASHSEED=seed, PYTHONPATH=src)
+            subprocess.run([sys.executable, "-c", script, str(project)], env=env, check=True)
+            outputs.append({
+                name: (project / "docs" / name).read_bytes()
+                for name in (
+                    "inventory-tree.md",
+                    "inventory-tree.svg",
+                    "inventory-tree.excalidraw",
+                    "README.md",
+                )
+            })
+        assert outputs[0] == outputs[1] == outputs[2]

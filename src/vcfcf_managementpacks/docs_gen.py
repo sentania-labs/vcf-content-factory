@@ -167,6 +167,9 @@ def _parse_traversal_paths(spec_kind_elem, ns: str) -> List[TraversalEdge]:
     Each consecutive pair rk(i) → rk(i+1) produces an edge (if not already seen).
     The adapter-instance root is skipped; it appears in describe.xml as type=7.
 
+    A ``::~child`` segment inverts its edge: that kind is the PARENT of the
+    previous level (vSphere ``VMWARE::Datastore::~child`` after a Synology
+    LUN means the Datastore holds the LUN), matching the cross-MP table.
     A ``/recursive`` level adds the self-edge rk → rk right after the edge
     into it, so the tree, diagram and Parent(s) column show that the kind
     nests under itself. ``/preferred`` is stripped and otherwise ignored.
@@ -188,17 +191,24 @@ def _parse_traversal_paths(spec_kind_elem, ns: str) -> List[TraversalEdge]:
         # Each segment: "adapterKind::resourceKind" or
         # "adapterKind::resourceKind::child", optionally ending in
         # "/recursive" and/or "/preferred"
-        levels: List[Tuple[str, bool]] = []  # (resource kind key, recursive)
+        # (resource kind key, recursive, inverse)
+        levels: List[Tuple[str, bool, bool]] = []
         for seg in segments:
             parts = seg.split("::")
             if len(parts) >= 2:
                 parts[-1], mods = _split_path_modifiers(parts[-1])
-                levels.append((parts[1], "recursive" in mods))  # resource kind key
+                inverse = len(parts) >= 3 and parts[2].strip().startswith("~")
+                levels.append((parts[1], "recursive" in mods, inverse))
 
-        # Build consecutive pairs, plus the self-edge of each recursive level
-        for i, (rk, recursive) in enumerate(levels):
+        # Build consecutive pairs (reversed for ~child), plus the self-edge
+        # of each recursive level
+        for i, (rk, recursive, inverse) in enumerate(levels):
             if i > 0:
-                _add(levels[i - 1][0], rk)
+                prev = levels[i - 1][0]
+                if inverse:
+                    _add(rk, prev)
+                else:
+                    _add(prev, rk)
             if recursive:
                 _add(rk, rk)
 
@@ -358,13 +368,21 @@ def _build_children_map(model: AdapterDocModel) -> Dict[str, List[str]]:
 def _tree_roots(model: AdapterDocModel) -> List[str]:
     """Return kind keys that are edge sources but not edge targets (tree roots).
 
-    Excludes the adapter-instance kind (type=7).
+    Order is deterministic: the pak's own root kinds first, in describe.xml
+    order, then foreign root kinds (a ``::~child`` parent such as a VMWARE
+    Datastore) sorted by label, then key.
     """
-    all_parents = {e.parent_key for e in model.edges}
     # A recursive self-edge does not make a kind a child of something else.
     all_children = {e.child_key for e in model.edges if not e.is_self}
-    # Roots appear as parents but not as children
-    roots = [k for k in all_parents if k not in all_children]
+    candidates: List[str] = []
+    for e in model.edges:
+        k = e.parent_key
+        if k not in all_children and k not in candidates:
+            candidates.append(k)
+    own = [k.key for k in model.kinds if k.key in candidates]
+    # A foreign kind has no ResourceKind here, so its label is its key.
+    foreign = sorted(k for k in candidates if k not in model.kind_map)
+    roots = own + foreign
     if not roots:
         # Fallback: first non-adapter-instance kind that appears as a parent
         for e in model.edges:
@@ -394,17 +412,27 @@ def _assign_depth(model: AdapterDocModel) -> Dict[str, int]:
     roots = _tree_roots(model)
 
     depth: Dict[str, int] = {}
-    queue = [(r, 0) for r in roots]
-    while queue:
-        node, d = queue.pop(0)
-        if node in depth:
-            depth[node] = min(depth[node], d)
-        else:
+
+    def _bfs(start: List[str], fill_only: bool) -> None:
+        # fill_only: leave kinds already placed (from the pak's own roots)
+        # where they are, so a foreign ::~child parent such as a VMWARE
+        # Datastore cannot pull its pak children up to row 1.
+        queue = [(r, 0) for r in start]
+        placed = set(depth) if fill_only else set()
+        while queue:
+            node, d = queue.pop(0)
+            if node in placed:
+                continue
+            if node in depth and depth[node] <= d:
+                continue  # already as shallow; also stops any cycle
             depth[node] = d
-        for child in children.get(node, []):
-            if child == node:
-                continue  # recursive self-edge: same row, and no endless loop
-            queue.append((child, d + 1))
+            for child in children.get(node, []):
+                if child == node:
+                    continue  # recursive self-edge: same row
+                queue.append((child, d + 1))
+
+    _bfs([r for r in roots if r in model.kind_map], fill_only=False)
+    _bfs([r for r in roots if r not in model.kind_map], fill_only=True)
 
     # Adapter-instance kinds: depth = -1
     for k in model.kinds:
