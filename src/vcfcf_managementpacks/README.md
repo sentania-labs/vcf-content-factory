@@ -89,6 +89,13 @@ the watch, it prints `ACCOUNTS UNCHECKED` with the state as of the last good
 read and leaves the exit code alone. This adds about 2 minutes when the
 pak's adapter kind has accounts; `--no-restart-failed` skips it, and
 `--no-wait` never runs it.
+A start runs whatever adapter jar the collector has loaded, and no Suite API
+endpoint reports which version that is. When a Cloud Proxy's jar sync fails
+(collector log: "Adapter jar synchronization failed", after "Did not receive
+response from Controller for 'Sync Adapters' task"), the proxy keeps the old
+version: re-run the same install instead of starting the account.
+`ACCOUNT NOT STARTED` says so, and a `NOTE` line says so whenever the
+installer sent a start.
 After that, `install` checks that each dashboard the pak ships
 finished building (issue #244); when one is still building it waits once
 (180 s by default, `--materialization-wait`, capped at 900 s) before the
@@ -105,7 +112,9 @@ reads each copy and prints `SUMMARY OK` or `SUMMARY INCOMPLETE <kind>
 <copy id> (<n> of <m> widgets loading)` as information. `--summary-rebind`
 is accepted and is the default. Exit code 3 means the pak installed but a post-install check failed
 (`ACCOUNT NOT STARTED`, including an account already FAILED before the install, `MATERIALIZATION STALLED`, or with the repair on `SUMMARY NOT REBOUND`,
-which quotes the server's HTTP status and answer); do not reinstall on it.
+which quotes the server's HTTP status and answer); do not reinstall on it,
+except for `ACCOUNT NOT STARTED` when the collector log shows "Adapter jar
+synchronization failed".
 
 **Credential env vars** (matches the rest of the factory):
 

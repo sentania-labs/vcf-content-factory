@@ -102,6 +102,20 @@ RESTARTABLE_STATES = frozenset({"FAILED", "STOPPED", "NONE"})
 TRANSITIONAL_STATES = frozenset({"STARTING", "STOPPING", "UPDATING"})
 #: The only state that counts as collecting.
 OK_STATE = "STARTED"
+#: The second failure mode (compliance 0.0.0.103 on devel_8_18, Cloud Proxy,
+#: 2026-10-28): the proxy's "Sync Adapters" wait on the controller timed out,
+#: "Adapter jar synchronization failed", and it loaded the OLD adapter
+#: version. A start then only runs the old jar; re-running the same install
+#: synced the jar and the account started on its own. No Suite API endpoint
+#: (operations/internal specs 8.18, 9.0, 9.1) reports the adapter version a
+#: collector has loaded, so only the collector log tells the two apart.
+JAR_SYNC_ADVICE = (
+    "If the collector log (collector.log; Administration > Control Panel > "
+    "Support Logs in the UI when SSH is unavailable) shows \"Adapter jar synchronization failed\", "
+    "the collector kept the old adapter version: re-run the same install "
+    "rather than starting the account, since a start only runs the old jar."
+)
+
 #: What :func:`read_accounts` records when an instance has no status entry.
 UNREADABLE_STATE = "UNKNOWN"
 
@@ -464,10 +478,17 @@ def restart_failed_accounts(
                 tried += (f"; {'no further' if ok_starts else 'no'} start was sent: "
                           f"the {timeout_s} s budget ran out")
             err(f"ACCOUNT NOT STARTED: {_label(acct)}: {_state_text(acct)} after "
-                f"{int(clock() - t0)} s{was}{tried}. Confirm the collector loaded the "
-                f"new adapter version, then PUT /suite-api/api/adapters/{acct.id}/"
-                f"monitoringstate/start (lesson remote-collector-upgrade-start-race). "
-                f"Do not reinstall.")
+                f"{int(clock() - t0)} s{was}{tried}. {JAR_SYNC_ADVICE} Otherwise, once "
+                f"the collector log shows the new adapter version loaded, PUT "
+                f"/suite-api/api/adapters/{acct.id}/monitoringstate/start (lesson "
+                f"remote-collector-upgrade-start-race). Do not reinstall for any "
+                f"other reason.")
+    if any(not s[1] for sent in starts.values() for s in sent):
+        # A start runs whatever jar the collector holds; nothing in the Suite
+        # API says which version that is, so a start can "succeed" on the
+        # old one (compliance 0.0.0.103, devel_8_18, 2026-10-28).
+        out(f"NOTE: the installer started account(s) without knowing which "
+            f"adapter version their collector loaded. {JAR_SYNC_ADVICE}")
     return rc
 
 

@@ -587,6 +587,42 @@ status entry, the state is unreadable and reported as such. Nothing records
 when the install's verify happens relative to the server's own start task,
 which is why the second start exists.
 
+### No endpoint reports the adapter version a collector loaded
+
+A second failure mode looks the same from the Suite API. Compliance
+0.0.0.103 on devel_8_18 (Cloud Proxy), 2026-10-28: the proxy logged "Did not
+receive response from Controller for 'Sync Adapters' task. Wait for response
+timed out" and "Adapter jar synchronization failed", then loaded the old
+version (0.0.0.102). A start would only have run the old jar. Re-running the
+install fixed it.
+
+Checked against the specs only (2026-10-28), for an endpoint the installer
+could read before a start: `operations-api.json` and `internal-api.json`
+(9.0), `operations-api-9.1.json` and `internal-api-9.1.json`, and
+`operations-api-8.18.json` and `internal-api-8.18.json` (on branch
+`suite-api-batch-push`, not yet on main). None reports the adapter version
+loaded on a collector:
+
+- `collector` (`GET /api/collectors`): `adapterInstanceIds`, `hostName`,
+  `id`, `lastHeartbeat`, `local`, `name`, `nodeIdentifier`, `state`,
+  `type`, `uuId` (9.x adds `dataPersistenceEnabled`, `notSupported`). No
+  version.
+- `GET /api/collectors/{id}/adapters`: `adapter-instances`, the same DTO as
+  `/api/adapters`, with no version.
+- `adapter-kind.describeVersion` (`/api/adapterkinds/{id}`): the
+  controller's describe.xml version, which the spec says "is not the version
+  of the Adapter". It is cluster-wide.
+- `solution.version` (`/api/solutions`, `/internal/solutions/preinstalled`):
+  the pak version the controller registered.
+- `application-resource.agentVersion` (app-monitoring agent) and 9.1
+  `ServiceDetails.version` (integration service) are unrelated.
+
+So the installer cannot tell "jar not loaded yet" from "old jar loaded".
+`ACCOUNT NOT STARTED` and the `NOTE` printed after any start tell the user to
+re-run the install when the collector log shows "Adapter jar synchronization
+failed". A live read of `/api/collectors` could still show an undocumented
+field; that would be an api-explorer task.
+
 ## Unsupportability caveat
 
 All `/admin/*` and `/casa/*` endpoints documented here are

@@ -36,6 +36,26 @@ accounts run on the primary node's collector.
   all three accounts FAILED; a manual start per account a minute later fixed
   them.
 
+## Second failure mode: the jar sync fails and the old version loads
+
+Seen 2026-10-28, compliance 0.0.0.103 on devel_8_18 (Cloud Proxy). The
+proxy logged "Did not receive response from Controller for 'Sync Adapters'
+task. Wait for response timed out" and "Adapter jar synchronization failed",
+then loaded the OLD adapter version (0.0.0.102). This is not the start race:
+the collector never got the new jar, so a start would only have run the old
+one. Re-running the same install fixed it; the sync succeeded and the
+account started on its own.
+
+- Before starting a FAILED account by hand, read the collector log. "Adapter
+  jar synchronization failed" means re-run the install, not start the
+  account. "Loaded adapter entry class ... version <new>" means start it.
+- No Suite API endpoint reports the adapter version a collector has loaded
+  (checked in the operations and internal specs for 8.18, 9.0 and 9.1:
+  `describeVersion` is the controller's describe.xml version, `/api/solutions`
+  is the controller's pak version, and neither `collector` nor
+  `/api/collectors/{id}/adapters` carries a version). Only the collector log
+  tells the two failure modes apart.
+
 ## Codified in the installer (2026-10-28)
 
 `python3 -m vcfcf_managementpacks install` now does the check above itself
@@ -58,6 +78,10 @@ UNCHECKED` instead, with no verdict. `--no-restart-failed` turns it off;
 `--no-wait` never runs it.
 
 The installer reads `resourceState`, not the collector log, so it does not
-confirm the jar loaded before starting. If an account is still FAILED after
+confirm the jar loaded before starting, and it cannot see the jar-sync
+failure above: a start it sends can run the old version and read STARTED.
+`ACCOUNT NOT STARTED` tells you to re-run the install if the collector log
+shows "Adapter jar synchronization failed", and a `NOTE` line says the same
+whenever the installer sent a start. If an account is still FAILED after
 its two starts, do the by-hand steps above. A green install still says
 nothing about a collection cycle: verify one.

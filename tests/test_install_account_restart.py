@@ -506,6 +506,50 @@ def test_second_start_is_timed_from_each_accounts_own_first_start():
         assert all(b - a >= ar.RETRY_AFTER_S for a, b in zip(times, times[1:]))
 
 
+JAR_SYNC = "Adapter jar synchronization failed"
+
+
+def test_not_started_says_to_rerun_the_install_on_a_jar_sync_failure():
+    """Compliance 0.0.0.103 on devel_8_18: the proxy's jar sync failed and it
+    loaded the old version; a start would only run the old jar."""
+    clock = _Clock()
+    suite = FakeSuite({"a1": "FAILED"}, clock=clock, on_start={"a1": "FAILED"})
+    rc, out, err = _run(suite, _before({"a1": "STARTED"}), clock)
+    assert rc == ar.ACCOUNTS_NOT_STARTED_RC
+    line = next(l for l in err.splitlines() if l.startswith("ACCOUNT NOT STARTED"))
+    assert JAR_SYNC in line
+    assert "re-run the same install rather than starting the account" in line
+    assert "Do not reinstall for any other reason" in line
+
+
+def test_note_after_any_start_warns_it_may_run_the_old_jar():
+    clock = _Clock()
+    suite = FakeSuite({"a1": "FAILED"}, clock=clock)
+    rc, out, err = _run(suite, _before({"a1": "STARTED"}), clock)
+    assert rc == 0
+    assert "ACCOUNT OK (restarted)" in out
+    note = [l for l in out.splitlines() if l.startswith("NOTE:")]
+    assert len(note) == 1 and JAR_SYNC in note[0]
+
+
+def test_no_note_when_no_start_was_sent():
+    clock = _Clock()
+    suite = FakeSuite({"a1": "STARTED"}, clock=clock)
+    rc, out, err = _run(suite, _before({"a1": "STARTED"}), clock)
+    assert "NOTE:" not in out and JAR_SYNC not in out + err
+
+
+def test_cli_epilog_names_the_jar_sync_exception():
+    import io
+    from contextlib import redirect_stdout
+    buf = io.StringIO()
+    with redirect_stdout(buf), pytest.raises(SystemExit):
+        cli.main(["install", "--help"])
+    text = " ".join(buf.getvalue().split())
+    assert "Do not reinstall on 3, with one exception" in text
+    assert JAR_SYNC in text
+
+
 def test_last_request_gets_only_what_is_left():
     clock = _Clock()
     suite = FakeSuite({"a1": "FAILED"}, clock=clock)
