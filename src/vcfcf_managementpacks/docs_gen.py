@@ -427,12 +427,15 @@ def _render_tree_md(model: AdapterDocModel) -> str:
     lines: List[str] = []
 
     def _walk(key: str, indent: int) -> None:
-        if key in visited:
-            return
-        visited.add(key)
         kind = model.kind_map.get(key)
         label = kind.label if kind else key
         prefix = "  " * indent + "- "
+        if key in visited:
+            # A further parent of a kind already drawn in full above: one
+            # reference line, so every parent > child pair shows in the tree.
+            lines.append(f"{prefix}**{label}** (`{key}`) *(see above)*")
+            return
+        visited.add(key)
         lines.append(f"{prefix}**{label}** (`{key}`)")
         for child in children.get(key, []):
             if child == key:
@@ -607,8 +610,8 @@ _V_GAP = 90            # vertical gap between rows
 _MARGIN = 40           # canvas margin
 # A /recursive self-loop hooks over the node's top-right corner: it leaves the
 # top edge, reaches right of the node and comes back into the right edge. It
-# stays clear of the top-center inbound arrow and of the mid-height line a
-# same-row edge draws, and its reach fits inside _H_GAP and _MARGIN.
+# stays clear of the top-center inbound arrow and of the upward-edge lanes
+# (_UP_LANE_CLEAR), and its reach fits inside _H_GAP and _MARGIN.
 _SELF_LOOP_INSET = 36  # loop start, measured left from the node's right edge
 _SELF_LOOP_RISE = 16   # how far the loop climbs above the node
 _SELF_LOOP_REACH = 16  # how far the loop reaches right of the node
@@ -627,6 +630,97 @@ def _self_loop_points(x: float, y: float, w: float) -> List[Tuple[float, float]]
         (xo, y + _SELF_LOOP_DROP),
         (xr + 2, y + _SELF_LOOP_DROP),
     ]
+
+
+# Edges whose child is not in the row below the parent (min-depth layout puts
+# a kind in its shallowest row, so a parent can share the child's row, or sit
+# below it) are routed through lanes in the gaps between rows instead of the
+# old midpoint path, which drew a flat line through the row's nodes.
+#   same-row edge: leaves the parent's bottom, runs along a lane just under
+#                  the row, enters the child's bottom
+#   upward edge:   leaves the parent's top, runs along a lane in the gap above
+#                  the parent's row, enters the child's bottom
+# Each gap grows by 2 * _LANE_STEP per lane, so the lanes stay clear of the
+# parent-to-child connector that runs through the middle of the gap.
+_LANE_STEP = 8         # spacing between lanes, and from a lane to its row
+_UP_LANE_CLEAR = 24    # upward lanes start below the self-loop's rise
+_LANE_OUT = 0.75       # where a routed edge leaves its parent (fraction of width)
+_LANE_UP_OUT = 0.65    # where an upward edge leaves its parent's top
+_LANE_IN = 0.25        # where a routed edge enters its child's bottom
+
+
+def _row_of(model: AdapterDocModel, depth_map: Dict[str, int]) -> Dict[str, int]:
+    """Diagram row of every non-adapter-instance kind (as _layout_nodes uses)."""
+    return {
+        k.key: depth_map.get(k.key, 0)
+        for k in model.kinds
+        if not k.is_adapter_instance
+    }
+
+
+def _edge_lanes(
+    model: AdapterDocModel, row_of: Dict[str, int]
+) -> Dict[Tuple[str, str], Tuple[str, int, int]]:
+    """Lane assignment for same-row and upward edges.
+
+    Returns dict: (parent, child) → (kind, parent row, lane index), kind being
+    "same" or "up". Edges into the row below get no entry and draw as before.
+    Lane indexes count up per (kind, parent row) in edge order.
+    """
+    lanes: Dict[Tuple[str, str], Tuple[str, int, int]] = {}
+    counts: Dict[Tuple[str, int], int] = {}
+    for edge in model.edges:
+        if edge.is_self:
+            continue
+        p, c = edge.parent_key, edge.child_key
+        if p not in row_of or c not in row_of:
+            continue
+        pr, cr = row_of[p], row_of[c]
+        if cr == pr:
+            kind = "same"
+        elif cr < pr:
+            kind = "up"
+        else:
+            continue
+        idx = counts.get((kind, pr), 0)
+        counts[(kind, pr)] = idx + 1
+        lanes[(p, c)] = (kind, pr, idx)
+    return lanes
+
+
+def _lane_counts(lanes: Dict[Tuple[str, str], Tuple[str, int, int]]) -> Dict[Tuple[str, int], int]:
+    counts: Dict[Tuple[str, int], int] = {}
+    for kind, row, _ in lanes.values():
+        counts[(kind, row)] = counts.get((kind, row), 0) + 1
+    return counts
+
+
+def _routed_edge_points(
+    p: str,
+    c: str,
+    positions: Dict[str, Tuple[float, float, int, int]],
+    lanes: Dict[Tuple[str, str], Tuple[str, int, int]],
+    row_of: Dict[str, int],
+) -> Optional[List[Tuple[float, float]]]:
+    """Absolute points of a same-row or upward edge, or None for a plain edge."""
+    lane = lanes.get((p, c))
+    if lane is None:
+        return None
+    kind, row, idx = lane
+    px, py, pw, ph = positions[p]
+    cx, cy, cw, ch = positions[c]
+    ex = cx + cw * _LANE_IN
+    ey = cy + ch
+    if kind == "same":
+        row_bottom = max(
+            y + h for k, (x, y, w, h) in positions.items() if row_of.get(k) == row
+        )
+        ly = row_bottom + _LANE_STEP * (idx + 1)
+        sx = px + pw * _LANE_OUT
+        return [(sx, py + ph), (sx, ly), (ex, ly), (ex, ey)]
+    ly = py - _UP_LANE_CLEAR - _LANE_STEP * idx
+    sx = px + pw * _LANE_UP_OUT
+    return [(sx, py), (sx, ly), (ex, ly), (ex, ey)]
 
 
 def _stable_id(seed: str) -> str:
@@ -665,6 +759,12 @@ def _layout_nodes(model: AdapterDocModel) -> Dict[str, Tuple[float, float, int, 
     max_depth = max(depth_groups.keys())
     positions: Dict[str, Tuple[float, float, int, int]] = {}
 
+    # Room for routed-edge lanes: same-row lanes sit in the gap below their
+    # row, upward lanes in the gap above their parent's row.
+    lane_counts = _lane_counts(_edge_lanes(model, _row_of(model, depth_map)))
+    nonempty = [d for d in range(max_depth + 1) if depth_groups.get(d)]
+    next_row = dict(zip(nonempty, nonempty[1:]))
+
     y = _MARGIN
     for d in range(max_depth + 1):
         row_keys = depth_groups.get(d, [])
@@ -683,7 +783,10 @@ def _layout_nodes(model: AdapterDocModel) -> Dict[str, Tuple[float, float, int, 
             positions[key] = (x, y, _NODE_W, h)
             x += _NODE_W + _H_GAP
 
-        y += row_h + _V_GAP
+        n_same = lane_counts.get(("same", d), 0)
+        n_up = lane_counts.get(("up", next_row[d]), 0) if d in next_row else 0
+        extra = 2 * _LANE_STEP * (n_same + n_up) + (_UP_LANE_CLEAR if n_up else 0)
+        y += row_h + _V_GAP + extra
 
     return positions
 
@@ -841,6 +944,8 @@ def generate_excalidraw(model: AdapterDocModel) -> dict:
     positions = _layout_nodes(model)
     depth_map = _assign_depth(model)
     roots = set(_tree_roots(model))
+    row_of = _row_of(model, depth_map)
+    lanes = _edge_lanes(model, row_of)
 
     elements: List[dict] = []
     rect_ids: Dict[str, str] = {}  # kind_key → element id
@@ -885,6 +990,24 @@ def generate_excalidraw(model: AdapterDocModel) -> dict:
         if edge.is_self:
             # /recursive level: a loop over the node's top-right corner
             pts = _self_loop_points(px, py, pw)
+            (sx, sy), (ex, ey) = pts[0], pts[-1]
+            arrow = _excalidraw_element_arrow(
+                elem_id=_stable_id(f"arrow:{p}->{c}"),
+                start_x=sx, start_y=sy, end_x=ex, end_y=ey,
+                start_binding=rect_ids.get(p),
+                end_binding=rect_ids.get(c),
+            )
+            xs = [pt[0] for pt in pts]
+            ys = [pt[1] for pt in pts]
+            arrow["width"] = max(xs) - min(xs)
+            arrow["height"] = max(ys) - min(ys)
+            arrow["points"] = [[ptx - sx, pty - sy] for ptx, pty in pts]
+            elements.append(arrow)
+            continue
+
+        pts = _routed_edge_points(p, c, positions, lanes, row_of)
+        if pts is not None:
+            # Same-row or upward edge: routed through a lane between rows
             (sx, sy), (ex, ey) = pts[0], pts[-1]
             arrow = _excalidraw_element_arrow(
                 elem_id=_stable_id(f"arrow:{p}->{c}"),
@@ -968,6 +1091,8 @@ def generate_svg(model: AdapterDocModel) -> str:
     """
     positions = _layout_nodes(model)
     roots = set(_tree_roots(model))
+    row_of = _row_of(model, _assign_depth(model))
+    lanes = _edge_lanes(model, row_of)
 
     if not positions:
         return '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="100"><text x="10" y="20" font-family="sans-serif" font-size="13">No traversal spec found.</text></svg>'
@@ -1001,6 +1126,16 @@ def generate_svg(model: AdapterDocModel) -> str:
         if edge.is_self:
             # /recursive level: a loop over the node's top-right corner
             pts = _self_loop_points(px, py, pw)
+            path = "M " + " L ".join(f"{ptx:.1f},{pty:.1f}" for ptx, pty in pts)
+            svg_parts.append(
+                f'<path d="{path}" fill="none" stroke="#374151" stroke-width="1.5" '
+                f'marker-end="url(#arrow)"/>'
+            )
+            continue
+
+        pts = _routed_edge_points(p, c, positions, lanes, row_of)
+        if pts is not None:
+            # Same-row or upward edge: routed through a lane between rows
             path = "M " + " L ".join(f"{ptx:.1f},{pty:.1f}" for ptx, pty in pts)
             svg_parts.append(
                 f'<path d="{path}" fill="none" stroke="#374151" stroke-width="1.5" '
