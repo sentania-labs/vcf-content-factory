@@ -71,7 +71,174 @@ public class AmbientCredentialTest {
         testInjectedFailureReasonRecordedWhenConfigPresentButCredentialsNull();
         testInjectedFailureReasonRecordedWhenConfigPresentButUsernameBlank();
         testNoInjectedFailureReasonRecordedWhenConfigAbsent();
+        testIsCloudProxyFromCollectorProperties();
+        testCloudProxyNeverReachesFileCandidatesOrCrypt();
+        testAnalyticsNodeStillTriesFileCandidates();
+        testOverrideStillWinsOnCloudProxy();
         report();
+    }
+
+    // -----------------------------------------------------------------------
+    // compliance#58: Cloud Proxy pre-check before Crypt
+    // -----------------------------------------------------------------------
+
+    /** The collector.properties lines read on the six devel nodes, 2026-10-28. */
+    private static void testIsCloudProxyFromCollectorProperties() throws IOException {
+        String[][] cases = {
+            {"9.1.1 / 9.0.2 Cloud Proxy",
+             "remote = true\nisUnifiedCloudProxy=true\nhttpRelayEnabled=true\n", "true"},
+            {"8.18.6 Cloud Proxy (no isUnifiedCloudProxy key)",
+             "remote = true\n#httpRelayEnabled=false\nhttpRelayEnabled=true\n"
+             + "httpRelayServerURL=https://localhost/suite-api\n", "true"},
+            {"9.1.1 / 9.0.2 analytics node",
+             "remote = false\nisUnifiedCloudProxy = false\n", "false"},
+            {"8.18.6 analytics node", "remote = false\n#httpRelayEnabled=false\n", "false"},
+            {"remote=true alone (classic remote collector) keeps the old path",
+             "remote = true\n", "false"},
+            {"value case and spaces", "isUnifiedCloudProxy = TRUE  \n", "true"},
+            {"explicit isUnifiedCloudProxy=false wins over httpRelayEnabled=true",
+             "isUnifiedCloudProxy = false\nhttpRelayEnabled=true\n", "false"},
+        };
+        for (String[] c : cases) {
+            Path p = Files.createTempFile("collector", ".properties");
+            try {
+                Files.write(p, c[1].getBytes(StandardCharsets.UTF_8));
+                assertEquals("isCloudProxy: " + c[0], c[2],
+                        String.valueOf(AmbientCredential.isCloudProxy(p)));
+            } finally {
+                Files.deleteIfExists(p);
+            }
+        }
+        assertTrue("isCloudProxy: missing file is false (old path)",
+                !AmbientCredential.isCloudProxy(
+                        java.nio.file.Paths.get("/nonexistent/collector.properties")));
+        assertTrue("isCloudProxy: null path is false", !AmbientCredential.isCloudProxy(null));
+        Path unreadable = Files.createTempFile("collector-unreadable", ".properties");
+        try {
+            Files.write(unreadable, "isUnifiedCloudProxy=true\n".getBytes(StandardCharsets.UTF_8));
+            Files.setPosixFilePermissions(unreadable, EnumSet.noneOf(PosixFilePermission.class));
+            if (Files.isReadable(unreadable)) {
+                System.out.println("  SKIP: unreadable collector.properties (running as root)");
+            } else {
+                assertTrue("isCloudProxy: unreadable file is false (old path)",
+                        !AmbientCredential.isCloudProxy(unreadable));
+            }
+        } finally {
+            Files.setPosixFilePermissions(unreadable,
+                    EnumSet.of(PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE));
+            Files.deleteIfExists(unreadable);
+        }
+    }
+
+    /**
+     * On a Cloud Proxy with no injected credential, load() throws its own
+     * IOException before any file candidate is opened, so Crypt is never
+     * called. The candidate here is an encrypted automation file whose
+     * decrypt would otherwise be attempted (the control test below shows
+     * that it is, on a node).
+     */
+    private static void testCloudProxyNeverReachesFileCandidatesOrCrypt() throws IOException {
+        clearOverride();
+        Path cp = tempFile("collector-cp", "remote = true\nisUnifiedCloudProxy=true\n"
+                + "httpRelayEnabled=true\n");
+        Path auto = tempFile("automationuser-cp",
+                "username=automationAdmin\npassword=1:aXY=:Y2lwaGVy\nencrypted=true\n");
+        List<AmbientCredential.Candidate> candidates = new ArrayList<>();
+        candidates.add(new AmbientCredential.Candidate(auto.toString(), "automation", false));
+        try {
+            Throwable got = loadOutcome(null, cp, candidates);
+            assertTrue("Cloud Proxy: load throws IOException (got " + got + ")",
+                    got instanceof IOException);
+            assertTrue("Cloud Proxy: the message says the file credentials were not tried",
+                    got != null && String.valueOf(got.getMessage()).contains("Cloud Proxy")
+                            && got.getMessage().contains("were not tried"));
+            assertTrue("Cloud Proxy: no secret or ciphertext in the message",
+                    got != null && !got.getMessage().contains("Y2lwaGVy"));
+
+            AdapterConfig cfg = new AdapterConfig("some_kind", 1);
+            Throwable withCfg = loadOutcome(cfg, cp, candidates);
+            assertTrue("Cloud Proxy + config without credentials: the reason is named",
+                    withCfg instanceof IOException
+                            && withCfg.getMessage().contains("(credentials null/blank)"));
+        } finally {
+            Files.deleteIfExists(cp);
+            Files.deleteIfExists(auto);
+        }
+    }
+
+    /** Control: the same files on an analytics node still reach the decrypt. */
+    private static void testAnalyticsNodeStillTriesFileCandidates() throws IOException {
+        clearOverride();
+        Path node = tempFile("collector-node", "remote = false\nisUnifiedCloudProxy = false\n");
+        Path enc = tempFile("automationuser-node",
+                "username=automationAdmin\npassword=1:aXY=:Y2lwaGVy\nencrypted=true\n");
+        Path plain = tempFile("automationuser-plain",
+                "username=automationAdmin\npassword=plain-s3cret\nencrypted=false\n");
+        try {
+            List<AmbientCredential.Candidate> encList = new ArrayList<>();
+            encList.add(new AmbientCredential.Candidate(enc.toString(), "automation", false));
+            Throwable got = loadOutcome(null, node, encList);
+            // Reaching Crypt shows as: the platform Crypt class missing (this
+            // sandbox), its null return turned into "could not decrypt" (a
+            // collector with a mismatched key), or a decrypted credential.
+            boolean reachedCrypt = got == null
+                    || (got instanceof NoClassDefFoundError
+                            && String.valueOf(got.getMessage()).contains("Crypt"))
+                    || (got instanceof IOException
+                            && String.valueOf(got.getMessage()).contains("could not decrypt"));
+            assertTrue("node: the encrypted candidate reaches the decrypt (got " + got + ")",
+                    reachedCrypt);
+
+            List<AmbientCredential.Candidate> plainList = new ArrayList<>();
+            plainList.add(new AmbientCredential.Candidate(plain.toString(), "automation", false));
+            AmbientCredential cred = AmbientCredential.load(null, node, plainList);
+            assertEquals("node: the file candidate still loads", "automationAdmin",
+                    cred.getUsername());
+            assertEquals("node: source label automation", "automation", cred.getSourceLabel());
+            AmbientCredential noFile = AmbientCredential.load(null,
+                    java.nio.file.Paths.get("/nonexistent/collector.properties"), plainList);
+            assertEquals("no collector.properties: old path", "automation",
+                    noFile.getSourceLabel());
+        } finally {
+            Files.deleteIfExists(node);
+            Files.deleteIfExists(enc);
+            Files.deleteIfExists(plain);
+        }
+    }
+
+    /** The explicit override is a deliberate choice: it is still honoured on a proxy. */
+    private static void testOverrideStillWinsOnCloudProxy() throws IOException {
+        Path cp = tempFile("collector-cp2", "isUnifiedCloudProxy=true\n");
+        Path override = tempFile("override",
+                "username=overrideUser\npassword=pw\nencrypted=false\n");
+        System.setProperty(AmbientCredential.SYSPROP_CREDENTIAL_PATH, override.toString());
+        try {
+            AmbientCredential cred = AmbientCredential.load(null, cp,
+                    AmbientCredential.buildCandidates());
+            assertEquals("Cloud Proxy + override: override used", "override",
+                    cred.getSourceLabel());
+        } finally {
+            clearOverride();
+            Files.deleteIfExists(cp);
+            Files.deleteIfExists(override);
+        }
+    }
+
+    private static Path tempFile(String prefix, String body) throws IOException {
+        Path p = Files.createTempFile(prefix, ".properties");
+        Files.write(p, body.getBytes(StandardCharsets.UTF_8));
+        return p;
+    }
+
+    /** What load(cfg, props, candidates) threw, or null if it returned. */
+    private static Throwable loadOutcome(AdapterConfig cfg, Path props,
+            List<AmbientCredential.Candidate> candidates) {
+        try {
+            AmbientCredential.load(cfg, props, candidates);
+            return null;
+        } catch (Throwable t) {
+            return t;
+        }
     }
 
     // -----------------------------------------------------------------------

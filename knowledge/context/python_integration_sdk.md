@@ -75,7 +75,7 @@ is an SDK addition, `cli:api/integration-sdk-definition-endpoint.json`).
 |---|---|---|---|---|---|
 | `/apiVersion` | GET | (none, served by the server) | none | `{major:1, minor:0, maintenance:0}` (`controller.py:112-123`) | collector; `mp-build` writes it into `API_VERSION` |
 | `/test` | POST | `test` | `AdapterConfig` | `{}` or `{"errorMessage": ...}` | collector on Validate Connection |
-| `/collect` | POST | `collect` | `AdapterConfig` plus `collection_number`, `collection_window` added by the server (`controller.py:50-65`) | `{"result": [...], "relationships": [...], "nonExistingObjects": []}` or `{"errorMessage": ...}` | collector each cycle |
+| `/collect` | POST | `collect` | `AdapterConfig` plus `collection_number`, `collection_window` added by the server (`controller.py:50-65`) | `{"result": [...], "relationships": [...], "nonExistingObjects": []}` or `{"errorMessage": ...}`. The lib always sends `nonExistingObjects` empty, but the platform reads `notExistingObjects`, so a pack cannot mark objects gone; the collector does that itself after 12 missed cycles (`sdk/vanished_object_lifecycle.md`) | collector each cycle |
 | `/endpointURLs` | POST | `endpoint_urls` | `AdapterConfig` | `{"endpointUrls": [...]}` | collector, before `test` (template comment `adapter.py.template:118-125`) |
 | `/adapterDefinition` | GET | `adapter_definition` | none | AdapterDefinition JSON, or 204 when the adapter writes nothing (`controller.py:68-85`) | `mp-build` and `mp-test` only, to generate `describe.xml` (`docs:references/architecture.md` §Adapter/Collection Code) |
 
