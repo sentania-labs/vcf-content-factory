@@ -216,9 +216,12 @@ mkdir -p "$BUILD_DIR"
 # --release 11, not -source/-target: it also limits the JDK library API to
 # Java 11, the 8.18 collector's runtime (issue #252, RULE-019), so a Java 12+
 # call fails here instead of on that collector. Same as sdk_builder._JAVA_RELEASE.
+# -proc:none: no annotation processor found in a classpath jar runs at compile
+# time (sdk-runtime#1); same as every sdk_builder javac call.
 echo "Compiling (--release 11) ..."
 # shellcheck disable=SC2086
 javac --release 11 \
+    -proc:none \
     -cp "$CP" \
     -d "$BUILD_DIR" \
     $SOURCES 2>&1
