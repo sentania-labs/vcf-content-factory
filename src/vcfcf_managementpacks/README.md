@@ -72,10 +72,13 @@ install. One that was STOPPED or in maintenance before is never started
 (the user's choice); one with no usable state from before (UNKNOWN, NONE,
 NOT_EXISTING, no status entry, or the read failed) is started only when
 FAILED. An account that reads FAILED again 60 s after its start gets a
-second one, never a third. It polls until they read STARTED or 300 s have
-passed, with a 30 s timeout on every Suite API call, each cut to what is
-left of that one 300 s deadline (no request or start is sent past it, and
-accounts it had no room to start are named), and only ever starts
+second one, never a third. It polls until they read STARTED or a 300 s
+deadline passes, with a 30 s timeout on every Suite API call, each cut to
+what is left of that deadline (no request or start is sent past it, and
+accounts it had no room to start are named). The one way past it is the
+server rejecting the session token in the last seconds: the client then
+gets a new token and retries the call, 30 s each, so the check takes up to
+about 360 s in the worst case. It only ever starts
 from that poll's reading. Each account's final state is printed (`ACCOUNT
 OK`, `ACCOUNT LEFT ALONE`, `ACCOUNT NOT COLLECTING` when it has no usable
 state from before and was not started, `ACCOUNT UNCHECKED` when its state

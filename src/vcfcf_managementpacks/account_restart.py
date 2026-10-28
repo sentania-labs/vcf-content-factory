@@ -67,7 +67,11 @@ from typing import Callable, Dict, Iterable, List, Optional
 #: Seconds after the install verifies before any start is sent. The
 #: collector loaded the jar about 2 minutes after the start task on 9.1.
 START_DELAY_S = 120
-#: Seconds after the install verifies before the check gives up.
+#: Seconds after the install verifies before the check gives up: the shared
+#: deadline for every read, start and sleep. One overrun remains: a session
+#: token rejected near the end makes ``VCFOpsClient._request`` re-acquire
+#: (``auth_timeout``) and retry the call, 30 s each, so the worst case is
+#: about 360 s.
 TIMEOUT_S = 300
 #: Seconds between state reads.
 POLL_S = 15

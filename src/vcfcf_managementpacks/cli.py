@@ -1402,7 +1402,9 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Skip the post-install account check. By default install reads "
             "each adapter instance of the pak's adapter kinds before the "
-            "upload, then for about 2 minutes after it (up to 300 s) watches "
+            "upload, then for about 2 minutes after it (a 300 s deadline; "
+            "up to about 360 s if the server rejects the session token "
+            "near the end) watches "
             "them and sends Start monitoring to each the install left "
             "FAILED or STOPPED (a second start, at most, if it reads FAILED "
             "again 60 s later), never to one stopped or in maintenance before "

@@ -69,9 +69,13 @@ POLL_TIMEOUT = 300         # uninstall: seconds before giving up
 #: lines can be under contention.  Override: ``--install-timeout`` or
 #: :data:`INSTALL_TIMEOUT_ENV`.  Subprocess wrappers that invoke
 #: ``vcfcf_managementpacks install`` must set their own timeout HIGHER than
-#: this plus the post-install checks (up to 300 s for the account restart
-#: plus up to 900 s for the dashboard checks), or they kill the CLI
-#: while the server is still installing.
+#: this plus the account read before the upload (normally seconds; about
+#: 90 s if the Suite API stalls: one token request and two reads, 30 s
+#: each), the account restart (a 300 s deadline, up to about 360 s if the
+#: server rejects the session token in its last seconds: the client's
+#: re-auth and retried call, 30 s each, run past it) and up to 900 s for
+#: the dashboard checks, or they kill the CLI while the server is still
+#: installing.
 INSTALL_POLL_TIMEOUT = 1800
 #: Environment override for :data:`INSTALL_POLL_TIMEOUT` (whole seconds, > 0).
 INSTALL_TIMEOUT_ENV = "VCFCF_INSTALL_TIMEOUT_S"

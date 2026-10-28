@@ -48,7 +48,9 @@ STARTING, UPDATING or FAILED before the install. One that was STOPPED or in
 maintenance before is never started; one with no usable state from before
 is started only when FAILED. An account that reads FAILED again 60 s after
 its start gets a second, never a third. It polls until they read STARTED or
-300 s have passed and prints each account's final state; an account that
+a 300 s deadline passes (up to about 360 s in the worst case, when the
+server rejects the session token near the end and the client's re-auth and
+retried call run past it) and prints each account's final state; an account that
 was collecting or already FAILED before and is still not STARTED prints
 `ACCOUNT NOT STARTED` and the command exits 3 (installed, post-install check
 failed: do not reinstall). If the last state read failed it prints `ACCOUNTS

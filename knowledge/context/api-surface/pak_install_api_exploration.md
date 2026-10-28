@@ -574,8 +574,15 @@ the states before the upload, waits 120 s after the install verifies, and
 starts each FAILED, STOPPED or NONE account that read STARTED, STARTING,
 UPDATING or FAILED before (never one STOPPED or in maintenance before; one
 with no usable prior only when FAILED). It sends a second start to one that
-reads FAILED again 60 s later and polls to 300 s, with a 30 s timeout on
-every call including the token acquire. When the instance's resource has no
+reads FAILED again 60 s later and polls to a 300 s deadline, with a 30 s
+timeout on every call including the token acquire, each cut to what is left
+of the deadline. The first token acquire runs inside the first read, so its
+time comes off the budget. The one overrun is a token rejected near the
+end: `VCFOpsClient._request` re-acquires (up to 30 s) and retries the call
+with the timeout already computed (up to 30 s), so the check can take up to
+about 360 s. `requests` timeouts bound connect and each socket read, not a
+whole response, so a server that trickles bytes can still run longer
+(issue #235). When the instance's resource has no
 status entry, the state is unreadable and reported as such. Nothing records
 when the install's verify happens relative to the server's own start task,
 which is why the second start exists.
