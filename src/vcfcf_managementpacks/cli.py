@@ -570,8 +570,8 @@ def cmd_install(args) -> int:
         return 2
 
     # installer.install_pak calls sys.exit(1) on fatal errors; a return is
-    # 0, 3 when the pak installed but a post-install dashboard check failed,
-    # or 4 when the wait ran out with the install still running.
+    # 0, 3 when the pak installed but a post-install dashboard or account
+    # check failed, or 4 when the wait ran out with the install still running.
     return install_pak(
         pak_path=args.pak_path,
         host=args.host,
@@ -584,6 +584,7 @@ def cmd_install(args) -> int:
         materialization_check=not getattr(args, "skip_materialization_check", False),
         materialization_wait=getattr(args, "materialization_wait", None),
         summary_rebind=summary_rebind,
+        restart_failed=getattr(args, "restart_failed", True),
     )
 
 
@@ -1393,18 +1394,47 @@ def build_parser() -> argparse.ArgumentParser:
             "SUMMARY INCOMPLETE (n of m widgets loading) as information."
         ),
     )
+    pi.add_argument(
+        "--no-restart-failed",
+        action="store_false",
+        dest="restart_failed",
+        default=True,
+        help=(
+            "Skip the post-install account check. By default install reads "
+            "each adapter instance of the pak's adapter kinds before the "
+            "upload, then for about 2 minutes after it (a 300 s deadline; "
+            "up to about 360 s if the server rejects the session token "
+            "near the end) watches "
+            "them and sends Start monitoring to each the install left "
+            "FAILED or STOPPED (a second start, at most, if it reads FAILED "
+            "again 60 s later), never to one stopped or in maintenance before "
+            "the install, and to one with no usable state from before the "
+            "install only when FAILED (a remote collector or Cloud Proxy gets "
+            "the start before it loads the new jar). Not run with --no-wait."
+        ),
+    )
     pi.epilog = (
         _creds_help
         + " Exit codes: 0 installed and every check passed; 1 the install "
         "failed or was refused, or the wait ran out with its status unread "
         "(the last status poll failed) (nothing to retry blindly: read the "
         "ERROR); 2 "
-        "usage error; 3 the pak installed but a post-install dashboard check "
+        "usage error; 3 the pak installed but a post-install check "
         "failed (MATERIALIZATION STALLED: a dashboard waits on an adapter "
-        "that is not installed; or SUMMARY NOT REBOUND: a Summary tab still "
+        "that is not installed; SUMMARY NOT REBOUND: a Summary tab still "
         "shows an unfinished copy, with the server's answer when the bind was "
-        "refused). SUMMARY INCOMPLETE with --skip-summary-rebind is information "
-        "and leaves the exit code alone. Do not reinstall on 3. 4 the wait "
+        "refused; or ACCOUNT NOT STARTED: an account that was collecting, "
+        "or already FAILED, before the install is not STARTED at the end, "
+        "so an account broken for unrelated reasons such as bad credentials "
+        "also gives 3). "
+        "ACCOUNT LEFT ALONE (stopped or in maintenance before the install), "
+        "ACCOUNT NOT COLLECTING (no usable state from before the install), "
+        "ACCOUNT UNCHECKED (state unreadable) and ACCOUNTS UNCHECKED (the "
+        "last read failed or was refused) leave the exit code alone. SUMMARY INCOMPLETE with --skip-summary-rebind is information "
+        "and leaves the exit code alone. Do not reinstall on 3, with one "
+        "exception: ACCOUNT NOT STARTED where the collector log shows "
+        "'Adapter jar synchronization failed' (the collector kept the old "
+        "adapter version; re-run the same install). 4 the wait "
         "(--install-timeout or VCFCF_INSTALL_TIMEOUT_S, default 1800 s) ran out while the server still "
         "reported the install running on its last poll (INSTALL STILL RUNNING): not a failure "
         "and the post-install checks did not run; watch Admin UI > Software "

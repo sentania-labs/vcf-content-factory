@@ -543,6 +543,88 @@ not that the adapter registration changed. A missing or blank `version`
 on the matched entry is reported as "version unverified", not as a
 failure: no shape without the field is recorded, and 8.18 is unchecked.
 
+## Post-install account restart (remote-collector start race)
+
+A verified install also says nothing about collection. On a remote
+collector or Cloud Proxy the server sends Start monitoring before the
+collector has loaded the new jar, and every account of the adapter kind
+stays `resourceState` FAILED (lesson
+`../../lessons/remote-collector-upgrade-start-race.md`).
+`vcfcf_managementpacks.account_restart` handles it from the Suite API:
+
+- `GET /suite-api/api/adapters?adapterKindKey=<kind>` answers
+  `{"adapterInstancesInfoDto": [{"id", "resourceKey": {"name",
+  "adapterKindKey", "resourceKindKey", ...}, "collectorId",
+  "collectorGroupId", "monitoringInterval", ...}]}`, and an empty list
+  (still 200) for a kind with no accounts or an unknown kind. The DTO
+  carries no state.
+- The adapter instance is a resource with the same id.
+  `GET /suite-api/api/resources?resourceId=<id>&resourceId=<id>&pageSize=<n>`
+  returns `resourceList[]` with `identifier` and `resourceStatusStates[]`;
+  the instance's own entry has `adapterInstanceId` equal to its id and
+  carries `resourceState` (STARTED, FAILED, STOPPED, MAINTAINED, ...),
+  `resourceStatus` (DATA_RECEIVING, ...) and `statusMessage`.
+- `PUT /suite-api/api/adapters/{id}/monitoringstate/start` (no body)
+  answers 200.
+
+Read on devel_9_1 (9.1) on 2026-10-28 against the three `vcfcf_compliance`
+accounts (all STARTED / DATA_RECEIVING at the time); the start call's 200 is
+from the 2026-10-16 and 2026-10-28 manual recoveries. The installer reads
+the states before the upload, waits 120 s after the install verifies, and
+starts each FAILED, STOPPED or NONE account that read STARTED, STARTING,
+UPDATING or FAILED before (never one STOPPED or in maintenance before; one
+with no usable prior only when FAILED). It sends a second start to one that
+reads FAILED again 60 s later and polls to a 300 s deadline, with a 30 s
+timeout on every call including the token acquire, each cut to what is left
+of the deadline. The first token acquire runs inside the first read, so its
+time comes off the budget. The one overrun is a token rejected near the
+end: `VCFOpsClient._request` re-acquires (up to 30 s) and retries the call
+with the timeout already computed (up to 30 s), so the check can take up to
+about 360 s. `requests` timeouts bound connect and each socket read, not a
+whole response, so a server that trickles bytes can still run longer
+(issue #235). Starts may not use the last 30 s of the deadline, which is
+kept for one state read after them; an account with no reading after its
+last start is reported UNCHECKED, never NOT STARTED. When the instance's resource has no
+status entry, the state is unreadable and reported as such. Nothing records
+when the install's verify happens relative to the server's own start task,
+which is why the second start exists.
+
+### No endpoint reports the adapter version a collector loaded
+
+A second failure mode looks the same from the Suite API. Compliance
+0.0.0.103 on devel_8_18 (Cloud Proxy), 2026-10-28: the proxy logged "Did not
+receive response from Controller for 'Sync Adapters' task. Wait for response
+timed out" and "Adapter jar synchronization failed", then loaded the old
+version (0.0.0.102). A start would only have run the old jar. Re-running the
+install fixed it.
+
+Checked against the specs only (2026-10-28), for an endpoint the installer
+could read before a start: `operations-api.json` and `internal-api.json`
+(9.0), `operations-api-9.1.json` and `internal-api-9.1.json`, and
+`operations-api-8.18.json` and `internal-api-8.18.json` (on branch
+`suite-api-batch-push`, not yet on main). None reports the adapter version
+loaded on a collector:
+
+- `collector` (`GET /api/collectors`): `adapterInstanceIds`, `hostName`,
+  `id`, `lastHeartbeat`, `local`, `name`, `nodeIdentifier`, `state`,
+  `type`, `uuId` (9.x adds `dataPersistenceEnabled`, `notSupported`). No
+  version.
+- `GET /api/collectors/{id}/adapters`: `adapter-instances`, the same DTO as
+  `/api/adapters`, with no version.
+- `adapter-kind.describeVersion` (`/api/adapterkinds/{id}`): the
+  controller's describe.xml version, which the spec says "is not the version
+  of the Adapter". It is cluster-wide.
+- `solution.version` (`/api/solutions`, `/internal/solutions/preinstalled`):
+  the pak version the controller registered.
+- `application-resource.agentVersion` (app-monitoring agent) and 9.1
+  `ServiceDetails.version` (integration service) are unrelated.
+
+So the installer cannot tell "jar not loaded yet" from "old jar loaded".
+`ACCOUNT NOT STARTED` and the `NOTE` printed after any start tell the user to
+re-run the install when the collector log shows "Adapter jar synchronization
+failed". A live read of `/api/collectors` could still show an undocumented
+field; that would be an api-explorer task.
+
 ## Unsupportability caveat
 
 All `/admin/*` and `/casa/*` endpoints documented here are

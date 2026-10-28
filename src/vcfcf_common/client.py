@@ -69,8 +69,13 @@ class VCFOpsClient:
         password: str,
         auth_source: str = "Local",
         verify_ssl: bool = True,
+        auth_timeout: Optional[float] = None,
     ):
         self.base = f"https://{host}/suite-api"
+        # Seconds for the token acquire; None (the default) leaves it
+        # unbounded as before. The pak installer's account check sets it so
+        # a stalled Suite API cannot hang the install before the upload.
+        self._auth_timeout = auth_timeout
         self._username = username
         self._password = password
         self._auth_source = auth_source
@@ -115,6 +120,7 @@ class VCFOpsClient:
 
     # ---- auth -----------------------------------------------------------
     def authenticate(self) -> None:
+        extra = {} if self._auth_timeout is None else {"timeout": self._auth_timeout}
         r = self._session.post(
             f"{self.base}/api/auth/token/acquire",
             json={
@@ -122,6 +128,7 @@ class VCFOpsClient:
                 "password": self._password,
                 "authSource": self._auth_source,
             },
+            **extra,
         )
         if r.status_code != 200:
             raise VCFOpsError(f"auth failed ({r.status_code}): {r.text}")

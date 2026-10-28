@@ -21,6 +21,10 @@ release. Two version lines, no exceptions:
 
 Operational consequences:
 
+- **Devel only ever runs `0.x` builds.** A `1.x` release is never
+  installed on devel: it breaks the upgrade path devel exists to test
+  (Scott, 2026-10-28). To prove released behaviour on devel, build the
+  merged source as a `0.x` dev preview and install that.
 - Installing a `0.x` test pak over an installed `1.x` release is a
   **version downgrade** — expect and use the platform's force/overwrite
   ("clobber") install path deliberately, and record the previously
