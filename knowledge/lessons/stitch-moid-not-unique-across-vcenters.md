@@ -36,7 +36,7 @@ trap*) already stated "MOID is not unique across vCenters — join on vCenter
 stitchers still violated it, because the reviewer's hunt is what caught it,
 not authoring discipline.
 
-## The fix pattern (vcommunity build 2 — copy this)
+## The fix pattern (vcommunity build 2, tightened in compliance build 102)
 
 `content/sdk-adapters/vcommunity/src/com/vcfcf/adapters/vcommunity/VCommunityStitcher.java`:
 
@@ -48,13 +48,23 @@ not authoring discipline.
   owning UUID is known and a loaded resource carries a `VMEntityVCID` that
   does not match, skip it — a bare MOID can then only resolve to a resource
   belonging to the vCenter this adapter instance monitors.
-- **Degrade, never drop.** If the owning UUID is unknown (null/blank — not
-  yet resolved) or a row has no `VMEntityVCID`, keep the resource and fall
-  back to the old unscoped behaviour. Single-vCenter deployments are
-  unaffected either way.
+- **Hold back, never guess** (amended 2026-10-28, compliance build 102,
+  compliance#20). If the owning UUID is unknown, hold the VMWARE kinds back
+  for that cycle and flag it (`Rollup|incomplete = 1`); skip a row with no
+  `VMEntityVCID` and count it. The original rule here was "degrade to
+  unscoped", which is the very cross-stitch this lesson exists to prevent,
+  just on a rarer path. The skill's identity rule (join on vCenter
+  `instanceUuid` + MOID) has no unscoped exception, and a missed push for
+  one cycle is visible and recoverable where a wrong push is silent.
+- **Duplicate MOID within one vCenter matches neither row**; a row without
+  a usable identifier is skipped and counted, logged once per cycle at INFO
+  with the first one.
 - **Log the scope.** The load line reports `scoped to vCenter <uuid>; skipped
-  N from other vCenters` vs `unscoped — owning vCenter UUID unknown`, so a
-  silently-unscoped cycle is visible in the adapter log.
+  N from other vCenters`; a held-back cycle logs a WARN and sets
+  `Rollup|incomplete`, so a cycle that pushed nothing is visible. (vcommunity
+  build 2 still degrades to unscoped and logs `unscoped — owning vCenter UUID
+  unknown`; copy compliance build 102, not vcommunity, for the unknown-UUID
+  path.)
 
 ## Generalizable rule
 
@@ -62,8 +72,10 @@ not authoring discipline.
 > MOID, NAS volume ID, controller slot, …) must scope resolution to the
 > owning target instance — for VMWARE kinds, filter by `VMEntityVCID`
 > against the vCenter UUID pinned from the live session. Local IDs are only
-> unique per target. Degrade to unscoped when the discriminator is unknown;
-> never drop an undisambiguatable resource.
+> unique per target. When the discriminator is unknown, hold the push back
+> and say so; never attach data to a resource you could not disambiguate.
+> No name or prefix fallback either (compliance#20: HashMap-ordered prefix
+> matching sent data to the wrong object).
 
 ## References
 
