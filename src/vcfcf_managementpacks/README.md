@@ -59,7 +59,22 @@ prints `INSTALL STILL RUNNING` and exits 4 (when the last status poll
 failed instead, the status is unknown and it exits 1): not a failure, do not reinstall, and
 the post-install checks below did not run (no command re-runs them on their
 own against an installed pak).  Uninstall keeps its 300 s poll (`POLL_TIMEOUT`).
-After the install, `install` checks that each dashboard the pak ships
+After the install verifies, `install` restarts the accounts the install
+left FAILED (lesson `remote-collector-upgrade-start-race`): on a remote
+collector or Cloud Proxy the server sends Start monitoring before the
+collector has loaded the new jar, and every account of the adapter kind
+stays FAILED until someone starts it. Before the upload it reads each
+adapter instance of the pak's `adapter_kinds` and its `resourceState`;
+after the install it watches them for 120 s, then sends
+`PUT /api/adapters/{id}/monitoringstate/start` once to each that reads
+FAILED, STOPPED or NONE, skipping any that was STOPPED or in maintenance
+before the install (the user's choice), and polls until they read STARTED
+or 300 s have passed. Each account's final state is printed (`ACCOUNT OK`,
+`ACCOUNT LEFT ALONE`, `ACCOUNT NOT COLLECTING` when its state before the
+install is unknown and it was not started, or `ACCOUNT NOT STARTED`, which
+sets exit code 3). This adds about 2 minutes when the pak's adapter kind has
+accounts; `--no-restart-failed` skips it, and `--no-wait` never runs it.
+After that, `install` checks that each dashboard the pak ships
 finished building (issue #244); when one is still building it waits once
 (180 s by default, `--materialization-wait`, capped at 900 s) before the
 re-check, so allow that much more, or pass `--skip-materialization-check`.
@@ -73,8 +88,8 @@ build reads (issue #260), and reads the new copy back. `--skip-summary-rebind`
 or `VCFCF_SUMMARY_REBIND=0` turns the repair off; the install then only
 reads each copy and prints `SUMMARY OK` or `SUMMARY INCOMPLETE <kind>
 <copy id> (<n> of <m> widgets loading)` as information. `--summary-rebind`
-is accepted and is the default. Exit code 3 means the pak installed but a dashboard check failed
-(`MATERIALIZATION STALLED`, or with the repair on `SUMMARY NOT REBOUND`,
+is accepted and is the default. Exit code 3 means the pak installed but a post-install check failed
+(`ACCOUNT NOT STARTED`, `MATERIALIZATION STALLED`, or with the repair on `SUMMARY NOT REBOUND`,
 which quotes the server's HTTP status and answer); do not reinstall on it.
 
 **Credential env vars** (matches the rest of the factory):

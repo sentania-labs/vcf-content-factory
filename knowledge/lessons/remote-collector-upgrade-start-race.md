@@ -32,3 +32,25 @@ accounts run on the primary node's collector.
   minutes until started by hand. The race is not limited to version bumps;
   any pak install that reloads the adapter on a remote collector can trip it.
   The 9.0.2 instance with its collector on the primary did not.
+- Seen again 2026-10-28 on devel_9_1: the compliance 0.0.0.102 install left
+  all three accounts FAILED; a manual start per account a minute later fixed
+  them.
+
+## Codified in the installer (2026-10-28)
+
+`python3 -m vcfcf_managementpacks install` now does the check above itself
+(`src/vcfcf_managementpacks/account_restart.py`). Before the upload it reads
+each adapter instance of the pak's `adapter_kinds` and its `resourceState`.
+After the install verifies it watches them for 120 s (a start sent before
+the collector loads the jar fails the same way), then sends Start monitoring
+once to each account that reads FAILED, STOPPED or NONE, never to one that
+was STOPPED or in maintenance before the install. It polls until they read
+STARTED or 300 s have passed and prints each account's final state; an
+account still not STARTED prints `ACCOUNT NOT STARTED` and the command exits
+3 (installed, post-install check failed: do not reinstall).
+`--no-restart-failed` turns it off; `--no-wait` never runs it.
+
+The installer reads `resourceState`, not the collector log, so it does not
+confirm the jar loaded before starting. If an account is still FAILED after
+its one start, do the by-hand steps above. A green install still says
+nothing about a collection cycle: verify one.
