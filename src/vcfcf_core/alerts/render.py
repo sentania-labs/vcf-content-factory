@@ -39,7 +39,12 @@ import format used by the UI:
 
 REST -> XML mapping:
   CONDITION_HT  -> Condition type="metric"   (key, operator, value attrs)
-  CONDITION_DT  -> Condition type="metric"   (key, operator=DT_ABOVE etc, no value)
+  CONDITION_DT  -> Condition type="dtmetric" (key, operator=above/below/abnormal,
+                   instanced; no thresholdType/value/valueType). The REST
+                   DT_ABOVE spelling is rejected by content import
+                   ("Invalid operator:dt_above") and the symptom, plus every
+                   alert using it, is dropped silently. See
+                   knowledge/context/wire-formats/symptomdef_dt_condition_import.md.
   CONDITION_PROPERTY_STRING/NUMERIC -> Condition type="property" (key, operator, value)
   msg_event     -> Condition type="msg_event" (eventMsg, eventSubType, eventType, operator)
 
@@ -182,6 +187,12 @@ def _xml_severity(severity: str) -> str:
 # Condition serialization (YAML condition dict -> XML Condition element)
 # ---------------------------------------------------------------------------
 
+# Content-import XML operator for a DT condition (alertDefinitionSchema.xsd
+# ConditionType: "For dtmetric and dtsuper: above, below, abnormal"). Not the
+# REST DT_<direction> spelling.
+_DT_XML_OPERATORS = {"ABOVE": "above", "BELOW": "below", "ABNORMAL": "abnormal"}
+
+
 def _add_condition_element(parent: ET.Element, cond: dict) -> None:
     """Append a <Condition> element to *parent* from the YAML condition dict.
 
@@ -214,13 +225,16 @@ def _add_condition_element(parent: ET.Element, cond: dict) -> None:
     ("STATIC"/"NUMERIC"). The two wire formats are cased independently; do
     not copy the REST casing here.
 
-    No vendor XML example with a DT (metric_dynamic) condition was found in
-    any reference pak to confirm whether thresholdType/valueType apply
-    there too. Since DT conditions carry no ``value`` at all (REST's own
-    ``_condition_to_wire`` omits thresholdType/valueType for
-    CONDITION_DT), this renderer follows the same omission for metric_dynamic
-    on the XML path — instanced only, no thresholdType/valueType. Flag to
-    api-explorer if a live/vendor DT example ever surfaces to confirm.
+    DT (metric_dynamic) conditions use the content-import vocabulary, not
+    the REST one: ``type="dtmetric"`` and a lowercase ``operator`` of
+    ``above``/``below``/``abnormal``, with ``instanced`` and no
+    thresholdType/value/valueType. The REST spelling (``DT_ABOVE`` on
+    ``type="metric"``) fails import with ``Invalid operator:dt_above`` on
+    8.18 and 9.1, and the symptom and its alerts are dropped silently.
+    Evidence (vendor XSD, VMSP pak alertdefs.xml, vSphere describe.xml,
+    server logs): knowledge/context/wire-formats/symptomdef_dt_condition_import.md.
+    A DT on a super metric would be ``type="dtsuper"``; the symptom loader
+    rejects metric_dynamic on a ``Super Metric|`` key, so it never gets here.
     """
     ctype = cond.get("type", "")
     key = cond.get("key", "")
@@ -240,9 +254,14 @@ def _add_condition_element(parent: ET.Element, cond: dict) -> None:
 
     elif ctype == "metric_dynamic":
         direction = cond.get("direction", "ABOVE")
+        if direction not in _DT_XML_OPERATORS:
+            raise ValueError(
+                f"metric_dynamic direction must be one of "
+                f"{sorted(_DT_XML_OPERATORS)}; got {direction!r}"
+            )
         attribs["key"] = key
-        attribs["operator"] = f"DT_{direction}"
-        attribs["type"] = "metric"
+        attribs["operator"] = _DT_XML_OPERATORS[direction]
+        attribs["type"] = "dtmetric"
         attribs["instanced"] = instanced
 
     elif ctype == "property":
