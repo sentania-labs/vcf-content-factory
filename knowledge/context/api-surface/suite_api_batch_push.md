@@ -22,7 +22,7 @@ per object per cycle"). Design context:
   `reference/docs/internal-api-8.18.json`.
 - The framework source: `src/vcfcf_managementpacks/adapter_framework/src/com/vcfcf/adapter/stitch/SuiteApiStitcher.java`
   and `SuiteApiStitchClient.java`.
-- One live write on `devel_8_18` (below).
+- Three live writes on `devel_8_18`, all same-value (below).
 
 All endpoints here are in the **supported public** spec on every version.
 No `X-Ops-API-use-unsupported` header is involved.
@@ -32,9 +32,9 @@ No `X-Ops-API-use-unsupported` header is involved.
 | Question | Answer | Confidence |
 |---|---|---|
 | Bulk endpoints exist? | Yes: `POST /api/resources/stats` and `POST /api/resources/properties` | Spec on all three lines |
-| Same on 8.18, 9.0, 9.1? | Same paths, same query params, same 200-only response, same JSON shape in the vendor examples on all three. 9.0 and 9.1 schemas are identical (key order only). 8.18's generated schema shows different field names (below); its own JSON example agrees with 9.x | High for 9.x; 8.18 accepted the 9.x shape with HTTP 200, landing not observable (see live test) |
+| Same on 8.18, 9.0, 9.1? | Same paths, same query params, same 200-only response, same JSON shape in the vendor examples on all three. 9.0 and 9.1 schemas are identical (key order only). 8.18's generated schema shows different field names (below); its own JSON example agrees with 9.x | High. 8.18 stats batch in the 9.x shape proven landed (live test 2); 8.18 properties batch accepted with 200 (live test 1, landing not observable for a same-value property) |
 | Stats and properties in one request? | **No.** No schema in any of the six specs references both `stat-content` and `property-content`; the two bulk bodies are separate types | Spec, all versions |
-| Partial failure reported per resource? | **No per-resource result in the spec.** Response is `200` with no body (observed: `Content-Length: 0`). Behavior when one id in a batch is bad is **untested** | Spec + live; partial-failure behavior UNKNOWN |
+| Partial failure reported per resource? | **No.** Response is `200` with no body (`Content-Length: 0`). An id that matches no resource is **silently dropped**: the batch still returns 200 and the other resources land, even when the bad id comes first (live test 3) | Spec + live on 8.18.7 |
 | Documented batch size limit? | **None** in any spec, on either endpoint | Spec |
 
 Cost change: today 2 requests per object per cycle. With batching, 2
@@ -133,9 +133,9 @@ Springfox reads Java field names; the wire is serialized from the JAXB
 names, which the XML and JSON examples on the same 8.18 operation both
 use. The 8.18 per-id schemas (`stat-content`, `property-content`) match
 9.x exactly. Treat the 9.x names as the wire format on 8.18 (INFERENCE,
-supported by the live 200 below; the stats key is not live-tested).
+now proven for stats: the 8.18 stats batch keyed `resource-stat-content` landed, live test 2).
 
-## Live test (one write, devel_8_18, 8.18.7)
+## Live test 1: properties batch, same value (devel_8_18, 8.18.7)
 
 Target: host `vcf-lab-mgmt-esx02` (`1e9de40c-b045-4f9e-9b4f-be7d471773e6`),
 property `VCF-CF Compliance|esx.ssh|Expected`, which the compliance pak
@@ -162,6 +162,72 @@ same-value write is accepted but leaves no trace. **What this proves:**
 8.18 accepts the 9.x property batch shape with 200. **What it does not:**
 that the data landed. Nothing to clean up: the value was unchanged and no
 object was created.
+
+## Live test 2: stats batch, same value (devel_8_18, 8.18.7)
+
+Same host, stat `VCF-CF Compliance|total_count`, which the compliance pak
+pushes every cycle, current value `48.0` (latest sample `1793178450846`).
+
+```
+POST /suite-api/api/resources/stats
+{"resource-stat-content": [{"id": "1e9de40c-b045-4f9e-9b4f-be7d471773e6",
+  "stat-contents": [{"statKey": "VCF-CF Compliance|total_count",
+  "timestamps": [1793178725960], "data": [48.0]}]}]}
+
+HTTP 200, Content-Length: 0, empty body
+```
+
+`GET /api/resources/stats/latest` did not show it: the pak's own cycle
+pushed a later sample (`1793178751610`) before the next poll, and latest
+returns only the newest point. The raw series did:
+`POST /api/resources/stats/query` with
+`{"resourceId":[<host>],"statKey":["VCF-CF Compliance|total_count"],"begin":1793178000000,"end":1793178900000}`
+(no `rollUpType`; `"NONE"` is rejected with apiErrorCode 1501 "unit is
+null") returned `(1793178151217, 48.0), (1793178450846, 48.0),
+(1793178725960, 48.0), (1793178751610, 48.0)`. The third point is this
+write. **The 9.x stats batch shape lands on 8.18.**
+
+## Live test 3: partial failure (devel_8_18, 8.18.7)
+
+One batch of two entries: first a random UUID
+`35603c17-6c40-4137-a41d-2fb406281543` (checked first:
+`GET /api/resources/<uuid>` 404 "No such Resource"), then the real host,
+same stat and value as test 2.
+
+```
+POST /suite-api/api/resources/stats
+{"resource-stat-content": [
+  {"id": "35603c17-6c40-4137-a41d-2fb406281543", "stat-contents": [{"statKey":
+   "VCF-CF Compliance|total_count", "timestamps": [1793178887347], "data": [48.0]}]},
+  {"id": "1e9de40c-b045-4f9e-9b4f-be7d471773e6", "stat-contents": [{"statKey":
+   "VCF-CF Compliance|total_count", "timestamps": [1793178887347], "data": [48.0]}]}]}
+
+HTTP 200, Content-Length: 0, empty body
+```
+
+- **The real resource landed:** `(1793178887347, 48.0)` appeared in the
+  raw series 15 to 30 s after the 200.
+- **The unknown id was dropped without a trace:** still 404 on
+  `GET /api/resources/<uuid>`, and `stats/query` for it answers 404 "The
+  Resources ... were not found". No resource was created.
+- **No extra adapter instance:** `GET /api/adapters` shows a single
+  `vRealizeOpsMgrAPI` instance (the collector's default), so the batch
+  path did not mint one. No before-snapshot was taken, so this shows the
+  end state only.
+- **Logs: not read.** SSH key auth to the 8.18 node is refused, `.env`
+  has no SSH password for it, and the Suite API has no log-read endpoint
+  (8.18 `/api/logs*` is configuration and forwarding only). Whether the
+  server logs the dropped id is UNKNOWN.
+
+Untested: a malformed entry (missing `statKey`, both `data` and
+`values`), which may 4xx the whole batch rather than drop one entry; and
+the same probe on the properties batch (assumed to behave alike,
+INFERENCE). What the per-id path does with an unknown id was not tested
+here.
+
+Clean-up: all three writes carried the value already stored; the extra
+samples are identical to the pak's own at adjacent timestamps. Nothing
+was created.
 
 ## What the facade does today
 
@@ -216,12 +282,16 @@ they change (design §3) cuts more than batching does.
    bare array vs wrapped object). Skip resources with an empty map; skip
    the request when nothing is left. Validate ids with the existing
    `isUuid`, since an id is now in a body, not a path.
-4. **Partial failure:** the response names nothing. Treat a non-2xx batch
-   as failed as a whole: one WARN naming the count and the first few
-   resource ids (through `loggable`), then retry that chunk's resources
-   once on the existing per-id path, so one bad id cannot drop the rest.
-   This also covers the untested case where the server rejects the whole
-   batch for one bad id.
+4. **Partial failure:** the response names nothing, and a stale or
+   unknown id does **not** fail the batch: it is dropped and the call
+   still returns 200 (live test 3). So a 200 means "accepted", not
+   "every id landed", and the per-id fallback will not catch a stale id.
+   Stale ids must be caught where ids are resolved (the adapter's
+   `ForeignResourceResolver` refresh), not from the push result. Keep a
+   fallback for a non-2xx batch (a malformed entry or a server error can
+   still fail the whole call): one WARN naming the count and the first
+   few resource ids (through `loggable`), then retry that chunk's
+   resources once on the per-id path.
 5. **Retry semantics:** keep the single 401 re-acquire and retry. No
    blind retry on 5xx or timeout beyond the per-id fallback. A timeout is
    ambiguous (the batch may have been applied); re-pushing the same
@@ -233,16 +303,10 @@ they change (design §3) cuts more than batching does.
    stats in the same cycle, keep properties first, as compliance's
    per-object calls do today.
 
-## Open (needs approval before testing)
+## Open
 
-1. **8.18 stats key name.** One same-value `POST /api/resources/stats` on
-   `devel_8_18` with a stat the compliance pak owns, read back with
-   `/api/resources/stats/latest`. Stats store every sample, so unlike
-   properties the landing is observable. Settles `resource-stat-content`
-   vs `list`.
-2. **Partial failure.** One batch with one real resource (same value) and
-   one random UUID that exists nowhere: does the server 200 and drop the
-   unknown id, 4xx/5xx the whole batch, or apply the good one and then
-   fail?
-3. **Size ceiling.** Largest property batch accepted before a 413 or
-   front-end reject, and server time per MB.
+1. **Size ceiling: not probed by decision.** Tooling uses conservative
+   byte and count caps instead.
+2. Partial failure on 9.0 and 9.1 and on the properties batch: not
+   tested; assumed the same as 8.18 stats (INFERENCE, same spec family).
+3. Server-side logging of a dropped id: unknown without node log access.
