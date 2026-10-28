@@ -1048,6 +1048,61 @@ viewed in this capture (no browser session). The units rest on the
 arithmetic above and the console's own `total_bytes` label; the UI is
 fed by the same bootstrap.
 
+#### `nvr` storage health fields (captured 2026-10-28, UniFi SDK pak build 19)
+
+Read-only, same devel console (UDM Pro, console firmware 6.0.15, Protect
+7.3.70): `GET /proxy/protect/api/bootstrap` (`nvr` subtree), `GET
+/proxy/protect/api/nvr` (the same `nvr` object), and `GET /api/system`
+(UniFi OS, top-level `ustorage`). Vocabulary beyond the live values is from
+the UniFi OS web UI's own main bundles (served at `/main-*.js`, the shell
+that renders the console's storage page): its zod schema for the
+`ustorage` record and its status title and colour maps. Serials redacted.
+
+**Where health lives.** `nvr.systemInfo.ustorage` (bootstrap and
+`/proxy/protect/api/nvr`) is the UniFi OS `ustorage` block, slightly
+trimmed: `/api/system` `ustorage.space[]` also carries `error_count`,
+`resv_bytes`, `expansion_limit_bytes` and a `raid` block (`expected`,
+`had_most`, `members[]`, `member_size`), and its `disks[]` a `node`
+(`sda`); the Protect copy has none of these. `nvr.systemInfo.storage.devices[]`
+repeats each drive as `model`, `size`, `healthy` only.
+
+| Path (under `nvr`) | Devel value | Vocabulary (UI schema / maps) |
+|---|---|---|
+| `systemInfo.ustorage.space[].space_type` | `primary`, `swap`, `root` | `primary`, `secondary`, `root`, `swap`. The UI's volume is the `primary` entry, else the only non-root, non-swap one. |
+| `systemInfo.ustorage.space[].health` | `atrisk` (md3), `health` (md0, root) | `health` or `healthy` (both shown healthy, "Storage Fully Operational", green); `atrisk` ("Storage At Risk of Failure", orange); `failed` ("Storage has Failed", red). An entry with no `health` is treated as healthy. |
+| `systemInfo.ustorage.space[].reasons[]` | `[{"type":"io_err","level":"atrisk","slot":0}]` on md3, `[]` elsewhere | `type`: `disk_atrisk`, `disk_failed`, `space_degrade`, `space_failed`, `space_ro`, `lacking_disk`, `io_err`, `raid_bad_blocks`. `level`: free string (seen `atrisk`). `slot` reads 0 although the only drive is slot 1, so it does not name a drive. |
+| `systemInfo.ustorage.space[].action` | `none` | `none`, `syncing`, `repairing`, `expanding`, `formatting`, `erasing`, `checking`, `scanning`. |
+| `systemInfo.ustorage.space[].device` | `md3`, `md0`, `overlayfs-root` | md device name. |
+| `systemInfo.ustorage.disks[].slot` | `1` | integer bay. |
+| `systemInfo.ustorage.disks[].state` | `normal` | `nodisk` (empty bay, "No Drive Detected", neutral); `normal` ("Optimal", green); `spare` ("Hot Spare"), `initializing`, `expanding` (green); `probing` ("Scanning Drive", neutral); `risk` ("Drive At Risk of Failure"), `spare_at_risk`, `foreign` ("Existing Data Detected on Drive"), `repairing`, `incompatible` ("Incompatible Drive") (orange); `broken`, `faulty` ("Drive Failure Detected"), `not_support` ("Drive Not Supported") (red). |
+| `systemInfo.ustorage.disks[].health` | absent | `healthy`, `at_risk`, `broken`, `unspecified`. The UI shows a `normal` drive as `risk` when `health` is `at_risk` or `reason` names a risk. |
+| `systemInfo.ustorage.disks[].reason` | `[]` | a string, `{type}`, or a list of either. Risk reasons: `abnormal_smart`, `too_many_read_error`, `too_many_bad_sectors`, `too_short_life_span`, `too_many_unc_count`, `too_many_get_smart_error`, `investigation_needed`. Not risks: `less_than_min_size`, `disk_at_risk`, `different_type`, `lower_rpm`, `higher_rpm`, `sector_format`. |
+| `systemInfo.ustorage.disks[].healthy` | `good` | not in the UI schema; other values unknown. |
+| `systemInfo.ustorage.disks[].action` | `none` | `none`, `faulty`, `spare`, `repairing`, `initializing`, `expanding`, `probing`. |
+| `systemInfo.ustorage.disks[].bad_sector` | `0` | integer. The UI schema also has `unc_count` and `life_span`; not sent here. |
+| `systemInfo.ustorage.disks[].temperature`, `poweronhrs`, `rpm`, `model`, `firmware`, `size`, `type`, `ata`, `sata`, `serial` | `47`, `31001`, `7200`, `ST10000VN0004-1ZD101`, `SC60`, `10000831348736`, `HDD`, `SATA 3.1`, `SATA 3.1`, `<redacted>` | descriptive. |
+| `systemInfo.ustorage.raid`, `hotspare` | `raid5`, `false` | the target layout; `/api/system` `settings.ustorage` shows current `raid1`, target `raid5`. |
+| `systemInfo.ustorage.sdcards[]` | `[]` | SD-card consoles. |
+| `systemInfo.storage.capability` | `ok` | unknown. |
+| `hardDriveState` | `hddNotCompatible` | Protect-only; unknown vocabulary, not used by the UniFi OS storage page. |
+| `dbRecoveryOptions.hddFailing` | `null` | unknown. |
+
+UI special case: a `primary` space whose `health` is `atrisk` with
+exactly one reason, `lacking_disk` at level `atrisk`, and either no `raid`
+block or `raid.had_most < raid.expected`, is shown healthy.
+
+`/api/system` on devel adds, for md3: `error_count: 9`,
+`raid: {"expected": 2, "had_most": 1, "members": ["sda5"]}`. The UI also
+offers a file system repair when a primary or secondary space has
+`error_count > 0` or an `io_err` reason.
+
+Fullness is not health: devel is 99.1 % used and that is Protect at its
+retention limit. The pak's build 19 publishes `Storage|volume_health`,
+`volume_issues`, `volume_action`, `volume_device`, `drive_count`,
+`drives_not_healthy`, `drives_failed`, `unhealthy_drive_slot`,
+`unhealthy_drive_state`, `drive_bad_sectors` and `hard_drive_state` from
+these paths.
+
 ### Events / alarms (v1.1)
 
 Covered in Endpoint 7 above. Summary:
