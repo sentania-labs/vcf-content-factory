@@ -673,6 +673,14 @@ and never an early one. A tracked entry, marked or not, is dropped as soon
 as the platform no longer lists its resource (review W2), with one INFO line
 per cycle for marked ones.
 
+**Empty is not complete (UniFi build 18 review, 2026-10-28).** A pak may
+declare a kind read in full only from a read that returned it, or from
+positive evidence the kind is empty. An empty list, an empty child table on
+a registered device, or an error code inside a 200 response leaves the kind
+out; the framework's "delivered nothing" guard does not catch it because the
+World object is always delivered. Cost: a kind's last object is never
+auto-removed.
+
 ### Logging — UPDATED (componentLogger added)
 
 Use `logInfo()` / `logWarn()` / `logError()` helpers on `VcfCfAdapter`

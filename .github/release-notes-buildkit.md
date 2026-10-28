@@ -196,6 +196,12 @@ Version note: this is 1.0.19, after 1.0.18.
   list, one Synology share's NFS probe) still delivers the same kind from
   the other parents. Leave a kind out of `kindsReadThisCycle()` whenever any
   part of its read failed.
+- An empty answer is not a complete read. An empty list, an empty child
+  table on a registered device, or an error code inside a 200 body must
+  leave the kind out, unless the source says positively that none exist.
+  Otherwise one empty response repeated for 12 cycles marks a live
+  inventory gone. The cost is that a kind's last object is never
+  auto-removed.
 - The threshold counts collection cycles, not time: 12 cycles is an hour at
   a 5-minute interval and 12 minutes at a 1-minute one.
   `notExistingMissedCycles()` changes it (0 turns marking off).
