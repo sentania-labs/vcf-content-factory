@@ -188,6 +188,10 @@ schema-valid, not observed.
 
 ## 3. What the renderer must emit
 
+**Status (2026-10-28): fixed** in the renderer (buildkit 1.0.23), guarded by
+`tests/test_symptom_dt_condition_xml.py`. The symptom loader rejects
+`metric_dynamic` on a `Super Metric|` key until a `dtsuper` path exists.
+
 `src/vcfcf_core/alerts/render.py::_add_condition_element`, `metric_dynamic`
 branch. Today:
 

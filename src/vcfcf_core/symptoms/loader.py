@@ -197,6 +197,18 @@ class SymptomDef:
                     f"{tag}: direction must be one of "
                     f"{sorted(DYNAMIC_DIRECTIONS)}; got {direction!r}"
                 )
+            # A DT on a super metric is a different condition type on both
+            # wires (XML type="dtsuper", REST CONDITION_DT_SUPER). The factory
+            # emits dtmetric / CONDITION_DT only, and a wrong DT condition is
+            # dropped silently at content import with its alerts, so refuse
+            # it here. See
+            # knowledge/context/wire-formats/symptomdef_dt_condition_import.md.
+            if str(key).startswith("Super Metric|"):
+                raise SymptomValidationError(
+                    f"{tag}: metric_dynamic on a super metric key ({key!r}) "
+                    f"is not supported (needs dtsuper / CONDITION_DT_SUPER, "
+                    f"which the factory does not emit)"
+                )
 
         elif ctype == "property":
             op = cond.get("operator", "")
