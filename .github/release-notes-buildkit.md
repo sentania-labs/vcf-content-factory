@@ -176,6 +176,21 @@ Version note: this is 1.0.19, after 1.0.18.
   makes one early.
 - No pak source change is required. Rebuild every pak on this kit to pick
   it up, and check the pak's kinds against the hooks above first.
+- On a Cloud Proxy, the ambient Suite API credential no longer tries the
+  automation and maintenance credential files (compliance#58). Those files
+  never authenticate from a proxy, and decrypting them made the platform's
+  `Crypt` log an ERROR ("Crypt.decrypt_impl_v2: ... pad block corrupted")
+  on every Test Connection. When the collector-injected credential is
+  missing on a proxy, the framework now raises one clear error without
+  calling `Crypt`, so the pak logs a single WARN with no stack. The proxy is
+  detected from the collector's own `collector.properties`
+  (`isUnifiedCloudProxy=true` or `httpRelayEnabled=true`). An analytics
+  node, or a collector whose file cannot be read, keeps the old behaviour.
+  Collection on a proxy still uses the injected credential, as before.
+- When the platform `Crypt` cannot decrypt a credential file, it returns
+  nothing instead of throwing. The framework now stops there with an error
+  naming the file. Before, it went on to log in with no password, which
+  failed with a 401.
 
 Version note: open PR #281 holds 1.0.21; this is 1.0.22.
 

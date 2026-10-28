@@ -114,7 +114,13 @@ import java.util.Properties;
  *       explicit credential fields.</li>
  *   <li>Malformed file (missing keys, empty username) — throws
  *       {@link IOException}.</li>
- *   <li>Decryption failure — propagates the exception from {@link Crypt}.</li>
+ *   <li>Decryption failure — {@link Crypt} logs it at ERROR and returns
+ *       null; this throws {@link IOException}. Anything Crypt throws
+ *       propagates.</li>
+ *   <li>Cloud Proxy with no injected credential — throws {@link IOException}
+ *       without reading a file candidate or calling {@link Crypt}, so the
+ *       platform logs no cipher ERROR (compliance#58; see
+ *       {@link #isCloudProxy(Path)}).</li>
  * </ul>
  */
 public final class AmbientCredential {
@@ -147,6 +153,56 @@ public final class AmbientCredential {
      */
     static final String MAINTENANCE_PROPS_PATH =
             "/usr/lib/vmware-vcops/user/conf/maintenanceuser.properties";
+
+    /**
+     * The collector's own properties file, which says whether this collector
+     * is a Cloud Proxy (compliance#58). Mode {@code 0600 admin:admin}, readable
+     * by the collector JVM the adapter runs in.
+     */
+    static final String COLLECTOR_PROPS_PATH =
+            "/usr/lib/vmware-vcops/user/conf/collector/collector.properties";
+
+    /**
+     * Whether {@code collectorProperties} marks this collector a Cloud Proxy:
+     * {@code isUnifiedCloudProxy=true} or {@code httpRelayEnabled=true}.
+     * Anything else, including a missing or unreadable file, is false, which
+     * keeps the behaviour from before this check. Visible to tests.
+     *
+     * <p>Evidence (read-only SSH, 2026-10-28, six devel nodes):
+     * <ul>
+     *   <li>{@code isUnifiedCloudProxy} is the key the collector's own
+     *       {@code CollectorProperties} reads ({@code getBoolean(
+     *       "isUnifiedCloudProxy", false)}, vcops-collector 9.1.1). True on the
+     *       9.0.2 and 9.1.1 proxies, false on both analytics nodes. Absent on
+     *       8.18.6, proxy and node alike.</li>
+     *   <li>{@code httpRelayEnabled=true} (one-way collector traffic over the
+     *       suite-api port, relay URL {@code https://localhost/suite-api}) is
+     *       set on all three proxies, 8.18.6 included, and on none of the
+     *       three analytics nodes.</li>
+     *   <li>Not used: {@code remote=true}. It is true on every proxy, but
+     *       older platform jars still carry a classic {@code REMOTE} collector
+     *       type ({@code CollectorType}), whose ambient behaviour is not
+     *       established, so it keeps the old path.</li>
+     * </ul>
+     */
+    static boolean isCloudProxy(Path collectorProperties) {
+        if (collectorProperties == null) return false;
+        Properties p = new Properties();
+        try {
+            if (!Files.isReadable(collectorProperties)) return false;
+            try (InputStream in = Files.newInputStream(collectorProperties)) {
+                p.load(in);
+            }
+        } catch (IOException | RuntimeException e) {
+            return false;
+        }
+        return isTrue(p.getProperty("isUnifiedCloudProxy"))
+                || isTrue(p.getProperty("httpRelayEnabled"));
+    }
+
+    private static boolean isTrue(String v) {
+        return v != null && "true".equalsIgnoreCase(v.trim());
+    }
 
     /** Property key for the principal name. */
     private static final String KEY_USERNAME = "username";
@@ -358,6 +414,27 @@ public final class AmbientCredential {
      * @throws RuntimeException if Crypt decryption fails
      */
     public static AmbientCredential load(AdapterConfig adapterConfig) throws IOException {
+        return load(adapterConfig, Paths.get(COLLECTOR_PROPS_PATH), buildCandidates());
+    }
+
+    /**
+     * {@link #load(AdapterConfig)} with the collector properties file and the
+     * file candidates supplied. Seam for tests.
+     *
+     * <p><strong>Cloud Proxy (compliance#58).</strong> Unless the explicit
+     * override is set, when the injected credential is absent and
+     * {@code collectorProperties} marks this collector a Cloud Proxy
+     * ({@link #isCloudProxy(Path)}), no file candidate is read and
+     * {@code Crypt} is never called: an {@link IOException} saying so is
+     * thrown instead. On a Cloud Proxy the file credentials do not
+     * authenticate (DEF-006: automation 401s at token acquire, maintenance
+     * is the role-less {@code cloudproxy_<uuid>}), and on devel 9.1 the
+     * automation password does not even decrypt: {@code Crypt.decrypt_impl_v2}
+     * logs "pad block corrupted" at ERROR and returns null before the
+     * framework sees anything.
+     */
+    static AmbientCredential load(AdapterConfig adapterConfig, Path collectorProperties,
+            List<Candidate> fileCandidates) throws IOException {
         boolean overrideSet = isOverrideSet();
         String injectedFailureReason = null;
 
@@ -373,9 +450,19 @@ public final class AmbientCredential {
                 injectedFailureReason = LAST_INJECTED_FAILURE_REASON.get();
             }
             LAST_INJECTED_FAILURE_REASON.remove();
+
+            if (isCloudProxy(collectorProperties)) {
+                throw new IOException("AmbientCredential: this collector is a Cloud Proxy ("
+                        + COLLECTOR_PROPS_PATH + " sets isUnifiedCloudProxy or httpRelayEnabled),"
+                        + " where the automation and maintenance file credentials do not"
+                        + " authenticate, so they were not tried; the per-instance credential the"
+                        + " collector injects was not available here"
+                        + (injectedFailureReason == null ? "" : " (" + injectedFailureReason + ")")
+                        + ". Collection on this proxy normally has it; Test Connection may not");
+            }
         }
 
-        AmbientCredential fileCred = loadFromFileCandidates();
+        AmbientCredential fileCred = loadFromFileCandidates(fileCandidates);
         return injectedFailureReason == null
                 ? fileCred
                 : fileCred.withInjectedFailureReason(injectedFailureReason);
@@ -494,8 +581,8 @@ public final class AmbientCredential {
      * If all candidates are exhausted, an {@link IOException} is thrown
      * listing every path tried.
      */
-    private static AmbientCredential loadFromFileCandidates() throws IOException {
-        List<Candidate> candidates = buildCandidates();
+    private static AmbientCredential loadFromFileCandidates(List<Candidate> candidates)
+            throws IOException {
         List<String> tried = new ArrayList<>();
 
         for (Candidate candidate : candidates) {
@@ -608,6 +695,13 @@ public final class AmbientCredential {
         String plainPassword;
         if (encrypted) {
             plainPassword = decryptWithPlatformCrypt(rawPassword.trim());
+            if (plainPassword == null) {
+                // com.vmware.vcops.security.Crypt.decrypt_impl_v2 catches its own
+                // failure, logs it at ERROR and returns null (javap, 9.1.1
+                // vcops-security). Fail here rather than log in with no password.
+                throw new IOException("AmbientCredential: the platform Crypt could not"
+                        + " decrypt the password in " + path + " (Crypt logged the reason)");
+            }
         } else {
             plainPassword = rawPassword.trim();
         }
