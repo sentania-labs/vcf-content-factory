@@ -85,6 +85,57 @@ owns three classes of file under an adapter's `docs/`:
 
 Any other file under `docs/` is the adapter's own and is never touched.
 
+The inventory tree reads the first `TraversalSpecKind` in `describe.xml`.
+Each `ResourcePath` segment may end in the vendor path modifiers
+(`knowledge/context/cleanroom-spec/spec/07-relationships-cross-mp.md`):
+`/recursive` means the level repeats, so the generator adds a self-edge
+(the kind lists itself in Parent(s), the tree shows one
+`*(recursive: nests under itself)*` line under it, and the SVG and
+Excalidraw draw a loop over the node's top-right corner). `/preferred`
+and `/skip` have no confirmed runtime meaning (PR #290: the SDK validator
+only constrains where they may appear); the docs give them no topology
+and strip them. An edge modifier `::~child` inverts
+the segment's edge: that kind is the parent of the previous level, so
+Synology's `VMWARE::Datastore::~child` after the iSCSI LUN makes the
+Datastore the LUN's parent, as the Cross-MP table says.
+
+A level of another adapter kind is its own node, keyed `ADAPTER::Kind`
+and labelled `Kind (ADAPTER)` (Synology: `Datastore (VMWARE)`), so it never
+merges with a pak kind of the same name. A `*` level is a wildcard: one
+pseudo-kind node per adapter kind, labelled `Any resource kind` (plus
+`(ADAPTER)` when foreign), shown in the tree and Parent(s) but not drawn
+in the diagram.
+
+Top-level tree nodes come out in a fixed order: the pak's own root kinds
+first, in `describe.xml` order, then the other roots (a foreign
+`::~child` parent, a wildcard level) sorted by label, then key. Diagram
+rows come from the pak's own roots; a foreign parent never pulls the
+pak's kinds up a row, and foreign kinds are not drawn in the diagram. The
+generator never iterates a set to order output, so two runs give
+byte-identical files. Cycles terminate. A cycle no root reaches (for
+example `A > B > A` with nothing above it) raises a Python warning naming
+the kinds and is drawn from its first edge parent, so the tree is never
+silently empty.
+
+A kind with several parents is drawn in full under the first parent met
+in `describe.xml` order, and as a one-line `*(see above)*` reference under
+each other parent, so every parent > child pair shows in the tree (UniFi
+Site > Switch, Synology Storage Pool > Disk).
+
+The diagram puts each kind in its shallowest row, so a parent can share
+its child's row (UniFi Gateway > Switch) or sit below it (Synology SSD
+Cache > Disk). Those edges are routed through lanes between rows: a
+same-row edge leaves the parent's bottom, runs under the row and enters
+the child's bottom; an upward edge leaves the parent's top, runs in the
+gap above the parent's row and enters the child's bottom. Each lane widens
+its gap, so a pak with such edges gets a taller diagram, and the canvas
+grows to hold lanes under the last row. Lanes may cross other edges'
+connectors without a hop (Synology's SSD Cache > Disk lane crosses the
+Volume children's connector), and an upward edge that climbs more than
+one row can also cross the rows in between; no pak has one today. In the
+Excalidraw, multi-point arrows (lanes and self-loops) are square-cornered
+(`roundness: null`), like the SVG.
+
 ### Bundled content naming (`content_naming`)
 
 `adapter.yaml` may declare `content_naming`, the naming contract for every
@@ -1234,6 +1285,7 @@ Empirical basis: `knowledge/context/investigations/suiteapi_ambient_auth_devel_2
 
 | Date | Change |
 |---|---|
+| 2026-10-28 | **docs-gen reads the `/recursive`, `/preferred` and `::~child` ResourcePath modifiers (UniFi build 18 review W4).** A `/recursive` level adds the kind's self-edge, so the generated tree, diagram and Parent(s) column show Switch > Switch and AP > AP; `/preferred` and `/skip` (meaning unconfirmed, PR #290) are stripped; foreign levels are keyed `ADAPTER::Kind` and labelled `Kind (ADAPTER)`; `*` levels are a wildcard pseudo-kind; unreachable cycles warn and still render. Every further parent of a kind gets a `*(see above)*` tree line, and same-row and upward diagram edges are routed through lanes between rows instead of a flat line through the row. `::~child` now makes that kind the parent, and top-level nodes are ordered own roots (describe.xml order) then foreign roots (sorted) instead of by set iteration. Synology docs change on the next build: Datastore moves from under the iSCSI LUN to a top-level foreign root `Datastore (VMWARE)` with *(see above)* lines for the iSCSI LUN and NFS Export, the LUN and NFS Export Parent(s) gain `Datastore (VMWARE)`, the tree gains Storage Pool > Disk *(see above)*, and the diagram routes SSD Cache > Disk; compliance has no traversal spec and does not change. See "Generated docset" above. **Versioning:** `BUILDKIT_VERSION` not bumped here; paks get the fix with the next buildkit tag. |
 | 2026-10-28 | **Buildkit 1.0.23: `metric_dynamic` symptoms render as content-import `type="dtmetric"` with `above`/`below`/`abnormal`, not `type="metric" operator="DT_ABOVE"`.** `vcfcf_core/alerts/render.py::_add_condition_element` used the REST spelling in content XML; the importer rejects it (`Invalid operator:dt_above`, 8.18 and 9.1) and drops the symptom, every other symptom in the same alertdefs file, and every alert referencing them, while the pak install reports success (Synology 0.0.0.35). The renderer is shared by factory content zips (`vcfcf_core/packaging/assembly.py`) and SDK pak `content/symptomdefs/` and `content/alertdefs/` (`sdk_builder.py`, the kit's `alerts_render.py` copy). REST (`CONDITION_DT` / `DT_<direction>`) is unchanged. The symptom loader now rejects `metric_dynamic` on a `Super Metric|` key: that is `dtsuper` / `CONDITION_DT_SUPER` on the two wires, which the factory emits on neither, and no content uses it. Evidence: `knowledge/context/wire-formats/symptomdef_dt_condition_import.md`. Guard: `tests/test_symptom_dt_condition_xml.py`. **Versioning:** `BUILDKIT_VERSION` 1.0.23, following the merged 1.0.22 (#287). Factory zips: `CURRENT_TEMPLATE_VERSION` 2026-10-28-2, since `AlertContent.xml` in every zip comes from this renderer (no repo zip carries a DT symptom, but a clone's would be stale). **Adapter adoption:** synology is the only pak with a `metric_dynamic` symptom (`Disk Uncorrectable Sectors Increasing`); rebuild it to land that symptom and the `Disk Failing` alert. No source change. Other paks' built bytes are unchanged. |
 | 2026-10-28 | **Ambient credential: no file decrypt on a Cloud Proxy (compliance#58).** `AmbientCredential.load(AdapterConfig)`: when the explicit override is not set and the injected per-instance credential is absent, a collector whose `/usr/lib/vmware-vcops/user/conf/collector/collector.properties` has `isUnifiedCloudProxy=true`, or `httpRelayEnabled=true` where `isUnifiedCloudProxy` is absent (8.18; an explicit `false` wins, review N1) (`AmbientCredential.isCloudProxy`) gets an `IOException` naming the proxy, and no file candidate is read and `Crypt` is never called. Before, Test Connection on the 9.1 devel proxy decrypted `automationuser.properties`, and the platform `Crypt.decrypt_impl_v2` logged "pad block corrupted" at ERROR, returned null, and the login then 401'd. The file identities are dead on a proxy anyway (DEF-006). A null return from `Crypt.decrypt` is now an `IOException` naming the file, not a credential with no password. Detection evidence (six devel nodes on three lines, platform bytecode, why `remote=true` is not used): `knowledge/context/sdk/cloud_proxy_detection.md`. New `AmbientCredentialTest` cases: detection on the six nodes' property lines, and the proxy path never reaching `Crypt`; a mutation that disables the check reproduces the `Crypt` call. **Versioning:** second item of `BUILDKIT_VERSION` `1.0.22`. **Adapter adoption:** none needed. Compliance's `testSuiteApi` already logs one WARN with no stack (`getSimpleName(): getMessage()`); after a rebuild it carries the proxy message instead of the 401. Collection on a proxy is unchanged (injected credential). |
 | 2026-10-28 | **Vanished objects can be marked NOT_EXISTING, opt-in per kind (unifi#20).** `VcfCfAdapter.onCollect`, for `discoverOnCollect()` adapters that override `kindsReadThisCycle()`, diffs the platform's monitoring plus stopped resources of the declared kinds against what `enumerateResources` delivered. After `notExistingMissedCycles()` consecutive complete cycles missing (default 12, cycles not time) it calls `changeResourceState(rc, NOTEXIST)` with the platform's `ResourceConfig`; see §Vanished objects. New protected hooks: `notExistingMissedCycles()`, `kindsReadThisCycle()` (default `null` = mark nothing) and `notExistingExcludedKinds()`, plus the constant `DEFAULT_NOT_EXISTING_MISSED_CYCLES`. Marked objects are not collected while missing. One is sent `START` on return only while the platform still lists it; otherwise it returns through discovery (`AdapterCache.processNotExistingResponse` drops it), with an INFO line. Tracked entries the platform no longer lists are released. New test `adapter_framework/test/.../VanishedResourceTest.java` (65 checks: same kind from two parents with one unread, the default marks nothing, eviction, no START once unlisted, kinds ignoring case). Framework review `knowledge/context/reviews/framework/adapter-framework-vanished-objects-2026-10-28.md`: B1 (opt-in), W1 to W4 and N3/N4 fixed in this round. **Versioning:** `BUILDKIT_VERSION` `1.0.22`. Open PR #281 holds 1.0.21 and must merge and publish first, so `sdk-buildkit-v1` never moves backwards. **Adapter adoption:** no pak changes behaviour until it opts in. compliance enumerates only its world and has nothing to opt in. unifi: before opting in, track `failedSites` (leave the device kinds out of the read set when any site failed) and per-device `port_table`/`radio_table_stats` gaps, and name `UniFiCamera`/`UniFiNvr` only when the Protect read succeeded. Decide whether the synthetic per-site `UniFiWirelessAggregate` goes in `notExistingExcludedKinds()`. synology: leave `SynologyNfsExport` out when `nfsProbeFailed` is non-empty, and handle the optional UPS and SSD cache the same way. On first opt-in both sweep their legacy-keyed orphans (synology pre-build-34 keys, unifi `<mac>_0` ports), marked about 12 cycles later and deleted by retention. Run the live START/re-registration check on devel before the first pak opts in. |
