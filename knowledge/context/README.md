@@ -71,6 +71,12 @@ These files cost almost nothing to scan and prevent re-deriving known knowledge.
 ### `tier2_architecture.md`
 Tier 2 (Java SDK) framework architecture — read when working on SDK adapters.
 
+### `sdk/` — Tier 2 SDK behavior notes
+| File | Purpose |
+|---|---|
+| `cloud_proxy_detection.md` | How an adapter tells a Cloud Proxy from an analytics node: `collector/collector.properties` `isUnifiedCloudProxy`, or `httpRelayEnabled=true` where that key is absent (six devel nodes, 8.18.6/9.0.2/9.1.1); why `remote=true` is not used; the platform `Crypt` logs a decrypt failure at ERROR itself and returns null, so the only way to avoid that line is not to call it (2026-10-28, compliance#58) |
+| `vanished_object_lifecycle.md` | How an adapter marks an object gone: `AdapterBase.changeResourceState(rc, StateChangeEnum.NOTEXIST)` from `onCollect` (SDK 8.18.7/2.2/9.1.1); what vCenter, vSAN, NSX, VCF, MPB and the Integration SDK container runtime (implicit 12 missed cycles) do; the `DELETED_OBJECTS_RETENTION_IN_HOURS` / `DELETION_SCHEDULING_INTERVAL_IN_HOURS` settings act only on `NOT_EXISTING` objects; why the framework leaves vanished objects `DATA_RECEIVING` (2026-10-28) |
+
 ### `framework_v2_migration.md`
 Tier 2 framework v2 migration record (componentLogger, keyed constructors,
 the SPI reshape) — cross-referenced throughout `tier2_architecture.md` and the
