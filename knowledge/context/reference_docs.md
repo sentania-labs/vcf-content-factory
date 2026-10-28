@@ -6,6 +6,8 @@
 |---|---|
 | `reference/docs/operations-api.json` | VCF Ops Suite API OpenAPI spec (public, supported) |
 | `reference/docs/internal-api.json` | `/internal/*` OpenAPI spec (unsupported, requires `X-Ops-API-use-unsupported: true`) |
+| `reference/docs/operations-api-9.1.json`, `internal-api-9.1.json` | Same pair for 9.1 |
+| `reference/docs/operations-api-8.18.json`, `internal-api-8.18.json` | Same pair for Aria Operations 8.18.7, verbatim as served by `devel_8_18` (springfox Swagger 2.0, `/suite-api/doc/v2/api-docs?group=Public%20APIs` and `?group=Internal%20APIs`, fetched 2026-10-28). Generated schemas use Java field names in places; trust the per-operation `x-examples` for JSON wire keys (see `api-surface/suite_api_batch_push.md`) |
 | `knowledge/context/vrops-content-management.md` | Extracted from the Suite-API whitepaper |
 | `reference/docs/vcf9/supermetrics.md` | VCF 9 docs p.4171–4180, the super metric DSL reference |
 | `reference/docs/vcf9/metrics-properties.md` | VCF 9 docs p.4242–4507, valid metric key reference |

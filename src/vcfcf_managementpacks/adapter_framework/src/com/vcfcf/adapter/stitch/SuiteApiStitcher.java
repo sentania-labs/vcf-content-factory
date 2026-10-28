@@ -48,6 +48,10 @@ import java.util.Map;
  * props.put("Summary|compliance_score", String.valueOf(score));
  *
  * stitcher.pushProperties(foreignResourceUuid, props, System.currentTimeMillis());
+ *
+ * // Many objects per cycle (1.0.24): two calls per batch, not two per object.
+ * // Properties go first. A 2xx means "accepted", not "every id landed".
+ * SuiteApiBatchResult r = stitcher.pushBatch(propsByUuid, statsByUuid, ts);
  * }</pre>
  *
  * <h3>What this wraps</h3>
@@ -193,6 +197,116 @@ public final class SuiteApiStitcher {
             Map<String, Double> stats,
             long timestamp) {
         client.pushStats(resourceId, stats, timestamp);
+    }
+
+    /**
+     * Push string properties onto many foreign resources in as few Suite API
+     * calls as the default caps allow ({@code POST /api/resources/properties},
+     * at most {@link SuiteApiStitchClient#BATCH_MAX_RESOURCES_DEFAULT}
+     * resources and {@link SuiteApiStitchClient#BATCH_MAX_BYTES_DEFAULT}
+     * bytes of JSON per request). Use it instead of one {@link #pushProperties}
+     * per object when a cycle pushes onto many objects (buildkit 1.0.24).
+     *
+     * <p>Never throws. A batch refused with a 4xx other than 401 and 429 is
+     * logged once and its resources re-sent one by one to isolate the bad
+     * entry. A 5xx, 429, persistent 401, timeout or token failure is logged
+     * once and stops the call: nothing more is sent and the rest counts as
+     * skipped. <strong>A 2xx does not mean every id landed:</strong> the
+     * Suite API drops an id that matches no resource silently, so detect stale
+     * ids in the {@link ForeignResourceResolver} refresh, not from the result.
+     * Full contract: {@link SuiteApiStitchClient#pushPropertiesBatch(Map, long, int, int)}.
+     *
+     * @param byResource resource UUID to (statKey to string value)
+     * @param timestamp  sample timestamp in epoch milliseconds, for every value
+     * @return what was sent; never {@code null}
+     */
+    public SuiteApiBatchResult pushPropertiesBatch(
+            Map<String, ? extends Map<String, String>> byResource, long timestamp) {
+        return client.pushPropertiesBatch(byResource, timestamp);
+    }
+
+    /**
+     * {@link #pushPropertiesBatch(Map, long)} with caller-chosen caps; a cap
+     * below 1 falls back to its default with a WARN.
+     *
+     * @param byResource   resource UUID to (statKey to string value)
+     * @param timestamp    sample timestamp in epoch milliseconds
+     * @param maxResources most resources per request
+     * @param maxBytes     most bytes of JSON (UTF-8) per request; a single
+     *                     larger resource is sent alone
+     * @return what was sent; never {@code null}
+     */
+    public SuiteApiBatchResult pushPropertiesBatch(
+            Map<String, ? extends Map<String, String>> byResource, long timestamp,
+            int maxResources, int maxBytes) {
+        return client.pushPropertiesBatch(byResource, timestamp, maxResources, maxBytes);
+    }
+
+    /**
+     * Push numeric stats onto many foreign resources
+     * ({@code POST /api/resources/stats}) with the default caps. Same contract
+     * as {@link #pushPropertiesBatch(Map, long)}, the 2xx caveat included.
+     * Full contract: {@link SuiteApiStitchClient#pushStatsBatch(Map, long, int, int)}.
+     *
+     * @param byResource resource UUID to (statKey to double value)
+     * @param timestamp  sample timestamp in epoch milliseconds, for every value
+     * @return what was sent; never {@code null}
+     */
+    public SuiteApiBatchResult pushStatsBatch(
+            Map<String, ? extends Map<String, Double>> byResource, long timestamp) {
+        return client.pushStatsBatch(byResource, timestamp);
+    }
+
+    /**
+     * {@link #pushStatsBatch(Map, long)} with caller-chosen caps.
+     *
+     * @param byResource   resource UUID to (statKey to double value)
+     * @param timestamp    sample timestamp in epoch milliseconds
+     * @param maxResources most resources per request
+     * @param maxBytes     most bytes of JSON (UTF-8) per request
+     * @return what was sent; never {@code null}
+     */
+    public SuiteApiBatchResult pushStatsBatch(
+            Map<String, ? extends Map<String, Double>> byResource, long timestamp,
+            int maxResources, int maxBytes) {
+        return client.pushStatsBatch(byResource, timestamp, maxResources, maxBytes);
+    }
+
+    /**
+     * Push properties, then stats, for many resources with the default caps:
+     * the properties call finishes (fallback included) before the stats call
+     * starts, and if the properties call stopped, the stats call sends nothing.
+     * The recommended way for a pak to push a whole cycle. Full
+     * contract: {@link SuiteApiStitchClient#pushBatch(Map, Map, long, int, int)}.
+     *
+     * @param propertiesByResource resource UUID to (statKey to string value)
+     * @param statsByResource      resource UUID to (statKey to double value)
+     * @param timestamp            sample timestamp in epoch milliseconds
+     * @return the two calls' results summed; never {@code null}
+     */
+    public SuiteApiBatchResult pushBatch(
+            Map<String, ? extends Map<String, String>> propertiesByResource,
+            Map<String, ? extends Map<String, Double>> statsByResource,
+            long timestamp) {
+        return client.pushBatch(propertiesByResource, statsByResource, timestamp);
+    }
+
+    /**
+     * {@link #pushBatch(Map, Map, long)} with caller-chosen caps.
+     *
+     * @param propertiesByResource resource UUID to (statKey to string value)
+     * @param statsByResource      resource UUID to (statKey to double value)
+     * @param timestamp            sample timestamp in epoch milliseconds
+     * @param maxResources         most resources per request
+     * @param maxBytes             most bytes of JSON (UTF-8) per request
+     * @return the two calls' results summed; never {@code null}
+     */
+    public SuiteApiBatchResult pushBatch(
+            Map<String, ? extends Map<String, String>> propertiesByResource,
+            Map<String, ? extends Map<String, Double>> statsByResource,
+            long timestamp, int maxResources, int maxBytes) {
+        return client.pushBatch(propertiesByResource, statsByResource, timestamp,
+                maxResources, maxBytes);
     }
 
     /**

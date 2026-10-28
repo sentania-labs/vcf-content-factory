@@ -388,3 +388,27 @@ jobs:
         run: |
           export VCFCF_SDK_COMPAT_JAR="$RUNNER_TEMP/sdk_runtime/$JAR_NAME"
           bash src/vcfcf_managementpacks/adapter_framework/build-framework.sh --compat-only
+
+      - name: Run the stitch Java suites against the ${{ matrix.sdk }} SDK jar
+        # SuiteApiStitch* tests (batch push, transport, client, relationships).
+        # log4j comes from Maven Central, sha256-pinned: the SDK jar does not
+        # carry it and the runtime repo is SDK jars only.
+        if: steps.key.outputs.present == 'true'
+        env:
+          JAR_NAME: ${{ matrix.jar }}
+        run: |
+          set -euo pipefail
+          L4J="$RUNNER_TEMP/log4j"
+          mkdir -p "$L4J"
+          for a in api core; do
+            curl -sfL -o "$L4J/log4j-$a-2.24.3.jar" \
+              "https://repo1.maven.org/maven2/org/apache/logging/log4j/log4j-$a/2.24.3/log4j-$a-2.24.3.jar"
+          done
+          ( cd "$L4J" && sha256sum -c - <<'SUMS'
+          5b4a0a0cd0e751ded431c162442bdbdd53328d1f8bb2bae5fc1bbeee0f66d80f  log4j-api-2.24.3.jar
+          7eb4084596ae25bd3c61698e48e8d0ab65a9260758884ed5cbb9c6e55c44a56a  log4j-core-2.24.3.jar
+          SUMS
+          )
+          VCFCF_SDK_JAR="$RUNNER_TEMP/sdk_runtime/$JAR_NAME" \
+          VCFCF_LOG4J_CLASSPATH="$L4J/log4j-api-2.24.3.jar:$L4J/log4j-core-2.24.3.jar" \
+            bash src/vcfcf_managementpacks/adapter_framework/run_stitch_tests.sh
