@@ -39,6 +39,33 @@ Before writing YAML, pin down:
      the API) narrows the traversal.
    - `resourceTagConditionRules`: vSphere tag `category` +
      `stringValue` + operator.
+   - **No conditions ("every object of this kind")**: set
+     `all_of_kind: true` on the rule and omit every condition list.
+     The loader rejects a rule with no conditions unless this opt-in
+     is present (so a forgotten condition still fails), and rejects
+     `all_of_kind: true` combined with any condition. Wire: all five
+     condition arrays empty on the REST body (live-proven 201,
+     membership resolves immediately) and `"rules": []` in the UI
+     import `ruleGroups` entry (vendor shape, vmbro hardware
+     vCommunity "Dell EMC Servers"). Main use: a helper group that a
+     self-provider View widget pins to so the view lists every object
+     of a kind with no common ancestor. See
+     `wire-formats/view_widget_all_objects_of_kind.md`.
+     Unknown rule keys are rejected (a typo such as `properties:` would
+     otherwise vanish and leave an over-broad group). Two caveats before
+     the helper-group pattern ships in a distributed bundle (details in the
+     wire doc): the bundle installer (`install.py` / `install.ps1`) imports
+     dashboards **before** custom groups, the reverse of factory sync, so
+     the pinned dashboard may import before its group exists; and a
+     dashboard pinned to a custom group by name is not yet live-verified.
+     The first devel install must show the dashboard bound to the group
+     before any bundle carries the pattern.
+     ```yaml
+     rules:
+       - resource_kind: "(Custom) Application"
+         adapter_kind: Container
+         all_of_kind: true
+     ```
 5. **`autoResolveMembership`** — default `true`. Only set `false`
    if the user explicitly wants a snapshot group.
 

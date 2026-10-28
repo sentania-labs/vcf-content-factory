@@ -46,6 +46,10 @@ Key facts:
 - Rules use AND within a single rule, OR across multiple rules.
 - Each rule selects one `(resourceKind, adapterKind)` pair.
 - `autoResolveMembership: true` for dynamic evaluation.
+- A rule with no conditions (YAML `all_of_kind: true`) means every object
+  of that kind. A View widget can only list objects under one pinned
+  source, so "list every object of kind X" is a helper group with such a
+  rule plus a dashboard `pin:` to it (`knowledge/context/wire-formats/view_widget_all_objects_of_kind.md`).
 - For rule grammar details, read `knowledge/context/wire-formats/customgroup_relationship_grammar.md`.
 
 ### List views
