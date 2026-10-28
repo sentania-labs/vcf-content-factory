@@ -1,0 +1,13 @@
+id: d9c52d59-e7fc-4430-927a-f79d7add79f1
+name: "[VCF Content Factory] Application VM Count"
+resource_kinds:
+  - resource_kind_key: "(Custom) Application"
+    adapter_kind_key: Container
+description: >
+  Number of member VMs in a (Custom) Application custom group. Counts VMWARE
+  VirtualMachine objects one hop (depth=1) from the group, using
+  config|hardware|num_Cpu, which every VM reports, as the counted metric.
+  Unit: count.
+formula: |
+  count(${adaptertype=VMWARE, objecttype=VirtualMachine,
+          metric=config|hardware|num_Cpu, depth=1})

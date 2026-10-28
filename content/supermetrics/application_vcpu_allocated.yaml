@@ -1,0 +1,12 @@
+id: 7a1672ca-4f89-4a60-b452-e70e6d5c393f
+name: "[VCF Content Factory] Application vCPU Allocated"
+resource_kinds:
+  - resource_kind_key: "(Custom) Application"
+    adapter_kind_key: Container
+description: >
+  Total vCPUs allocated to the member VMs of a (Custom) Application custom
+  group. Sums config|hardware|num_Cpu across VMWARE VirtualMachine objects one
+  hop (depth=1) from the group. Unit: vCPUs.
+formula: |
+  sum(${adaptertype=VMWARE, objecttype=VirtualMachine,
+        metric=config|hardware|num_Cpu, depth=1})
