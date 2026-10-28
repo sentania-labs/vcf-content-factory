@@ -48,10 +48,14 @@ not authoring discipline.
   owning UUID is known and a loaded resource carries a `VMEntityVCID` that
   does not match, skip it — a bare MOID can then only resolve to a resource
   belonging to the vCenter this adapter instance monitors.
-- **Degrade, never drop.** If the owning UUID is unknown (null/blank — not
-  yet resolved) or a row has no `VMEntityVCID`, keep the resource and fall
-  back to the old unscoped behaviour. Single-vCenter deployments are
-  unaffected either way.
+- **Hold back, never guess** (amended 2026-10-28, compliance build 102,
+  compliance#20). If the owning UUID is unknown, hold the VMWARE kinds back
+  for that cycle and flag it (`Rollup|incomplete = 1`); skip a row with no
+  `VMEntityVCID` and count it. The original rule here was "degrade to
+  unscoped", which is the very cross-stitch this lesson exists to prevent,
+  just on a rarer path. The skill's identity rule (join on vCenter
+  `instanceUuid` + MOID) has no unscoped exception, and a missed push for
+  one cycle is visible and recoverable where a wrong push is silent.
 - **Log the scope.** The load line reports `scoped to vCenter <uuid>; skipped
   N from other vCenters` vs `unscoped — owning vCenter UUID unknown`, so a
   silently-unscoped cycle is visible in the adapter log.
@@ -62,8 +66,10 @@ not authoring discipline.
 > MOID, NAS volume ID, controller slot, …) must scope resolution to the
 > owning target instance — for VMWARE kinds, filter by `VMEntityVCID`
 > against the vCenter UUID pinned from the live session. Local IDs are only
-> unique per target. Degrade to unscoped when the discriminator is unknown;
-> never drop an undisambiguatable resource.
+> unique per target. When the discriminator is unknown, hold the push back
+> and say so; never attach data to a resource you could not disambiguate.
+> No name or prefix fallback either (compliance#20: HashMap-ordered prefix
+> matching sent data to the wrong object).
 
 ## References
 
