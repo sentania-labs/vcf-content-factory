@@ -16,6 +16,12 @@ This list is the same one CLAUDE.md carries under "After tooling changes";
 keep the two in step.
 
 History (most recent first):
+  2026-10-28-1  install.py / install.ps1: alert subType defaults to 19 when
+                absent or null (was 3, outside the 18-22 enum); out-of-enum
+                values skip the alert with a warning. install.ps1 now skips
+                an alert on any conversion error instead of aborting the run
+                (as install.py already did), and reads optional symptom-set
+                threshold fields StrictMode-safely (issue #282)
   2026-10-26-1  install.ps1: post-import dashboard materialization check
                 (MATERIALIZATION lines, -SkipMaterializationCheck,
                 -MaterializationWait; issue #255)
@@ -30,4 +36,4 @@ History (most recent first):
   2026-08-24-2  install.ps1: uninstall residual-else sites warn and continue
 """
 
-CURRENT_TEMPLATE_VERSION = "2026-10-26-1"
+CURRENT_TEMPLATE_VERSION = "2026-10-28-1"

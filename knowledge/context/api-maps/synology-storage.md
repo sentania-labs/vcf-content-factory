@@ -1,5 +1,21 @@
 # Synology API Map: Storage (Storage Pool, Volume, Disk Objects)
 
+> **Request method (2026-10-28, Synology build 35, synology#16).** Build 35
+> calls every authenticated DSM API, login and logout included, as an
+> HTTPS form POST to `/webapi/<cgi>` with `api`, `version`, `method`, the
+> parameters and `_sid` (login: `account`, `passwd`) in an
+> `application/x-www-form-urlencoded` body, so the password and session id
+> never reach DSM's access log or a proxy log. DSM still accepts GET with the
+> same parameters in the query string. Only the session-less
+> `SYNO.API.Info` query (`/webapi/query.cgi`) stays GET. Where a section
+> below says "Method: GET" or shows `?api=...&_sid=...`, read it as the
+> parameter set; send it as POST. Checked live on DS1520+ / DSM 7.4.1-90080,
+> 2026-10-28: GET and POST both succeed for `SYNO.DSM.Info`,
+> `SYNO.Core.Hardware.FanSpeed` and `SYNO.Storage.CGI.Storage load_info`;
+> `SYNO.API.Info` GET on `query.cgi` succeeds; Auth v7 login and logout as
+> POST succeed. Build 35 itself verified all 14 of its data APIs as POST
+> on DSM 7.3.2 (pak CHANGELOG 0.0.0.35, #16).
+
 ## Provenance
 
 - **Authored by:** api-cartographer
@@ -49,7 +65,7 @@
 ### SYNO.Storage.CGI.Storage (load_info)
 
 - **Path**: `/webapi/entry.cgi` `[re-verified 2026-04-21]`
-- **Method**: GET
+- **Method**: POST form body, `_sid` in the body (build 35, synology#16); DSM still accepts GET
 - **Params**: `api=SYNO.Storage.CGI.Storage&version=1&method=load_info&_sid=<session>`
 - **Auth**: Session ID required (admin)
 
@@ -616,7 +632,7 @@ Monthly 98.99%, HalfYearly 98.41%, Yearly 98.21%. The inline
 
 | Field | Type | Notes |
 |---|---|---|
-| `status` | STRING | `"normal"`, likely also `"degraded"`, `"crashed"` `[observed 2026-05-19]` |
+| `status` | STRING | `"normal"` `[observed 2026-05-19]`; failure values `degrade`, `crashed`, `deverr`, `ro` (see "DSM status vocabularies"). ~~likely also `"degraded"`, `"crashed"`~~ superseded 2026-10-28. |
 | `summary_status` | STRING | Mirrors `status` `[observed 2026-05-19]` |
 | `space_status.detail` | STRING | `"cache_normal"` -- cache-specific status detail `[observed 2026-05-19]` |
 | `space_status.status` | STRING | `"cache_normal"` `[observed 2026-05-19]` |
@@ -765,6 +781,47 @@ captured curl session's shape works as expected.
 
 ---
 
+## DSM status vocabularies (pool, volume, SSD cache, SMART) `[2026-10-28]`
+
+These are the values of `status` on `storagePools[]`, `volumes[]` and
+`ssdCaches[]` and of `smart_status` on `disks[]` in the `load_info`
+response above. Build 35's bundled alerts match on them.
+
+Source: DSM UI code on the lab NAS
+(Storage Manager `storage_panel.js` and the `[volume]` / `[smart]` string
+tables), via build 35 REFERENCE.md "Bundled alerts". The earlier design
+used "status != normal", and the mapping rows below guessed `degraded`
+and `abnormal`. Both **are superseded 2026-10-28**: "not normal" also
+matches in-progress states and a blank read (review W1, N1), and the
+guessed values are not DSM's keys.
+
+- **Pool status, failure:** `degrade`, `crashed`, `deverr`,
+  `pool_crashed`, `pool_error`.
+- **Volume status, failure:** `degrade`, `crashed`, `deverr`, `ro`,
+  `pool_crashed`, `pool_error`.
+- **SSD cache status, failure:** `degrade`, `crashed`, `deverr`, `ro`.
+- **Not failures** (pool/volume): `normal` and the in-progress states
+  `background`, `repair`, `resync`, `raid_sync`, `scrubbing`, `expand`,
+  `expand_fs`, `add_disk`, `create`, `creating`, `create_fs`, `delete`,
+  `deleting`, `deactivating`, `defrag`, `optimize`, `paritycount`,
+  `running_fsck`, `running_btrfs_balance`, `upgrade`, `replace`,
+  `waiting`, `activating`, `initializing`.
+- **Disk `smart_status`:** `normal` healthy; `failing`, `degraded`,
+  `access_err` failure (Storage Manager: "Replace the drive
+  immediately"); `unknown` means DSM cannot read the drive's SMART
+  (Storage Manager disables Health Info for it, like a disconnected
+  drive), neither healthy nor failed.
+- DSM can omit or blank these fields; publish nothing rather than `""`.
+
+Verified on DSM 7.4.1-90080 (2026-10-28, NAS string table):
+`[volume]` `volume_status_degrade` "Degraded", `volume_status_crashed`
+"Crashed", `volume_status_deverr` "Unknown Error", `volume_status_ro`
+"Read Only", `volume_status_normal` "Healthy". The pool-only states and
+the SMART values come from `storage_panel.js` on DSM 7.3.2 and were not
+re-read on 7.4.1. Only `normal` has been seen live for each.
+
+---
+
 ## Field -> Object Mapping: Storage Pool
 
 **Source**: `data.storagePools[]` `[re-verified 2026-04-21]`
@@ -780,7 +837,7 @@ equal `id` on this NAS. `uuid` also available for a stable key.
 | `uuid` | pool_uuid | IDENTIFIER | STRING | | `[observed 2026-04-21]` DSM-internal UUID, new |
 | `num_id` | num_id | PROPERTY | NUMBER | | Numeric pool index |
 | `device_type` | device_type | PROPERTY | STRING | | e.g., `raid_6` `[observed 2026-04-21]` |
-| `status` | status | PROPERTY | STRING | | "normal", "degraded", "crashed" |
+| `status` | status | PROPERTY | STRING | | `normal` healthy; failure values `degrade`, `crashed`, `deverr`, `pool_crashed`, `pool_error` (see "DSM status vocabularies"). ~~"normal", "degraded", "crashed"~~ superseded 2026-10-28: the key is `degrade`, not `degraded`. |
 | `summary_status` | summary_status | PROPERTY | STRING | | `[observed 2026-04-21]` |
 | `raidType` | raid_type | PROPERTY | STRING | | On this NAS returned `multiple` (SHR layout) `[observed 2026-04-21]` |
 | `disks[]` | (relationship) | | ARRAY[STRING] | | List of disk IDs -- builds Pool->Disk relationship |
@@ -810,7 +867,7 @@ name from `vol_path` or `num_id` rather than depending on
 | `uuid` | volume_uuid | IDENTIFIER | STRING | | `[observed 2026-04-21]` DSM-internal UUID, new |
 | `num_id` | num_id | PROPERTY | NUMBER | | 1 here |
 | `vol_desc` | description | PROPERTY | STRING | | Empty on this NAS |
-| `status` | status | PROPERTY | STRING | | "normal" |
+| `status` | status | PROPERTY | STRING | | `normal` live; failure values `degrade`, `crashed`, `deverr`, `ro`, `pool_crashed`, `pool_error` (see "DSM status vocabularies", 2026-10-28) |
 | `summary_status` | summary_status | PROPERTY | STRING | | `[observed 2026-04-21]` |
 | `fs_type` | fs_type | PROPERTY | STRING | | "btrfs" here |
 | `pool_path` | pool_path | PROPERTY | STRING | | `[superseded 2026-04-21]` Bare `reuse_1`; **join key** to `storagePools[].pool_path` |
@@ -899,7 +956,7 @@ position; they're uncorrelated. Use `id`. `[observed 2026-04-21]`
 | `disk_location` | disk_location | PROPERTY | STRING | | `Main` on internal drives `[observed 2026-04-21]` |
 | `isSsd` | is_ssd | PROPERTY | BOOLEAN | | Present in response; helpful for NVMe vs SATA filters `[observed 2026-04-21]` |
 | `temp` | temp | METRIC | NUMBER | C | Current drive temperature |
-| `smart_status` | smart_status | PROPERTY | STRING | | "normal", "abnormal" |
+| `smart_status` | smart_status | PROPERTY | STRING | | `normal`; failure `failing`, `degraded`, `access_err`; `unknown` = SMART unreadable, not a failure (see "DSM status vocabularies"). ~~"normal", "abnormal"~~ superseded 2026-10-28. |
 | `unc` | unc_sectors | METRIC | NUMBER | count | Uncorrectable sectors lifetime counter |
 | `remain_life.value` | remain_life | METRIC | NUMBER | % | `[superseded 2026-04-21]` Field is **object** `{trustable, value}`, not a scalar; `-1` sentinel for HDD |
 | `remain_life.trustable` | remain_life_trustable | PROPERTY | BOOLEAN | | `[observed 2026-04-21]` |

@@ -217,9 +217,9 @@ jobs:
         run: ${{ matrix.ps }} -NoProfile -NonInteractive -Command '$PSVersionTable.PSVersion.ToString(); $PSVersionTable.PSEdition'
 
       - name: Run the install.ps1 tests
-        # Only the two ps1 test files: the new file imports helpers from
+        # Only the ps1 test files: the materialization file imports helpers from
         # tests/test_install_materialization.py, which only has to be present.
-        run: python -m pytest -m "" --override-ini="addopts=" -v --tb=short tests/test_install_ps1_materialization.py tests/test_install_ps1_tls_and_advisories.py
+        run: python -m pytest -m "" --override-ini="addopts=" -v --tb=short tests/test_install_ps1_materialization.py tests/test_install_ps1_tls_and_advisories.py tests/test_install_alert_subtype.py
 
   sdk-compat:
     # Compile matrix (issues #211, #252, RULE-019: every Tier 2 pak works on

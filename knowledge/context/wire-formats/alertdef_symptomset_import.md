@@ -198,3 +198,35 @@ Read-only investigation. Devel actions: token acquire, GET
 alertdefinitions/reportdefinitions, SSH log grep — no POST/PUT/DELETE, no test
 objects created. Scratch pak extraction removed. Nothing to clean on the
 instance.
+
+---
+
+## Alert `subType` enum (added 2026-10-27, tooling)
+
+`subType` on an AlertDefinition takes one of five values: **18
+Availability, 19 Performance, 20 Capacity, 21 Compliance, 22
+Configuration**. Sources: the vendor `alertDefinitionSchema.xsd` (integration
+SDK, `reference/references/vmware-vcf-operations-integration-sdk/.../adapter_configurations/alertDefinitionSchema.xsd`,
+an `xs:enumeration` of exactly 18-22), and `BuilderAlertSubType` in
+`reference/docs/internal-api-9.1.json` (see
+`knowledge/context/api-surface/compliance_enablement_markers.md`). The REST
+`alert-definition.subType` is an unconstrained int32, so a wrong value is not
+rejected at sync; it lands as a meaningless category. `type` in the same XSD
+is 15 Application, 16 Virtualization, 17 Hardware, 18 Storage, 19 Network.
+Built-in vSphere alerts also carry 6, 28 and 29 (see
+`knowledge/context/mpb/mpb_builderfile_schema.md`); those are not authorable.
+
+The factory alert loader (`vcfcf_core.alerts.loader`, so `vcfcf_alerts
+validate` and SDK `bundled_content.alerts` alike) rejects any other
+`sub_type`; an absent or null `sub_type` defaults to 19, an explicit 0 fails. Before 2026-10-27 the
+loader documented 1-5 and accepted any positive int.
+
+The shipped distribution installers (`install.py`, `install.ps1`, template
+2026-10-28-1) apply the same rules to the bundled alert payload: absent or
+null defaults to 19 (they fell back to 3 before, issue #282), and an
+out-of-enum value skips that alert with a WARN instead of posting it. Since
+that template, `install.ps1` also skips an alert on any other conversion error
+(as `install.py` always did) instead of aborting the whole install, and a
+non-SELF symptom set without `threshold_type` / `threshold_value` no longer
+trips StrictMode there. They restate the enum because they run standalone;
+`tests/test_install_alert_subtype.py` keeps the copies in step with the loader.

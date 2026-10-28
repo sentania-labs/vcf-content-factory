@@ -12,7 +12,7 @@ description: >
 adapter_kind: mpb_synology_dsm
 resource_kind: volume
 type: 18              # Storage
-sub_type: 2           # Capacity
+sub_type: 20          # Capacity
 wait_cycles: 1
 cancel_cycles: 1
 criticality: SYMPTOM_BASED

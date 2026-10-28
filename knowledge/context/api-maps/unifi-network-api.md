@@ -936,6 +936,118 @@ Key deltas from design expectations:
 
 No sidecar file written; the Protect scope fits in this paragraph.
 
+#### `nvr` storage fields (captured 2026-10-28, UniFi SDK pak build 18, issue #39)
+
+Read-only capture from the devel console (UDM Pro, UniFi OS console
+firmware 6.0.15, Protect `version` 7.3.70), `GET
+/proxy/protect/api/bootstrap`, `nvr` subtree, storage-related keys
+only. Identifiers (id, mac, host, hardwareId, serials, names, IPs) are
+omitted or redacted; numbers are as returned.
+
+- **There is no `nvr.storageInfo`.** The SDK pak's build 15 to 17
+  collector read `storageInfo.totalSize` / `usedSize` and never
+  published.
+- **`nvr.systemInfo.storage`** is the recording volume, in **bytes**.
+  `size` = `used` + `available` exactly, and `size` equals the
+  `systemInfo.ustorage.space[]` entry with `space_type: "primary"`
+  `total_bytes` (the console names that number bytes). The single
+  drive's `size` 10,000,831,348,736 is a 10 TB disk. The pak reads
+  `size` / `used` first.
+- **`nvr.storageStats.recordingSpace`** (`total`, `used`,
+  `available`, bytes) is Protect's share of the volume, slightly
+  smaller. `storageStats.utilization` (99.6118...) equals
+  `recordingSpace.used / total * 100` to every printed digit. The pak
+  falls back to this pair only when the volume pair is missing.
+- `systemInfo.memory` and `systemInfo.tmpfs` are in **KiB**, not
+  bytes (`memory.total` 4040824 on a 4 GB console). Do not assume
+  `systemInfo` is bytes throughout.
+- Protect fills the volume and recycles the oldest footage
+  (`storage.isRecycling: true`), so usage near 100 % is normal.
+
+```json
+{
+  "nvr": {
+    "type": "UDM-PRO",
+    "marketName": "UDM Pro",
+    "version": "7.3.70",
+    "firmwareVersion": "6.0.15",
+    "isRecycling": true,
+    "recordingRetentionDurationMs": 1209600000,
+    "systemInfo": {
+      "cpu": {"averageLoad": 22, "temperature": 49},
+      "memory": {"available": 934096, "free": 68644, "total": 4040824},
+      "storage": {
+        "available": 89899663360,
+        "isRecycling": true,
+        "size": 9912161972224,
+        "type": "hdd",
+        "used": 9822262308864,
+        "capability": "ok",
+        "devices": [
+          {"model": "ST10000VN0004-1ZD101", "size": 10000831348736, "healthy": "good"}
+        ]
+      },
+      "ustorage": {
+        "hotspare": false,
+        "raid": "raid5",
+        "disks": [
+          {"slot": 1, "type": "HDD", "model": "ST10000VN0004-1ZD101",
+           "size": 10000831348736, "serial": "<redacted>", "firmware": "SC60",
+           "rpm": 7200, "healthy": "good", "state": "normal",
+           "temperature": 47, "poweronhrs": 30996, "bad_sector": 0}
+        ],
+        "space": [
+          {"device": "md3", "health": "atrisk", "space_type": "primary",
+           "total_bytes": 9912161972224, "used_bytes": 9822262308864,
+           "reasons": [{"type": "io_err", "level": "atrisk", "slot": 0}]},
+          {"device": "md0", "health": "health", "space_type": "swap",
+           "total_bytes": 0, "used_bytes": 0, "reasons": []},
+          {"device": "overlayfs-root", "health": "health", "space_type": "root",
+           "total_bytes": 9898135552, "used_bytes": 2887606272, "reasons": []}
+        ],
+        "sdcards": []
+      },
+      "tmpfs": {"available": 517676, "total": 524288, "used": 6612, "path": "/var/opt/ms/tmp"},
+      "degradation": {"level": 0, "loadLevel": "normal", "pressures": []}
+    },
+    "storageStats": {
+      "utilization": 99.61180910825918,
+      "recordingRate": 3717.152956718497,
+      "capacity": 1221630433,
+      "remainingCapacity": 10315617,
+      "averageCapacity": 2657356947,
+      "recordingSpace": {
+        "total": 9877802233856,
+        "used": 9839457505280,
+        "available": 38344728576
+      },
+      "retentionRatioLQ": 0.12043064533230412,
+      "recordingDistribution": {
+        "lq": {"percentage": 62, "bytes": 6234145030144},
+        "hq": {"percentage": 35, "bytes": 3482144735232},
+        "persistent": {"percentage": 0, "bytes": 4294967296},
+        "timelapse": {"percentage": 0, "bytes": 41875931136},
+        "reserved": {"percentage": 3, "bytes": 100618735616},
+        "unused": {"percentage": 0, "bytes": 49082572800}
+      },
+      "storageDistribution": {
+        "recordingTypeDistributions": [
+          {"recordingType": "rotating", "size": 9720584732672, "percentage": 99.57105147382315},
+          {"recordingType": "timelapse", "size": 41875931136, "percentage": 0.42894852617685875},
+          {"recordingType": "detections", "size": 0, "percentage": 0}
+        ],
+        "resolutionDistributions": []
+      }
+    }
+  }
+}
+```
+
+Not verified on screen: the Protect UI's storage page itself was not
+viewed in this capture (no browser session). The units rest on the
+arithmetic above and the console's own `total_bytes` label; the UI is
+fed by the same bootstrap.
+
 ### Events / alarms (v1.1)
 
 Covered in Endpoint 7 above. Summary:

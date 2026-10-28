@@ -173,7 +173,7 @@ _ALERT_YAML = textwrap.dedent(
     adapter_kind: VMWARE
     resource_kind: VirtualMachine
     type: 16
-    sub_type: 3
+    sub_type: 19
     wait_cycles: 1
     cancel_cycles: 1
     criticality: CRITICAL
@@ -1080,7 +1080,7 @@ _ALERT_YAML_COLL_A = textwrap.dedent(
     adapter_kind: VMWARE
     resource_kind: VirtualMachine
     type: 16
-    sub_type: 3
+    sub_type: 19
     wait_cycles: 1
     cancel_cycles: 1
     criticality: CRITICAL
@@ -1103,7 +1103,7 @@ _ALERT_YAML_COLL_B = textwrap.dedent(
     adapter_kind: VMWARE
     resource_kind: VirtualMachine
     type: 16
-    sub_type: 3
+    sub_type: 19
     wait_cycles: 2
     cancel_cycles: 2
     criticality: WARNING

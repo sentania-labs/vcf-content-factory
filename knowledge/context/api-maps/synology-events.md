@@ -1,5 +1,26 @@
 # Synology API Map: Events / Notifications
 
+> **Request method (2026-10-28, Synology build 35, synology#16).** Build 35
+> calls every authenticated DSM API, login and logout included, as an
+> HTTPS form POST to `/webapi/<cgi>` with `api`, `version`, `method`, the
+> parameters and `_sid` (login: `account`, `passwd`) in an
+> `application/x-www-form-urlencoded` body, so the password and session id
+> never reach DSM's access log or a proxy log. DSM still accepts GET with the
+> same parameters in the query string. Only the session-less
+> `SYNO.API.Info` query (`/webapi/query.cgi`) stays GET. Where a section
+> below says "Method: GET" or shows `?api=...&_sid=...`, read it as the
+> parameter set; send it as POST. Checked live on DS1520+ / DSM 7.4.1-90080,
+> 2026-10-28: GET and POST both succeed for `SYNO.DSM.Info`,
+> `SYNO.Core.Hardware.FanSpeed` and `SYNO.Storage.CGI.Storage load_info`;
+> `SYNO.API.Info` GET on `query.cgi` succeeds; Auth v7 login and logout as
+> POST succeed. Build 35 itself verified all 14 of its data APIs as POST
+> on DSM 7.3.2 (pak CHANGELOG 0.0.0.35, #16).
+>
+> Build 35 does not call the event APIs. `SYNO.Core.SyslogClient.Log list`
+> and `SYNO.SecurityAdvisor.LoginActivity list` were checked as POST on
+> 2026-10-28 and succeed; `SYNO.Core.Upgrade.Server check` was not
+> re-probed (it reaches out to Synology's update servers).
+
 ## Purpose
 
 Maps the DSM API surface that the MP renders as **MPB events** — the
@@ -74,7 +95,7 @@ JSUI-bound session path our monitoring account cannot traverse.
 ### SYNO.Core.SyslogClient.Log
 
 - **Path**: `/webapi/entry.cgi`
-- **Method**: GET (query string)
+- **Method**: POST form body, `_sid` in the body (checked 2026-10-28; build 35 does not call this endpoint); DSM still accepts GET (query string)
 - **Version**: 1
 - **Method name**: `list`
 - **Auth**: session `_sid`, admin account
@@ -246,7 +267,7 @@ Package install/start failures (historical):
 ### SYNO.Core.Upgrade.Server
 
 - **Path**: `/webapi/entry.cgi`
-- **Method**: GET
+- **Method**: GET as mapped; POST not re-probed (build 35 does not call this endpoint)
 - **Version**: 4 (minVersion 1, maxVersion 4)
 - **Method name**: `check`
 - **Auth**: session `_sid`, admin account
@@ -322,7 +343,7 @@ update.restart = "some"
 ### SYNO.SecurityAdvisor.LoginActivity
 
 - **Path**: `/webapi/entry.cgi`
-- **Method**: GET
+- **Method**: POST form body, `_sid` in the body (checked 2026-10-28; build 35 does not call this endpoint); DSM still accepts GET
 - **Version**: 1
 - **Method name**: `list`
 - **Auth**: session `_sid`, admin account

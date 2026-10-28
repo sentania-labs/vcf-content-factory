@@ -211,10 +211,17 @@ jobs:
 
           # Only move forward: a re-run of an older tag, or an older tag whose
           # run finishes after a newer one, must not pull the floating major
-          # back. Compare against every published vMAJOR.Y.Z tag.
+          # back. Compare against PUBLISHED vMAJOR.Y.Z releases (not tags): a
+          # higher tag whose publish failed, or was refused by the main-ancestry
+          # gate, never became a release and must not freeze the floating
+          # major (Codex review on #281). This run's own release was created
+          # in the step above; it is added explicitly in case the listing lags.
+          HIGHEST="$( { gh release list --repo "${{ github.repository }}" --limit 1000 \
+                          --json tagName,isDraft --jq '.[] | select(.isDraft | not) | .tagName'
+                        echo "sdk-buildkit-v${VERSION}"; } \
+            | grep -E "^sdk-buildkit-v${MAJOR}\.[0-9]+\.[0-9]+$" | sed 's/^sdk-buildkit-v//' \
+            | sort -V | tail -n 1)"
           git fetch --tags --force origin
-          HIGHEST="$(git tag -l "sdk-buildkit-v${MAJOR}.*.*" | sed 's/^sdk-buildkit-v//' \
-            | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)"
           if [ "$HIGHEST" != "$VERSION" ]; then
             echo "v${VERSION} is not the highest ${FLOATING} release (v${HIGHEST}); leaving ${FLOATING} where it is."
             exit 0

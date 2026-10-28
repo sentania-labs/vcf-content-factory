@@ -1,11 +1,50 @@
 # Synology API Map: System (Diskstation Object)
 
+> **Request method (2026-10-28, Synology build 35, synology#16).** Build 35
+> calls every authenticated DSM API, login and logout included, as an
+> HTTPS form POST to `/webapi/<cgi>` with `api`, `version`, `method`, the
+> parameters and `_sid` (login: `account`, `passwd`) in an
+> `application/x-www-form-urlencoded` body, so the password and session id
+> never reach DSM's access log or a proxy log. DSM still accepts GET with the
+> same parameters in the query string. Only the session-less
+> `SYNO.API.Info` query (`/webapi/query.cgi`) stays GET. Where a section
+> below says "Method: GET" or shows `?api=...&_sid=...`, read it as the
+> parameter set; send it as POST. Checked live on DS1520+ / DSM 7.4.1-90080,
+> 2026-10-28: GET and POST both succeed for `SYNO.DSM.Info`,
+> `SYNO.Core.Hardware.FanSpeed` and `SYNO.Storage.CGI.Storage load_info`;
+> `SYNO.API.Info` GET on `query.cgi` succeeds; Auth v7 login and logout as
+> POST succeed. Build 35 itself verified all 14 of its data APIs as POST
+> on DSM 7.3.2 (pak CHANGELOG 0.0.0.35, #16).
+>
+> `SYNO.Core.System.Status` was also checked as POST on 2026-10-28.
+
+> **Correction 2026-10-28 (Synology build 35, review B2).**
+> - `SYNO.Core.Hardware.FanSpeed` `cool_fan` is **not** fan health. It
+>   lists which fan speed modes the model offers (`no`, `single`, `yes`).
+>   The claim that `"no"` means a failed fan is **SUPERSEDED 2026-10-28**.
+> - Fan failure is visible only through `SYNO.Core.System.SystemHealth`
+>   (new section below), as message keys `widget:fan_fail`,
+>   `widget:cpu_fan_fail`, `widget:eunit_fan_fail`. DSM returns only its
+>   top-ranked problem, so while another problem outranks a failed fan the
+>   fan state is not visible.
+>   Pool, volume, SSD cache and SMART status vocabularies, failure versus
+>   in-progress: `synology-storage.md`, section "DSM status vocabularies".
+> - Live firmware is now **DSM 7.4.1-90080** (DS1520+, read 2026-10-28).
+>   The `7.3.2-86009` samples below are from earlier sessions.
+>
+> Evidence: Synology pak (`content/sdk-adapters/synology`, branch
+> `build-35`, commit `2ffd1ed`): `SystemHealth.java`, CHANGELOG 0.0.0.35,
+> REFERENCE.md (Fan, Health, Bundled alerts);
+> `knowledge/context/reviews/synology-build-35.md` (B2, W1, N1); and a
+> read-only probe of the lab NAS on 2026-10-28 (POST login, logout),
+> recorded inline below.
+
 ## Endpoints
 
 ### SYNO.DSM.Info
 
 - **Path**: `/webapi/entry.cgi`
-- **Method**: GET
+- **Method**: POST form body, `_sid` in the body (build 35, synology#16); DSM still accepts GET
 - **Params**: `api=SYNO.DSM.Info&version=2&method=getinfo&_sid=<session>`
 - **Auth**: Session ID required (works with non-admin accounts too)
 
@@ -27,6 +66,10 @@
 }
 ```
 
+Live 2026-10-28 (after the NAS upgrade): `"version": "90080"`,
+`"version_string": "DSM 7.4.1-90080"`. Note `version` is now the bare build
+number, not the dotted string shown above.
+
 #### Field -> Object Mapping
 
 | Response Field | Object Type | MP Key | Usage | Type | Unit | Notes |
@@ -44,7 +87,7 @@
 ### SYNO.Core.System (info)
 
 - **Path**: `/webapi/entry.cgi`
-- **Method**: GET
+- **Method**: POST form body, `_sid` in the body (build 35, synology#16); DSM still accepts GET
 - **Params**: `api=SYNO.Core.System&version=3&method=info&_sid=<session>`
 - **Auth**: Session ID required (admin)
 
@@ -98,7 +141,7 @@
 ### SYNO.Core.System.Utilization (get)
 
 - **Path**: `/webapi/entry.cgi`
-- **Method**: GET
+- **Method**: POST form body, `_sid` in the body (build 35, synology#16); DSM still accepts GET
 - **Params**: `api=SYNO.Core.System.Utilization&version=1&method=get&_sid=<session>`
 - **Auth**: Session ID required (admin)
 
@@ -179,7 +222,7 @@
 ### SYNO.Core.Hardware.FanSpeed (get)
 
 - **Path**: `/webapi/entry.cgi`
-- **Method**: GET
+- **Method**: POST form body, `_sid` in the body (build 35, synology#16); DSM still accepts GET
 - **Params**: `api=SYNO.Core.Hardware.FanSpeed&version=1&method=get&_sid=<session>`
 - **Auth**: Session ID required (works with non-admin too per live testing)
 
@@ -204,20 +247,123 @@
 
 | Response Field | Object Type | MP Key | Usage | Type | Unit | Notes |
 |---|---|---|---|---|---|---|
-| `data.cool_fan` | Diskstation | fan_status | PROPERTY | STRING | | "yes" = fan running normally; likely "no" = failed. Maps to fan_status "normal"/"failed" in the design. |
+| `data.cool_fan` | Diskstation | fan_status | PROPERTY | STRING | | Fan speed modes the model offers: `no`, `single`, `yes` (`yes` on the DS1520+, also on DSM 7.4.1-90080, 2026-10-28). Not fan health. Build 35 display name "Fan Mode Support". ~~"yes" = fan running normally; likely "no" = failed. Maps to fan_status "normal"/"failed" in the design.~~ **SUPERSEDED 2026-10-28.** |
 | `data.dual_fan_speed` | Diskstation | fan_speed_mode | PROPERTY | STRING | | Fan speed mode: "coolfan" (cool mode), possibly "fullfan" (full speed), "quietfan" (quiet mode). This is the speed POLICY, not an RPM reading. |
 | `data.fan_type` | Diskstation | fan_type | PROPERTY | NUMBER | | Numeric fan type code (11 observed on DS1520+). Meaning not documented. |
 | `data.all_disk_temp_fail` | Diskstation | disk_temp_fail | PROPERTY | STRING | | "no" = all disk temps OK; "yes" = thermal warning. String "yes"/"no", not boolean. |
 | `data.fan_support_adjust_by_ext_nic` | Diskstation | fan_adjust_ext_nic | PROPERTY | STRING | | "no" on this model. Whether fan speed adjusts based on expansion NIC temperature. |
 
-**Note**: This API does NOT return a numeric RPM value. The response contains fan policy/mode information only: whether the fan is running (`cool_fan`), what speed mode it's in (`dual_fan_speed`), and disk thermal status. For actual RPM readings, SNMP (`synoDiskFanSpeed` / `synoCPUFanSpeed` OIDs) would be needed. The REST API is limited to status/mode reporting.
+**Note**: This API does NOT return a numeric RPM value. ~~The response contains fan policy/mode information only: whether the fan is running (`cool_fan`), what speed mode it's in (`dual_fan_speed`), and disk thermal status.~~ **SUPERSEDED 2026-10-28:** the response is fan-mode configuration only: which modes the model offers (`cool_fan`), the selected mode (`dual_fan_speed`), and disk thermal status. Nothing here says whether a fan works. For actual RPM readings, SNMP (`synoDiskFanSpeed` / `synoCPUFanSpeed` OIDs) would be needed.
+
+**What `cool_fan` drives (DSM UI code).** DSM's Fan Speed Mode panel
+(`/webman/modules/AdminCenter/admin_center.js`, re-read from the NAS on
+DSM 7.4.1-90080, 2026-10-28) uses it to pick radio buttons:
+`"no"===t.data.cool_fan` shows the high-fan and low-fan buttons;
+`"single"===t.data.cool_fan` shows full and quiet, gated on `fan_type`
+bits (`FAN_MODE_ENUM`). (Other branches not read.) A model that answers
+`"no"` is healthy; the old reading would raise a permanent false Critical
+on it and never fire on a real failure (build 35 review B2).
+
+**No polled API carries per-fan state on a desktop model** (DS1520+,
+checked 2026-10-28 by the build 35 work on DSM 7.3.2): not FanSpeed,
+`SYNO.Core.System info`, `SYNO.Core.System.Status`,
+`SYNO.Storage.CGI.Storage load_info` (no fans in
+`env.storageMachineInfo`), nor `SYNO.Storage.CGI.Enclosure` (rack and
+expansion enclosures only; error 103 on this model). Use
+`SYNO.Core.System.SystemHealth`.
+
+---
+
+### SYNO.Core.System.SystemHealth (get)
+
+- **Path**: `/webapi/entry.cgi`
+- **Method**: POST (form body, `_sid` in the body), as the build 35 adapter
+  calls every DSM API
+- **Params**: `api=SYNO.Core.System.SystemHealth&version=1&method=get&_sid=<session>`
+- **API info** (`SYNO.API.Info query`, live 2026-10-28): `minVersion` 1,
+  `maxVersion` 1, `path` `entry.cgi`, `requestFormat` `JSON`
+- **Auth**: Session ID required (tested with the lab admin account only)
+
+This is what DSM's System Health widget polls
+(`webman/modules/SystemInfoApp/SystemHealthWidget.js`, per the build 35
+work). The widget renders `rule.description` through the `[widget]` string
+table.
+
+#### Response Schema
+
+**CONFIRMED 2026-10-28 via live API call** (DS1520+, DSM 7.4.1-90080;
+`interfaces` trimmed to one entry):
+
+```json
+{
+  "success": true,
+  "data": {
+    "hostname": "storage",
+    "interfaces": [ { "id": "eth0.13", "ip": "172.16.3.51", "type": "lan" } ],
+    "rule": {
+      "description": {
+        "description_format": "{0}",
+        "description_params": ["widget:system_ok"],
+        "description_use_formatted": false
+      },
+      "id": "system_health",
+      "priority": 40,
+      "type": 2
+    },
+    "uptime": "1064:4:13"
+  }
+}
+```
+
+#### Reading the rule
+
+- `rule.type`: 0 danger, 1 attention, 2 normal (the widget's
+  `RuleMappingUtil`, per build 35 `SystemHealth.java`).
+- `rule.id`: DSM's rule id. `system_health` seen live; the pak's
+  REFERENCE.md also names `ups_status_abnormal` and
+  `disk_health_status_error` (from UI code, not seen live).
+- Message keys: when `description_use_formatted` is true,
+  `description_format` itself is the key; otherwise each entry of
+  `description_params` is one. Keys are `section:key`.
+- **Fan failure** keys, verified in the NAS's own
+  `/webman/texts/enu/strings` `[widget]` table on DSM 7.4.1-90080
+  (2026-10-28):
+  - `widget:fan_fail`: "The fan of your _DISKSTATION_ has failed. ..."
+  - `widget:cpu_fan_fail`: "The CPU fan of your _DISKSTATION_ has failed. ..."
+  - `widget:eunit_fan_fail`: "The fan of Synology Expansion Unit has failed. ..."
+  - Healthy: `widget:system_ok`, "Your _DISKSTATION_ is working well."
+  - `[beep]` also has `fan_fail` / `eunit_fan_fail` (the beep path, not this API).
+- **Only the top-ranked problem is returned.** One `rule`, not a list.
+  While another problem (UPS on battery, a degraded volume) outranks a fan
+  failure, the fan is invisible. A consumer must therefore treat a
+  non-normal rule that is not a fan key as "fan state unknown", never as
+  "fan normal". The build 35 adapter publishes `Fan|fan_health` =
+  `failed` / `normal` (type 2) / `unknown` on exactly that rule.
+- **Gap:** never seen with a failed fan (the lab NAS has none). The
+  failure shape is the live healthy shape with the string-table keys.
+
+#### Field -> Object Mapping (build 35 adapter)
+
+| Response Field | Object Type | MP Key | Usage | Type | Notes |
+|---|---|---|---|---|---|
+| `data.rule.type` | Diskstation | Health\|system_health | PROPERTY | STRING | `normal` / `attention` / `danger` |
+| `data.rule.id` | Diskstation | Health\|system_health_rule | PROPERTY | STRING | |
+| message keys | Diskstation | Health\|system_health_message | PROPERTY | STRING | `widget:system_ok` when healthy |
+| derived | Diskstation | Fan\|fan_health | PROPERTY | STRING | `failed` / `normal` / `unknown`; skipped when the rule was not read |
+
+---
+
+### DSM status vocabularies (pool, volume, SSD cache, SMART)
+
+Moved 2026-10-28 to `synology-storage.md`, section "DSM status
+vocabularies", next to the endpoint that returns them.
 
 ---
 
 ### SYNO.Core.System.Status (get)
 
 - **Path**: `/webapi/entry.cgi`
-- **Method**: GET
+- **Method**: POST form body, `_sid` in the body (build 35, synology#16); DSM still accepts GET
 - **Params**: `api=SYNO.Core.System.Status&version=1&method=get&_sid=<session>`
 - **Auth**: Session ID required (admin)
 
@@ -245,7 +391,7 @@
 ### SYNO.Core.Network.Interface (list)
 
 - **Path**: `/webapi/entry.cgi`
-- **Method**: GET
+- **Method**: POST form body, `_sid` in the body (build 35, synology#16); DSM still accepts GET
 - **Params**: `api=SYNO.Core.Network.Interface&version=1&method=list&_sid=<session>`
 - **Auth**: Session ID required (admin)
 
@@ -285,9 +431,10 @@
   - `SYNO.Core.System.Utilization` `get` -- CPU, memory, network, plus disk/LUN IO (shared with storage/iSCSI maps)
   - `SYNO.DSM.Info` `getinfo` -- model, serial, temp, uptime, version
 
-- **Requests per cycle (15-min interval)**: 3
+- **Requests per cycle (15-min interval)**: 4
   - `SYNO.Core.System` `info` -- CPU details, firmware, timezone, NTP
-  - `SYNO.Core.Hardware.FanSpeed` `get` -- fan status
+  - `SYNO.Core.Hardware.FanSpeed` `get` -- fan mode support and speed mode (~~fan status~~, superseded 2026-10-28)
+  - `SYNO.Core.System.SystemHealth` `get` -- DSM's top health verdict; the only fan-failure signal (build 35, optional read)
   - `SYNO.Core.Network.Interface` `list` -- NIC inventory
 
 - **Requests per cycle (30-min interval)**: 1
