@@ -63,15 +63,11 @@ CASES = [
     ("arabic_indic19", "\u0661\u0669"),
     # Past Int64: rejected with the enum message, not a cast error.
     ("over_int64", "99999999999999999999999"),
-]
-
-# isdigit() passes these but int() does not.  The loader raises a bare
-# ValueError on them (outside this change); both installers must reject them
-# with the enum message instead.
-INSTALLER_ONLY_REJECTS = [
+    # isdigit() passes these but int() refuses them: the enum error everywhere.
     ("superscript2", "\u00b2"),
     ("double_minus", "--19"),
 ]
+
 
 # Symptom-set threshold shapes for a non-SELF set: both fields are optional
 # in the loader (_validate_set), so every shape must install, not throw.
@@ -176,13 +172,6 @@ def test_install_py_agrees_with_loader(inst, case_id, raw):
         assert wire["subType"] == expected
 
 
-@pytest.mark.parametrize("case_id,raw", INSTALLER_ONLY_REJECTS,
-                         ids=[c[0] for c in INSTALLER_ONLY_REJECTS])
-def test_install_py_rejects_isdigit_only_strings(inst, case_id, raw):
-    with pytest.raises(ValueError, match="sub_type must be one of"):
-        inst._alert_sub_type(raw)
-
-
 def _threshold_alert(case_id, extra):
     a = _alert(case_id, _ABSENT)
     a["symptom_sets"]["sets"][0].update({"defined_on": "CHILD", **extra})
@@ -239,7 +228,7 @@ def test_install_py_skips_out_of_enum_and_installs_the_rest(inst, tmp_path, caps
 @pytest.mark.usefixtures("ps_exe")
 def test_install_ps1_agrees_with_loader(tmp_path):
     cases = [{"id": cid, "alert": _alert(cid, raw)}
-             for cid, raw in CASES + INSTALLER_ONLY_REJECTS]
+             for cid, raw in CASES]
     cases_path = tmp_path / "cases.json"
     cases_path.write_text(json.dumps(cases), encoding="utf-8")
     threshold_alerts = [_threshold_alert(cid, extra) for cid, extra in THRESHOLD_SHAPES]
@@ -262,10 +251,6 @@ def test_install_ps1_agrees_with_loader(tmp_path):
             assert got["value"] == expected, cid
             expected_posted.append((f"[VCF Content Factory] Subtype {cid}", expected))
 
-    for cid, _raw in INSTALLER_ONLY_REJECTS:
-        got = out["sub_types"][cid]
-        assert got["ok"] is False and "sub_type must be one of" in got["error"], cid
-
     # Threshold shapes post (no StrictMode throw) with the same
     # base-symptom-set install.py builds.
     inst = _load_install_py()
@@ -280,7 +265,6 @@ def test_install_ps1_agrees_with_loader(tmp_path):
     assert "aggregation" not in by_name["[VCF Content Factory] Subtype child_no_threshold"]["base"]
 
     rejected = [cid for cid, raw in CASES if _loader_verdict(raw) is None]
-    rejected += [cid for cid, _raw in INSTALLER_ONLY_REJECTS]
     assert len(out["warnings"]) == len(rejected)
     for cid, warning in zip(rejected, out["warnings"]):
         assert f"Subtype {cid}'" in warning and "wire conversion failed" in warning
