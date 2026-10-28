@@ -370,7 +370,11 @@ def restart_failed_accounts(
                     continue
                 if sent:
                     # A second start only for an account that took the first
-                    # one and reads FAILED again a while later.
+                    # one and reads FAILED again a while later. first_at is
+                    # when that start was actually sent and ``elapsed`` is
+                    # when this reading was taken (after it), so the FAILED
+                    # was seen at least retry_after_s after the first start,
+                    # and the second goes out later still.
                     first_at, first_err = sent[0]
                     if (len(sent) >= MAX_STARTS or first_err or acct.state != "FAILED"
                             or elapsed - first_at < retry_after_s):
@@ -378,18 +382,23 @@ def restart_failed_accounts(
                 if out_of_time:
                     unsent.append(acct.id)
                     continue
+                # Timestamp the start when it is sent, not when the poll
+                # began: earlier slow starts in this sweep move it on (Codex
+                # P2, PR #293).
+                sent_at = clock() - t0
                 try:
                     start_account(client, acct.id, budget=budget)
-                    starts.setdefault(acct.id, []).append((elapsed, ""))
+                    starts.setdefault(acct.id, []).append((sent_at, ""))
                     nth = "re-issued" if not sent else "re-issued a second time"
                     out(f"ACCOUNT START SENT: {_label(acct)} read {_state_text(acct)} "
-                        f"{int(elapsed)} s after the install; start monitoring {nth}.")
+                        f"{int(elapsed)} s after the install; start monitoring {nth} "
+                        f"at {int(sent_at)} s.")
                 except DeadlineReached:
                     # No start goes out past the deadline; the rest are listed.
                     out_of_time = True
                     unsent.append(acct.id)
                 except Exception as exc:  # noqa: BLE001  reported per account
-                    starts.setdefault(acct.id, []).append((elapsed, str(exc)))
+                    starts.setdefault(acct.id, []).append((sent_at, str(exc)))
                     err(f"WARN: start monitoring refused for {_label(acct)}: {exc}")
             if out_of_time:
                 err(f"WARN: the {timeout_s} s account check ran out before start "

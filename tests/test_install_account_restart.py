@@ -475,6 +475,37 @@ def test_slow_reads_and_starts_together_stay_within_the_cap():
     assert clock.now - 1000.0 <= ar.TIMEOUT_S
 
 
+def test_second_start_is_timed_from_each_accounts_own_first_start():
+    """Codex P2 on PR #293: every start in a sweep was stamped with the
+    poll's start time, so a later account whose first start went out late
+    (behind slow ones) could get its second under 60 s after it."""
+    clock = _Clock()
+    ids = {"a0": "FAILED", "a1": "FAILED", "a2": "FAILED"}
+    # a0 and a1 take their start; a2 (started last, 40 s late) fails again.
+    suite = FakeSuite(ids, clock=clock,
+                      on_start={"a0": "STARTED", "a1": "STARTED", "a2": "FAILED"})
+    real = suite._request
+
+    def slow_put(method, path, **kw):
+        resp = real(method, path, **kw)
+        if method == "PUT":
+            clock.now += 20          # each start takes 20 s
+        return resp
+
+    suite._request = slow_put
+    rc, out, err = _run(suite, _before({aid: "STARTED" for aid in ids}), clock)
+    by_id = {}
+    for aid, at in suite.starts:
+        by_id.setdefault(aid, []).append(at)
+    assert by_id["a0"] == [ar.START_DELAY_S]
+    assert by_id["a2"][0] == ar.START_DELAY_S + 40
+    # a2 does get its second start, 60 s or more after its own first.
+    assert len(by_id["a2"]) == 2
+    assert by_id["a2"][1] - by_id["a2"][0] >= ar.RETRY_AFTER_S
+    for times in by_id.values():
+        assert all(b - a >= ar.RETRY_AFTER_S for a, b in zip(times, times[1:]))
+
+
 def test_last_request_gets_only_what_is_left():
     clock = _Clock()
     suite = FakeSuite({"a1": "FAILED"}, clock=clock)
