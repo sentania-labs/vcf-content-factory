@@ -16,6 +16,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -139,6 +140,8 @@ import java.util.regex.Pattern;
  * // Use:
  * client.pushProperties(resourceUuid, props, System.currentTimeMillis());
  * client.pushStats(resourceUuid, stats, System.currentTimeMillis());
+ * // Many resources per cycle (1.0.24): properties first, then stats, chunked.
+ * SuiteApiBatchResult r = client.pushBatch(propsByUuid, statsByUuid, System.currentTimeMillis());
  * String body = client.get("/api/resources?adapterKind=VMWARE");
  * // Shared singleton parent: look it up every cycle (one local GET), never
  * // cache it across cycles. true from addChild means "accepted", not "linked".
@@ -160,6 +163,13 @@ public final class SuiteApiStitchClient {
     private static final String AUTH_SOURCE = "LOCAL";
 
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(30);
+
+    /**
+     * Read timeout for one batch request (connect stays 30 s). A batch carries
+     * up to {@link #BATCH_MAX_BYTES_DEFAULT} of JSON, so it gets longer than a
+     * per-id push. A timed-out batch is not re-sent: it may have been applied.
+     */
+    static final Duration BATCH_READ_TIMEOUT = Duration.ofSeconds(120);
 
     // -----------------------------------------------------------------------
     // Instance fields
@@ -588,6 +598,498 @@ public final class SuiteApiStitchClient {
         }
     }
 
+    // -----------------------------------------------------------------------
+    // Batch stitching API (buildkit 1.0.24, compliance#17)
+    // -----------------------------------------------------------------------
+
+    /** Default most resources in one batch request. */
+    public static final int BATCH_MAX_RESOURCES_DEFAULT = 100;
+
+    /**
+     * Default most bytes of JSON (UTF-8) in one batch request, about 1 MB. No
+     * spec on any line documents a limit; this is a conservative cap, not a
+     * measured one.
+     */
+    public static final int BATCH_MAX_BYTES_DEFAULT = 1_000_000;
+
+    /** Bulk stats endpoint. Never the {@code /adapterkinds/{kind}} variant. */
+    static final String STATS_BATCH_PATH = "/api/resources/stats";
+
+    /** Bulk properties endpoint. Never the {@code /adapterkinds/{kind}} variant. */
+    static final String PROPERTIES_BATCH_PATH = "/api/resources/properties";
+
+    /** Opening of the stats batch body; entries follow, then {@code "]}"}. */
+    static final String STATS_BATCH_PREFIX = "{\"resource-stat-content\":[";
+
+    /** Opening of the properties batch body; entries follow, then {@code "]}"}. */
+    static final String PROPERTIES_BATCH_PREFIX = "{\"values\":[";
+
+    /** Resource ids named in the WARN for a failed batch or skipped ids. */
+    static final int BATCH_FAILURE_IDS_LOGGED = 3;
+
+    /**
+     * Push string properties onto many foreign resources with the default caps
+     * ({@link #BATCH_MAX_RESOURCES_DEFAULT} resources and
+     * {@link #BATCH_MAX_BYTES_DEFAULT} bytes per request). Full contract:
+     * {@link #pushPropertiesBatch(Map, long, int, int)}.
+     *
+     * @param byResource resource UUID to (statKey to string value)
+     * @param timestamp  sample timestamp in epoch milliseconds, for every value
+     * @return what was sent; never {@code null}
+     */
+    public SuiteApiBatchResult pushPropertiesBatch(
+            Map<String, ? extends Map<String, String>> byResource, long timestamp) {
+        return pushPropertiesBatch(byResource, timestamp,
+                BATCH_MAX_RESOURCES_DEFAULT, BATCH_MAX_BYTES_DEFAULT);
+    }
+
+    /**
+     * Push string properties onto many foreign resources:
+     * {@code POST /api/resources/properties} with body
+     * {@code {"values":[{"resourceId":<uuid>,"property-contents":{"property-content":[...]}}]}}
+     * (same shape on 8.18, 9.0 and 9.1;
+     * {@code knowledge/context/api-surface/suite_api_batch_push.md}). Never the
+     * {@code /adapterkinds/{adapterKind}} variant, which wants an OPENAPI
+     * adapter kind and creates one when the kind is absent.
+     *
+     * <p><strong>A 2xx does not mean every id landed.</strong> The Suite API
+     * answers 200 with no body and drops an id that matches no resource
+     * silently while the rest of the batch lands (live on 8.18.7). A stale id
+     * is therefore never reported here, and the per-id fallback does not
+     * catch it either. Catch stale ids where they are resolved, in the
+     * adapter's {@link ForeignResourceResolver} refresh.
+     *
+     * <p><strong>Chunking.</strong> Each resource is serialized first, then
+     * packed in caller order into requests of at most {@code maxResources}
+     * resources and {@code maxBytes} bytes of JSON, whichever comes first. A
+     * single resource larger than {@code maxBytes} is sent alone. A cap below
+     * 1 falls back to its default with a WARN.
+     *
+     * <p><strong>Ids and values.</strong> Ids go into the body, so each is
+     * checked with the same UUID test as {@link #addChildren}: a non-UUID id
+     * is skipped (one WARN per call naming the count and the first few). Ids
+     * are trimmed and lowercased; two keys naming the same UUID are merged,
+     * the later value winning per statKey. A resource with an empty or
+     * {@code null} map is skipped silently. Entries with a {@code null} key or
+     * value are dropped (one WARN per call with the count), so one bad entry
+     * cannot fail a whole batch.
+     *
+     * <p><strong>Failures.</strong> Never throws; the collect cycle never sees
+     * an exception. A batch answered with a non-2xx status gets one WARN
+     * naming the resource count and the first ids, then each of its resources
+     * is re-sent once on the per-id path ({@link #pushProperties}). A 401 is
+     * re-acquired and retried once, as everywhere in this client; a 401 that
+     * survives that retry is not re-sent per id (the credential is the
+     * problem). A failure with no HTTP status (timeout, refused connection)
+     * gets the same WARN and is not re-sent: a timed-out batch may have been
+     * applied, and re-sending to an unreachable server costs a timeout per
+     * resource. Nothing is retried blindly on 5xx or timeout. An interrupt
+     * (flag restored) or a closed client stops the call, and the resources
+     * not yet sent count as skipped. The per-id fallback also stops at its
+     * first failure with no HTTP status.
+     *
+     * @param byResource   resource UUID to (statKey to string value); no-op if
+     *                     {@code null} or empty
+     * @param timestamp    sample timestamp in epoch milliseconds, for every value
+     * @param maxResources most resources per request
+     * @param maxBytes     most bytes of JSON (UTF-8) per request
+     * @return what was sent; never {@code null}
+     */
+    public SuiteApiBatchResult pushPropertiesBatch(
+            Map<String, ? extends Map<String, String>> byResource, long timestamp,
+            int maxResources, int maxBytes) {
+        return pushBatchOf(false, byResource, timestamp, maxResources, maxBytes);
+    }
+
+    /**
+     * Push numeric stats onto many foreign resources with the default caps.
+     * Full contract: {@link #pushStatsBatch(Map, long, int, int)}.
+     *
+     * @param byResource resource UUID to (statKey to double value)
+     * @param timestamp  sample timestamp in epoch milliseconds, for every value
+     * @return what was sent; never {@code null}
+     */
+    public SuiteApiBatchResult pushStatsBatch(
+            Map<String, ? extends Map<String, Double>> byResource, long timestamp) {
+        return pushStatsBatch(byResource, timestamp,
+                BATCH_MAX_RESOURCES_DEFAULT, BATCH_MAX_BYTES_DEFAULT);
+    }
+
+    /**
+     * Push numeric stats onto many foreign resources:
+     * {@code POST /api/resources/stats} with body
+     * {@code {"resource-stat-content":[{"id":<uuid>,"stat-contents":[...]}]}}.
+     * Note the asymmetries with the properties batch: the entry key is
+     * {@code id} (not {@code resourceId}) and {@code stat-contents} is a bare
+     * array (not an object wrapping one). {@code disableAnalyticsProcessing}
+     * is never sent, so it stays at its default {@code false}: with
+     * {@code true} the data is stored but no alert is evaluated on it.
+     *
+     * <p>Everything else, the 2xx-is-not-landed caveat included, matches
+     * {@link #pushPropertiesBatch(Map, long, int, int)}. A {@code null},
+     * NaN or infinite value is dropped like a {@code null} key (it would
+     * make the whole body invalid JSON).
+     *
+     * @param byResource   resource UUID to (statKey to double value); no-op if
+     *                     {@code null} or empty
+     * @param timestamp    sample timestamp in epoch milliseconds, for every value
+     * @param maxResources most resources per request
+     * @param maxBytes     most bytes of JSON (UTF-8) per request
+     * @return what was sent; never {@code null}
+     */
+    public SuiteApiBatchResult pushStatsBatch(
+            Map<String, ? extends Map<String, Double>> byResource, long timestamp,
+            int maxResources, int maxBytes) {
+        return pushBatchOf(true, byResource, timestamp, maxResources, maxBytes);
+    }
+
+    /**
+     * Push properties, then stats, for many resources with the default caps.
+     * Full contract: {@link #pushBatch(Map, Map, long, int, int)}.
+     *
+     * @param propertiesByResource resource UUID to (statKey to string value)
+     * @param statsByResource      resource UUID to (statKey to double value)
+     * @param timestamp            sample timestamp in epoch milliseconds
+     * @return the two calls' results summed; never {@code null}
+     */
+    public SuiteApiBatchResult pushBatch(
+            Map<String, ? extends Map<String, String>> propertiesByResource,
+            Map<String, ? extends Map<String, Double>> statsByResource,
+            long timestamp) {
+        return pushBatch(propertiesByResource, statsByResource, timestamp,
+                BATCH_MAX_RESOURCES_DEFAULT, BATCH_MAX_BYTES_DEFAULT);
+    }
+
+    /**
+     * Push properties, then stats: {@link #pushPropertiesBatch} runs to
+     * completion (fallback included) before {@link #pushStatsBatch} starts, so
+     * an adapter gets the properties-first order its per-object pushes gave
+     * it. The Suite API has no request that carries both. If the properties
+     * call left the thread interrupted or the client closed, the stats call
+     * sends nothing (its resources count as skipped).
+     *
+     * @param propertiesByResource resource UUID to (statKey to string value)
+     * @param statsByResource      resource UUID to (statKey to double value)
+     * @param timestamp            sample timestamp in epoch milliseconds
+     * @param maxResources         most resources per request
+     * @param maxBytes             most bytes of JSON (UTF-8) per request
+     * @return the two calls' results summed (a resource in both counts twice);
+     *         never {@code null}
+     */
+    public SuiteApiBatchResult pushBatch(
+            Map<String, ? extends Map<String, String>> propertiesByResource,
+            Map<String, ? extends Map<String, Double>> statsByResource,
+            long timestamp, int maxResources, int maxBytes) {
+        SuiteApiBatchResult props = pushPropertiesBatch(propertiesByResource, timestamp,
+                maxResources, maxBytes);
+        return props.plus(pushStatsBatch(statsByResource, timestamp,
+                maxResources, maxBytes));
+    }
+
+    /** One resource of a batch: its id, its serialized entry, its clean values. */
+    static final class BatchEntry {
+        final String id;
+        final String json;
+        final int bytes;
+        final Map<String, ?> values;
+
+        BatchEntry(String id, String json, Map<String, ?> values) {
+            this.id = id;
+            this.json = json;
+            this.bytes = json.getBytes(StandardCharsets.UTF_8).length;
+            this.values = values;
+        }
+    }
+
+    /**
+     * Shared body of the two batch methods. Never throws.
+     *
+     * @param stats {@code true} for stats, {@code false} for properties
+     */
+    private SuiteApiBatchResult pushBatchOf(boolean stats,
+            Map<String, ? extends Map<String, ?>> byResource, long timestamp,
+            int maxResources, int maxBytes) {
+        String op = stats ? "pushStatsBatch" : "pushPropertiesBatch";
+        String path = stats ? STATS_BATCH_PATH : PROPERTIES_BATCH_PATH;
+        String prefix = stats ? STATS_BATCH_PREFIX : PROPERTIES_BATCH_PREFIX;
+        int sent = 0;
+        int ok = 0;
+        int failed = 0;
+        int fellBack = 0;
+        int skipped = 0;
+        try {
+            if (byResource == null || byResource.isEmpty()) return SuiteApiBatchResult.EMPTY;
+            int maxRes = maxResources;
+            if (maxRes < 1) {
+                logger.warn("SuiteApiStitchClient: " + op + " maxResources " + maxResources
+                        + " is below 1; using " + BATCH_MAX_RESOURCES_DEFAULT);
+                maxRes = BATCH_MAX_RESOURCES_DEFAULT;
+            }
+            int maxB = maxBytes;
+            if (maxB < 1) {
+                logger.warn("SuiteApiStitchClient: " + op + " maxBytes " + maxBytes
+                        + " is below 1; using " + BATCH_MAX_BYTES_DEFAULT);
+                maxB = BATCH_MAX_BYTES_DEFAULT;
+            }
+
+            // Validate ids and merge keys naming the same UUID. The caller's
+            // map is read inside the guard: a concurrent modification of it
+            // must not throw into the collect cycle.
+            Map<String, Map<String, Object>> merged = new LinkedHashMap<>();
+            int badIds = 0;
+            List<String> badIdSamples = new ArrayList<>();
+            for (Map.Entry<String, ? extends Map<String, ?>> r : byResource.entrySet()) {
+                String id = r.getKey();
+                if (!isUuid(id)) {
+                    badIds++;
+                    if (badIdSamples.size() < BATCH_FAILURE_IDS_LOGGED) {
+                        badIdSamples.add(loggable(id));
+                    }
+                    continue;
+                }
+                Map<String, ?> values = r.getValue();
+                if (values == null || values.isEmpty()) continue;
+                merged.computeIfAbsent(normalizeUuid(id), k -> new LinkedHashMap<>())
+                        .putAll(values);
+            }
+            if (badIds > 0) {
+                skipped += badIds;
+                logger.warn("SuiteApiStitchClient: " + op + " skipped " + badIds
+                        + " resource id(s) that are not UUIDs, e.g. " + badIdSamples);
+            }
+
+            // Drop entries that would make the body invalid, then serialize.
+            List<BatchEntry> entries = new ArrayList<>();
+            int dropped = 0;
+            for (Map.Entry<String, Map<String, Object>> r : merged.entrySet()) {
+                Map<String, Object> clean = new LinkedHashMap<>();
+                for (Map.Entry<String, Object> e : r.getValue().entrySet()) {
+                    if (e.getKey() != null && isSendable(stats, e.getValue())) {
+                        clean.put(e.getKey(), e.getValue());
+                    } else {
+                        dropped++;
+                    }
+                }
+                if (clean.isEmpty()) {
+                    skipped++;
+                    continue;
+                }
+                String json = stats
+                        ? statsBatchEntry(r.getKey(), castStats(clean), timestamp)
+                        : propertiesBatchEntry(r.getKey(), castProps(clean), timestamp);
+                entries.add(new BatchEntry(r.getKey(), json, clean));
+            }
+            if (dropped > 0) {
+                logger.warn("SuiteApiStitchClient: " + op + " dropped " + dropped
+                        + " entr" + (dropped == 1 ? "y" : "ies") + " with a null key or a "
+                        + (stats ? "null, NaN or infinite" : "null") + " value");
+            }
+
+            List<List<BatchEntry>> chunks = chunk(entries,
+                    prefix.getBytes(StandardCharsets.UTF_8).length, maxRes, maxB);
+            boolean stop = false;
+            for (List<BatchEntry> chunk : chunks) {
+                // A closed client is refused by ensureToken, which logs the
+                // one closed-client WARN (issue #217); an interrupt set by
+                // the caller (or a previous call) stops here.
+                if (stop || Thread.currentThread().isInterrupted()) {
+                    stop = true;
+                    skipped += chunk.size();
+                    continue;
+                }
+                sent += chunk.size();
+                Exception err = null;
+                try {
+                    postWithRetry(path, batchBody(prefix, chunk), BATCH_READ_TIMEOUT);
+                    ok++;
+                } catch (Exception e) {
+                    if (e instanceof InterruptedException) {
+                        Thread.currentThread().interrupt();
+                    }
+                    err = e;
+                    failed++;
+                }
+                if (err == null) continue;
+
+                boolean halt = err instanceof InterruptedException
+                        || err instanceof ClientClosedException;
+                boolean perId = !halt && err instanceof SuiteApiHttpException
+                        && !(err instanceof Suite401Exception);
+                String next = halt ? "; the rest of this call is not sent"
+                        : perId ? "; re-sending each of them on the per-id path"
+                        : err instanceof Suite401Exception
+                                ? "; not re-sent (401 after the token retry)"
+                                : "; not re-sent (no HTTP status: it may have been applied)";
+                logFailure(op, "SuiteApiStitchClient: " + op + " batch of " + chunk.size()
+                        + " resource(s) failed, first ids " + firstIds(chunk) + next, err);
+                if (halt) {
+                    stop = true;
+                    continue;
+                }
+                if (!perId) continue;
+
+                for (BatchEntry be : chunk) {
+                    if (closed || Thread.currentThread().isInterrupted()) {
+                        stop = true;
+                        break;
+                    }
+                    fellBack++;
+                    Exception one = pushOnePerId(stats, be, timestamp);
+                    if (one != null && (!(one instanceof SuiteApiHttpException)
+                            || one instanceof Suite401Exception)) {
+                        // No HTTP status (or interrupt, or closed): the server
+                        // is not answering. A 401 after the token retry: the
+                        // credential is refused. Either way, stop re-sending
+                        // this chunk.
+                        break;
+                    }
+                }
+            }
+            SuiteApiBatchResult result =
+                    new SuiteApiBatchResult(sent, ok, failed, fellBack, skipped);
+            if (logger.isDebugEnabled()) {
+                logger.debug("SuiteApiStitchClient: " + op + " " + result);
+            }
+            return result;
+        } catch (Exception e) {
+            // Unexpected (a malformed caller map, a concurrent modification):
+            // never into the collect cycle.
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
+            logFailure(op, "SuiteApiStitchClient: " + op + " failed", e);
+            return new SuiteApiBatchResult(sent, ok, failed, fellBack, skipped);
+        }
+    }
+
+    /**
+     * True if a value can go into a batch body: a finite {@link Double} for
+     * stats, a non-null {@link String} for properties.
+     */
+    private static boolean isSendable(boolean stats, Object v) {
+        if (stats) {
+            return v instanceof Double && !((Double) v).isNaN() && !((Double) v).isInfinite();
+        }
+        return v instanceof String;
+    }
+
+    /**
+     * Re-send one resource of a failed batch on the per-id path. Logs its own
+     * failure and returns it ({@code null} on success); restores the
+     * interrupt flag.
+     */
+    private Exception pushOnePerId(boolean stats, BatchEntry be, long timestamp) {
+        String path = "/api/resources/" + be.id + (stats ? "/stats" : "/properties");
+        String body = stats ? buildStatsJson(castStats(be.values), timestamp)
+                : buildPropertiesJson(castProps(be.values), timestamp);
+        String op = stats ? "pushStats" : "pushProperties";
+        try {
+            postWithRetry(path, body, REQUEST_TIMEOUT);
+            return null;
+        } catch (Exception e) {
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
+            logFailure(op, "SuiteApiStitchClient: " + op + " (batch fallback) failed for"
+                    + " resource=" + be.id, e);
+            return e;
+        }
+    }
+
+    /** POST with the cached token; on 401 re-acquire and retry exactly once. */
+    private void postWithRetry(String path, String body, Duration readTimeout)
+            throws IOException, InterruptedException {
+        String tok = ensureToken();
+        try {
+            urlConnRequest("POST", suiteApiBase + path, body, tok, DEFAULT_ACCEPT, readTimeout);
+        } catch (Suite401Exception e) {
+            tok = reAcquireToken(tok);
+            urlConnRequest("POST", suiteApiBase + path, body, tok, DEFAULT_ACCEPT, readTimeout);
+        }
+    }
+
+    /** Values were checked by {@link #isSendable}; the cast is safe. */
+    @SuppressWarnings("unchecked")
+    private static Map<String, Double> castStats(Map<String, ?> m) {
+        return (Map<String, Double>) m;
+    }
+
+    /** Values were checked by {@link #isSendable}; the cast is safe. */
+    @SuppressWarnings("unchecked")
+    private static Map<String, String> castProps(Map<String, ?> m) {
+        return (Map<String, String>) m;
+    }
+
+    /** The first {@link #BATCH_FAILURE_IDS_LOGGED} ids of a chunk, for a WARN. */
+    private static List<String> firstIds(List<BatchEntry> chunk) {
+        List<String> ids = new ArrayList<>();
+        for (BatchEntry be : chunk) {
+            if (ids.size() >= BATCH_FAILURE_IDS_LOGGED) break;
+            ids.add(be.id);
+        }
+        return ids;
+    }
+
+    /**
+     * One stats batch entry: {@code {"id":<uuid>,"stat-contents":[...]}}, the
+     * {@code stat-contents} a bare array. Visible to tests.
+     */
+    static String statsBatchEntry(String resourceId, Map<String, Double> stats,
+            long timestamp) {
+        return "{\"id\":" + jsonStr(resourceId) + ",\"stat-contents\":"
+                + statContentArray(stats, timestamp) + "}";
+    }
+
+    /**
+     * One properties batch entry:
+     * {@code {"resourceId":<uuid>,"property-contents":{"property-content":[...]}}},
+     * the {@code property-contents} an object wrapping the array (the per-id
+     * body nested unchanged). Visible to tests.
+     */
+    static String propertiesBatchEntry(String resourceId, Map<String, String> properties,
+            long timestamp) {
+        return "{\"resourceId\":" + jsonStr(resourceId) + ",\"property-contents\":"
+                + buildPropertiesJson(properties, timestamp) + "}";
+    }
+
+    /** {@code prefix}, the entries joined by {@code ","}, then {@code "]}"}. */
+    static String batchBody(String prefix, List<BatchEntry> chunk) {
+        StringBuilder sb = new StringBuilder(prefix);
+        boolean first = true;
+        for (BatchEntry be : chunk) {
+            if (!first) sb.append(",");
+            first = false;
+            sb.append(be.json);
+        }
+        return sb.append("]}").toString();
+    }
+
+    /**
+     * Pack serialized entries, in order, into requests of at most
+     * {@code maxResources} entries and {@code maxBytes} bytes of body (prefix,
+     * entries, separating commas and the closing {@code "]}"}). An entry that
+     * alone exceeds {@code maxBytes} gets a request of its own. Visible to
+     * tests.
+     */
+    static List<List<BatchEntry>> chunk(List<BatchEntry> entries, int prefixBytes,
+            int maxResources, int maxBytes) {
+        List<List<BatchEntry>> chunks = new ArrayList<>();
+        List<BatchEntry> cur = new ArrayList<>();
+        long curBytes = prefixBytes + 2L;
+        for (BatchEntry be : entries) {
+            if (!cur.isEmpty() && (cur.size() >= maxResources
+                    || curBytes + 1 + be.bytes > maxBytes)) {
+                chunks.add(cur);
+                cur = new ArrayList<>();
+                curBytes = prefixBytes + 2L;
+            }
+            curBytes += (cur.isEmpty() ? 0 : 1) + be.bytes;
+            cur.add(be);
+        }
+        if (!cur.isEmpty()) chunks.add(cur);
+        return chunks;
+    }
+
     /**
      * Add one child to an existing resource through the Suite API, additively.
      *
@@ -1000,8 +1502,8 @@ public final class SuiteApiStitchClient {
      *
      * <p>After this returns, no call on this client acquires a token again.
      * {@link #get} throws an {@link IOException} saying the client is closed;
-     * {@link #pushProperties}, {@link #pushStats}, {@link #addChildren} and
-     * {@link #findSingletonResourceId} send nothing and log one WARN for the
+     * {@link #pushProperties}, {@link #pushStats}, the batch pushes,
+     * {@link #addChildren} and {@link #findSingletonResourceId} send nothing and log one WARN for the
      * first refused call (DEBUG after that). This matters when an adapter
      * swaps clients on reconfigure while a cycle is still running on the old
      * one: before, that cycle logged in again and left a token behind.
@@ -1180,6 +1682,16 @@ public final class SuiteApiStitchClient {
      */
     private String urlConnRequest(String method, String fullUrl, String body, String opsToken,
             String accept) throws IOException, InterruptedException {
+        return urlConnRequest(method, fullUrl, body, opsToken, accept, REQUEST_TIMEOUT);
+    }
+
+    /**
+     * {@link #urlConnRequest(String, String, String, String, String)} with a
+     * caller-chosen read timeout (the connect timeout stays
+     * {@link #REQUEST_TIMEOUT}). Batch pushes use {@link #BATCH_READ_TIMEOUT}.
+     */
+    private String urlConnRequest(String method, String fullUrl, String body, String opsToken,
+            String accept, Duration readTimeout) throws IOException, InterruptedException {
         if (Thread.currentThread().isInterrupted()) {
             throw new InterruptedException(
                     "SuiteApiStitchClient: thread interrupted before "
@@ -1190,7 +1702,7 @@ public final class SuiteApiStitchClient {
         try {
             conn.setRequestMethod(method);
             conn.setConnectTimeout((int) REQUEST_TIMEOUT.toMillis());
-            conn.setReadTimeout((int) REQUEST_TIMEOUT.toMillis());
+            conn.setReadTimeout((int) readTimeout.toMillis());
             conn.setRequestProperty("Accept", accept);
             if (body != null) {
                 conn.setDoOutput(true);
@@ -1301,7 +1813,22 @@ public final class SuiteApiStitchClient {
 
     private static String buildPropertiesJson(
             Map<String, String> properties, long timestamp) {
-        StringBuilder sb = new StringBuilder("{\"property-content\":[");
+        return "{\"property-content\":" + propertyContentArray(properties, timestamp) + "}";
+    }
+
+    private static String buildStatsJson(
+            Map<String, Double> stats, long timestamp) {
+        return "{\"stat-content\":" + statContentArray(stats, timestamp) + "}";
+    }
+
+    /**
+     * {@code [{"statKey":k,"timestamps":[ts],"values":[v]},...]}: the
+     * {@code property-content} array, shared by the per-id body and the batch
+     * entry so the two cannot drift.
+     */
+    private static String propertyContentArray(Map<String, String> properties,
+            long timestamp) {
+        StringBuilder sb = new StringBuilder("[");
         boolean first = true;
         for (Map.Entry<String, String> e : properties.entrySet()) {
             if (!first) sb.append(",");
@@ -1310,12 +1837,16 @@ public final class SuiteApiStitchClient {
               .append(",\"timestamps\":[").append(timestamp).append("]")
               .append(",\"values\":[").append(jsonStr(e.getValue())).append("]}");
         }
-        return sb.append("]}").toString();
+        return sb.append("]").toString();
     }
 
-    private static String buildStatsJson(
-            Map<String, Double> stats, long timestamp) {
-        StringBuilder sb = new StringBuilder("{\"stat-content\":[");
+    /**
+     * {@code [{"statKey":k,"timestamps":[ts],"data":[v]},...]}: the
+     * {@code stat-content} array, shared by the per-id body and the batch
+     * entry.
+     */
+    private static String statContentArray(Map<String, Double> stats, long timestamp) {
+        StringBuilder sb = new StringBuilder("[");
         boolean first = true;
         for (Map.Entry<String, Double> e : stats.entrySet()) {
             if (!first) sb.append(",");
@@ -1324,7 +1855,7 @@ public final class SuiteApiStitchClient {
               .append(",\"timestamps\":[").append(timestamp).append("]")
               .append(",\"data\":[").append(e.getValue()).append("]}");
         }
-        return sb.append("]}").toString();
+        return sb.append("]").toString();
     }
 
     /** Canonical 8-4-4-4-12 hex UUID, the form Suite API resource ids take. */

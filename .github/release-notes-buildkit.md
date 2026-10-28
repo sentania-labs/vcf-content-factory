@@ -165,6 +165,29 @@ adapter-framework designs round; this is 1.0.18.
 
 Version note: this is 1.0.19, after 1.0.18.
 
+## Behavior since 1.0.24
+
+- Batch Suite API pushes (compliance#17). `SuiteApiStitcher` (and
+  `SuiteApiStitchClient`) gain `pushPropertiesBatch`, `pushStatsBatch` and
+  `pushBatch`, which push onto many foreign resources through
+  `POST /api/resources/properties` and `POST /api/resources/stats`: two
+  calls per batch instead of two per object. Same on 8.18, 9.0 and 9.1.
+  **Opt-in: a pak that keeps calling `pushProperties` / `pushStats` per
+  object builds and behaves exactly as before.**
+- `pushBatch(properties, stats, timestamp)` sends properties, then stats.
+  Requests are capped at 100 resources and about 1 MB of JSON, whichever
+  comes first (both overridable per call); one resource bigger than the
+  byte cap goes alone. Ids must be UUIDs; others are skipped with a WARN.
+- Never throws. A batch answered with a non-2xx status logs one WARN (the
+  count and the first ids) and re-sends that batch's resources on the
+  per-id path. A 401 is retried once with a new token, as before; nothing
+  is retried on 5xx or a timeout. Each call returns a `SuiteApiBatchResult`
+  (sent, batchesOk, batchesFailed, fellBack, skipped) for the pak to count.
+- **A 2xx does not mean every id landed.** The Suite API drops an id that
+  matches no resource without an error and stores the rest. A stale id
+  never shows in the result: catch it where ids are resolved (the pak's
+  `ForeignResourceResolver` refresh).
+
 ## Behavior since 1.0.23
 
 - Dynamic-threshold symptoms bundled in a pak now import. The kit wrote a

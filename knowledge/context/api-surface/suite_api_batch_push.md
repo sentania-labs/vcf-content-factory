@@ -269,6 +269,17 @@ they change (design §3) cuts more than batching does.
 
 ## What a batch API on the facade needs
 
+**Built in buildkit 1.0.24** as `SuiteApiStitchClient` / `SuiteApiStitcher`
+`pushPropertiesBatch`, `pushStatsBatch` and `pushBatch` (properties, then
+stats), returning `SuiteApiBatchResult`. Choices the list below left open:
+`disableAnalyticsProcessing` is never sent (the live tests ran without it);
+a failure with no HTTP status (timeout, refused connection) is not re-sent
+per id, only logged, since it may have been applied and re-sending to an
+unreachable server costs a timeout per resource; a 401 that survives the
+one re-acquire is not re-sent per id either; batch read timeout is 120 s.
+Null keys, null values and non-finite stats are dropped before serializing,
+so they cannot turn a whole batch into a 400.
+
 1. **Two methods**, same no-throw contract as today:
    `pushPropertiesBatch(Map<String, Map<String,String>> byResource, long ts)`
    and `pushStatsBatch(Map<String, Map<String,Double>> byResource, long ts)`.

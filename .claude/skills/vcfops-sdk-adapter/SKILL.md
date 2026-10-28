@@ -110,7 +110,8 @@ The SDK collect result drops data for resources the adapter did not
 discover, so stitching onto foreign resources goes through the Suite
 API. Hold a `SuiteApiStitcher` (`SuiteApiStitcher.create(this, logger)`
 in `configureAdapter`, `discard()` in `onDiscard`). Surface:
-`pushProperties`, `pushStats`, `addChild` / `addChildren`,
+`pushProperties`, `pushStats`, the batch pushes (`pushBatch`,
+`pushPropertiesBatch`, `pushStatsBatch`), `addChild` / `addChildren`,
 `findSingletonResourceId`, `get`, `close` / `isClosed`. The push,
 relationship and lookup calls log and swallow failures and never throw
 into the collect cycle: a failed push is one WARN line per cycle, with
@@ -135,6 +136,23 @@ exception message is shown on the account row (Integrations > Accounts),
 so `collect()` must throw messages free of credentials, session ids and
 tokens; the framework's redaction is only a backstop (#223). Configure lines never carry
 the Suite API principal (#227).
+
+**Many objects per cycle: batch, don't loop (buildkit 1.0.24).** A pak
+that stitches onto more than a handful of resources builds one
+`Map<uuid, Map<statKey, value>>` for properties and one for stats per
+cycle and calls `stitcher.pushBatch(props, stats, ts)`: properties go
+first, then stats, in requests of at most 100 resources and about 1 MB
+(`pushPropertiesBatch` / `pushStatsBatch` take `maxResources, maxBytes`
+when that is wrong for the pak). Cost drops from two calls per object to
+two per batch. It never throws; count from the returned
+`SuiteApiBatchResult` (sent, batchesOk, batchesFailed, fellBack, skipped)
+rather than grepping the log. A non-2xx batch falls back to per-id pushes
+for that batch; a timeout is not re-sent. **A 2xx does not mean every id
+landed:** an id that matches no resource is dropped silently, so a stale
+id surfaces in no result. Detect it in the `ForeignResourceResolver`
+refresh, where ids are resolved. Push properties only when they change
+where the pak can: they dominate the bytes (compliance: ~145 KB per host
+on 9.0.2). Evidence: `knowledge/context/api-surface/suite_api_batch_push.md`.
 
 **Relationships: POST adds, PUT replaces.** `addChild(parentId,
 childId)` is the additive `POST
