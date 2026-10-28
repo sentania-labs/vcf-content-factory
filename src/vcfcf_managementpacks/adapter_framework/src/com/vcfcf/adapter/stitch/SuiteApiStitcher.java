@@ -95,10 +95,11 @@ public final class SuiteApiStitcher {
      * <p>Identity v3 order: prefers the platform-injected per-instance
      * credential ({@code adapter.getAdapterConfig().getAdapterCredentials()},
      * when present), then {@code automationuser.properties} ({@code
-     * automationAdmin}, preferred over maintenance on every node role
-     * including a Cloud Proxy), falling back to
+     * automationAdmin}, preferred over maintenance), falling back to
      * {@code maintenanceuser.properties} only if both prior sources are
-     * absent/unreadable (see {@link AmbientCredential}). File-based passwords
+     * absent/unreadable (see {@link AmbientCredential}). On a Cloud Proxy
+     * the two files are never tried (they do not authenticate there,
+     * compliance#58): without the injected credential this throws. File-based passwords
      * decrypt via the SDK {@link com.integrien.alive.common.security.Crypt};
      * targets {@code https://localhost/suite-api}. This is the zero-config
      * path — no adapter config fields are required.

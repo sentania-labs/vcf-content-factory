@@ -165,6 +165,70 @@ adapter-framework designs round; this is 1.0.18.
 
 Version note: this is 1.0.19, after 1.0.18.
 
+## Behavior since 1.0.22
+
+- Vanished objects can be marked not existing (unifi#20). **Opt-in: no pak
+  changes behaviour on this kit until it opts in.** A pak with
+  `discoverOnCollect()` on opts in by overriding `kindsReadThisCycle()` to
+  return the kinds its `enumerateResources` read in full that cycle; the
+  default `null` marks nothing. For those kinds, a resource the platform
+  knows that the enumeration has not delivered for 12 consecutive complete
+  cycles is marked with `changeResourceState(rc, NOTEXIST)`, as the vSphere,
+  vSAN and NSX adapters do. VCF Ops then shows it as Not Existing and
+  deletes it after the Deleted Objects retention setting.
+- Only the pak can say a kind was read in full. That a kind was delivered
+  is not enough: a read that failed for one parent (one UniFi site's device
+  list, one Synology share's NFS probe) still delivers the same kind from
+  the other parents. Leave a kind out of `kindsReadThisCycle()` whenever any
+  part of its read failed.
+- The threshold counts collection cycles, not time: 12 cycles is an hour at
+  a 5-minute interval and 12 minutes at a 1-minute one.
+  `notExistingMissedCycles()` changes it (0 turns marking off).
+- Nothing is counted or marked in a cycle whose enumeration threw or
+  delivered nothing, that was stopped, or in which every object failed.
+  The adapter instance and its kind are never marked, nor are kinds in
+  `notExistingExcludedKinds()` (synthetic and aggregate kinds, and kinds
+  registered outside `enumerateResources`). Kinds compare ignoring case.
+- **On first opt-in, every orphan goes.** Every object the platform still
+  holds under a key no current enumeration produces is counted from the
+  first cycle. Examples are Synology objects from before build 34's
+  DiskStation re-key and UniFi `<mac>_0` ports from before #23. All of them
+  are marked about 12 cycles after the upgrade and then deleted by the
+  retention window (7 days by default, 6 hours on some labs), with their
+  history. That is the correct end state, but it cannot be undone: check
+  what the platform holds for the pak before opting in.
+- A marked object is no longer collected while it stays missing. If the
+  enumeration delivers it again while the platform still lists it, it is
+  sent `START`. The SDK's own cache usually drops a resource once the
+  platform confirms NOTEXIST (`AdapterCache.processNotExistingResponse`),
+  and then no `START` can be sent: the object can return only through
+  normal discovery (`addNewResource`). Neither path is verified on a live
+  instance yet.
+- Logging: one INFO line per cycle each for objects marked, objects sent
+  `START`, objects back but no longer listed by the platform, and marked
+  objects the platform no longer lists (count and first object).
+- The miss counts are in memory: a collector restart delays a mark, never
+  makes one early.
+- On a Cloud Proxy, the ambient Suite API credential no longer tries the
+  automation and maintenance credential files (compliance#58). Those files
+  never authenticate from a proxy, and decrypting them made the platform's
+  `Crypt` log an ERROR ("Crypt.decrypt_impl_v2: ... pad block corrupted")
+  on every Test Connection. When the collector-injected credential is
+  missing on a proxy, the framework now raises one clear error without
+  calling `Crypt`, so the pak logs a single WARN with no stack. The proxy is
+  detected from the collector's own `collector.properties`
+  (`isUnifiedCloudProxy`, or `httpRelayEnabled=true` where that key is
+  absent, as on 8.18). An analytics
+  node, or a collector whose file cannot be read, keeps the old behaviour.
+  Collection on a proxy still uses the injected credential, as before.
+- When the platform `Crypt` cannot decrypt a credential file, it returns
+  nothing instead of throwing. The framework now stops there with an error
+  naming the file. Before, it went on to log in with no password, which
+  failed with a 401.
+
+Version note: open PR #281 holds 1.0.21; this is 1.0.22. #281 merges and
+publishes first, so `sdk-buildkit-v1` never moves backwards.
+
 ## Behavior since 1.0.15
 
 - `build-sdk` and `validate-sdk` take `--sdk-compat-jar <path to
