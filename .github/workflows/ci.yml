@@ -318,9 +318,21 @@ jobs:
           github.com ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBEmKSENjQEezOmxkZMy7opKgwFB9nkt5YRrYMjNuG5N87uRgg6CLrbo5wAdT/y6v0mKV0U2w0WZ2YB/++Tpockg=
           github.com ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQCj7ndNxQowgcQnjshcLrqPEiiphnt+VTTvDP6mHBL9j1aNUkY4Ue1gvwnGLVlOhGeYrnZaMgRK6+PKCUXaDbC7qtbW8gIkhL7aGCsOr/C56SJMy/BCZfxd1nWzAOxSDPgVsmerOBYfNqltV9/hWCqBywINIR+5dIg6JTJ72pcEpEjcYgXkE2YEFXV1JHnsKgbLWNlhScqb2UmyRkQyytRLtL+38TGxkxCflmO+5Z8CSSNY7GidjMIZ7Q4zMjA2n1nGrlTDkzwDCsw+wqFPGQA179cnfGWOWRVruj16z6XyvxvjJwbz0wQZ75XK5tKSb7FNyeIEs4TT4jk+S4dhPeAUC5y+bDYirYgM4GC7uEnztnZyaVWQ7B381AK4Qdrwt51ZqExKbQpTUNn+EjqoTwvqNj4kqx5QUCI0ThS/YkOxJCXmPUWZbhjpCg56i+2aB6CmK2JGhn57K5mj0MNdBXA4/WnwH6XoPWJzK5Nyu2zB3nAZp+S5hpQs+p1vN1/wsjk=
           HOSTKEYS
-          # Cloned outside the checkout so nothing in the workspace changes.
-          GIT_SSH_COMMAND="ssh -i $KEY_FILE -o IdentitiesOnly=yes -o UserKnownHostsFile=$KNOWN_HOSTS -o StrictHostKeyChecking=yes" \
-            git clone --depth 1 git@github.com:sentania-labs/vcf-content-factory-sdk-runtime.git "$RUNNER_TEMP/sdk_runtime"
+          # Fetched outside the checkout so nothing in the workspace changes.
+          # Pinned to one runtime commit, never default-branch HEAD (runtime#1):
+          # the same pin the pak repos' build-pak-on-tag.yml use. Bump it here
+          # and in PROVENANCE.md together when a jar changes.
+          SDK_RUNTIME_COMMIT=b92956cc7c9ede5d9cfb5bc499c10b2e8e85cb9e
+          export GIT_SSH_COMMAND="ssh -i $KEY_FILE -o IdentitiesOnly=yes -o UserKnownHostsFile=$KNOWN_HOSTS -o StrictHostKeyChecking=yes"
+          git init -q "$RUNNER_TEMP/sdk_runtime"
+          git -C "$RUNNER_TEMP/sdk_runtime" remote add origin git@github.com:sentania-labs/vcf-content-factory-sdk-runtime.git
+          git -C "$RUNNER_TEMP/sdk_runtime" fetch -q --depth 1 origin "$SDK_RUNTIME_COMMIT"
+          git -C "$RUNNER_TEMP/sdk_runtime" checkout -q FETCH_HEAD
+          GOT="$(git -C "$RUNNER_TEMP/sdk_runtime" rev-parse HEAD)"
+          if [ "$GOT" != "$SDK_RUNTIME_COMMIT" ]; then
+            echo "::error::sdk-runtime checkout is $GOT, expected pinned $SDK_RUNTIME_COMMIT"
+            exit 1
+          fi
           ls -l "$RUNNER_TEMP"/sdk_runtime/vrops-adapters-sdk-*.jar
 
       - name: Verify the SDK jar against adapter_runtime/PROVENANCE.md

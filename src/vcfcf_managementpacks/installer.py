@@ -69,8 +69,13 @@ POLL_TIMEOUT = 300         # uninstall: seconds before giving up
 #: lines can be under contention.  Override: ``--install-timeout`` or
 #: :data:`INSTALL_TIMEOUT_ENV`.  Subprocess wrappers that invoke
 #: ``vcfcf_managementpacks install`` must set their own timeout HIGHER than
-#: this plus the post-install checks (up to 900 s), or they kill the CLI
-#: while the server is still installing.
+#: this plus the account read before the upload (normally seconds; about
+#: 90 s if the Suite API stalls: one token request and two reads, 30 s
+#: each), the account restart (a 300 s deadline, up to about 360 s if the
+#: server rejects the session token in its last seconds: the client's
+#: re-auth and retried call, 30 s each, run past it) and up to 900 s for
+#: the dashboard checks, or they kill the CLI while the server is still
+#: installing.
 INSTALL_POLL_TIMEOUT = 1800
 #: Environment override for :data:`INSTALL_POLL_TIMEOUT` (whole seconds, > 0).
 INSTALL_TIMEOUT_ENV = "VCFCF_INSTALL_TIMEOUT_S"
@@ -1083,6 +1088,8 @@ def install_pak(
     materialization_check: bool = True,
     materialization_wait: Optional[int] = None,
     summary_rebind: bool = True,
+    restart_failed: bool = True,
+    suite_factory=None,
 ) -> int:
     """Install a .pak file onto a VCF Ops instance via the /ui/ SPA Struts layer.
 
@@ -1094,6 +1101,9 @@ def install_pak(
       2a:  _preflight_unsigned_policy(): an unsigned pak on a cluster whose
            "Allow Unsigned PAK Installation" switch is off stops here with
            the fix (issue #216)
+      2b:  account_restart.read_accounts(): each adapter instance of the
+           pak's adapter kinds and its state before the install (only with
+           ``wait`` and ``restart_failed``)
       3:   _UISession.prepare_upload()  (/ui/utility.action prepareFileUpload)
       4:   _UISession.upload_pak()  (/ui/admin/services/solution/upload)
       5:   _UISession.trigger_install()  (/ui/solution.action mainAction=install)
@@ -1101,6 +1111,14 @@ def install_pak(
       6a:  _verify_adapter_registered(): adapter kind present, isInstalled=true,
            and installed version == the uploaded pak's version (issue #202)
       7:   _UISession.logout()
+      7a:  account_restart.restart_failed_accounts(): watch the pak's
+           accounts, send Start monitoring (twice at most) to each the
+           install left FAILED or STOPPED (not those stopped or in
+           maintenance before it; FAILED only for one with no usable state
+           from before), and print each one's final state (lesson
+           remote-collector-upgrade-start-race). Only with ``wait`` and
+           ``restart_failed``; adds about 2 minutes when the kind has
+           accounts.
       8:   post_install.report_pak_dashboards(): did each dashboard the pak
            ships finish building (issue #244)? Only with ``wait`` and
            ``materialization_check``. When the pak binds Summary dashboards
@@ -1110,7 +1128,9 @@ def install_pak(
            reports it.
 
     Returns 0, or ``post_install.POST_INSTALL_FAILED_RC`` (3) when the pak
-    installed but a post-install dashboard check failed, or
+    installed but a post-install dashboard check failed or an account that
+    was collecting, or already FAILED, before the install is not STARTED
+    (``ACCOUNT NOT STARTED``), or
     :data:`INSTALL_STILL_RUNNING_RC` (4) when ``poll_timeout`` ran out while
     the server still reported the install running (the post-install checks
     did not run). A failed install exits 1 through ``_abort``.
@@ -1121,9 +1141,17 @@ def install_pak(
     Credentials resolve order: CLI flags > VCFOPS_USER/VCFOPS_PASSWORD env vars >
     legacy VCFOPS_ADMIN/VCFOPS_ADMINPASSWORD env vars (deprecated, warn).
     """
+    from .account_restart import (
+        default_suite_factory, pak_adapter_kinds, read_accounts,
+        restart_failed_accounts,
+    )
+
     p = Path(pak_path)
     installed = False
     still_running = False
+    accounts_before = None
+    if suite_factory is None:
+        suite_factory = default_suite_factory
     if not p.exists():
         _abort(f"Pak file not found: {pak_path}")
     if not p.is_file():
@@ -1149,6 +1177,7 @@ def install_pak(
     _info(f"      name={pak_name!r}  version={pak_version!r}")
     pak_size_mb = p.stat().st_size / (1024 * 1024)
     _info(f"      size={pak_size_mb:.1f} MB")
+    adapter_kinds = pak_adapter_kinds(manifest)
 
     # UI session login
     _info(f"[2/6] Authenticating to /ui/ as {user!r} ...")
@@ -1167,6 +1196,23 @@ def install_pak(
         # Unsigned-pak preflight (issue #216): stop before uploading when the
         # cluster refuses unsigned paks, with the fix rather than the raw key.
         _preflight_unsigned_policy(ui, p)
+
+        # Accounts before the install (lesson
+        # remote-collector-upgrade-start-race): which ones the user had
+        # stopped, so the post-install restart leaves them alone.
+        if wait and restart_failed and adapter_kinds:
+            try:
+                suite = suite_factory(host, user, password, effective_verify_ssl)
+                accounts_before = read_accounts(suite, adapter_kinds)
+                _info(f"      {len(accounts_before)} adapter instance(s) of "
+                      f"{', '.join(adapter_kinds)} before the install"
+                      + (": " + ", ".join(f"{a.name}={a.state}"
+                                          for a in accounts_before.values())
+                         if accounts_before else ""))
+            except Exception as e:  # noqa: BLE001  the install goes ahead
+                _warn(f"Could not read the pak's accounts before the install "
+                      f"({e}); after it, only FAILED accounts will be started.")
+                accounts_before = None
 
         # prepare upload
         _info("[3/6] Preparing upload slot (/ui/utility.action prepareFileUpload) ...")
@@ -1308,18 +1354,38 @@ def install_pak(
 
     if still_running:
         return INSTALL_STILL_RUNNING_RC
-    if not installed or not materialization_check:
+    if not installed:
         return 0
+    # Accounts the install left FAILED (lesson
+    # remote-collector-upgrade-start-race): on a remote collector or Cloud
+    # Proxy the start is sent before the collector loads the new jar.
+    accounts_rc = 0
+    if not restart_failed:
+        _info("Account restart skipped (--no-restart-failed): on a remote "
+              "collector or Cloud Proxy, check each account's state and start "
+              "any the install left FAILED.")
+    elif adapter_kinds:
+        try:
+            suite = suite_factory(host, user, password, effective_verify_ssl)
+        except Exception as e:  # noqa: BLE001  reported, install not in doubt
+            print(f"WARNING: ACCOUNTS UNCHECKED: could not open a Suite API "
+                  f"session ({e}).", file=sys.stderr)
+        else:
+            accounts_rc = restart_failed_accounts(suite, adapter_kinds,
+                                                  accounts_before)
+    if not materialization_check:
+        return accounts_rc
     # Post-install (issues #244, #200): the install finishing says nothing
     # about whether the pak's dashboards, or the Summary copies the server
     # cloned from them, finished building.
     from .post_install import report_pak_dashboards
 
-    return report_pak_dashboards(
+    dashboards_rc = report_pak_dashboards(
         p, host=host, user=user, password=password,
         verify_ssl=effective_verify_ssl, wait_s=materialization_wait,
         summary_rebind=summary_rebind,
     )
+    return dashboards_rc or accounts_rc
 
 
 # ---------------------------------------------------------------------------

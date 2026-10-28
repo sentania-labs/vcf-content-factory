@@ -59,7 +59,47 @@ prints `INSTALL STILL RUNNING` and exits 4 (when the last status poll
 failed instead, the status is unknown and it exits 1): not a failure, do not reinstall, and
 the post-install checks below did not run (no command re-runs them on their
 own against an installed pak).  Uninstall keeps its 300 s poll (`POLL_TIMEOUT`).
-After the install, `install` checks that each dashboard the pak ships
+After the install verifies, `install` restarts the accounts the install
+left FAILED (lesson `remote-collector-upgrade-start-race`): on a remote
+collector or Cloud Proxy the server sends Start monitoring before the
+collector has loaded the new jar, and every account of the adapter kind
+stays FAILED until someone starts it. Before the upload it reads each
+adapter instance of the pak's `adapter_kinds` and its `resourceState`;
+after the install it watches them for 120 s, then sends
+`PUT /api/adapters/{id}/monitoringstate/start` to each that reads FAILED,
+STOPPED or NONE and read STARTED, STARTING, UPDATING or FAILED before the
+install. One that was STOPPED or in maintenance before is never started
+(the user's choice); one with no usable state from before (UNKNOWN, NONE,
+NOT_EXISTING, no status entry, or the read failed) is started only when
+FAILED. An account that reads FAILED again 60 s after its start gets a
+second one, never a third. It polls until they read STARTED or a 300 s
+deadline passes, with a 30 s timeout on every Suite API call, each cut to
+what is left of that deadline (no request or start is sent past it, and
+accounts it had no room to start are named). Starts may not use the last
+30 s, which is kept for a state read after them; an account with no reading
+after its last start is reported `ACCOUNT UNCHECKED`, never `ACCOUNT NOT
+STARTED`. The one way past it is the
+server rejecting the session token in the last seconds: the client then
+gets a new token and retries the call, 30 s each, so the check takes up to
+about 360 s in the worst case. It only ever starts
+from that poll's reading. Each account's final state is printed (`ACCOUNT
+OK`, `ACCOUNT LEFT ALONE`, `ACCOUNT NOT COLLECTING` when it has no usable
+state from before and was not started, `ACCOUNT UNCHECKED` when its state
+is unreadable, or `ACCOUNT NOT STARTED`, which sets exit code 3). Exit 3
+also covers an account that was already FAILED before the install and still
+is (bad credentials, say). When the last read failed, or a 401/403 stopped
+the watch, it prints `ACCOUNTS UNCHECKED` with the state as of the last good
+read and leaves the exit code alone. This adds about 2 minutes when the
+pak's adapter kind has accounts; `--no-restart-failed` skips it, and
+`--no-wait` never runs it.
+A start runs whatever adapter jar the collector has loaded, and no Suite API
+endpoint reports which version that is. When a Cloud Proxy's jar sync fails
+(collector log: "Adapter jar synchronization failed", after "Did not receive
+response from Controller for 'Sync Adapters' task"), the proxy keeps the old
+version: re-run the same install instead of starting the account.
+`ACCOUNT NOT STARTED` says so, and a `NOTE` line says so whenever the
+installer sent a start.
+After that, `install` checks that each dashboard the pak ships
 finished building (issue #244); when one is still building it waits once
 (180 s by default, `--materialization-wait`, capped at 900 s) before the
 re-check, so allow that much more, or pass `--skip-materialization-check`.
@@ -73,9 +113,11 @@ build reads (issue #260), and reads the new copy back. `--skip-summary-rebind`
 or `VCFCF_SUMMARY_REBIND=0` turns the repair off; the install then only
 reads each copy and prints `SUMMARY OK` or `SUMMARY INCOMPLETE <kind>
 <copy id> (<n> of <m> widgets loading)` as information. `--summary-rebind`
-is accepted and is the default. Exit code 3 means the pak installed but a dashboard check failed
-(`MATERIALIZATION STALLED`, or with the repair on `SUMMARY NOT REBOUND`,
-which quotes the server's HTTP status and answer); do not reinstall on it.
+is accepted and is the default. Exit code 3 means the pak installed but a post-install check failed
+(`ACCOUNT NOT STARTED`, including an account already FAILED before the install, `MATERIALIZATION STALLED`, or with the repair on `SUMMARY NOT REBOUND`,
+which quotes the server's HTTP status and answer); do not reinstall on it,
+except for `ACCOUNT NOT STARTED` when the collector log shows "Adapter jar
+synchronization failed".
 
 **Credential env vars** (matches the rest of the factory):
 
