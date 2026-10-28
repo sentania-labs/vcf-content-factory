@@ -165,6 +165,21 @@ adapter-framework designs round; this is 1.0.18.
 
 Version note: this is 1.0.19, after 1.0.18.
 
+## Behavior since 1.0.23
+
+- Dynamic-threshold symptoms bundled in a pak now import. The kit wrote a
+  `metric_dynamic` condition in the REST spelling (`type="metric"
+  operator="DT_ABOVE"`) inside `content/symptomdefs` and
+  `content/alertdefs`; VCF Ops 8.18 and 9.1 reject that with
+  `Invalid operator:dt_above` and silently drop the symptom and every alert
+  that uses it. It now writes the content-import form the vendor schema and
+  vendor paks use: `type="dtmetric" operator="above|below|abnormal"`.
+  Rebuild any pak that bundles a dynamic-threshold symptom (Synology does);
+  other paks build byte-identical.
+- `validate-sdk` and `build-sdk` refuse a `metric_dynamic` condition on a
+  `Super Metric|` key (that needs the super-metric DT type, which the kit does
+  not emit).
+
 ## Behavior since 1.0.22
 
 - Vanished objects can be marked not existing (unifi#20). **Opt-in: no pak
@@ -181,6 +196,12 @@ Version note: this is 1.0.19, after 1.0.18.
   list, one Synology share's NFS probe) still delivers the same kind from
   the other parents. Leave a kind out of `kindsReadThisCycle()` whenever any
   part of its read failed.
+- An empty answer is not a complete read. An empty list, an empty child
+  table on a registered device, or an error code inside a 200 body must
+  leave the kind out, unless the source says positively that none exist.
+  Otherwise one empty response repeated for 12 cycles marks a live
+  inventory gone. The cost is that a kind's last object is never
+  auto-removed.
 - The threshold counts collection cycles, not time: 12 cycles is an hour at
   a 5-minute interval and 12 minutes at a 1-minute one.
   `notExistingMissedCycles()` changes it (0 turns marking off).
@@ -226,8 +247,8 @@ Version note: this is 1.0.19, after 1.0.18.
   naming the file. Before, it went on to log in with no password, which
   failed with a 401.
 
-Version note: open PR #281 holds 1.0.21; this is 1.0.22. #281 merges and
-publishes first, so `sdk-buildkit-v1` never moves backwards.
+Version note: 1.0.21 (#281) is the first kit with `SHA256SUMS`; this is 1.0.22.
+Publish 1.0.21 before 1.0.22 so `sdk-buildkit-v1` never moves backwards.
 
 ## Behavior since 1.0.15
 

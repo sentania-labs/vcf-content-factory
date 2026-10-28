@@ -161,10 +161,11 @@ class TestInstancedMetricStaticCondition:
 
 
 class TestInstancedMetricDynamicCondition:
-    """No vendor DT (metric_dynamic) XML example was found in any reference
-    pak. This locks current (conservative) behavior: instanced is emitted,
-    thresholdType/valueType are not (matching the REST wire's own omission
-    for CONDITION_DT, which carries no `value`)."""
+    """DT conditions render in the content-import vocabulary
+    (type="dtmetric", lowercase operator), with instanced and no
+    thresholdType/valueType/value. Full vendor-form guards live in
+    tests/test_symptom_dt_condition_xml.py; the evidence is
+    knowledge/context/wire-formats/symptomdef_dt_condition_import.md."""
 
     def test_metric_dynamic_emits_instanced_no_threshold_or_value_type(self):
         cond = _render_condition(
@@ -176,8 +177,8 @@ class TestInstancedMetricDynamicCondition:
             }
         )
         assert cond.get("instanced") == "true"
-        assert cond.get("operator") == "DT_ABOVE"
-        assert cond.get("type") == "metric"
+        assert cond.get("operator") == "above"
+        assert cond.get("type") == "dtmetric"
         assert cond.get("thresholdType") is None
         assert cond.get("valueType") is None
         assert cond.get("value") is None

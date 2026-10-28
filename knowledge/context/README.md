@@ -61,6 +61,7 @@ These files cost almost nothing to scan and prevent re-deriving known knowledge.
 | `ui_import_formats.md` | UI import format investigation |
 | `alertdef_symptomset_import.md` | Alert content-import multi-tier SymptomSet encoding |
 | `symptomdef_severity_import.md` | SymptomDefinition severity: content-import XML vs REST JSON divergence |
+| `symptomdef_dt_condition_import.md` | Dynamic-threshold symptom condition: content-import XML is `type="dtmetric"` + `above`/`below`/`abnormal`, REST is `CONDITION_DT` + `DT_*`; `DT_ABOVE` in XML fails with `Invalid operator:dt_above` (2026-10-28) |
 | `dashboard_section_gauge_viewdetails.md` | Factory mapping for Section (row header, membership by row), gauge scoreboard (`visualTheme: 9`), `viewDetails` link contract, AlertVolume (`IntSummaryAlertVolume`); 9.1.1 / 9.2 captures plus export samples |
 | `dashboard_navigations.md` | Dashboard Navigation drill-down: `dashboardNavigations` wire shape, per-widget `navigations:` YAML (`dashboard` by name or raw `dashboard_id`, target `widgets`), validate/render resolution, bundle-must-carry-targets, extract mapping (2026-10-07) |
 | `dashboard_view_pin_resolution.md` | Self-provider View pin binds by resource display name, not kind key (live-verified 2026-08-26); `_WORLD_DISPLAY_NAME` table and `pin.name` override |
