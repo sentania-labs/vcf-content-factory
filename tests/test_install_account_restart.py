@@ -435,6 +435,60 @@ def test_every_suite_call_carries_a_timeout():
                for _, _, t in suite.timeouts)
 
 
+def _slow(suite, clock, methods=("PUT",)):
+    """Every request of ``methods`` runs to its timeout on the fake clock."""
+    real = suite._request
+
+    def slow(method, path, **kw):
+        resp = real(method, path, **kw)
+        if method in methods:
+            clock.now += kw["timeout"]
+        return resp
+
+    suite._request = slow
+
+
+def test_many_slow_starts_finish_within_the_cap():
+    """Codex P2 on PR #293: 12 FAILED accounts whose start PUTs each run to
+    the 30 s timeout took a 300 s check to 495 s."""
+    clock = _Clock()
+    ids = {f"a{i:02d}": "FAILED" for i in range(12)}
+    suite = FakeSuite(ids, clock=clock, on_start={aid: "FAILED" for aid in ids})
+    _slow(suite, clock)
+    rc, out, err = _run(suite, _before({aid: "STARTED" for aid in ids}), clock)
+    assert clock.now - 1000.0 <= ar.TIMEOUT_S
+    assert rc == ar.ACCOUNTS_NOT_STARTED_RC
+    # Every request's timeout fit inside what was left of the budget.
+    assert all(t <= ar.REQUEST_TIMEOUT_S for _, _, t in suite.timeouts)
+    # The budget ran out mid-sweep: the rest are named, none sent past it.
+    assert "ran out before start monitoring could be sent" in err
+    assert "budget ran out" in err
+    assert len(suite.starts) < 12
+
+
+def test_slow_reads_and_starts_together_stay_within_the_cap():
+    clock = _Clock()
+    ids = {f"a{i}": "FAILED" for i in range(5)}
+    suite = FakeSuite(ids, clock=clock, on_start={aid: "FAILED" for aid in ids})
+    _slow(suite, clock, methods=("GET", "PUT"))
+    rc, out, err = _run(suite, _before({aid: "STARTED" for aid in ids}), clock)
+    assert clock.now - 1000.0 <= ar.TIMEOUT_S
+
+
+def test_last_request_gets_only_what_is_left():
+    clock = _Clock()
+    suite = FakeSuite({"a1": "FAILED"}, clock=clock)
+    left = {"v": 12.5}
+    to = ar._request_timeout(ar.REQUEST_TIMEOUT_S, lambda: left["v"])
+    assert to == 12.5
+    left["v"] = 0.4
+    with pytest.raises(ar.DeadlineReached):
+        ar._request_timeout(ar.REQUEST_TIMEOUT_S, lambda: left["v"])
+    with pytest.raises(ar.DeadlineReached):
+        ar.start_account(suite, "a1", budget=lambda: 0.0)
+    assert suite.starts == []      # never sent
+
+
 def test_read_accounts_default_timeout_is_set():
     suite = FakeSuite({"a1": "STARTED"})
     ar.read_accounts(suite, [KIND])

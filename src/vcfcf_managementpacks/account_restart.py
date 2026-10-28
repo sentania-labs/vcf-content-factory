@@ -131,19 +131,45 @@ def _ok_json(resp, what: str) -> dict:
     return body
 
 
+class DeadlineReached(RuntimeError):
+    """The watch's shared budget ran out before a request could be sent."""
+
+
+#: A request is not sent with less than this many seconds of budget left.
+MIN_REQUEST_S = 1.0
+
+
+def _request_timeout(timeout: float, budget: Optional[Callable[[], float]]) -> float:
+    """Per-request timeout: ``timeout``, cut to what is left of ``budget``.
+
+    ``budget`` (seconds left, recomputed on every call) is the watch's shared
+    deadline; with less than :data:`MIN_REQUEST_S` left the request is not
+    sent and :class:`DeadlineReached` is raised. None means no deadline.
+    """
+    if budget is None:
+        return timeout
+    left = budget()
+    if left < MIN_REQUEST_S:
+        raise DeadlineReached(f"{max(left, 0.0):.1f} s of the account check's budget left")
+    return min(timeout, left)
+
+
 def read_accounts(client, adapter_kinds: Iterable[str],
-                  timeout: float = REQUEST_TIMEOUT_S) -> Dict[str, Account]:
+                  timeout: float = REQUEST_TIMEOUT_S,
+                  budget: Optional[Callable[[], float]] = None) -> Dict[str, Account]:
     """Every adapter instance of ``adapter_kinds`` with its state, keyed by id.
 
     Raises on a transport error or a non-200 answer (:class:`AuthRefused` on
     401/403); an instance whose resource carries no status entry reads
-    :data:`UNREADABLE_STATE`. ``timeout`` goes on every request.
+    :data:`UNREADABLE_STATE`. ``timeout`` goes on every request, cut to what
+    ``budget()`` says is left before each one (:func:`_request_timeout`).
     """
     accounts: Dict[str, Account] = {}
     for kind in adapter_kinds:
         body = _ok_json(
             client._request("GET", "/api/adapters",
-                            params={"adapterKindKey": kind}, timeout=timeout),
+                            params={"adapterKindKey": kind},
+                            timeout=_request_timeout(timeout, budget)),
             f"GET /api/adapters?adapterKindKey={kind}",
         )
         for dto in body.get("adapterInstancesInfoDto") or []:
@@ -163,7 +189,7 @@ def read_accounts(client, adapter_kinds: Iterable[str],
     body = _ok_json(
         client._request("GET", "/api/resources",
                         params={"resourceId": ids, "pageSize": max(len(ids), 1)},
-                        timeout=timeout),
+                        timeout=_request_timeout(timeout, budget)),
         "GET /api/resources?resourceId=...",
     )
     for res in body.get("resourceList") or []:
@@ -181,10 +207,12 @@ def read_accounts(client, adapter_kinds: Iterable[str],
     return accounts
 
 
-def start_account(client, account_id: str, timeout: float = REQUEST_TIMEOUT_S) -> None:
-    """``PUT /api/adapters/{id}/monitoringstate/start``; raises unless 2xx."""
+def start_account(client, account_id: str, timeout: float = REQUEST_TIMEOUT_S,
+                  budget: Optional[Callable[[], float]] = None) -> None:
+    """``PUT /api/adapters/{id}/monitoringstate/start``; raises unless 2xx
+    (:class:`DeadlineReached`, unsent, when ``budget`` has run out)."""
     resp = client._request("PUT", f"/api/adapters/{account_id}/monitoringstate/start",
-                           timeout=timeout)
+                           timeout=_request_timeout(timeout, budget))
     code = getattr(resp, "status_code", None)
     if code is None or not 200 <= int(code) < 300:
         text = str(getattr(resp, "text", ""))[:300]
@@ -287,17 +315,31 @@ def restart_failed_accounts(
     auth_refused = False
     # id -> [(elapsed, refusal or "")] per start sent
     starts: Dict[str, List[tuple]] = {}
+    # Accounts that needed a start the budget had no room for.
+    unsent: List[str] = []
     announced = False
+    deadline = t0 + timeout_s
+
+    def budget() -> float:
+        # One shared deadline, recomputed before every request and sleep, so
+        # slow requests cannot stack past timeout_s (Codex P2, PR #293: 12
+        # FAILED accounts with 30 s start timeouts ran a 300 s check to 495 s).
+        return deadline - clock()
+
     while True:
+        if budget() < MIN_REQUEST_S:
+            break
         elapsed = clock() - t0
-        remaining = timeout_s - elapsed
         fresh = False
         try:
-            accounts = read_accounts(client, adapter_kinds,
-                                     timeout=max(5.0, min(REQUEST_TIMEOUT_S, remaining)))
+            accounts = read_accounts(client, adapter_kinds, budget=budget)
             fresh = True
             last_good_at = elapsed
             last_error = ""
+        except DeadlineReached:
+            # Out of time mid-read: not a failed read. The last good reading
+            # (one poll old at most) stands.
+            break
         except Exception as exc:  # noqa: BLE001  retried until the deadline
             failed_reads += 1
             last_error = str(exc)
@@ -316,6 +358,7 @@ def restart_failed_accounts(
             out(f"ACCOUNT CHECK: {len(accounts)} adapter instance(s) of {kinds_text}; "
                 f"watching for {start_delay_s} s before starting any that the install "
                 f"left FAILED (up to {timeout_s} s).")
+        out_of_time = False
         if fresh and elapsed >= start_delay_s:
             for acct in accounts.values():
                 sent = starts.get(acct.id, [])
@@ -328,21 +371,32 @@ def restart_failed_accounts(
                     if (len(sent) >= MAX_STARTS or first_err or acct.state != "FAILED"
                             or elapsed - first_at < retry_after_s):
                         continue
+                if out_of_time:
+                    unsent.append(acct.id)
+                    continue
                 try:
-                    start_account(client, acct.id,
-                                  timeout=max(5.0, min(REQUEST_TIMEOUT_S, remaining)))
+                    start_account(client, acct.id, budget=budget)
                     starts.setdefault(acct.id, []).append((elapsed, ""))
                     nth = "re-issued" if not sent else "re-issued a second time"
                     out(f"ACCOUNT START SENT: {_label(acct)} read {_state_text(acct)} "
                         f"{int(elapsed)} s after the install; start monitoring {nth}.")
+                except DeadlineReached:
+                    # No start goes out past the deadline; the rest are listed.
+                    out_of_time = True
+                    unsent.append(acct.id)
                 except Exception as exc:  # noqa: BLE001  reported per account
                     starts.setdefault(acct.id, []).append((elapsed, str(exc)))
                     err(f"WARN: start monitoring refused for {_label(acct)}: {exc}")
+            if out_of_time:
+                err(f"WARN: the {timeout_s} s account check ran out before start "
+                    f"monitoring could be sent to {len(unsent)} account(s).")
+                break
             if all(_settled(a, before) for a in accounts.values()):
                 break
-        if elapsed >= timeout_s:
+        left = budget()
+        if left < MIN_REQUEST_S:
             break
-        sleep(max(1.0, min(poll_s, remaining)))
+        sleep(min(poll_s, left))
 
     if accounts is None or last_error:
         why = "a 401/403 stopped the watch" if auth_refused else "the last read failed"
@@ -393,6 +447,9 @@ def restart_failed_accounts(
                 tried = f"; start monitoring was re-issued {len(ok_starts)} time(s)"
             else:
                 tried = ""
+            if acct.id in unsent:
+                tried += (f"; {'no further' if ok_starts else 'no'} start was sent: "
+                          f"the {timeout_s} s budget ran out")
             err(f"ACCOUNT NOT STARTED: {_label(acct)}: {_state_text(acct)} after "
                 f"{int(clock() - t0)} s{was}{tried}. Confirm the collector loaded the "
                 f"new adapter version, then PUT /suite-api/api/adapters/{acct.id}/"
