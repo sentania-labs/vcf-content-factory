@@ -530,13 +530,18 @@ def _sub_type(raw):
     """``sub_type`` from YAML: 19 (Performance) only when absent or null.
 
     An explicit value, 0 included, is kept so ``validate`` rejects it.  An
-    integer string ("19") becomes the int; anything else (a bool, a float,
-    other text) is returned as-is and fails the enum check.
+    integer string ("19", or any Unicode decimal digits int() reads) becomes
+    the int; anything else (a bool, a float, other text, and strings such as
+    a superscript digit or "--19" that isdigit() passes but int() refuses) is
+    returned as-is and fails the enum check.
     """
     if raw is None:
         return 19
     if isinstance(raw, str) and raw.strip().lstrip("-").isdigit():
-        return int(raw.strip())
+        try:
+            return int(raw.strip())
+        except ValueError:
+            return raw
     return raw
 
 
