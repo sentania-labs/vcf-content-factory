@@ -144,15 +144,18 @@ cycle and calls `stitcher.pushBatch(props, stats, ts)`: properties go
 first, then stats, in requests of at most 100 resources and about 1 MB
 (`pushPropertiesBatch` / `pushStatsBatch` take `maxResources, maxBytes`
 when that is wrong for the pak). Cost drops from two calls per object to
-two per batch. It never throws; count from the returned
-`SuiteApiBatchResult` (sent, batchesOk, batchesFailed, fellBack, skipped)
-rather than grepping the log. A non-2xx batch falls back to per-id pushes
-for that batch; a timeout is not re-sent. **A 2xx does not mean every id
-landed:** an id that matches no resource is dropped silently, so a stale
-id surfaces in no result. Detect it in the `ForeignResourceResolver`
-refresh, where ids are resolved. Push properties only when they change
-where the pak can: they dominate the bytes (compliance: ~145 KB per host
-on 9.0.2). Evidence: `knowledge/context/api-surface/suite_api_batch_push.md`.
+two per batch. Evidence status: wire shape from spec + vendor examples; stats landing proven on 8.18.7; properties landing and 9.0/9.1 landing to be proven live before a pak adopts. It never throws; count
+from the returned `SuiteApiBatchResult` (sent, batchesOk, batchesFailed,
+fellBack, skipped, dropped, stopped; `isClean()`) rather than grepping the
+log. A batch refused with a 4xx other than 401/429 is re-sent per id to
+isolate the bad entry; a 5xx, 429, persistent 401, timeout or token
+failure stops the call (no re-send, the rest counted skipped, no stats
+half). **A 2xx does not mean every id landed:** an id that matches no
+resource is dropped silently, so a stale id surfaces in no result. Detect
+it in the `ForeignResourceResolver` refresh, where ids are resolved. Push
+properties only when they change where the pak can: they dominate the
+bytes (compliance: ~145 KB per host on 9.0.2). Evidence:
+`knowledge/context/api-surface/suite_api_batch_push.md`.
 
 **Relationships: POST adds, PUT replaces.** `addChild(parentId,
 childId)` is the additive `POST

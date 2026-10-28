@@ -32,7 +32,7 @@ No `X-Ops-API-use-unsupported` header is involved.
 | Question | Answer | Confidence |
 |---|---|---|
 | Bulk endpoints exist? | Yes: `POST /api/resources/stats` and `POST /api/resources/properties` | Spec on all three lines |
-| Same on 8.18, 9.0, 9.1? | Same paths, same query params, same 200-only response, same JSON shape in the vendor examples on all three. 9.0 and 9.1 schemas are identical (key order only). 8.18's generated schema shows different field names (below); its own JSON example agrees with 9.x | High. 8.18 stats batch in the 9.x shape proven landed (live test 2); 8.18 properties batch accepted with 200 (live test 1, landing not observable for a same-value property) |
+| Same on 8.18, 9.0, 9.1? | Same paths, same query params, same 200-only response, same JSON shape in the vendor examples on all three. 9.0 and 9.1 schemas are identical (key order only). 8.18's generated schema shows different field names (below); its own JSON example agrees with 9.x | High. 8.18 stats batch in the 9.x shape proven landed (live test 2); 8.18 properties batch accepted with 200 (live test 1, landing not observable for a same-value property). **Not yet proven live:** properties landing on any version, and either batch landing on 9.0 or 9.1; prove both with a changed value before a pak adopts |
 | Stats and properties in one request? | **No.** No schema in any of the six specs references both `stat-content` and `property-content`; the two bulk bodies are separate types | Spec, all versions |
 | Partial failure reported per resource? | **No.** Response is `200` with no body (`Content-Length: 0`). An id that matches no resource is **silently dropped**: the batch still returns 200 and the other resources land, even when the bad id comes first (live test 3) | Spec + live on 8.18.7 |
 | Documented batch size limit? | **None** in any spec, on either endpoint | Spec |
@@ -271,14 +271,19 @@ they change (design §3) cuts more than batching does.
 
 **Built in buildkit 1.0.24** as `SuiteApiStitchClient` / `SuiteApiStitcher`
 `pushPropertiesBatch`, `pushStatsBatch` and `pushBatch` (properties, then
-stats), returning `SuiteApiBatchResult`. Choices the list below left open:
-`disableAnalyticsProcessing` is never sent (the live tests ran without it);
-a failure with no HTTP status (timeout, refused connection) is not re-sent
-per id, only logged, since it may have been applied and re-sending to an
-unreachable server costs a timeout per resource; a 401 that survives the
-one re-acquire is not re-sent per id either; batch read timeout is 120 s.
-Null keys, null values and non-finite stats are dropped before serializing,
-so they cannot turn a whole batch into a 400.
+stats), returning `SuiteApiBatchResult`. Evidence status: wire shape from spec + vendor examples; stats landing proven on 8.18.7; properties landing and 9.0/9.1 landing to be proven live before a pak adopts.
+Choices the list below left open, after the framework review
+(`knowledge/context/reviews/framework/adapter-framework-batch-push-2026-10-28.md`):
+`disableAnalyticsProcessing` is never sent (the live tests ran without it).
+The token is fetched before each request, and a token failure stops the
+call before anything more is sent. Only a 4xx other than 401 and 429 (a
+likely bad entry) falls back to per-id re-sends; a 5xx, 429, a 401 that
+survives the one re-acquire, or a failure with no HTTP status stops the
+call, so a struggling or hung server gets one request, and `pushBatch`
+skips its stats half. The per-id fallback stops on the same conditions.
+Batch read timeout is 120 s. Resources are serialized and sent one chunk at
+a time. Null keys, null values and non-finite stats are dropped, and every
+control character is escaped, so no value can make a body invalid JSON.
 
 1. **Two methods**, same no-throw contract as today:
    `pushPropertiesBatch(Map<String, Map<String,String>> byResource, long ts)`

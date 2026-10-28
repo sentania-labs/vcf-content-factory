@@ -207,9 +207,11 @@ public final class SuiteApiStitcher {
      * bytes of JSON per request). Use it instead of one {@link #pushProperties}
      * per object when a cycle pushes onto many objects (buildkit 1.0.24).
      *
-     * <p>Never throws. A batch answered with a non-2xx status is logged once
-     * and its resources re-sent one by one; nothing is retried blindly on 5xx
-     * or timeout. <strong>A 2xx does not mean every id landed:</strong> the
+     * <p>Never throws. A batch refused with a 4xx other than 401 and 429 is
+     * logged once and its resources re-sent one by one to isolate the bad
+     * entry. A 5xx, 429, persistent 401, timeout or token failure is logged
+     * once and stops the call: nothing more is sent and the rest counts as
+     * skipped. <strong>A 2xx does not mean every id landed:</strong> the
      * Suite API drops an id that matches no resource silently, so detect stale
      * ids in the {@link ForeignResourceResolver} refresh, not from the result.
      * Full contract: {@link SuiteApiStitchClient#pushPropertiesBatch(Map, long, int, int)}.
@@ -273,7 +275,8 @@ public final class SuiteApiStitcher {
     /**
      * Push properties, then stats, for many resources with the default caps:
      * the properties call finishes (fallback included) before the stats call
-     * starts. The recommended way for a pak to push a whole cycle. Full
+     * starts, and if the properties call stopped, the stats call sends nothing.
+     * The recommended way for a pak to push a whole cycle. Full
      * contract: {@link SuiteApiStitchClient#pushBatch(Map, Map, long, int, int)}.
      *
      * @param propertiesByResource resource UUID to (statKey to string value)

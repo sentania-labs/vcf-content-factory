@@ -171,18 +171,30 @@ Version note: this is 1.0.19, after 1.0.18.
   `SuiteApiStitchClient`) gain `pushPropertiesBatch`, `pushStatsBatch` and
   `pushBatch`, which push onto many foreign resources through
   `POST /api/resources/properties` and `POST /api/resources/stats`: two
-  calls per batch instead of two per object. Same on 8.18, 9.0 and 9.1.
+  calls per batch instead of two per object. Evidence: wire shape from spec + vendor examples; stats landing proven on 8.18.7; properties landing and 9.0/9.1 landing to be proven live before a pak adopts.
   **Opt-in: a pak that keeps calling `pushProperties` / `pushStats` per
   object builds and behaves exactly as before.**
 - `pushBatch(properties, stats, timestamp)` sends properties, then stats.
   Requests are capped at 100 resources and about 1 MB of JSON, whichever
   comes first (both overridable per call); one resource bigger than the
-  byte cap goes alone. Ids must be UUIDs; others are skipped with a WARN.
-- Never throws. A batch answered with a non-2xx status logs one WARN (the
-  count and the first ids) and re-sends that batch's resources on the
-  per-id path. A 401 is retried once with a new token, as before; nothing
-  is retried on 5xx or a timeout. Each call returns a `SuiteApiBatchResult`
-  (sent, batchesOk, batchesFailed, fellBack, skipped) for the pak to count.
+  byte cap goes alone. Resources are serialized and sent one request at a
+  time, so memory stays near one request's JSON. Ids must be UUIDs; others
+  are skipped with a WARN.
+- Never throws. The token is fetched before each request; if it cannot be,
+  the call stops before sending anything more. A 401 is retried once with a
+  new token, as before. A batch refused with a 4xx other than 401 and 429
+  (a bad entry) logs one WARN (the count and the first ids) and re-sends
+  that batch's resources one by one to isolate it. A 5xx, a 429, a 401
+  that survives the retry, or a timeout logs one WARN and stops the call:
+  no re-send, no further batches, and `pushBatch` skips its stats half. A
+  struggling or hung server gets one request, not one per object.
+- Each call returns a `SuiteApiBatchResult` for the pak to count: sent,
+  batchesOk, batchesFailed, fellBack, skipped (every resource no request
+  delivered), dropped (null keys, null values, NaN or infinite stats) and
+  stopped. `isClean()` is false if anything was skipped, dropped or failed.
+- Every control character in a key or value is now escaped, in batch and
+  per-id bodies alike; before, one such character made the body invalid
+  JSON.
 - **A 2xx does not mean every id landed.** The Suite API drops an id that
   matches no resource without an error and stores the rest. A stale id
   never shows in the result: catch it where ids are resolved (the pak's
