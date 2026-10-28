@@ -37,6 +37,7 @@ import hashlib
 import json
 import math
 import re
+import warnings
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -76,6 +77,11 @@ class KindInfo:
 class TraversalEdge:
     parent_key: str
     child_key: str
+
+    @property
+    def is_self(self) -> bool:
+        """True for the self-edge a ``/recursive`` path level implies."""
+        return self.parent_key == self.child_key
 
 
 @dataclass
@@ -128,37 +134,113 @@ def _load_properties(project_dir: Path) -> Dict[str, str]:
     return props
 
 
-def _parse_traversal_paths(spec_kind_elem, ns: str) -> List[TraversalEdge]:
+# Path-level modifiers the vendor grammar allows at the end of a ResourcePath
+# segment (knowledge/context/cleanroom-spec/spec/07-relationships-cross-mp.md;
+# the SDK describe validator, TraversalSpecUtil.validateResKindPath, PR #290):
+#   /recursive  the level repeats: the kind nests under itself (vSphere
+#               ``HostFolder::child/recursive``, UniFi ``UniFiSwitch::child/recursive``)
+#   /preferred  runtime meaning unconfirmed (PR #290); no topology, stripped.
+#   /skip       runtime meaning unconfirmed (MPB wire reference
+#               ``::child/skip``); no topology, stripped.
+_PATH_MODIFIERS = ("recursive", "preferred", "skip")
+
+# A level whose resource kind is ``*`` is a wildcard: any kind of that
+# adapter. The docs keep it as one pseudo-kind node per adapter kind,
+# labelled "Any resource kind", never drawn in the diagram.
+_WILDCARD = "*"
+_WILDCARD_LABEL = "Any resource kind"
+
+
+def _split_path_modifiers(token: str) -> Tuple[str, set]:
+    """Strip trailing ``/recursive``, ``/preferred`` and ``/skip`` from a token.
+
+    Only known modifiers are stripped, so a ``/`` that is part of a name is
+    left alone. Returns (token without modifiers, set of modifier names).
+    """
+    mods: set = set()
+    while True:
+        head, sep, tail = token.rpartition("/")
+        if sep and tail.strip() in _PATH_MODIFIERS:
+            mods.add(tail.strip())
+            token = head
+        else:
+            return token, mods
+
+
+def _node_key(adapter_kind: str, kind: str, own_adapter_kind: str) -> str:
+    """Node identity for a path level.
+
+    The pak's own kinds keep their bare resource-kind key (it matches the
+    ResourceKind ``key`` in describe.xml). A level of another adapter kind is
+    keyed ``ADAPTER::Kind``, so a foreign ``VMWARE::Datastore`` can never
+    merge with a pak kind that is also called ``Datastore``. With no own
+    adapter kind known, every level is treated as the pak's own.
+    """
+    if not own_adapter_kind or adapter_kind == own_adapter_kind:
+        return kind
+    return f"{adapter_kind}::{kind}"
+
+
+def _parse_traversal_paths(
+    spec_kind_elem, ns: str, own_adapter_kind: str = ""
+) -> List[TraversalEdge]:
     """Parse ResourcePath elements → ordered list of unique TraversalEdge pairs.
 
     Path format:
-      ak::rk1||ak::rk2::child||ak::rk3::child||...
+      ak::rk1||ak::rk2::child||ak::rk3::child/recursive||...
 
     Each consecutive pair rk(i) → rk(i+1) produces an edge (if not already seen).
     The adapter-instance root is skipped; it appears in describe.xml as type=7.
+    Levels of an adapter kind other than ``own_adapter_kind`` are keyed
+    ``ADAPTER::Kind`` (see ``_node_key``).
+
+    A ``::~child`` segment inverts its edge: that kind is the PARENT of the
+    previous level (vSphere ``VMWARE::Datastore::~child`` after a Synology
+    LUN means the Datastore holds the LUN), matching the cross-MP table.
+    A ``/recursive`` level adds the self-edge rk → rk right after the edge
+    into it, so the tree, diagram and Parent(s) column show that the kind
+    nests under itself. ``/preferred`` and ``/skip`` are stripped and
+    otherwise ignored (runtime meaning unconfirmed). A ``*`` level is a
+    wildcard pseudo-kind (see ``_WILDCARD``).
+    Paths without modifiers parse exactly as before.
     """
     edges: List[TraversalEdge] = []
     seen: set = set()
+
+    def _add(parent: str, child: str) -> None:
+        pair = (parent, child)
+        if pair not in seen:
+            seen.add(pair)
+            edges.append(TraversalEdge(parent_key=parent, child_key=child))
 
     for rp in spec_kind_elem.iter(f"{ns}ResourcePath"):
         path_str = rp.get("path", "")
         # Split on "||" to get segments
         segments = path_str.split("||")
-        # Each segment: "adapterKind::resourceKind" or "adapterKind::resourceKind::child"
-        rk_keys = []
+        # Each segment: "adapterKind::resourceKind" or
+        # "adapterKind::resourceKind::child", optionally ending in
+        # "/recursive", "/preferred" and/or "/skip"
+        # (resource kind key, recursive, inverse)
+        levels: List[Tuple[str, bool, bool]] = []
         for seg in segments:
             parts = seg.split("::")
             if len(parts) >= 2:
-                rk_keys.append(parts[1])  # resource kind key
+                parts[-1], mods = _split_path_modifiers(parts[-1])
+                inverse = len(parts) >= 3 and parts[2].strip().startswith("~")
+                key = _node_key(parts[0].strip(), parts[1], own_adapter_kind)
+                levels.append((key, "recursive" in mods, inverse))
 
-        # Build consecutive pairs
-        for i in range(len(rk_keys) - 1):
-            parent = rk_keys[i]
-            child = rk_keys[i + 1]
-            pair = (parent, child)
-            if pair not in seen:
-                seen.add(pair)
-                edges.append(TraversalEdge(parent_key=parent, child_key=child))
+        # Build consecutive pairs (reversed for ~child), plus the self-edge
+        # of each recursive level
+        for i, (rk, recursive, inverse) in enumerate(levels):
+            if i > 0:
+                prev = levels[i - 1][0]
+                if inverse:
+                    _add(rk, prev)
+                else:
+                    _add(prev, rk)
+            if recursive:
+                _add(rk, rk)
 
     return edges
 
@@ -236,7 +318,7 @@ def parse_describe_xml(project_dir: Path) -> Tuple[List[KindInfo], str, List[Tra
         name_key = spec_kind.get("nameKey", "")
         if name_key and name_key in props:
             traversal_name = props[name_key]
-        edges = _parse_traversal_paths(spec_kind, ns)
+        edges = _parse_traversal_paths(spec_kind, ns, root.get("key", ""))
         break  # use first traversal spec
 
     return kinds, traversal_name, edges, config_fields
@@ -297,6 +379,22 @@ def build_doc_model(
 # Tree helpers
 # ---------------------------------------------------------------------------
 
+def _node_label(model: AdapterDocModel, key: str) -> str:
+    """Display label of a tree node.
+
+    A pak kind uses its ResourceKind label. A foreign ``ADAPTER::Kind`` node
+    reads ``Kind (ADAPTER)``, matching the Cross-MP table's foreign
+    endpoints. A wildcard level reads ``Any resource kind``.
+    """
+    kind = model.kind_map.get(key)
+    if kind:
+        return kind.label
+    adapter, sep, rk = key.rpartition("::")
+    if rk == _WILDCARD:
+        rk = _WILDCARD_LABEL
+    return f"{rk} ({adapter})" if sep else rk
+
+
 def _build_children_map(model: AdapterDocModel) -> Dict[str, List[str]]:
     """Return dict: parent_key → [child_key, ...] (in edge order)."""
     children: Dict[str, List[str]] = {}
@@ -316,18 +414,59 @@ def _build_children_map(model: AdapterDocModel) -> Dict[str, List[str]]:
 def _tree_roots(model: AdapterDocModel) -> List[str]:
     """Return kind keys that are edge sources but not edge targets (tree roots).
 
-    Excludes the adapter-instance kind (type=7).
+    Order is deterministic: the pak's own root kinds first, in describe.xml
+    order, then the other roots (a foreign ``::~child`` parent such as a
+    VMWARE Datastore, or a wildcard level) sorted by label, then key.
+
+    A kind no root reaches (a cycle with no way in, such as
+    ``A > B > A``) would vanish from the tree. Each such kind's first edge
+    parent, in edge order, becomes an extra root, after a warning naming the
+    kinds, so the tree is never silently empty or short.
     """
-    all_parents = {e.parent_key for e in model.edges}
-    all_children = {e.child_key for e in model.edges}
-    # Roots appear as parents but not as children
-    roots = [k for k in all_parents if k not in all_children]
-    if not roots:
-        # Fallback: first non-adapter-instance kind that appears as a parent
+    # A recursive self-edge does not make a kind a child of something else.
+    all_children = {e.child_key for e in model.edges if not e.is_self}
+    candidates: List[str] = []
+    for e in model.edges:
+        k = e.parent_key
+        if k not in all_children and k not in candidates:
+            candidates.append(k)
+    own = [k.key for k in model.kinds if k.key in candidates]
+    other = sorted(
+        (k for k in candidates if k not in model.kind_map),
+        key=lambda k: (_node_label(model, k), k),
+    )
+    roots = own + other
+
+    children = _build_children_map(model)
+    reached: set = set()
+
+    def _reach(start: str) -> None:
+        stack = [start]
+        while stack:
+            node = stack.pop()
+            if node in reached:
+                continue
+            reached.add(node)
+            stack.extend(children.get(node, []))
+
+    for r in roots:
+        _reach(r)
+    unreached: List[str] = []
+    for e in model.edges:
+        for k in (e.parent_key, e.child_key):
+            if k not in reached and k not in unreached:
+                unreached.append(k)
+    if unreached:
+        warnings.warn(
+            "docs-gen: traversal kinds not reachable from any root (a cycle "
+            f"with no way in): {', '.join(unreached)}; drawing them from the "
+            "first edge parent",
+            stacklevel=2,
+        )
         for e in model.edges:
-            if e.parent_key not in all_children:
+            if e.parent_key not in reached:
                 roots.append(e.parent_key)
-                break
+                _reach(e.parent_key)
     return roots
 
 
@@ -351,15 +490,27 @@ def _assign_depth(model: AdapterDocModel) -> Dict[str, int]:
     roots = _tree_roots(model)
 
     depth: Dict[str, int] = {}
-    queue = [(r, 0) for r in roots]
-    while queue:
-        node, d = queue.pop(0)
-        if node in depth:
-            depth[node] = min(depth[node], d)
-        else:
+
+    def _bfs(start: List[str], fill_only: bool) -> None:
+        # fill_only: leave kinds already placed (from the pak's own roots)
+        # where they are, so a foreign ::~child parent such as a VMWARE
+        # Datastore cannot pull its pak children up to row 1.
+        queue = [(r, 0) for r in start]
+        placed = set(depth) if fill_only else set()
+        while queue:
+            node, d = queue.pop(0)
+            if node in placed:
+                continue
+            if node in depth and depth[node] <= d:
+                continue  # already as shallow; also stops any cycle
             depth[node] = d
-        for child in children.get(node, []):
-            queue.append((child, d + 1))
+            for child in children.get(node, []):
+                if child == node:
+                    continue  # recursive self-edge: same row
+                queue.append((child, d + 1))
+
+    _bfs([r for r in roots if r in model.kind_map], fill_only=False)
+    _bfs([r for r in roots if r not in model.kind_map], fill_only=True)
 
     # Adapter-instance kinds: depth = -1
     for k in model.kinds:
@@ -382,14 +533,23 @@ def _render_tree_md(model: AdapterDocModel) -> str:
     lines: List[str] = []
 
     def _walk(key: str, indent: int) -> None:
+        label = _node_label(model, key)
+        prefix = "  " * indent + "- "
         if key in visited:
+            # A further parent of a kind already drawn in full above: one
+            # reference line, so every parent > child pair shows in the tree.
+            lines.append(f"{prefix}**{label}** (`{key}`) *(see above)*")
             return
         visited.add(key)
-        kind = model.kind_map.get(key)
-        label = kind.label if kind else key
-        prefix = "  " * indent + "- "
         lines.append(f"{prefix}**{label}** (`{key}`)")
         for child in children.get(key, []):
+            if child == key:
+                # /recursive level: draw one self-nested line, never descend
+                lines.append(
+                    f"{'  ' * (indent + 1)}- **{label}** (`{key}`) "
+                    f"*(recursive: nests under itself)*"
+                )
+                continue
             _walk(child, indent + 1)
 
     for root in roots:
@@ -494,8 +654,7 @@ def generate_inventory_tree_md(model: AdapterDocModel) -> str:
 
         parent_labels = []
         for pk in parents_map.get(kind.key, []):
-            pk_kind = model.kind_map.get(pk)
-            parent_labels.append(pk_kind.label if pk_kind else pk)
+            parent_labels.append(_node_label(model, pk))
 
         id_parts = []
         for ident in kind.identifiers:
@@ -553,6 +712,145 @@ _NODE_H_PER_KEY = 18   # extra height per identifier key line
 _H_GAP = 60            # horizontal gap between nodes in same row
 _V_GAP = 90            # vertical gap between rows
 _MARGIN = 40           # canvas margin
+# A /recursive self-loop hooks over the node's top-right corner: it leaves the
+# top edge, reaches right of the node and comes back into the right edge. It
+# stays clear of the top-center inbound arrow and of the upward-edge lanes
+# (_UP_LANE_CLEAR), and its reach fits inside _H_GAP and _MARGIN.
+_SELF_LOOP_INSET = 36  # loop start, measured left from the node's right edge
+_SELF_LOOP_RISE = 16   # how far the loop climbs above the node
+_SELF_LOOP_REACH = 16  # how far the loop reaches right of the node
+_SELF_LOOP_DROP = 18   # where the loop re-enters the right edge, below the top
+
+
+def _self_loop_points(x: float, y: float, w: float) -> List[Tuple[float, float]]:
+    """Absolute points of the self-loop for a node at (x, y) with width w."""
+    xr = x + w
+    xs = xr - _SELF_LOOP_INSET
+    xo = xr + _SELF_LOOP_REACH
+    return [
+        (xs, y),
+        (xs, y - _SELF_LOOP_RISE),
+        (xo, y - _SELF_LOOP_RISE),
+        (xo, y + _SELF_LOOP_DROP),
+        (xr + 2, y + _SELF_LOOP_DROP),
+    ]
+
+
+# Edges whose child is not in the row below the parent (min-depth layout puts
+# a kind in its shallowest row, so a parent can share the child's row, or sit
+# below it) are routed through lanes in the gaps between rows instead of the
+# old midpoint path, which drew a flat line through the row's nodes.
+#   same-row edge: leaves the parent's bottom, runs along a lane just under
+#                  the row, enters the child's bottom
+#   upward edge:   leaves the parent's top, runs along a lane in the gap above
+#                  the parent's row, enters the child's bottom
+# Each gap grows by 2 * _LANE_STEP per lane, so the lanes stay clear of the
+# parent-to-child connector that runs through the middle of the gap.
+_LANE_STEP = 8         # spacing between lanes, and from a lane to its row
+_UP_LANE_CLEAR = 24    # upward lanes start below the self-loop's rise
+_LANE_OUT = 0.75       # where a routed edge leaves its parent (fraction of width)
+_LANE_UP_OUT = 0.65    # where an upward edge leaves its parent's top
+_LANE_IN = 0.25        # where a routed edge enters its child's bottom
+
+
+def _row_of(model: AdapterDocModel, depth_map: Dict[str, int]) -> Dict[str, int]:
+    """Diagram row of every non-adapter-instance kind (as _layout_nodes uses)."""
+    return {
+        k.key: depth_map.get(k.key, 0)
+        for k in model.kinds
+        if not k.is_adapter_instance
+    }
+
+
+def _edge_lanes(
+    model: AdapterDocModel, row_of: Dict[str, int]
+) -> Dict[Tuple[str, str], Tuple[str, int, int]]:
+    """Lane assignment for same-row and upward edges.
+
+    Returns dict: (parent, child) → (kind, parent row, lane index), kind being
+    "same" or "up". Edges into the row below get no entry and draw as before.
+    Lane indexes count up per (kind, parent row) in edge order.
+    """
+    lanes: Dict[Tuple[str, str], Tuple[str, int, int]] = {}
+    counts: Dict[Tuple[str, int], int] = {}
+    for edge in model.edges:
+        if edge.is_self:
+            continue
+        p, c = edge.parent_key, edge.child_key
+        if p not in row_of or c not in row_of:
+            continue
+        pr, cr = row_of[p], row_of[c]
+        if cr == pr:
+            kind = "same"
+        elif cr < pr:
+            kind = "up"
+        else:
+            continue
+        idx = counts.get((kind, pr), 0)
+        counts[(kind, pr)] = idx + 1
+        lanes[(p, c)] = (kind, pr, idx)
+    return lanes
+
+
+def _lane_counts(lanes: Dict[Tuple[str, str], Tuple[str, int, int]]) -> Dict[Tuple[str, int], int]:
+    counts: Dict[Tuple[str, int], int] = {}
+    for kind, row, _ in lanes.values():
+        counts[(kind, row)] = counts.get((kind, row), 0) + 1
+    return counts
+
+
+def _routed_edge_points(
+    p: str,
+    c: str,
+    positions: Dict[str, Tuple[float, float, int, int]],
+    lanes: Dict[Tuple[str, str], Tuple[str, int, int]],
+    row_of: Dict[str, int],
+) -> Optional[List[Tuple[float, float]]]:
+    """Absolute points of a same-row or upward edge, or None for a plain edge."""
+    lane = lanes.get((p, c))
+    if lane is None:
+        return None
+    kind, row, idx = lane
+    px, py, pw, ph = positions[p]
+    cx, cy, cw, ch = positions[c]
+    ex = cx + cw * _LANE_IN
+    ey = cy + ch
+    if kind == "same":
+        row_bottom = max(
+            y + h for k, (x, y, w, h) in positions.items() if row_of.get(k) == row
+        )
+        ly = row_bottom + _LANE_STEP * (idx + 1)
+        sx = px + pw * _LANE_OUT
+        return [(sx, py + ph), (sx, ly), (ex, ly), (ex, ey)]
+    ly = py - _UP_LANE_CLEAR - _LANE_STEP * idx
+    sx = px + pw * _LANE_UP_OUT
+    return [(sx, py), (sx, ly), (ex, ly), (ex, ey)]
+
+
+def _special_edge_points(
+    edge: TraversalEdge,
+    positions: Dict[str, Tuple[float, float, int, int]],
+    lanes: Dict[Tuple[str, str], Tuple[str, int, int]],
+    row_of: Dict[str, int],
+) -> Optional[List[Tuple[float, float]]]:
+    """Polyline of a self-loop or lane-routed edge; None for a plain edge."""
+    if edge.is_self:
+        px, py, pw, _ = positions[edge.parent_key]
+        return _self_loop_points(px, py, pw)
+    return _routed_edge_points(edge.parent_key, edge.child_key, positions, lanes, row_of)
+
+
+def _canvas_size(
+    positions: Dict[str, Tuple[float, float, int, int]],
+    polylines: List[List[Tuple[float, float]]],
+) -> Tuple[float, float]:
+    """Canvas (width, height): nodes plus every lane and loop, plus margin."""
+    max_x = max(x + w for x, y, w, h in positions.values())
+    max_y = max(y + h for x, y, w, h in positions.values())
+    for pts in polylines:
+        max_x = max([max_x] + [pt[0] for pt in pts])
+        max_y = max([max_y] + [pt[1] for pt in pts])
+    return max_x + _MARGIN, max_y + _MARGIN
 
 
 def _stable_id(seed: str) -> str:
@@ -591,6 +889,12 @@ def _layout_nodes(model: AdapterDocModel) -> Dict[str, Tuple[float, float, int, 
     max_depth = max(depth_groups.keys())
     positions: Dict[str, Tuple[float, float, int, int]] = {}
 
+    # Room for routed-edge lanes: same-row lanes sit in the gap below their
+    # row, upward lanes in the gap above their parent's row.
+    lane_counts = _lane_counts(_edge_lanes(model, _row_of(model, depth_map)))
+    nonempty = [d for d in range(max_depth + 1) if depth_groups.get(d)]
+    next_row = dict(zip(nonempty, nonempty[1:]))
+
     y = _MARGIN
     for d in range(max_depth + 1):
         row_keys = depth_groups.get(d, [])
@@ -609,7 +913,10 @@ def _layout_nodes(model: AdapterDocModel) -> Dict[str, Tuple[float, float, int, 
             positions[key] = (x, y, _NODE_W, h)
             x += _NODE_W + _H_GAP
 
-        y += row_h + _V_GAP
+        n_same = lane_counts.get(("same", d), 0)
+        n_up = lane_counts.get(("up", next_row[d]), 0) if d in next_row else 0
+        extra = 2 * _LANE_STEP * (n_same + n_up) + (_UP_LANE_CLEAR if n_up else 0)
+        y += row_h + _V_GAP + extra
 
     return positions
 
@@ -756,6 +1063,33 @@ def _excalidraw_element_arrow(
     }
 
 
+def _excalidraw_polyline_arrow(
+    elem_id: str,
+    pts: List[Tuple[float, float]],
+    start_binding: Optional[str],
+    end_binding: Optional[str],
+) -> dict:
+    """Multi-point orthogonal arrow (self-loop or lane-routed edge).
+
+    ``roundness`` is None so Excalidraw keeps the corners square, like the
+    SVG, instead of curving through the points and overshooting them.
+    """
+    (sx, sy), (ex, ey) = pts[0], pts[-1]
+    arrow = _excalidraw_element_arrow(
+        elem_id=elem_id,
+        start_x=sx, start_y=sy, end_x=ex, end_y=ey,
+        start_binding=start_binding,
+        end_binding=end_binding,
+    )
+    xs = [pt[0] for pt in pts]
+    ys = [pt[1] for pt in pts]
+    arrow["width"] = max(xs) - min(xs)
+    arrow["height"] = max(ys) - min(ys)
+    arrow["points"] = [[ptx - sx, pty - sy] for ptx, pty in pts]
+    arrow["roundness"] = None
+    return arrow
+
+
 def generate_excalidraw(model: AdapterDocModel) -> dict:
     """Generate the Excalidraw JSON dict for the inventory tree diagram.
 
@@ -767,6 +1101,8 @@ def generate_excalidraw(model: AdapterDocModel) -> dict:
     positions = _layout_nodes(model)
     depth_map = _assign_depth(model)
     roots = set(_tree_roots(model))
+    row_of = _row_of(model, depth_map)
+    lanes = _edge_lanes(model, row_of)
 
     elements: List[dict] = []
     rect_ids: Dict[str, str] = {}  # kind_key → element id
@@ -807,6 +1143,14 @@ def generate_excalidraw(model: AdapterDocModel) -> dict:
 
         px, py, pw, ph = positions[p]
         cx, cy, cw, ch = positions[c]
+
+        # /recursive self-loop, or a same-row / upward edge in a lane
+        pts = _special_edge_points(edge, positions, lanes, row_of)
+        if pts is not None:
+            elements.append(_excalidraw_polyline_arrow(
+                _stable_id(f"arrow:{p}->{c}"), pts, rect_ids.get(p), rect_ids.get(c)
+            ))
+            continue
 
         # Arrow from bottom-center of parent to top-center of child
         start_x = px + pw / 2
@@ -876,13 +1220,34 @@ def generate_svg(model: AdapterDocModel) -> str:
     """
     positions = _layout_nodes(model)
     roots = set(_tree_roots(model))
+    row_of = _row_of(model, _assign_depth(model))
+    lanes = _edge_lanes(model, row_of)
 
     if not positions:
         return '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="100"><text x="10" y="20" font-family="sans-serif" font-size="13">No traversal spec found.</text></svg>'
 
+    # Edge polylines first: the canvas must hold every lane and loop too.
+    edge_paths: List[List[Tuple[float, float]]] = []
+    for edge in model.edges:
+        p = edge.parent_key
+        c = edge.child_key
+        if p not in positions or c not in positions:
+            continue
+        # /recursive self-loop, or a same-row / upward edge in a lane
+        pts = _special_edge_points(edge, positions, lanes, row_of)
+        if pts is None:
+            # Plain edge: bottom-center of parent, down to the gap's middle,
+            # across, down to top-center of child
+            px, py, pw, ph = positions[p]
+            cx, cy, cw, ch = positions[c]
+            x1, y1 = px + pw / 2, py + ph
+            x2, y2 = cx + cw / 2, cy
+            mid_y = (y1 + y2) / 2
+            pts = [(x1, y1), (x1, mid_y), (x2, mid_y), (x2, y2)]
+        edge_paths.append(pts)
+
     # Canvas size
-    max_x = max(x + w for x, y, w, h in positions.values()) + _MARGIN
-    max_y = max(y + h for x, y, w, h in positions.values()) + _MARGIN
+    max_x, max_y = _canvas_size(positions, edge_paths)
 
     svg_parts: List[str] = []
     svg_parts.append(
@@ -898,23 +1263,8 @@ def generate_svg(model: AdapterDocModel) -> str:
     svg_parts.append("</defs>")
 
     # Draw edges first (under rectangles)
-    for edge in model.edges:
-        p = edge.parent_key
-        c = edge.child_key
-        if p not in positions or c not in positions:
-            continue
-        px, py, pw, ph = positions[p]
-        cx, cy, cw, ch = positions[c]
-
-        # Arrow: bottom-center of parent → top-center of child
-        x1 = px + pw / 2
-        y1 = py + ph
-        x2 = cx + cw / 2
-        y2 = cy
-
-        # Orthogonal path: down from parent, right/left, then down to child
-        mid_y = (y1 + y2) / 2
-        path = f"M {x1:.1f},{y1:.1f} L {x1:.1f},{mid_y:.1f} L {x2:.1f},{mid_y:.1f} L {x2:.1f},{y2:.1f}"
+    for pts in edge_paths:
+        path = "M " + " L ".join(f"{ptx:.1f},{pty:.1f}" for ptx, pty in pts)
         svg_parts.append(
             f'<path d="{path}" fill="none" stroke="#374151" stroke-width="1.5" '
             f'marker-end="url(#arrow)"/>'
