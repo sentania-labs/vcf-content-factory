@@ -1,5 +1,21 @@
 # Synology API Map: UPS (UPS Object)
 
+> **Request method (2026-10-28, Synology build 35, synology#16).** Build 35
+> calls every authenticated DSM API, login and logout included, as an
+> HTTPS form POST to `/webapi/<cgi>` with `api`, `version`, `method`, the
+> parameters and `_sid` (login: `account`, `passwd`) in an
+> `application/x-www-form-urlencoded` body, so the password and session id
+> never reach DSM's access log or a proxy log. DSM still accepts GET with the
+> same parameters in the query string. Only the session-less
+> `SYNO.API.Info` query (`/webapi/query.cgi`) stays GET. Where a section
+> below says "Method: GET" or shows `?api=...&_sid=...`, read it as the
+> parameter set; send it as POST. Checked live on DS1520+ / DSM 7.4.1-90080,
+> 2026-10-28: GET and POST both succeed for `SYNO.DSM.Info`,
+> `SYNO.Core.Hardware.FanSpeed` and `SYNO.Storage.CGI.Storage load_info`;
+> `SYNO.API.Info` GET on `query.cgi` succeeds; Auth v7 login and logout as
+> POST succeed. Build 35 itself verified all 14 of its data APIs as POST
+> on DSM 7.3.2 (pak CHANGELOG 0.0.0.35, #16).
+
 > **Correction 2026-10-28 (Synology build 35, review B1).** `status` is a
 > DSM string-table key, not a NUT status code. Every NUT claim below
 > (`OL`, `OB`, `LB`, `OB LB`, "follows NUT conventions") is
@@ -45,7 +61,7 @@
 ### SYNO.Core.ExternalDevice.UPS (get)
 
 - **Path**: `/webapi/entry.cgi`
-- **Method**: GET
+- **Method**: POST form body, `_sid` in the body (build 35, synology#16); DSM still accepts GET
 - **Params**: `api=SYNO.Core.ExternalDevice.UPS&version=1&method=get&_sid=<session>`
 - **Auth**: Session ID required (admin)
 

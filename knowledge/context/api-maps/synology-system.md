@@ -1,5 +1,23 @@
 # Synology API Map: System (Diskstation Object)
 
+> **Request method (2026-10-28, Synology build 35, synology#16).** Build 35
+> calls every authenticated DSM API, login and logout included, as an
+> HTTPS form POST to `/webapi/<cgi>` with `api`, `version`, `method`, the
+> parameters and `_sid` (login: `account`, `passwd`) in an
+> `application/x-www-form-urlencoded` body, so the password and session id
+> never reach DSM's access log or a proxy log. DSM still accepts GET with the
+> same parameters in the query string. Only the session-less
+> `SYNO.API.Info` query (`/webapi/query.cgi`) stays GET. Where a section
+> below says "Method: GET" or shows `?api=...&_sid=...`, read it as the
+> parameter set; send it as POST. Checked live on DS1520+ / DSM 7.4.1-90080,
+> 2026-10-28: GET and POST both succeed for `SYNO.DSM.Info`,
+> `SYNO.Core.Hardware.FanSpeed` and `SYNO.Storage.CGI.Storage load_info`;
+> `SYNO.API.Info` GET on `query.cgi` succeeds; Auth v7 login and logout as
+> POST succeed. Build 35 itself verified all 14 of its data APIs as POST
+> on DSM 7.3.2 (pak CHANGELOG 0.0.0.35, #16).
+>
+> `SYNO.Core.System.Status` was also checked as POST on 2026-10-28.
+
 > **Correction 2026-10-28 (Synology build 35, review B2).**
 > - `SYNO.Core.Hardware.FanSpeed` `cool_fan` is **not** fan health. It
 >   lists which fan speed modes the model offers (`no`, `single`, `yes`).
@@ -9,8 +27,8 @@
 >   `widget:cpu_fan_fail`, `widget:eunit_fan_fail`. DSM returns only its
 >   top-ranked problem, so while another problem outranks a failed fan the
 >   fan state is not visible.
-> - Pool, volume and SMART status vocabularies, failure versus
->   in-progress: section "DSM status vocabularies" below.
+>   Pool, volume, SSD cache and SMART status vocabularies, failure versus
+>   in-progress: `synology-storage.md`, section "DSM status vocabularies".
 > - Live firmware is now **DSM 7.4.1-90080** (DS1520+, read 2026-10-28).
 >   The `7.3.2-86009` samples below are from earlier sessions.
 >
@@ -26,7 +44,7 @@
 ### SYNO.DSM.Info
 
 - **Path**: `/webapi/entry.cgi`
-- **Method**: GET
+- **Method**: POST form body, `_sid` in the body (build 35, synology#16); DSM still accepts GET
 - **Params**: `api=SYNO.DSM.Info&version=2&method=getinfo&_sid=<session>`
 - **Auth**: Session ID required (works with non-admin accounts too)
 
@@ -69,7 +87,7 @@ number, not the dotted string shown above.
 ### SYNO.Core.System (info)
 
 - **Path**: `/webapi/entry.cgi`
-- **Method**: GET
+- **Method**: POST form body, `_sid` in the body (build 35, synology#16); DSM still accepts GET
 - **Params**: `api=SYNO.Core.System&version=3&method=info&_sid=<session>`
 - **Auth**: Session ID required (admin)
 
@@ -123,7 +141,7 @@ number, not the dotted string shown above.
 ### SYNO.Core.System.Utilization (get)
 
 - **Path**: `/webapi/entry.cgi`
-- **Method**: GET
+- **Method**: POST form body, `_sid` in the body (build 35, synology#16); DSM still accepts GET
 - **Params**: `api=SYNO.Core.System.Utilization&version=1&method=get&_sid=<session>`
 - **Auth**: Session ID required (admin)
 
@@ -204,7 +222,7 @@ number, not the dotted string shown above.
 ### SYNO.Core.Hardware.FanSpeed (get)
 
 - **Path**: `/webapi/entry.cgi`
-- **Method**: GET
+- **Method**: POST form body, `_sid` in the body (build 35, synology#16); DSM still accepts GET
 - **Params**: `api=SYNO.Core.Hardware.FanSpeed&version=1&method=get&_sid=<session>`
 - **Auth**: Session ID required (works with non-admin too per live testing)
 
@@ -335,47 +353,17 @@ table.
 
 ---
 
-### DSM status vocabularies (pool, volume, SMART)
+### DSM status vocabularies (pool, volume, SSD cache, SMART)
 
-Recorded here because the build 35 alerts depend on them; the endpoint
-shapes live in `synology-storage.md`. Source: DSM UI code on the lab NAS
-(Storage Manager `storage_panel.js` and the `[volume]` / `[smart]` string
-tables), via build 35 REFERENCE.md "Bundled alerts". The earlier design
-used "status != normal", which **is superseded 2026-10-28**: it also
-matches in-progress states and a blank read (review W1, N1).
-
-- **Pool status, failure:** `degrade`, `crashed`, `deverr`,
-  `pool_crashed`, `pool_error`.
-- **Volume status, failure:** `degrade`, `crashed`, `deverr`, `ro`,
-  `pool_crashed`, `pool_error`.
-- **SSD cache status, failure:** `degrade`, `crashed`, `deverr`, `ro`.
-- **Not failures** (pool/volume): `normal` and the in-progress states
-  `background`, `repair`, `resync`, `raid_sync`, `scrubbing`, `expand`,
-  `expand_fs`, `add_disk`, `create`, `creating`, `create_fs`, `delete`,
-  `deleting`, `deactivating`, `defrag`, `optimize`, `paritycount`,
-  `running_fsck`, `running_btrfs_balance`, `upgrade`, `replace`,
-  `waiting`, `activating`, `initializing`.
-- **Disk `smart_status`:** `normal` healthy; `failing`, `degraded`,
-  `access_err` failure (Storage Manager: "Replace the drive
-  immediately"); `unknown` means DSM cannot read the drive's SMART
-  (Storage Manager disables Health Info for it, like a disconnected
-  drive), neither healthy nor failed.
-- DSM can omit or blank these fields; publish nothing rather than `""`.
-
-Verified on DSM 7.4.1-90080 (2026-10-28, NAS string table):
-`[volume]` `volume_status_degrade` "Degraded", `volume_status_crashed`
-"Crashed", `volume_status_deverr` "Unknown Error", `volume_status_ro`
-"Read Only", `volume_status_normal` "Healthy". The pool-only states and
-the SMART values come from `storage_panel.js` on DSM 7.3.2 and were not
-re-read on 7.4.1. Only `normal` has been seen live for each.
-
+Moved 2026-10-28 to `synology-storage.md`, section "DSM status
+vocabularies", next to the endpoint that returns them.
 
 ---
 
 ### SYNO.Core.System.Status (get)
 
 - **Path**: `/webapi/entry.cgi`
-- **Method**: GET
+- **Method**: POST form body, `_sid` in the body (build 35, synology#16); DSM still accepts GET
 - **Params**: `api=SYNO.Core.System.Status&version=1&method=get&_sid=<session>`
 - **Auth**: Session ID required (admin)
 
@@ -403,7 +391,7 @@ re-read on 7.4.1. Only `normal` has been seen live for each.
 ### SYNO.Core.Network.Interface (list)
 
 - **Path**: `/webapi/entry.cgi`
-- **Method**: GET
+- **Method**: POST form body, `_sid` in the body (build 35, synology#16); DSM still accepts GET
 - **Params**: `api=SYNO.Core.Network.Interface&version=1&method=list&_sid=<session>`
 - **Auth**: Session ID required (admin)
 
