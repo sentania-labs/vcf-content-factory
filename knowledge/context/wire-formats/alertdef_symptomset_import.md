@@ -220,3 +220,13 @@ The factory alert loader (`vcfcf_core.alerts.loader`, so `vcfcf_alerts
 validate` and SDK `bundled_content.alerts` alike) rejects any other
 `sub_type`; an absent or null `sub_type` defaults to 19, an explicit 0 fails. Before 2026-10-27 the
 loader documented 1-5 and accepted any positive int.
+
+The shipped distribution installers (`install.py`, `install.ps1`, template
+2026-10-28-1) apply the same rules to the bundled alert payload: absent or
+null defaults to 19 (they fell back to 3 before, issue #282), and an
+out-of-enum value skips that alert with a WARN instead of posting it. Since
+that template, `install.ps1` also skips an alert on any other conversion error
+(as `install.py` always did) instead of aborting the whole install, and a
+non-SELF symptom set without `threshold_type` / `threshold_value` no longer
+trips StrictMode there. They restate the enum because they run standalone;
+`tests/test_install_alert_subtype.py` keeps the copies in step with the loader.
