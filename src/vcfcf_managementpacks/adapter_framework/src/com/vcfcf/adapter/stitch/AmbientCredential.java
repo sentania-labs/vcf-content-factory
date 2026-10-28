@@ -36,16 +36,20 @@ import java.util.Properties;
  *
  * <p>This preference order is not cosmetic. On a Cloud Proxy the file-based
  * fallbacks name <em>different</em> principals: {@code automationuser.properties}
- * → {@code automationAdmin} (RBAC-bearing service account, works on every
- * node role including CP); {@code maintenanceuser.properties} → on a primary
- * node, {@code maintenanceAdmin} (also works); on a Cloud Proxy,
- * {@code cloudproxy_<uuid>} (scoped reverse-connect account with
- * {@code roles:[]}, which 403s on Suite API resource reads). Preferring
- * maintenance-first is the confirmed root cause of the Synology-stitcher
- * CP-403 (see {@code knowledge/context/investigations/cp-auth-door-probe-2026-07-01.md}).
+ * → {@code automationAdmin}; {@code maintenanceuser.properties} → on a primary
+ * node, {@code maintenanceAdmin}; on a Cloud Proxy, {@code cloudproxy_<uuid>}
+ * (scoped reverse-connect account with {@code roles:[]}, which 403s on Suite
+ * API resource reads). Neither file identity works from a Cloud Proxy: the
+ * automation credential 401s at token acquire, and on devel 9.1 it does not
+ * even decrypt there (DEF-006,
+ * {@code knowledge/lessons/cross-mp-stitch-cp-identity-and-edge-mechanics.md},
+ * compliance#58). So on a Cloud Proxy the files are never tried
+ * ({@link #isCloudProxy(Path)}). Preferring maintenance-first was the root
+ * cause of the Synology-stitcher CP-403 (see
+ * {@code knowledge/context/investigations/cp-auth-door-probe-2026-07-01.md}).
  * The platform-injected credential — a per-instance principal minted by the
- * collector — is the mechanism the vendor corpus relies on and sidesteps the
- * automation/maintenance CP identity distinction entirely when present.
+ * collector — is the mechanism the vendor corpus relies on, and the only
+ * ambient identity that works on a Cloud Proxy.
  *
  * <h3>Credential source resolution</h3>
  * <p>Candidates are tried in order; first present/readable hit wins:
@@ -62,9 +66,9 @@ import java.util.Properties;
  *       non-blank username. See {@link #load(AdapterConfig)}.</li>
  *   <li>Hard-wired default
  *       {@code /usr/lib/vmware-vcops/user/conf/automationuser.properties}
- *       (principal {@code automationAdmin}) — confirmed present, readable,
- *       and RBAC-bearing on both primary and Cloud Proxy nodes on VCF Ops 9.1
- *       (prod probe, 2026-07-01).</li>
+ *       (principal {@code automationAdmin}) — present on primary and Cloud
+ *       Proxy nodes (prod probe, 2026-07-01), but used only off a Cloud Proxy:
+ *       it does not authenticate from one (DEF-006).</li>
  *   <li>Hard-wired fallback
  *       {@code /usr/lib/vmware-vcops/user/conf/maintenanceuser.properties} —
  *       used only when the automation file is absent or unreadable.
@@ -164,7 +168,9 @@ public final class AmbientCredential {
 
     /**
      * Whether {@code collectorProperties} marks this collector a Cloud Proxy:
-     * {@code isUnifiedCloudProxy=true} or {@code httpRelayEnabled=true}.
+     * {@code isUnifiedCloudProxy} decides when it is present (an explicit
+     * {@code false} included); only when it is absent (8.18) does
+     * {@code httpRelayEnabled=true} count.
      * Anything else, including a missing or unreadable file, is false, which
      * keeps the behaviour from before this check. Visible to tests.
      *
@@ -196,8 +202,14 @@ public final class AmbientCredential {
         } catch (IOException | RuntimeException e) {
             return false;
         }
-        return isTrue(p.getProperty("isUnifiedCloudProxy"))
-                || isTrue(p.getProperty("httpRelayEnabled"));
+        // Review N1: isUnifiedCloudProxy is the key the collector itself reads,
+        // so when present it decides, an explicit false included.
+        // httpRelayEnabled only stands in where it is absent (8.18).
+        String unified = p.getProperty("isUnifiedCloudProxy");
+        if (unified != null && !unified.trim().isEmpty()) {
+            return isTrue(unified);
+        }
+        return isTrue(p.getProperty("httpRelayEnabled"));
     }
 
     private static boolean isTrue(String v) {
@@ -368,9 +380,12 @@ public final class AmbientCredential {
      * {@link AdapterConfig} in hand (e.g. some test harnesses).
      *
      * @return loaded and decrypted credential
-     * @throws IOException      if no candidate is accessible, or the file is
-     *                          malformed
-     * @throws RuntimeException if Crypt decryption fails
+     * @throws IOException      if no candidate is accessible, the file is
+     *                          malformed, Crypt cannot decrypt the password
+     *                          (it returns null), or this is a Cloud Proxy
+     *                          with no injected credential
+     * @throws RuntimeException if Crypt itself throws (it normally logs and
+     *                          returns null instead)
      * @see #load(AdapterConfig)
      */
     public static AmbientCredential load() throws IOException {
@@ -409,9 +424,12 @@ public final class AmbientCredential {
      *                      injection, or a test harness) — treated as "source
      *                      absent", not an error
      * @return loaded and decrypted credential
-     * @throws IOException      if no candidate is accessible, or the file is
-     *                          malformed
-     * @throws RuntimeException if Crypt decryption fails
+     * @throws IOException      if no candidate is accessible, the file is
+     *                          malformed, Crypt cannot decrypt the password
+     *                          (it returns null), or this is a Cloud Proxy
+     *                          with no injected credential
+     * @throws RuntimeException if Crypt itself throws (it normally logs and
+     *                          returns null instead)
      */
     public static AmbientCredential load(AdapterConfig adapterConfig) throws IOException {
         return load(adapterConfig, Paths.get(COLLECTOR_PROPS_PATH), buildCandidates());
@@ -453,7 +471,7 @@ public final class AmbientCredential {
 
             if (isCloudProxy(collectorProperties)) {
                 throw new IOException("AmbientCredential: this collector is a Cloud Proxy ("
-                        + COLLECTOR_PROPS_PATH + " sets isUnifiedCloudProxy or httpRelayEnabled),"
+                        + COLLECTOR_PROPS_PATH + " marks it one),"
                         + " where the automation and maintenance file credentials do not"
                         + " authenticate, so they were not tried; the per-instance credential the"
                         + " collector injects was not available here"

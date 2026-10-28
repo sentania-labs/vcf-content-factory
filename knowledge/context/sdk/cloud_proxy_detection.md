@@ -4,9 +4,11 @@ Investigated 2026-10-28 by `tooling` for compliance#58. Read-only SSH and GETs
 only. UNKNOWN means not established.
 
 **Answer.** Read `/usr/lib/vmware-vcops/user/conf/collector/collector.properties`.
-The collector is a Cloud Proxy when `isUnifiedCloudProxy=true` or
-`httpRelayEnabled=true`. A missing or unreadable file, or neither key true,
-means "not known to be a proxy". The framework uses this rule in
+When `isUnifiedCloudProxy` is present it decides, and an explicit `false`
+wins. Only where that key is absent (8.18) does `httpRelayEnabled=true` mark a
+Cloud Proxy. A missing or unreadable file, or neither key true, means "not
+known to be a proxy". The 2026-10-28 framework review (N1) tightened the
+first version, which OR'd the two keys. The framework uses this rule in
 `AmbientCredential.isCloudProxy` (buildkit 1.0.22).
 
 ## Evidence: six devel nodes

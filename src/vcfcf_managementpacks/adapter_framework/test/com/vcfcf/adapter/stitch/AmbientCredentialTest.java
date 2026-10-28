@@ -96,6 +96,8 @@ public class AmbientCredentialTest {
             {"remote=true alone (classic remote collector) keeps the old path",
              "remote = true\n", "false"},
             {"value case and spaces", "isUnifiedCloudProxy = TRUE  \n", "true"},
+            {"explicit isUnifiedCloudProxy=false wins over httpRelayEnabled=true",
+             "isUnifiedCloudProxy = false\nhttpRelayEnabled=true\n", "false"},
         };
         for (String[] c : cases) {
             Path p = Files.createTempFile("collector", ".properties");

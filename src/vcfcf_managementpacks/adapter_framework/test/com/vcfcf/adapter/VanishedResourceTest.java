@@ -66,6 +66,10 @@ public class VanishedResourceTest {
             testNoMarkingWhenInstanceFailing();
             testNoMarkingWhenCycleStopped();
             testNoMarkingOnEmptyEnumeration();
+            testDefaultMarksNothing();
+            testSameKindFromTwoParentsOneUnread();
+            testMarkedEntryForgottenWhenPlatformDropsIt();
+            testNoStartWhenPlatformNoLongerListsIt();
             testKindNotDeliveredIsNotRead();
             testKindsReadThisCycleOverrideExcludesKind();
             testKindsReadThisCycleOverrideCoversLastObject();
@@ -87,7 +91,8 @@ public class VanishedResourceTest {
 
     private static void testMarkableRule() {
         ResourceConfig inst = platform(9000, "unifi_instance", "i");
-        Set<String> read = new HashSet<>(Arrays.asList("UniFiSwitch", "unifi_instance"));
+        // markable takes lower-cased kind sets (VcfCfAdapter.lowerKinds).
+        Set<String> read = new HashSet<>(Arrays.asList("unifiswitch", "unifi_instance"));
         Set<String> none = new HashSet<>();
         assertTrue("a read kind of this adapter is markable", VcfCfAdapter.markable(
                 platform(1, "UniFiSwitch", "a"), inst, null, AK, read, none));
@@ -101,7 +106,7 @@ public class VanishedResourceTest {
                 platform(3, "UniFiCamera", "c"), inst, null, AK, read, none));
         assertFalse("an excluded kind is not markable", VcfCfAdapter.markable(
                 platform(1, "UniFiSwitch", "a"), inst, null, AK, read,
-                new HashSet<>(Arrays.asList("UniFiSwitch"))));
+                new HashSet<>(Arrays.asList("unifiswitch"))));
         assertFalse("another adapter kind is not markable", VcfCfAdapter.markable(
                 platformOf(4, "UniFiSwitch", "a", "VMWARE"), inst, null, AK, read, none));
         assertFalse("no resource id: not markable", VcfCfAdapter.markable(
@@ -278,6 +283,101 @@ public class VanishedResourceTest {
     // Kinds read this cycle
     // -----------------------------------------------------------------------
 
+    /** Review B1: kindsReadThisCycle() left at its default null marks nothing. */
+    private static void testDefaultMarksNothing() throws Exception {
+        TestAdapter a = unifi();
+        a.kindsRead = null;
+        a.deliver("UniFiWorld", "w");
+        a.deliver("UniFiSwitch", "a");
+        cycles(a, 30);
+        assertEquals("default (no opt-in): 30 cycles with b missing, nothing marked", 0,
+                a.changes.size());
+    }
+
+    /**
+     * Review B1/W4: two sites. Site 2's device list could not be read, so its
+     * switches b and c are missing while UniFiSwitch still arrives from site 1.
+     * Delivery of the kind is not proof it was read in full.
+     */
+    private static void testSameKindFromTwoParentsOneUnread() throws Exception {
+        TestAdapter a = unifi();
+        a.known.put(3, platform(3, "UniFiSwitch", "c"));
+        a.deliver("UniFiWorld", "w");
+        a.deliver("UniFiSwitch", "a");
+        a.kindsRead = null;
+        cycles(a, 30);
+        assertEquals("default: site 2 unread, its switches never marked", 0, a.changes.size());
+        a.kindsRead = new HashSet<>(Arrays.asList("UniFiWorld"));
+        cycles(a, 30);
+        assertEquals("opted in, UniFiSwitch left out because a site failed: nothing marked", 0,
+                a.changes.size());
+        a.kindsRead = new HashSet<>(Arrays.asList("UniFiWorld", "UniFiSwitch"));
+        cycles(a, 11);
+        assertEquals("declared read in full: counting starts only now (11 of 12)", 0,
+                a.changes.size());
+        a.onCollect(a.instance, a.resources());
+        assertEquals("declared read in full: b and c marked at 12",
+                Arrays.asList("2:NOTEXIST", "3:NOTEXIST"), a.changes);
+    }
+
+    /**
+     * Review W2/W4: once the platform stops listing a marked object (the SDK's
+     * AdapterCache.processNotExistingResponse drops it), the entry is released.
+     */
+    private static void testMarkedEntryForgottenWhenPlatformDropsIt() throws Exception {
+        TestAdapter a = unifi();
+        a.threshold = 2;
+        a.deliver("UniFiWorld", "w");
+        a.deliver("UniFiSwitch", "a");
+        cycles(a, 2);
+        assertEquals("b marked", Arrays.asList("2:NOTEXIST"), a.changes);
+        assertEquals("tracked: b", 1, tracker(a).size());
+        a.known.remove(2);
+        a.onCollect(a.instance, a.resources());
+        assertEquals("platform dropped b: no longer tracked", 0, tracker(a).size());
+        assertTrue("and one INFO line says so", a.log.contains(
+                "onCollect: 1 object(s) marked NOT_EXISTING are no longer listed by the platform"
+                + " and are no longer tracked (first: UniFiSwitch/b)"));
+        // Discovery registers b again under a new id; still missing, it counts from zero.
+        a.known.put(20, platform(20, "UniFiSwitch", "b"));
+        a.onCollect(a.instance, a.resources());
+        assertEquals("new b: 1 of 2, not marked", Arrays.asList("2:NOTEXIST"), a.changes);
+        a.onCollect(a.instance, a.resources());
+        assertEquals("new b: marked at 2", Arrays.asList("2:NOTEXIST", "20:NOTEXIST"),
+                a.changes);
+    }
+
+    /**
+     * Review W1/W4: a marked object back in the enumeration that the platform
+     * no longer lists has no platform ResourceConfig to send START with. No
+     * START; one INFO line.
+     */
+    private static void testNoStartWhenPlatformNoLongerListsIt() throws Exception {
+        TestAdapter a = unifi();
+        a.threshold = 2;
+        a.deliver("UniFiWorld", "w");
+        a.deliver("UniFiSwitch", "a");
+        cycles(a, 2);
+        a.known.remove(2);
+        a.deliver("UniFiSwitch", "b");
+        a.onCollect(a.instance, a.resources());
+        assertEquals("no START without a platform ResourceConfig", Arrays.asList("2:NOTEXIST"),
+                a.changes);
+        assertTrue("INFO: back but no longer listed", a.log.contains(
+                "onCollect: 1 object(s) marked NOT_EXISTING are back in the enumeration but the"
+                + " platform no longer lists them, so no START was sent; they are registered"
+                + " again through discovery (first: UniFiSwitch/b)"));
+        assertEquals("and no longer tracked", 0, tracker(a).size());
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<Integer, ?> tracker(TestAdapter a) throws Exception {
+        Field f = VcfCfAdapter.class.getDeclaredField("vanishTracker");
+        f.setAccessible(true);
+        Map<Integer, ?> m = (Map<Integer, ?>) f.get(a);
+        return m == null ? new java.util.HashMap<Integer, Object>() : m;
+    }
+
     /** UniFi Protect down: no NVR and no camera delivered, so neither kind is read. */
     private static void testKindNotDeliveredIsNotRead() throws Exception {
         TestAdapter a = unifi();
@@ -353,7 +453,10 @@ public class VanishedResourceTest {
         a.deliver("UniFiWorld", "w");
         a.deliver("UniFiSwitch", "a");
         a.deliver("UniFiWirelessAggregate", "default summary");
-        a.excluded = new HashSet<>(Arrays.asList("UniFiWirelessAggregate"));
+        a.kindsRead = new HashSet<>(Arrays.asList("UniFiWorld", "UniFiSwitch",
+                "UniFiWirelessAggregate"));
+        // Review N3: the exclusion holds whatever the casing.
+        a.excluded = new HashSet<>(Arrays.asList("unifiwirelessaggregate"));
         cycles(a, 20);
         assertEquals("the excluded aggregate kind is never marked", Arrays.asList("2:NOTEXIST"),
                 a.changes);
@@ -561,7 +664,9 @@ public class VanishedResourceTest {
     /**
      * A UniFi-shaped adapter: the platform knows the world (id 100) and
      * switches a (1) and b (2); nothing is delivered until the test says so.
-     * Threshold 12, discoverOnCollect on.
+     * Threshold 12, discoverOnCollect on, and opted in: the pak declares
+     * UniFiWorld and UniFiSwitch read in full each cycle. Tests of the
+     * default set {@code kindsRead = null}.
      */
     private static TestAdapter unifi() throws Exception {
         TestAdapter a = allocate(TestAdapter.class);
@@ -576,6 +681,7 @@ public class VanishedResourceTest {
         a.instance = platform(9000, "unifi_instance", "UniFi account");
         a.discover = true;
         a.threshold = VcfCfAdapter.DEFAULT_NOT_EXISTING_MISSED_CYCLES;
+        a.kindsRead = new HashSet<>(Arrays.asList("UniFiWorld", "UniFiSwitch"));
         a.known = new LinkedHashMap<>();
         a.known.put(100, platform(100, "UniFiWorld", "w"));
         a.known.put(1, platform(1, "UniFiSwitch", "a"));

@@ -89,6 +89,36 @@ The Suite API calls it `NOT_EXISTING` (`operations-api.json`, schema
 | `CollectResult.removeResourceCollectResult(Integer)` | `public void removeResourceCollectResult(java.lang.Integer)` | It drops this cycle's data for a resource. Nothing shows it changes the resource's state (UNKNOWN). |
 | `AdapterBase.onRemoveResources(AdapterStatus, Collection<ResourceConfig>)` | callback | This is the platform telling the adapter that resources were removed. The adapter cannot use it to report a removal. |
 
+### The adapter-side cache drops a resource on a NOTEXIST echo
+
+Added 2026-10-28 (`tooling`, framework review W1). This is javap of
+`com.integrien.alive.common.adapter3.AdapterCache`, and the shape is the same in all three
+jars. `update(AdapterConfig)` passes the config's auto-discovery response to
+`processAutoDiscoveryResponse(DiscoveryResult)`, which calls
+`processNotExistingResponse(DiscoveryResult)`. The core of that method:
+
+```
+11: invokevirtual DiscoveryResult.getDiscoveryMap:()Ljava/util/Map;
+57: invokevirtual DiscoveryResult$DiscoveryResultItem.getResourceStateChanges:()Ljava/util/Map;
+112: invokevirtual DiscoveryResult$StateChange.getState:()LDiscoveryResult$StateChangeEnum;
+115: getstatic     DiscoveryResult$StateChangeEnum.NOTEXIST
+118: if_acmpeq     124
+139: invokevirtual getMonitoringResource:(Ljava/lang/Integer;)LResourceConfig;
+152: invokevirtual removeMonitoringResource:(LResourceConfig;)V
+188: invokevirtual getStoppedResource:(Ljava/lang/Integer;)LResourceConfig;
+201: invokevirtual removeStoppedResource:(LResourceConfig;)V
+```
+
+For every `NOTEXIST` state change the platform sends back, the adapter's
+`getMonitoringResources()` / `getStoppedResources()` stop listing the resource.
+After that, the adapter holds no platform `ResourceConfig` for it, which
+`changeResourceState(rc, START)` would need. Whether the collector actually
+sends that echo after an adapter marks a resource is UNKNOWN. The method exists to
+handle it. Consequence for the framework: a marked object that
+comes back after the platform dropped it can return only through normal
+discovery (`addNewResource`, which the enumeration does every cycle), which
+is unverified live (see "What is missing").
+
 ## 2. What the Broadcom adapters do
 
 The appliance jars were searched for `changeResourceState`, `NOTEXIST`,
@@ -291,7 +321,10 @@ each, no single answer):
 - **Recovery after a false mark.** Whether a `NOTEXIST` resource re-registered
   through `collectResult.addNewResource` (the framework's
   `registerNewResource`) or sent `StateChangeEnum.START` returns to `STARTED`.
-  Nothing checked shows a Broadcom adapter sending `START` for this.
+  Nothing checked shows a Broadcom adapter sending `START` for this. `START`
+  is possible only while the platform still lists the resource. Once
+  `AdapterCache.processNotExistingResponse` has dropped it (§1), re-registration
+  is the only path.
 - **What `onCollect` receives afterwards.** Whether `NOT_EXISTING` resources
   still arrive in its `resources` argument before deletion.
 - **Alerts.** Whether marking `NOT_EXISTING` cancels active alerts on the

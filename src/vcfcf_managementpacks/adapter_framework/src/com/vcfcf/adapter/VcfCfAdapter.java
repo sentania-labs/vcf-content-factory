@@ -576,10 +576,16 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
      * {@link #enumerateResources(ResourceSink)} before the framework marks it
      * not existing (unifi#20). Default
      * {@link #DEFAULT_NOT_EXISTING_MISSED_CYCLES}. Return 0 or less to turn
-     * the marking off for this adapter.
+     * the marking off for this adapter. The threshold counts collection
+     * cycles, not time: 12 cycles is an hour at a 5-minute interval and 12
+     * minutes at a 1-minute one.
+     *
+     * <p><strong>Opt-in.</strong> Nothing is counted or marked unless
+     * {@link #kindsReadThisCycle()} returns the kinds the pak read in full
+     * this cycle; its default {@code null} marks nothing.
      *
      * <p><strong>What the framework does.</strong> Only for an adapter with
-     * {@link #discoverOnCollect()} {@code true}. After a complete cycle it
+     * {@link #discoverOnCollect()} {@code true} that opted in. After a complete cycle it
      * takes every resource the platform knows for this adapter instance
      * ({@code adapterCache.getMonitoringResources()} plus
      * {@code getStoppedResources()}), drops the ones this cycle's enumeration
@@ -614,28 +620,29 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
      * thread, right after {@code enumerateResources} returns without
      * throwing. Only resources of these kinds can collect a miss this cycle.
      *
-     * <p><strong>Default: {@code null}</strong>, meaning the kinds of the
-     * resources the enumeration delivered this cycle. So a kind with no
-     * resource this cycle is treated as not read, and its resources are
-     * neither counted nor marked. That covers an optional sub-tree whose read
-     * failed (UniFi Protect: when the bootstrap fails, no NVR and no camera is
-     * delivered, so neither kind is read), but it also means the last
-     * resource of a kind is never marked.
+     * <p><strong>Default: {@code null}, which marks nothing.</strong> Marking
+     * is opt-in: only the pak knows whether it read a kind completely. That is
+     * how the Broadcom adapters decide too (vSAN treats the objects of a failed
+     * vCenter as present; NSX skips the step when its instance is down). That
+     * a kind was delivered says nothing about completeness: a read that failed
+     * for one parent (a UniFi site whose device list could not be read, a
+     * Synology share whose NFS probe failed) still delivers the same kind
+     * from the other parents.
      *
-     * <p><strong>Override</strong> when that is not enough:
+     * <p><strong>To opt in</strong>, record during {@code enumerateResources}
+     * which kinds were read in full and return them here:
      * <ul>
-     *   <li>A sub-tree that can be read partly (one call for the NVR, another
-     *       for its cameras) must leave out a kind whose read failed even when
+     *   <li>Leave a kind out whenever any part of its read failed, even if
      *       some resources of it were delivered.</li>
-     *   <li>To let the last resource of a kind be marked, name the kind when
-     *       its read succeeded and returned nothing.</li>
+     *   <li>Name a kind whose read succeeded and returned nothing, so its last
+     *       resource can be marked.</li>
      * </ul>
-     * Record what was read in a field during {@code enumerateResources} and
-     * return it here. An empty set marks nothing this cycle. Anything this
-     * method throws is logged at WARN and the cycle marks nothing.
+     * An empty set marks nothing this cycle. Kinds are compared ignoring
+     * case. Anything this method throws is logged at WARN and the cycle
+     * marks nothing.
      *
-     * @return the kinds read in full this cycle, or {@code null} for the
-     *         kinds delivered this cycle
+     * @return the kinds read in full this cycle, or {@code null} (the
+     *         default) to mark nothing
      */
     protected Set<String> kindsReadThisCycle() {
         return null;
@@ -647,8 +654,9 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
      * (a world, a per-site summary object): kinds the adapter makes up rather
      * than reads from the source, and any kind registered outside
      * {@link #enumerateResources(ResourceSink)}. The adapter instance is never
-     * marked whatever this returns. Anything this method throws is logged at
-     * WARN and the cycle marks nothing.
+     * marked whatever this returns. Kinds are compared ignoring case.
+     * Anything this method throws is logged at WARN and the cycle marks
+     * nothing.
      *
      * @return the kinds never to mark; {@code null} or empty for none
      */
@@ -982,14 +990,16 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
      * stack trace at WARN on the first failure of a streak only; while the
      * object keeps failing, one WARN line per cycle and the trace at DEBUG.
      *
-     * <p><strong>Vanished objects (unifi#20).</strong> With
-     * {@link #discoverOnCollect()} on, a resource the platform knows that is
+     * <p><strong>Vanished objects (unifi#20).</strong> Opt-in through
+     * {@link #kindsReadThisCycle()}. With {@link #discoverOnCollect()} on, a
+     * resource the platform knows, of a kind the pak read in full, that is
      * missing from {@link #enumerateResources} for
      * {@link #notExistingMissedCycles()} consecutive complete cycles is
      * marked {@code NOTEXIST}; see that method for the rules and guards. A
-     * marked object is not collected while it stays missing, and is sent
-     * {@code START} when the enumeration delivers it again. One INFO line per
-     * cycle for each (count and first object).
+     * marked object is not collected while it stays missing. When the
+     * enumeration delivers it again it is sent {@code START} if the platform
+     * still lists it, and otherwise is left to normal discovery. One INFO line
+     * per cycle for each case (count and first object).
      */
     @Override
     @SuppressWarnings("unchecked")
@@ -3534,16 +3544,13 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
     private static final Set<String> HOOK_FAILED =
             Collections.unmodifiableSet(new HashSet<String>());
 
-    /** What one cycle's enumeration delivered: resource keys and kinds. */
+    /** What one cycle's enumeration delivered: resource keys. */
     static final class Enumerated {
         final Set<ResourceKey> keys = new HashSet<>();
-        final Set<String> kinds = new HashSet<>();
 
         void add(ResourceConfig rc) {
             ResourceKey key = rc == null ? null : rc.getResourceKey();
-            if (key == null) return;
-            keys.add(key);
-            if (key.getResourceKind() != null) kinds.add(key.getResourceKind());
+            if (key != null) keys.add(key);
         }
     }
 
@@ -3648,8 +3655,16 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
      * the other candidate path in that doc. The SDK counts START in
      * {@code numberOfNotExistingResources} too (it increments for every
      * value). A resource that was known only as stopped when marked is not
-     * sent START, so a stop made in the UI is not undone; neither is one the
-     * platform no longer lists.
+     * sent START, so a stop made in the UI is not undone.
+     *
+     * <p><strong>The platform usually drops a marked resource first.</strong>
+     * The SDK's {@code AdapterCache.processNotExistingResponse} (javap, all
+     * three jars) calls {@code removeMonitoringResource} /
+     * {@code removeStoppedResource} for every {@code NOTEXIST} state change
+     * the platform echoes back. A resource it has dropped has no platform
+     * {@code ResourceConfig} to send START with, so it gets none: its return
+     * rides on normal discovery (the enumeration's {@code addNewResource})
+     * alone, which is unverified live. That case is logged at INFO.
      */
     private void restoreReappeared(Enumerated enumerated) {
         Map<Integer, VanishEntry> tracker = vanishTracker;
@@ -3658,6 +3673,8 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
         boolean knownRead = false;
         int restored = 0;
         String first = null;
+        int unlisted = 0;
+        String firstUnlisted = null;
         java.util.Iterator<Map.Entry<Integer, VanishEntry>> it = tracker.entrySet().iterator();
         while (it.hasNext()) {
             Map.Entry<Integer, VanishEntry> en = it.next();
@@ -3670,7 +3687,11 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
                 knownRead = true;
             }
             ResourceConfig rc = known == null ? null : known.get(en.getKey());
-            if (rc == null) continue;
+            if (rc == null) {
+                unlisted++;
+                if (firstUnlisted == null) firstUnlisted = keyLabel(e.key);
+                continue;
+            }
             if (changeStateSafe(rc, DiscoveryResult.StateChangeEnum.START)) {
                 restored++;
                 if (first == null) first = rcLabel(rc);
@@ -3680,6 +3701,28 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
             logInfo("onCollect: " + restored + " object(s) marked NOT_EXISTING are back in the"
                     + " enumeration and were sent START this cycle (first: " + first + ")");
         }
+        if (unlisted > 0) {
+            logInfo("onCollect: " + unlisted + " object(s) marked NOT_EXISTING are back in the"
+                    + " enumeration but the platform no longer lists them, so no START was sent;"
+                    + " they are registered again through discovery (first: " + firstUnlisted + ")");
+        }
+    }
+
+    /** Kind/name of a resource key, for log lines. */
+    private static String keyLabel(ResourceKey key) {
+        if (key == null) return "<null>";
+        return (key.getResourceKind() != null ? key.getResourceKind() : "?") + "/"
+                + (key.getResourceName() != null ? key.getResourceName() : "?");
+    }
+
+    /** Lower-cased copy of a kind set (kinds compare ignoring case, as ResourceKey does). */
+    private static Set<String> lowerKinds(Set<String> kinds) {
+        Set<String> out = new HashSet<>();
+        if (kinds == null) return out;
+        for (String k : kinds) {
+            if (k != null) out.add(k.toLowerCase(java.util.Locale.ROOT));
+        }
+        return out;
     }
 
     /**
@@ -3695,13 +3738,15 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
         // DockerizedAdapterWrapper precedent: no implicit marking on an empty result.
         if (enumerated.keys.isEmpty()) return;
         Set<String> declared = hook("kindsReadThisCycle", this::kindsReadThisCycle, HOOK_FAILED);
-        if (declared == HOOK_FAILED) return;
-        Set<String> read = declared != null ? declared : enumerated.kinds;
+        // Opt-in (review B1): null, the default, marks nothing. Delivery of a
+        // kind is not proof it was read in full.
+        if (declared == HOOK_FAILED || declared == null) return;
+        Set<String> read = lowerKinds(declared);
         if (read.isEmpty()) return;
-        Set<String> excluded =
+        Set<String> excludedHook =
                 hook("notExistingExcludedKinds", this::notExistingExcludedKinds, HOOK_FAILED);
-        if (excluded == HOOK_FAILED) return;
-        if (excluded == null) excluded = Collections.emptySet();
+        if (excludedHook == HOOK_FAILED) return;
+        Set<String> excluded = lowerKinds(excludedHook);
 
         Set<Integer> stoppedOnly = new HashSet<>();
         Map<Integer, ResourceConfig> known = platformKnown(stoppedOnly);
@@ -3714,9 +3759,27 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
         ResourceConfig platformInstance = platformInstanceSafe();
 
         Map<Integer, VanishEntry> tracker = vanishTracker();
-        // Counts of resources the platform no longer lists end; marks stay
-        // so a resource that comes back can still be sent START.
-        tracker.entrySet().removeIf(en -> !en.getValue().marked && !known.containsKey(en.getKey()));
+        // Review W2: forget every resource the platform no longer lists. A
+        // marked one can no longer be sent START (no platform ResourceConfig;
+        // AdapterCache.processNotExistingResponse drops it), so keeping it
+        // would only leak.
+        int forgotten = 0;
+        String firstForgotten = null;
+        java.util.Iterator<Map.Entry<Integer, VanishEntry>> drop = tracker.entrySet().iterator();
+        while (drop.hasNext()) {
+            Map.Entry<Integer, VanishEntry> en = drop.next();
+            if (known.containsKey(en.getKey())) continue;
+            if (en.getValue().marked) {
+                forgotten++;
+                if (firstForgotten == null) firstForgotten = keyLabel(en.getValue().key);
+            }
+            drop.remove();
+        }
+        if (forgotten > 0) {
+            logInfo("onCollect: " + forgotten + " object(s) marked NOT_EXISTING are no longer"
+                    + " listed by the platform and are no longer tracked (first: "
+                    + firstForgotten + ")");
+        }
 
         int marked = 0;
         String first = null;
@@ -3754,7 +3817,9 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
      * Whether a platform resource may collect a miss: it has an id and a
      * key, it is not the adapter instance (by id, by key, or by kind), its
      * kind was read this cycle and is not excluded, and it belongs to this
-     * adapter kind. Visible to tests.
+     * adapter kind. {@code readKinds} and {@code excludedKinds} hold
+     * lower-cased kinds ({@link #lowerKinds}); kinds compare ignoring case,
+     * as {@code ResourceKey} does. Visible to tests.
      */
     static boolean markable(ResourceConfig rc, ResourceConfig adapterInstance,
             ResourceConfig platformInstance, String ownAdapterKind,
@@ -3771,7 +3836,7 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
                 return false;
             }
         }
-        String kind = key.getResourceKind();
+        String kind = key.getResourceKind().toLowerCase(java.util.Locale.ROOT);
         if (!readKinds.contains(kind) || excludedKinds.contains(kind)) return false;
         String ak = key.getAdapterKind();
         return ownAdapterKind == null || ak == null || ownAdapterKind.equalsIgnoreCase(ak);
