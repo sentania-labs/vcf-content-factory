@@ -224,8 +224,13 @@ does. Only `discoverOnCollect()` paks. What the pak decides:
   delivered: one UniFi site whose device list failed still leaves switches
   from the other sites, one Synology share whose NFS probe failed still
   leaves other exports. A whole optional sub-tree that failed (UniFi
-  Protect) is left out the same way. Name a kind whose read succeeded and
-  returned nothing, so its last object can be marked. `null` or an empty
+  Protect) is left out the same way. Name a kind whose read returned nothing only with positive evidence that
+  the kind is really empty (a field saying none is configured); an empty
+  list, an empty child table on a registered device, or an error code in a
+  200 body is not a complete read. Without that evidence leave the kind
+  out: its last object is then never auto-removed, which is the safe side
+  (UniFi build 18 review: an empty site list declared every kind and would
+  have deleted the whole inventory). `null` or an empty
   set marks nothing.
 - **Synthetic and aggregate kinds**, and any kind registered outside
   `enumerateResources` (from `collect()` or `rediscover()`): list them in
