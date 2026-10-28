@@ -164,6 +164,36 @@ def test_read_accounts_picks_the_instances_own_status_entry():
     assert got["a2"].state == "UNKNOWN"     # no resource entry
 
 
+@pytest.mark.parametrize("foreign", ["FAILED", "STARTED"])
+def test_another_instances_status_entry_is_not_the_accounts_state(foreign):
+    """Codex P2 on PR #293: a resource with only another adapter instance's
+    status entry took that state, so a foreign FAILED drew a start and a
+    foreign STARTED a false ACCOUNT OK. It stays unreadable."""
+    class C:
+        def __init__(self):
+            self.puts = []
+
+        def _request(self, method, path, **kw):
+            if method == "PUT":
+                self.puts.append(path)
+                return _Resp(200)
+            if path == "/api/adapters":
+                return _Resp(200, {"adapterInstancesInfoDto": [
+                    {"id": "a1", "resourceKey": {"name": "one", "adapterKindKey": KIND}}]})
+            return _Resp(200, {"resourceList": [
+                {"identifier": "a1", "resourceStatusStates": [
+                    {"adapterInstanceId": "someone-else", "resourceState": foreign}]}]})
+
+    c = C()
+    assert ar.read_accounts(c, [KIND])["a1"].state == ar.UNREADABLE_STATE
+    clock = _Clock()
+    rc, out, err = _run(c, _before({"a1": "STARTED"}), clock)
+    assert c.puts == []
+    assert rc == 0
+    assert "ACCOUNT OK" not in out
+    assert "state unreadable" in err
+
+
 def test_read_accounts_raises_on_non_200():
     class C:
         def _request(self, *a, **k):

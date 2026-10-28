@@ -220,8 +220,12 @@ def read_accounts(client, adapter_kinds: Iterable[str],
         if acct is None:
             continue
         entries = [e for e in (res.get("resourceStatusStates") or []) if isinstance(e, dict)]
+        # Only the instance's own entry describes it (devel_9_1 showed exactly
+        # one, with adapterInstanceId equal to the resource id). Another
+        # instance's entry is not this account's state: without its own it
+        # stays UNREADABLE_STATE (Codex P2, PR #293).
         own = [e for e in entries if str(e.get("adapterInstanceId") or "") == rid]
-        entry = (own or entries or [None])[0]
+        entry = own[0] if own else None
         if entry is not None:
             acct.state = str(entry.get("resourceState") or UNREADABLE_STATE)
             acct.status = str(entry.get("resourceStatus") or "")
