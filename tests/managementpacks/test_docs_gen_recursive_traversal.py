@@ -4,14 +4,15 @@ edges whose child is not in the row below the parent.
 
 The vendor grammar (knowledge/context/cleanroom-spec/spec/07-relationships-cross-mp.md)
 lets a ResourcePath segment end in ``/recursive`` (the level repeats, so the
-kind nests under itself) and ``/preferred`` (path preference, no topology).
+kind nests under itself), ``/preferred`` and ``/skip`` (runtime meaning
+unconfirmed, PR #290; no docs topology, stripped).
 UniFi build 18 review W4: the generator read each segment once, so the
 Switch > Switch and AP > AP nesting never reached the tree, the diagram, or
 the Parent(s) column.
 
 Covers:
   1. Parsing: /recursive adds the self-edge right after the edge into the
-     level; /preferred is stripped; both combine; the kind key is clean.
+     level; /preferred and /skip are stripped; modifiers combine; the kind key is clean.
   2. Paths without modifiers parse to the same consecutive pairs as before,
      and a /preferred-only path renders byte-identical to the bare path.
   3. Tree markdown: one self-nested line per recursive kind, no infinite
@@ -25,8 +26,13 @@ Covers:
      Switch, Synology SSD Cache > Disk shapes).
   7. ``::~child`` inverts its edge (that kind is the parent, as in Synology's
      ``VMWARE::Datastore::~child``); top-level order is the pak's own roots
-     in describe.xml order, then foreign roots sorted; output is
+     in describe.xml order, then foreign roots sorted by label; output is
      byte-identical across processes with different hash seeds.
+  8. Foreign levels are keyed ``ADAPTER::Kind`` and labelled
+     ``Kind (ADAPTER)``, so they never merge with a same-named pak kind;
+     wildcard levels; cycles terminate (subprocess timeout) and a rootless
+     cycle still renders, with a warning; lanes on the last row fit the
+     canvas; multi-point Excalidraw arrows are square-cornered.
 """
 from __future__ import annotations
 
@@ -34,6 +40,7 @@ import os
 import re
 import subprocess
 import sys
+import warnings
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -94,7 +101,7 @@ def _paths_xml(paths) -> str:
 def _pairs(paths):
     xml = _DESCRIBE_TMPL.format(paths=_paths_xml(paths)).split("?>", 1)[1]
     spec = next(ET.fromstring(xml).iter(f"{_NS}TraversalSpecKind"))
-    return [(e.parent_key, e.child_key) for e in _parse_traversal_paths(spec, _NS)]
+    return [(e.parent_key, e.child_key) for e in _parse_traversal_paths(spec, _NS, "ak")]
 
 
 def _model(tmp_path: Path, paths, name: str = "adapter"):
@@ -154,6 +161,13 @@ class TestParse:
             ("Folder", "Folder"),
             ("Folder", "Host"),
         ]
+
+    def test_skip_is_stripped_without_topology(self) -> None:
+        assert _pairs(["ak::Site||ak::Switch::child/skip||ak::Port::child"]) == [
+            ("Site", "Switch"),
+            ("Switch", "Port"),
+        ]
+        assert _pairs(["ak::Folder/skip||ak::Host::child"]) == [("Folder", "Host")]
 
     def test_unknown_slash_suffix_is_not_stripped(self) -> None:
         # Only the two grammar modifiers are stripped; anything else is left alone.
@@ -388,7 +402,7 @@ class TestInverseChild:
     def test_inverse_segment_is_the_parent(self) -> None:
         assert _pairs(["ak::Site||ak::Lun::child||VMWARE::Datastore::~child"]) == [
             ("Site", "Lun"),
-            ("Datastore", "Lun"),
+            ("VMWARE::Datastore", "Lun"),
         ]
 
     def test_path_continues_from_the_inverse_level(self) -> None:
@@ -400,7 +414,9 @@ class TestInverseChild:
     def test_roots_own_in_describe_order_then_foreign_sorted(self, tmp_path: Path) -> None:
         # Edge order meets Gateway after Site, Zeta before Alpha; describe.xml
         # lists Site before Gateway.
-        assert _tree_roots(_model(tmp_path, _INVERSE)) == ["Site", "Gateway", "Alpha", "Zeta"]
+        assert _tree_roots(_model(tmp_path, _INVERSE)) == [
+            "Site", "Gateway", "VMWARE::Alpha", "VMWARE::Zeta",
+        ]
 
     def test_foreign_parent_tree_and_parents_column(self, tmp_path: Path) -> None:
         model = _model(tmp_path, _INVERSE)
@@ -411,14 +427,14 @@ class TestInverseChild:
             "      - **Disk** (`Disk`)",
             "- **Gateway** (`Gateway`)",
             "  - **Port** (`Port`)",
-            "- **Alpha** (`Alpha`)",
+            "- **Alpha (VMWARE)** (`VMWARE::Alpha`)",
             f"  - **Disk** (`Disk`) {_SEE_ABOVE}",
-            "- **Zeta** (`Zeta`)",
+            "- **Zeta (VMWARE)** (`VMWARE::Zeta`)",
             f"  - **Volume** (`Volume`) {_SEE_ABOVE}",
         ]
         tree = generate_inventory_tree_md(model)
-        assert "| `Volume` | Volume | - | Pool, Zeta |" in tree
-        assert "| `Disk` | Disk | - | Volume, Alpha |" in tree
+        assert "| `Volume` | Volume | - | Pool, Zeta (VMWARE) |" in tree
+        assert "| `Disk` | Disk | - | Volume, Alpha (VMWARE) |" in tree
 
     def test_foreign_parent_does_not_pull_pak_kinds_up(self, tmp_path: Path) -> None:
         depth = _assign_depth(_model(tmp_path, _INVERSE))
@@ -447,3 +463,115 @@ class TestInverseChild:
                 )
             })
         assert outputs[0] == outputs[1] == outputs[2]
+
+
+def _run_docset_with_timeout(project: Path, timeout: int = 60) -> subprocess.CompletedProcess:
+    """generate_docset in a child process; a hang fails the test, not the run."""
+    src = str(Path(vcfcf_managementpacks.__file__).resolve().parents[1])
+    script = (
+        "import sys; from pathlib import Path; "
+        "from vcfcf_managementpacks.docs_gen import generate_docset; "
+        "generate_docset(Path(sys.argv[1]))"
+    )
+    env = dict(os.environ, PYTHONPATH=src)
+    return subprocess.run(
+        [sys.executable, "-c", script, str(project)],
+        env=env, check=True, timeout=timeout, capture_output=True, text=True,
+    )
+
+
+class TestForeignKeysAndWildcards:
+    def test_foreign_kind_never_merges_with_same_named_own_kind(self, tmp_path: Path) -> None:
+        # The pak has its own "Disk"; VMWARE::Disk is a different node.
+        model = _model(tmp_path, ["ak::Site||ak::Disk::child||VMWARE::Disk::~child"])
+        assert [(e.parent_key, e.child_key) for e in model.edges] == [
+            ("Site", "Disk"),
+            ("VMWARE::Disk", "Disk"),
+        ]
+        assert _tree_roots(model) == ["Site", "VMWARE::Disk"]
+        assert "| `Disk` | Disk | - | Site, Disk (VMWARE) |" in generate_inventory_tree_md(model)
+
+    def test_own_adapter_prefix_keeps_bare_key(self) -> None:
+        assert _pairs(["ak::Site||ak::Gateway::child"]) == [("Site", "Gateway")]
+
+    def test_wildcard_level_is_one_pseudo_kind(self, tmp_path: Path) -> None:
+        model = _model(tmp_path, ["ak::Site||ak::*::child||ak::Port::child"])
+        lines = _tree_lines(model)
+        assert lines == [
+            "- **Site** (`Site`)",
+            "  - **Any resource kind** (`*`)",
+            "    - **Port** (`Port`)",
+        ]
+        # Not a drawn kind: the diagram skips it.
+        assert "*" not in _layout_nodes(model)
+
+    def test_foreign_wildcard_label(self, tmp_path: Path) -> None:
+        model = _model(tmp_path, ["ak::Site||ak::Gateway::child||VMWARE::*::~child"])
+        assert "- **Any resource kind (VMWARE)** (`VMWARE::*`)" in _tree_lines(model)
+
+
+class TestCycles:
+    def test_cycle_reachable_from_root_terminates(self, tmp_path: Path) -> None:
+        # Gateway > Switch > Gateway, reachable from Site. The origin/main
+        # depth walk looped forever on this shape.
+        paths = ["ak::Site||ak::Gateway::child||ak::Switch::child||ak::Gateway::child"]
+        model = _model(tmp_path, paths, "model")
+        _model(tmp_path, paths, "proj")
+        _run_docset_with_timeout(tmp_path / "proj")
+        depth = _assign_depth(model)
+        assert (depth["Site"], depth["Gateway"], depth["Switch"]) == (0, 1, 2)
+        assert _tree_lines(model) == [
+            "- **Site** (`Site`)",
+            "  - **Gateway** (`Gateway`)",
+            "    - **Switch** (`Switch`)",
+            f"      - **Gateway** (`Gateway`) {_SEE_ABOVE}",
+        ]
+
+    def test_rootless_cycle_renders_with_warning(self, tmp_path: Path) -> None:
+        paths = ["ak::Gateway||ak::Switch::child||ak::Gateway::child"]
+        _model(tmp_path, paths, "proj")
+        _run_docset_with_timeout(tmp_path / "proj")
+        model = _model(tmp_path, paths, "model")
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            lines = _tree_lines(model)
+        assert lines == [
+            "- **Gateway** (`Gateway`)",
+            "  - **Switch** (`Switch`)",
+            f"    - **Gateway** (`Gateway`) {_SEE_ABOVE}",
+        ]
+        assert any("not reachable from any root" in str(w.message) for w in caught)
+
+    def test_unreachable_cycle_beside_a_rooted_tree(self, tmp_path: Path) -> None:
+        model = _model(tmp_path, [
+            "ak::Site||ak::Port::child",
+            "ak::Gateway||ak::Switch::child||ak::Gateway::child",
+        ])
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            roots = _tree_roots(model)
+        assert roots == ["Site", "Gateway"]
+        assert caught
+
+
+class TestCanvasAndExcalidraw:
+    def test_lanes_on_last_row_fit_the_canvas(self, tmp_path: Path) -> None:
+        # Six same-row edges under the deepest row.
+        kinds = ["Gateway", "Switch", "Port", "AP"]
+        paths = [f"ak::Site||ak::{k}::child" for k in kinds]
+        paths += [
+            f"ak::Site||ak::{a}::child||ak::{b}::child"
+            for i, a in enumerate(kinds) for b in kinds[i + 1:]
+        ]
+        svg = generate_svg(_model(tmp_path, paths))
+        height = float(re.search(r'<svg [^>]*height="([\d.]+)"', svg).group(1))
+        lowest = max(pt[1] for pts in _svg_paths(svg) for pt in pts)
+        assert lowest < height
+
+    def test_multi_point_arrows_are_square_cornered(self, tmp_path: Path) -> None:
+        doc = generate_excalidraw(_model(tmp_path, _UNIFI_LIKE + _SYNOLOGY_LIKE))
+        arrows = [e for e in doc["elements"] if e["type"] == "arrow"]
+        multi = [a for a in arrows if len(a["points"]) > 2]
+        assert multi
+        assert all(a["roundness"] is None for a in multi)
+        assert all(a["roundness"] == {"type": 2} for a in arrows if len(a["points"]) == 2)
