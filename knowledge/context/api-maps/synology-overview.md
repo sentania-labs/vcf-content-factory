@@ -1,5 +1,21 @@
 # Synology DSM API Map: Overview
 
+> **Request method (2026-10-28, Synology build 35, synology#16).** Build 35
+> calls every authenticated DSM API, login and logout included, as an
+> HTTPS form POST to `/webapi/<cgi>` with `api`, `version`, `method`, the
+> parameters and `_sid` (login: `account`, `passwd`) in an
+> `application/x-www-form-urlencoded` body, so the password and session id
+> never reach DSM's access log or a proxy log. DSM still accepts GET with the
+> same parameters in the query string. Only the session-less
+> `SYNO.API.Info` query (`/webapi/query.cgi`) stays GET. Where a section
+> below says "Method: GET" or shows `?api=...&_sid=...`, read it as the
+> parameter set; send it as POST. Checked live on DS1520+ / DSM 7.4.1-90080,
+> 2026-10-28: GET and POST both succeed for `SYNO.DSM.Info`,
+> `SYNO.Core.Hardware.FanSpeed` and `SYNO.Storage.CGI.Storage load_info`;
+> `SYNO.API.Info` GET on `query.cgi` succeeds; Auth v7 login and logout as
+> POST succeed. Build 35 itself verified all 14 of its data APIs as POST
+> on DSM 7.3.2 (pak CHANGELOG 0.0.0.35, #16).
+
 ## Provenance
 
 - **Authored by:** api-cartographer
@@ -44,7 +60,7 @@
 | Model | DS1520+ |
 | DSM Version | 7.3.2-86009 Update 1 |
 | Base URL | `https://<host>:5001/webapi/entry.cgi` |
-| Auth type | SESSION (SYNO.API.Auth v7, `_sid` query parameter) |
+| Auth type | SESSION (SYNO.API.Auth v7, `_sid` in the POST form body since build 35, synology#16; ~~query parameter~~ superseded 2026-10-28, still accepted) |
 | Total APIs available | 674 |
 | Admin account required | Yes (for all Core.* and Storage.CGI.* APIs) |
 
@@ -71,7 +87,7 @@
 | 3 | `SYNO.Core.System.Utilization` | `get` | Diskstation, Disk, Volume, iSCSI LUN | 5 min | CPU, memory, network, per-disk IO, per-LUN IO |
 | 4 | `SYNO.Storage.CGI.Storage` | `load_info` | Storage Pool, Volume, Disk | 5 min | Full storage topology in one call |
 | 5 | `SYNO.Core.System` | `info` | Diskstation | 15 min | CPU details, firmware, NTP, timezone |
-| 6 | `SYNO.Core.Hardware.FanSpeed` | `get` | Diskstation | 15 min | Fan status |
+| 6 | `SYNO.Core.Hardware.FanSpeed` | `get` | Diskstation | 15 min | Fan mode support and speed mode, not fan health (~~Fan status~~ superseded 2026-10-28; fan failure only via `SYNO.Core.System.SystemHealth`, see `synology-system.md`) |
 | 7 | `SYNO.Core.Network.Interface` | `list` | Diskstation | 15 min | NIC inventory |
 | 8 | `SYNO.Core.ISCSI.LUN` | `list` | iSCSI LUN | 15 min | LUN metadata |
 | 9 | `SYNO.Core.ISCSI.Target` | `list` | iSCSI LUN | 15 min | Target IQN for ESXi correlation |

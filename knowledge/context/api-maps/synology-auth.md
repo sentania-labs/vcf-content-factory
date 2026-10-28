@@ -1,5 +1,21 @@
 # Synology API Map: Authentication
 
+> **Request method (2026-10-28, Synology build 35, synology#16).** Build 35
+> calls every authenticated DSM API, login and logout included, as an
+> HTTPS form POST to `/webapi/<cgi>` with `api`, `version`, `method`, the
+> parameters and `_sid` (login: `account`, `passwd`) in an
+> `application/x-www-form-urlencoded` body, so the password and session id
+> never reach DSM's access log or a proxy log. DSM still accepts GET with the
+> same parameters in the query string. Only the session-less
+> `SYNO.API.Info` query (`/webapi/query.cgi`) stays GET. Where a section
+> below says "Method: GET" or shows `?api=...&_sid=...`, read it as the
+> parameter set; send it as POST. Checked live on DS1520+ / DSM 7.4.1-90080,
+> 2026-10-28: GET and POST both succeed for `SYNO.DSM.Info`,
+> `SYNO.Core.Hardware.FanSpeed` and `SYNO.Storage.CGI.Storage load_info`;
+> `SYNO.API.Info` GET on `query.cgi` succeeds; Auth v7 login and logout as
+> POST succeed. Build 35 itself verified all 14 of its data APIs as POST
+> on DSM 7.3.2 (pak CHANGELOG 0.0.0.35, #16).
+
 ## Provenance
 
 - **Authored by:** api-cartographer
@@ -21,7 +37,7 @@
 ### SYNO.API.Info
 
 - **Path**: `/webapi/query.cgi` `[unchanged since 2026-04-16]`
-- **Method**: GET
+- **Method**: GET (session-less; stays GET in build 35)
 - **Params**: `api=SYNO.API.Info&version=1&method=query&query=all`
 - **Auth**: None required (public endpoint) `[unchanged since 2026-04-16]`
 
@@ -58,7 +74,7 @@
 ### SYNO.API.Auth (login)
 
 - **Path**: `/webapi/entry.cgi` `[re-verified 2026-04-21]`
-- **Method**: GET `[re-verified 2026-04-21]`
+- **Method**: POST form body with `account` and `passwd` in the body (build 35, synology#16). Mapped as GET `[re-verified 2026-04-21]`, which DSM still accepts, but a GET puts the password in the URL and DSM's access log: do not use it.
 - **Params**: `api=SYNO.API.Auth&version=7&method=login&account=<USER>&passwd=<PASS>&session=<SESSION_NAME>&format=sid`
 - **Auth**: None (this IS the auth endpoint)
 - **Version range**: 1-7 on DSM 7.3.2 (use v7; v6 as fallback)
@@ -95,7 +111,7 @@ the lab account. `synotoken` was not requested and not returned
 
 #### Session Maintenance
 
-- Pass `_sid=<SESSION_ID>` as a query parameter on all subsequent requests
+- Pass `_sid=<SESSION_ID>` on all subsequent requests: in the POST form body (build 35, synology#16; with no `_sid` in the body DSM answers 119). ~~as a query parameter~~ superseded 2026-10-28; DSM still accepts it there, and also as the `id` cookie.
   `[re-verified 2026-04-21]`
 - Session lifetime: **7 days** (default) `[unchanged since 2026-04-16]`
 - Re-authenticate on error codes: `[unchanged since 2026-04-16]`
@@ -109,7 +125,7 @@ the lab account. `synotoken` was not requested and not returned
 ### SYNO.API.Auth (logout)
 
 - **Path**: `/webapi/entry.cgi` `[re-verified 2026-04-21]`
-- **Method**: GET
+- **Method**: POST form body with `_sid` in the body (build 35, synology#16). Mapped as GET, which DSM still accepts.
 - **Params**: `api=SYNO.API.Auth&version=7&method=logout&session=<SESSION_NAME>&_sid=<SESSION_ID>`
 - **Auth**: Active session
 
@@ -139,7 +155,7 @@ the lab account. `synotoken` was not requested and not returned
 
 ## MPB Configuration Notes
 
-- **Auth type**: SESSION (login endpoint returns sid, pass as `_sid` query param)
+- **Auth type**: SESSION (login endpoint returns sid, pass as `_sid` in the POST form body; ~~query param~~ superseded 2026-10-28, still accepted)
   `[re-verified 2026-04-21]`
 - **Admin account required**: Most `SYNO.Core.*` and `SYNO.Storage.CGI.*` APIs require admin privileges
   `[unchanged since 2026-04-16]`
@@ -148,4 +164,4 @@ the lab account. `synotoken` was not requested and not returned
 - **Re-auth strategy**: On any 106/107/119 error, re-authenticate before retrying the failed request
 - **Base URL**: `https://<NAS_IP>:5001/webapi/entry.cgi` (HTTPS on port 5001; HTTP on 5000)
   `[unchanged since 2026-04-16]`
-- **All API calls go to the same path** (`/webapi/entry.cgi`) differentiated only by query parameters
+- **All API calls go to the same path** (`/webapi/entry.cgi`, except `SYNO.API.Info` on `query.cgi`) differentiated only by the `api`/`version`/`method` parameters (form body under build 35; ~~query parameters~~ superseded 2026-10-28)

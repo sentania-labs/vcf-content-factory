@@ -1,5 +1,24 @@
 # Synology API Map: NFS File Service (NFS Export Object)
 
+> **Request method (2026-10-28, Synology build 35, synology#16).** Build 35
+> calls every authenticated DSM API, login and logout included, as an
+> HTTPS form POST to `/webapi/<cgi>` with `api`, `version`, `method`, the
+> parameters and `_sid` (login: `account`, `passwd`) in an
+> `application/x-www-form-urlencoded` body, so the password and session id
+> never reach DSM's access log or a proxy log. DSM still accepts GET with the
+> same parameters in the query string. Only the session-less
+> `SYNO.API.Info` query (`/webapi/query.cgi`) stays GET. Where a section
+> below says "Method: GET" or shows `?api=...&_sid=...`, read it as the
+> parameter set; send it as POST. Checked live on DS1520+ / DSM 7.4.1-90080,
+> 2026-10-28: GET and POST both succeed for `SYNO.DSM.Info`,
+> `SYNO.Core.Hardware.FanSpeed` and `SYNO.Storage.CGI.Storage load_info`;
+> `SYNO.API.Info` GET on `query.cgi` succeeds; Auth v7 login and logout as
+> POST succeed. Build 35 itself verified all 14 of its data APIs as POST
+> on DSM 7.3.2 (pak CHANGELOG 0.0.0.35, #16).
+>
+> Build 35 does not call `SYNO.Core.FileServ.NFS.AdvancedSetting`; it was
+> checked as POST on 2026-10-28 and succeeds.
+
 ## Provenance
 
 - **Authored by:** api-cartographer
@@ -34,7 +53,7 @@
 ### SYNO.Core.FileServ.NFS (get)
 
 - **Path**: `/webapi/entry.cgi` `[observed 2026-05-18]`
-- **Method**: GET
+- **Method**: POST form body, `_sid` in the body (build 35, synology#16); DSM still accepts GET
 - **Params**: `api=SYNO.Core.FileServ.NFS&version=3&method=get&_sid=<session>`
 - **Auth**: Session ID required (admin)
 - **Purpose**: NFS service-level configuration and on/off state.
@@ -78,7 +97,7 @@
 ### SYNO.Core.FileServ.NFS.AdvancedSetting (get)
 
 - **Path**: `/webapi/entry.cgi` `[observed 2026-05-18]`
-- **Method**: GET
+- **Method**: POST form body, `_sid` in the body (checked 2026-10-28; build 35 does not call this endpoint); DSM still accepts GET
 - **Params**: `api=SYNO.Core.FileServ.NFS.AdvancedSetting&version=1&method=get&_sid=<session>`
 - **Auth**: Session ID required (admin)
 
@@ -116,7 +135,7 @@ service-level state.
 ### SYNO.Core.Share (list)
 
 - **Path**: `/webapi/entry.cgi` `[observed 2026-05-18]`
-- **Method**: GET
+- **Method**: POST form body, `_sid` in the body (build 35, synology#16); DSM still accepts GET
 - **Params**: `api=SYNO.Core.Share&version=1&method=list&shareType=all&additional=<json-array>&_sid=<session>`
 - **Auth**: Session ID required (admin)
 - **Purpose**: Lists ALL shared folders (not just NFS). To
@@ -196,7 +215,7 @@ calling `NFS.SharePrivilege load` per share — see below.
 ### SYNO.Core.FileServ.NFS.SharePrivilege (load)
 
 - **Path**: `/webapi/entry.cgi` `[observed 2026-05-18]`
-- **Method**: GET
+- **Method**: POST form body, `_sid` in the body (build 35, synology#16); DSM still accepts GET
 - **Params**: `api=SYNO.Core.FileServ.NFS.SharePrivilege&version=1&method=load&share_name=<share>&_sid=<session>`
 - **Auth**: Session ID required (admin)
 - **Purpose**: Returns the per-client NFS export rules for one
@@ -315,7 +334,7 @@ Out of 11 shares on this NAS, 9 are NFS-exported:
   `synology-system.md` for the cpu/memory/disk/space surfaces.
   This section covers the `nfs` resource only.
 - **Path**: `/webapi/entry.cgi`
-- **Method**: GET (or POST for the form-encoded filter variant)
+- **Method**: POST form body, `_sid` in the body (build 35, synology#16); DSM still accepts GET (the form-encoded filter variant needs POST anyway for long `interfaces` lists)
 - **Params**: `api=SYNO.Core.System.Utilization&version=1&method=get&_sid=<session>`
 - **Auth**: Session ID required (admin)
 
@@ -380,7 +399,7 @@ DSM provides.
 ### SYNO.Core.CurrentConnection (get)
 
 - **Path**: `/webapi/entry.cgi` `[observed 2026-05-18]`
-- **Method**: GET
+- **Method**: POST form body, `_sid` in the body (build 35, synology#16); DSM still accepts GET
 - **Params**: `api=SYNO.Core.CurrentConnection&version=1&method=get&_sid=<session>`
 - **Auth**: Session ID required (admin)
 - **Purpose**: Lists every active connection to DSM regardless
