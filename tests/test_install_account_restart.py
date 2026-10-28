@@ -550,6 +550,55 @@ def test_cli_epilog_names_the_jar_sync_exception():
     assert JAR_SYNC in text
 
 
+def _not_started_ids(err):
+    return {l.split("id ")[1].split(")")[0] for l in err.splitlines()
+            if l.startswith("ACCOUNT NOT STARTED")}
+
+
+def test_starts_that_use_the_budget_are_followed_by_a_read():
+    """Codex P2 on PR #293 (third): six FAILED accounts, each start PUT
+    succeeds after 30 s. The starts used the budget up, the loop ended on the
+    pre-start FAILED reading and exited 3 for accounts that were STARTED."""
+    clock = _Clock()
+    ids = {f"a{i}": "FAILED" for i in range(6)}
+    suite = FakeSuite(ids, clock=clock)            # a start makes it STARTED
+    _slow(suite, clock)                            # each PUT takes its 30 s
+    rc, out, err = _run(suite, _before({aid: "STARTED" for aid in ids}), clock)
+    started = [aid for aid, _ in suite.starts]
+    last_start = max(at for _, at in suite.starts)
+    assert clock.now - 1000.0 <= ar.TIMEOUT_S
+    # A state read came after the last start, inside the budget.
+    reads = [i for i, (m, p, _) in enumerate(suite.calls) if p == "/api/resources"]
+    puts = [i for i, (m, p, _) in enumerate(suite.calls) if m == "PUT"]
+    assert reads[-1] > puts[-1]
+    assert last_start <= ar.TIMEOUT_S - ar.POST_START_READ_RESERVE_S
+    # Every account that was started is reported from that read, as OK.
+    assert out.count("ACCOUNT OK (restarted)") == len(started)
+    assert not (_not_started_ids(err) & set(started))
+    # The one the budget had no room for is FAILED and honestly not started.
+    missed = set(ids) - set(started)
+    assert _not_started_ids(err) == missed
+    assert rc == (ar.ACCOUNTS_NOT_STARTED_RC if missed else 0)
+    assert "no start was sent" in err
+
+
+def test_started_account_without_a_post_start_read_is_unchecked_not_not_started():
+    """When even the reserved read is cut off (every request runs to its
+    timeout), an account whose last start has no reading after it is
+    UNCHECKED, never NOT STARTED."""
+    clock = _Clock()
+    ids = {f"a{i}": "FAILED" for i in range(6)}
+    suite = FakeSuite(ids, clock=clock)
+    _slow(suite, clock, methods=("GET", "PUT"))
+    rc, out, err = _run(suite, _before({aid: "STARTED" for aid in ids}), clock)
+    started = {aid for aid, _ in suite.starts}
+    assert started
+    assert clock.now - 1000.0 <= ar.TIMEOUT_S
+    assert not (_not_started_ids(err) & started)
+    unchecked = [l for l in err.splitlines() if l.startswith("WARNING: ACCOUNT UNCHECKED")]
+    assert unchecked and all("no state was read after it" in l for l in unchecked)
+
+
 def test_last_request_gets_only_what_is_left():
     clock = _Clock()
     suite = FakeSuite({"a1": "FAILED"}, clock=clock)

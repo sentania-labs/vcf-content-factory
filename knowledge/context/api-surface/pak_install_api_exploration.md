@@ -582,7 +582,9 @@ end: `VCFOpsClient._request` re-acquires (up to 30 s) and retries the call
 with the timeout already computed (up to 30 s), so the check can take up to
 about 360 s. `requests` timeouts bound connect and each socket read, not a
 whole response, so a server that trickles bytes can still run longer
-(issue #235). When the instance's resource has no
+(issue #235). Starts may not use the last 30 s of the deadline, which is
+kept for one state read after them; an account with no reading after its
+last start is reported UNCHECKED, never NOT STARTED. When the instance's resource has no
 status entry, the state is unreadable and reported as such. Nothing records
 when the install's verify happens relative to the server's own start task,
 which is why the second start exists.

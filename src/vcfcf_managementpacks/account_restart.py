@@ -75,6 +75,10 @@ START_DELAY_S = 120
 TIMEOUT_S = 300
 #: Seconds between state reads.
 POLL_S = 15
+#: Seconds at the end of the budget that starts may not use: kept for the
+#: read that sees what the last starts did. Without it, starts could use up
+#: the budget and the verdict would rest on the FAILED read before them.
+POST_START_READ_RESERVE_S = 30
 #: Seconds after a start before an account that reads FAILED again gets
 #: its second (and last) start.
 RETRY_AFTER_S = 60
@@ -344,6 +348,14 @@ def restart_failed_accounts(
         # FAILED accounts with 30 s start timeouts ran a 300 s check to 495 s).
         return deadline - clock()
 
+    def start_budget() -> float:
+        # Starts may not use the last POST_START_READ_RESERVE_S: that is kept
+        # for the read that sees what they did (Codex P2, PR #293: six 30 s
+        # starts used the budget up and the verdict read the pre-start FAILED).
+        return budget() - POST_START_READ_RESERVE_S
+
+    started_since_read = False   # a start went out after the last good read
+    final_read = False           # starts are out of time: one read, then stop
     while True:
         if budget() < MIN_REQUEST_S:
             break
@@ -354,6 +366,9 @@ def restart_failed_accounts(
             fresh = True
             last_good_at = elapsed
             last_error = ""
+            started_since_read = False
+            if final_read:
+                break
         except DeadlineReached:
             # Out of time mid-read: not a failed read. The last good reading
             # (one poll old at most) stands.
@@ -394,36 +409,50 @@ def restart_failed_accounts(
                             or elapsed - first_at < retry_after_s):
                         continue
                 if out_of_time:
-                    unsent.append(acct.id)
+                    if acct.id not in unsent:
+                        unsent.append(acct.id)
                     continue
                 # Timestamp the start when it is sent, not when the poll
                 # began: earlier slow starts in this sweep move it on (Codex
                 # P2, PR #293).
                 sent_at = clock() - t0
                 try:
-                    start_account(client, acct.id, budget=budget)
+                    start_account(client, acct.id, budget=start_budget)
                     starts.setdefault(acct.id, []).append((sent_at, ""))
+                    started_since_read = True
                     nth = "re-issued" if not sent else "re-issued a second time"
                     out(f"ACCOUNT START SENT: {_label(acct)} read {_state_text(acct)} "
                         f"{int(elapsed)} s after the install; start monitoring {nth} "
                         f"at {int(sent_at)} s.")
                 except DeadlineReached:
-                    # No start goes out past the deadline; the rest are listed.
+                    # No start goes out into the read reserve or past the
+                    # deadline; the rest are listed.
                     out_of_time = True
-                    unsent.append(acct.id)
+                    if acct.id not in unsent:
+                        unsent.append(acct.id)
                 except Exception as exc:  # noqa: BLE001  reported per account
                     starts.setdefault(acct.id, []).append((sent_at, str(exc)))
                     err(f"WARN: start monitoring refused for {_label(acct)}: {exc}")
             if out_of_time:
                 err(f"WARN: the {timeout_s} s account check ran out before start "
                     f"monitoring could be sent to {len(unsent)} account(s).")
-                break
+                if not started_since_read:
+                    break
+                # Read once more, at once, to see what the starts did.
+                final_read = True
+                continue
             if all(_settled(a, before) for a in accounts.values()):
                 break
         left = budget()
         if left < MIN_REQUEST_S:
             break
-        sleep(min(poll_s, left))
+        if started_since_read:
+            # Leave the reserve for the read that follows the starts.
+            nap = min(poll_s, left - POST_START_READ_RESERVE_S)
+            if nap >= MIN_REQUEST_S:
+                sleep(nap)
+        else:
+            sleep(min(poll_s, left))
 
     if accounts is None or last_error:
         why = "a 401/403 stopped the watch" if auth_refused else "the last read failed"
@@ -451,7 +480,14 @@ def restart_failed_accounts(
         was = f"; was {prior.state} before the install" if prior is not None else ""
         sent = starts.get(acct.id, [])
         ok_starts = [s for s in sent if not s[1]]
-        if acct.state == OK_STATE:
+        if ok_starts and ok_starts[-1][0] >= last_good_at:
+            # No reading after its last start: the state held is from before
+            # it, so it is no verdict either way.
+            err(f"WARNING: ACCOUNT UNCHECKED: {_label(acct)}: start monitoring sent at "
+                f"{int(ok_starts[-1][0])} s, and no state was read after it (last read "
+                f"at {int(last_good_at)} s showed {_state_text(acct)}){was}. Check it "
+                f"by hand. {JAR_SYNC_ADVICE}")
+        elif acct.state == OK_STATE:
             how = "restarted" if ok_starts else "collecting"
             out(f"ACCOUNT OK ({how}): {_label(acct)}: {_state_text(acct)}{was}.")
         elif acct.state == UNREADABLE_STATE:
