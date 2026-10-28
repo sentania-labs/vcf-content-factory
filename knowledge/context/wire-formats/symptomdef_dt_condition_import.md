@@ -193,14 +193,14 @@ schema-valid, not observed.
 `metric_dynamic` on a `Super Metric|` key until a `dtsuper` path exists.
 
 `src/vcfcf_core/alerts/render.py::_add_condition_element`, `metric_dynamic`
-branch. Today:
+branch. Before the fix:
 
 ```python
 attribs["operator"] = f"DT_{direction}"
 attribs["type"] = "metric"
 ```
 
-Must be:
+After the fix:
 
 ```python
 attribs["key"] = key
