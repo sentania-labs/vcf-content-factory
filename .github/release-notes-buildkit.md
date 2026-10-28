@@ -241,8 +241,8 @@ Version note: this is 1.0.19, after 1.0.18.
   naming the file. Before, it went on to log in with no password, which
   failed with a 401.
 
-Version note: PR #281 (merged) holds 1.0.21; this is 1.0.22. #281 merges and
-publishes first, so `sdk-buildkit-v1` never moves backwards.
+Version note: 1.0.21 (#281) is the first kit with `SHA256SUMS`; this is 1.0.22.
+Publish 1.0.21 before 1.0.22 so `sdk-buildkit-v1` never moves backwards.
 
 ## Behavior since 1.0.15
 
