@@ -23,6 +23,9 @@ per object per cycle"). Design context:
 - The framework source: `src/vcfcf_managementpacks/adapter_framework/src/com/vcfcf/adapter/stitch/SuiteApiStitcher.java`
   and `SuiteApiStitchClient.java`.
 - Three live writes on `devel_8_18`, all same-value (below).
+- Landing proof (review W5): a changed-value properties batch on
+  `devel_8_18`, `devel` and `devel_9_1`, and a same-value stats batch on
+  `devel` and `devel_9_1` (§Live landing proof).
 
 All endpoints here are in the **supported public** spec on every version.
 No `X-Ops-API-use-unsupported` header is involved.
@@ -32,7 +35,7 @@ No `X-Ops-API-use-unsupported` header is involved.
 | Question | Answer | Confidence |
 |---|---|---|
 | Bulk endpoints exist? | Yes: `POST /api/resources/stats` and `POST /api/resources/properties` | Spec on all three lines |
-| Same on 8.18, 9.0, 9.1? | Same paths, same query params, same 200-only response, same JSON shape in the vendor examples on all three. 9.0 and 9.1 schemas are identical (key order only). 8.18's generated schema shows different field names (below); its own JSON example agrees with 9.x | High. 8.18 stats batch in the 9.x shape proven landed (live test 2); 8.18 properties batch accepted with 200 (live test 1, landing not observable for a same-value property). **Not yet proven live:** properties landing on any version, and either batch landing on 9.0 or 9.1; prove both with a changed value before a pak adopts |
+| Same on 8.18, 9.0, 9.1? | Same paths, same query params, same 200-only response, same JSON shape in the vendor examples on all three. 9.0 and 9.1 schemas are identical (key order only). 8.18's generated schema shows different field names (below); its own JSON example agrees with 9.x | High. Both batches in the 9.x shape proven landed on all three: stats on 8.18.7 (live test 2), 9.0.2 and 9.1.1; properties with a changed value on 8.18.7, 9.0.2 and 9.1.1 (§Live landing proof) |
 | Stats and properties in one request? | **No.** No schema in any of the six specs references both `stat-content` and `property-content`; the two bulk bodies are separate types | Spec, all versions |
 | Partial failure reported per resource? | **No.** Response is `200` with no body (`Content-Length: 0`). An id that matches no resource is **silently dropped**: the batch still returns 200 and the other resources land, even when the bad id comes first (live test 3) | Spec + live on 8.18.7 |
 | Documented batch size limit? | **None** in any spec, on either endpoint | Spec |
@@ -133,7 +136,7 @@ Springfox reads Java field names; the wire is serialized from the JAXB
 names, which the XML and JSON examples on the same 8.18 operation both
 use. The 8.18 per-id schemas (`stat-content`, `property-content`) match
 9.x exactly. Treat the 9.x names as the wire format on 8.18 (INFERENCE,
-now proven for stats: the 8.18 stats batch keyed `resource-stat-content` landed, live test 2).
+now proven for both: the 8.18 stats batch keyed `resource-stat-content` landed, live test 2, and the 8.18 properties batch keyed `property-contents` landed with a changed value, §Live landing proof).
 
 ## Live test 1: properties batch, same value (devel_8_18, 8.18.7)
 
@@ -160,7 +163,8 @@ move it either. Properties are stored only on change
 (`knowledge/context/reviews/compliance-build-58.md` says the same), so a
 same-value write is accepted but leaves no trace. **What this proves:**
 8.18 accepts the 9.x property batch shape with 200. **What it does not:**
-that the data landed. Nothing to clean up: the value was unchanged and no
+that the data landed (since proven with a changed value, §Live landing
+proof). Nothing to clean up: the value was unchanged and no
 object was created.
 
 ## Live test 2: stats batch, same value (devel_8_18, 8.18.7)
@@ -228,6 +232,130 @@ here.
 Clean-up: all three writes carried the value already stored; the extra
 samples are identical to the pak's own at adjacent timestamps. Nothing
 was created.
+
+## Live landing proof (2026-10-28, review W5)
+
+Closes the framework review's W5
+(`knowledge/context/reviews/framework/adapter-framework-batch-push-2026-10-28.md`):
+properties landing with a **changed** value on all three lines, stats
+landing on 9.0 and 9.1. Devel instances only, never prod. Only the two batch
+endpoints wrote; every body used the 9.x shape above, one resource per
+request. Times are CDT; timestamps epoch ms.
+
+| Profile | Version | Host | Resource id |
+|---|---|---|---|
+| `devel_8_18` | Aria Operations 8.18.7 | `vcf-lab-mgmt-esx02` | `1e9de40c-b045-4f9e-9b4f-be7d471773e6` |
+| `devel` | VCF Operations 9.0.2.0 | `vcf-lab-mgmt-esx02` | `b21b8d6e-3acd-4b5f-8480-323b361b5e96` |
+| `devel_9_1` | VCF Operations 9.1.1.0 | `vcf-lab-mgmt-esx02` | `2929498f-641a-4cce-a9b8-97443545eb90` |
+
+### Properties batch, changed value (8.18.7, 9.0.2, 9.1.1)
+
+**Key:** `VCF-CF Compliance|esx.account-password-history|Description`. The
+compliance pak writes it every cycle (`ComplianceDecisions.complianceProps`,
+`props.put(base + "|Description", ...)`). Unreferenced: no `key=` in the
+pak's `describe.xml` names a `|Description` key (symptom conditions use
+`|Compliant`, `score`, `has_unreadable`), and no YAML under
+`content/symptoms`, `content/alerts`, `content/supermetrics` or the pak's
+`content/`, `views/`, `dashboards/` mentions one. The stored value was the
+same text on all three (`Password history is the number of previous
+passwords ESX remembers ...`), with old timestamps (8.18 `1792090020158`,
+9.0 `1793039284978`, 9.1 `1792007097748`) because properties are stored on
+change.
+
+Request, one per instance (timestamp and value differ per instance):
+
+```
+POST /suite-api/api/resources/properties
+{"values": [{"resourceId": "<host id>",
+  "property-contents": {"property-content": [{"statKey":
+  "VCF-CF Compliance|esx.account-password-history|Description",
+  "timestamps": [<ts>], "values": ["BATCH-PUSH LANDING PROOF <ts>"]}]}}]}
+```
+
+| Profile | Sent | `<ts>` | Response |
+|---|---|---|---|
+| `devel_8_18` | 04:46:43 | `1793180803643` | HTTP 200, `Content-Length: 0`, empty body |
+| `devel` | 04:46:44 | `1793180803769` | HTTP 200, `Content-Length: 0`, empty body |
+| `devel_9_1` | 04:46:44 | `1793180804092` | HTTP 200, `Content-Length: 0`, empty body |
+
+Read-back with both `GET /api/resources/{id}/properties` and
+`POST /api/resources/properties/latest/query`:
+
+| Profile | 04:47:05 (+21 s) | 04:47:40 (+56 s) |
+|---|---|---|
+| `devel_8_18` | old value, ts `1792090020158` | `BATCH-PUSH LANDING PROOF 1793180803643`, ts `1793180803643` (both reads) |
+| `devel` | old value, ts `1793039284978` | `BATCH-PUSH LANDING PROOF 1793180803769`, ts `1793180803769` (both reads) |
+| `devel_9_1` | `BATCH-PUSH LANDING PROOF 1793180804092`, ts `1793180804092` (both reads) | same |
+
+**The properties batch in the 9.x shape (`resourceId`,
+`property-contents.property-content`) lands on 8.18.7, 9.0.2 and 9.1.1.**
+So the 8.18 springfox schema's `properties` field name is not the wire
+name; the JAXB inference above holds for properties too. Allow up to a
+minute before a read-back shows a batch write.
+
+Restore:
+
+- `devel` (9.0.2): the pak's own cycle restored the original at
+  `1793180979560` (04:49:39), about 3 minutes after the write; seen by the
+  04:50:39 poll on both reads.
+- `devel_9_1` (9.1.1): restored by the pak at `1793181214289` (04:53:34),
+  seen at 04:54:17 on both reads.
+- `devel_8_18` (8.18.7): **not restored by the pak.** Its compliance
+  instance `compliance-mgmt` (`dc959326-d14a-4906-9b4c-ffdf6bf71e67`) had
+  stopped collecting **before** the write: last `VCF-CF
+  Compliance|total_count` sample `1793180252977` (04:37:32),
+  `lastCollected` `1793180259986` (04:37:39), no 04:42 sample, nothing
+  through 05:00. `GET /api/resources/<instance id>` showed
+  `resourceState: FAILED`, `resourceStatus: NONE`, empty status message,
+  while `lastHeartbeat` kept advancing. With no cycle coming, the original
+  was written back by hand at 05:00:36 through the same batch endpoint
+  (`timestamps: [1793181636454]`, original text): HTTP 200, empty body;
+  read back as the original at 05:01:06 on both reads. The instance's
+  failure is not explained here and was not touched.
+
+End state: all three hosts carry the original text (verified on both
+reads). The value's timestamp is newer than before (the pak's restore, or
+the hand restore on 8.18); the earlier stored-on-change timestamp is not
+recoverable through the API.
+
+### Stats batch, same value (9.0.2, 9.1.1)
+
+Same hosts, stat `VCF-CF Compliance|total_count` (pak pushes `48.0` every
+~5 minutes on both), at a fresh timestamp:
+
+```
+POST /suite-api/api/resources/stats
+{"resource-stat-content": [{"id": "<host id>",
+  "stat-contents": [{"statKey": "VCF-CF Compliance|total_count",
+  "timestamps": [<ts>], "data": [48.0]}]}]}
+```
+
+| Profile | Sent | `<ts>` | Response |
+|---|---|---|---|
+| `devel` | 04:49:23 | `1793180963606` | HTTP 200, `Content-Length: 0`, empty body |
+| `devel_9_1` | 04:49:24 | `1793180963914` | HTTP 200, `Content-Length: 0`, empty body |
+
+Read-back, `POST /api/resources/stats/query` with
+`{"resourceId":[<host>],"statKey":["VCF-CF Compliance|total_count"],"begin":<ts - 400000>,"end":<now>}`:
+
+- `devel`, 04:49:32 (+9 s): `(1793180681592, 48.0), (1793180963606, 48.0)`.
+  The second point is this write; the first is the pak's.
+- `devel_9_1`, 04:49:32: empty (the pak's last sample, `1793180304183`, is
+  before `begin`). 04:49:52 (+28 s): `(1793180963914, 48.0)`, this write.
+
+**The stats batch in the 9.x shape lands on 9.0.2 and 9.1.1** (8.18.7:
+live test 2). Same-value sample at a timestamp between the pak's own,
+nothing to clean up.
+
+### What this changes
+
+- Verdict row "Same on 8.18, 9.0, 9.1?": landing is now proven for both
+  batches on all three lines (properties: this section; stats: live test 2
+  and this section).
+- Still untested on 9.x and on the properties batch: the partial-failure
+  behaviour of live test 3 (Open item 2).
+- Clean-up verified: the property is back to its original text on all
+  three; no object, instance or key was created.
 
 ## What the facade does today
 
@@ -325,4 +453,5 @@ control character is escaped, so no value can make a body invalid JSON.
    byte and count caps instead.
 2. Partial failure on 9.0 and 9.1 and on the properties batch: not
    tested; assumed the same as 8.18 stats (INFERENCE, same spec family).
+   Landing itself is proven on all three (§Live landing proof).
 3. Server-side logging of a dropped id: unknown without node log access.
