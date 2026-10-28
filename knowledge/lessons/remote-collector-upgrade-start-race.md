@@ -43,14 +43,19 @@ accounts run on the primary node's collector.
 each adapter instance of the pak's `adapter_kinds` and its `resourceState`.
 After the install verifies it watches them for 120 s (a start sent before
 the collector loads the jar fails the same way), then sends Start monitoring
-once to each account that reads FAILED, STOPPED or NONE, never to one that
-was STOPPED or in maintenance before the install. It polls until they read
-STARTED or 300 s have passed and prints each account's final state; an
-account still not STARTED prints `ACCOUNT NOT STARTED` and the command exits
-3 (installed, post-install check failed: do not reinstall).
-`--no-restart-failed` turns it off; `--no-wait` never runs it.
+to each account that reads FAILED, STOPPED or NONE and read STARTED,
+STARTING, UPDATING or FAILED before the install. One that was STOPPED or in
+maintenance before is never started; one with no usable state from before
+is started only when FAILED. An account that reads FAILED again 60 s after
+its start gets a second, never a third. It polls until they read STARTED or
+300 s have passed and prints each account's final state; an account that
+was collecting or already FAILED before and is still not STARTED prints
+`ACCOUNT NOT STARTED` and the command exits 3 (installed, post-install check
+failed: do not reinstall). If the last state read failed it prints `ACCOUNTS
+UNCHECKED` instead, with no verdict. `--no-restart-failed` turns it off;
+`--no-wait` never runs it.
 
 The installer reads `resourceState`, not the collector log, so it does not
 confirm the jar loaded before starting. If an account is still FAILED after
-its one start, do the by-hand steps above. A green install still says
+its two starts, do the by-hand steps above. A green install still says
 nothing about a collection cycle: verify one.

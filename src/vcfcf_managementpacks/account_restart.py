@@ -21,12 +21,26 @@ So ``install`` does what the lesson said to do by hand:
    same way, and an account still reading STARTED right after the install
    may not have been stopped yet.
 3. Once that delay has passed, send ``PUT /api/adapters/{id}/monitoringstate/start``
-   once per account that reads FAILED, STOPPED or NONE, unless it read
-   STOPPED, STOPPING or MAINTAINED* before the install (the user's choice,
-   left alone). An account with no state from before the install is started
-   only when FAILED, which is never a user's choice.
-4. Keep polling until every account that should collect reads STARTED, or
-   :data:`TIMEOUT_S` runs out, and print each account's final state.
+   to each account that reads FAILED, STOPPED or NONE, by what it read
+   before the install:
+
+   - STARTED, STARTING, UPDATING or FAILED (a *known* prior, the account was
+     meant to collect): started.
+   - STOPPED, STOPPING, MAINTAINED or MAINTAINED_MANUAL (a *held* prior, the
+     user's choice): never started.
+   - anything else (UNKNOWN, NONE, NOT_EXISTING, REMOVING, no status entry,
+     a new account, or the read before the install failed): started only
+     when FAILED, which is never a user's choice.
+
+   An account that was sent a start and reads FAILED again at least
+   :data:`RETRY_AFTER_S` later gets a second start (at most
+   :data:`MAX_STARTS`): nothing establishes that the install's verify
+   follows the server's start task by enough for the first start to clear
+   the jar load. A start is only ever sent on a reading taken that poll.
+4. Keep polling until every account is settled, or :data:`TIMEOUT_S` runs
+   out, and print each account's final state. When the last read failed
+   the verdict is ``ACCOUNTS UNCHECKED`` (state as of the last good read),
+   never a failure built from stale data. A 401/403 stops the polling.
 
 Wire shapes (read on devel_9_1, 9.1, 2026-10-28):
 ``GET /api/adapters?adapterKindKey=<kind>`` answers
@@ -57,6 +71,15 @@ START_DELAY_S = 120
 TIMEOUT_S = 300
 #: Seconds between state reads.
 POLL_S = 15
+#: Seconds after a start before an account that reads FAILED again gets
+#: its second (and last) start.
+RETRY_AFTER_S = 60
+#: Starts per account, at most.
+MAX_STARTS = 2
+#: Per-request timeout (seconds) on every Suite API call: the read before
+#: the upload must not hang the install, and the watch must stay near
+#: :data:`TIMEOUT_S`.
+REQUEST_TIMEOUT_S = 30
 
 #: Exit code when an account that should collect is not STARTED at the end.
 #: Same code as the dashboard checks: the pak installed, a post-install
@@ -66,10 +89,21 @@ ACCOUNTS_NOT_STARTED_RC = 3
 #: States that mean the user chose not to collect: an account in one of
 #: these before the install is never started by the installer.
 HELD_STATES = frozenset({"STOPPED", "STOPPING", "MAINTAINED", "MAINTAINED_MANUAL"})
-#: States after the install that get one start.
+#: States before the install that say the account was meant to collect. Any
+#: prior outside this set and :data:`HELD_STATES` is unknown intent.
+KNOWN_PRIOR_STATES = frozenset({"STARTED", "STARTING", "UPDATING", "FAILED"})
+#: States after the install that get a start.
 RESTARTABLE_STATES = frozenset({"FAILED", "STOPPED", "NONE"})
+#: States that are on their way somewhere: never settled.
+TRANSITIONAL_STATES = frozenset({"STARTING", "STOPPING", "UPDATING"})
 #: The only state that counts as collecting.
 OK_STATE = "STARTED"
+#: What :func:`read_accounts` records when an instance has no status entry.
+UNREADABLE_STATE = "UNKNOWN"
+
+
+class AuthRefused(RuntimeError):
+    """The Suite API refused the credentials (401/403): retrying will not help."""
 
 
 @dataclass
@@ -79,13 +113,15 @@ class Account:
     name: str
     adapter_kind: str
     collector_id: Optional[object] = None
-    state: str = "UNKNOWN"
+    state: str = UNREADABLE_STATE
     status: str = ""
     message: str = ""
 
 
 def _ok_json(resp, what: str) -> dict:
     code = getattr(resp, "status_code", None)
+    if code in (401, 403):
+        raise AuthRefused(f"{what} returned HTTP {code}")
     if code != 200:
         text = str(getattr(resp, "text", ""))[:300]
         raise RuntimeError(f"{what} returned HTTP {code}: {text}")
@@ -95,16 +131,19 @@ def _ok_json(resp, what: str) -> dict:
     return body
 
 
-def read_accounts(client, adapter_kinds: Iterable[str]) -> Dict[str, Account]:
+def read_accounts(client, adapter_kinds: Iterable[str],
+                  timeout: float = REQUEST_TIMEOUT_S) -> Dict[str, Account]:
     """Every adapter instance of ``adapter_kinds`` with its state, keyed by id.
 
-    Raises on a transport error or a non-200 answer; an instance whose
-    resource carries no status entry reads UNKNOWN.
+    Raises on a transport error or a non-200 answer (:class:`AuthRefused` on
+    401/403); an instance whose resource carries no status entry reads
+    :data:`UNREADABLE_STATE`. ``timeout`` goes on every request.
     """
     accounts: Dict[str, Account] = {}
     for kind in adapter_kinds:
         body = _ok_json(
-            client._request("GET", "/api/adapters", params={"adapterKindKey": kind}),
+            client._request("GET", "/api/adapters",
+                            params={"adapterKindKey": kind}, timeout=timeout),
             f"GET /api/adapters?adapterKindKey={kind}",
         )
         for dto in body.get("adapterInstancesInfoDto") or []:
@@ -123,7 +162,8 @@ def read_accounts(client, adapter_kinds: Iterable[str]) -> Dict[str, Account]:
     ids = list(accounts)
     body = _ok_json(
         client._request("GET", "/api/resources",
-                        params={"resourceId": ids, "pageSize": max(len(ids), 1)}),
+                        params={"resourceId": ids, "pageSize": max(len(ids), 1)},
+                        timeout=timeout),
         "GET /api/resources?resourceId=...",
     )
     for res in body.get("resourceList") or []:
@@ -135,45 +175,67 @@ def read_accounts(client, adapter_kinds: Iterable[str]) -> Dict[str, Account]:
         own = [e for e in entries if str(e.get("adapterInstanceId") or "") == rid]
         entry = (own or entries or [None])[0]
         if entry is not None:
-            acct.state = str(entry.get("resourceState") or "UNKNOWN")
+            acct.state = str(entry.get("resourceState") or UNREADABLE_STATE)
             acct.status = str(entry.get("resourceStatus") or "")
             acct.message = str(entry.get("statusMessage") or "")
     return accounts
 
 
-def start_account(client, account_id: str) -> None:
+def start_account(client, account_id: str, timeout: float = REQUEST_TIMEOUT_S) -> None:
     """``PUT /api/adapters/{id}/monitoringstate/start``; raises unless 2xx."""
-    resp = client._request("PUT", f"/api/adapters/{account_id}/monitoringstate/start")
+    resp = client._request("PUT", f"/api/adapters/{account_id}/monitoringstate/start",
+                           timeout=timeout)
     code = getattr(resp, "status_code", None)
     if code is None or not 200 <= int(code) < 300:
         text = str(getattr(resp, "text", ""))[:300]
         raise RuntimeError(f"HTTP {code}: {text}")
 
 
+def _is_auth_refusal(exc: BaseException) -> bool:
+    if isinstance(exc, AuthRefused):
+        return True
+    # VCFOpsClient.authenticate raises VCFOpsError("auth failed (<code>): ...")
+    # when the token acquire is refused.
+    text = str(exc)
+    return text.startswith("auth failed (401)") or text.startswith("auth failed (403)")
+
+
+def _prior(acct_id: str, before: Optional[Dict[str, Account]]) -> str:
+    """'known', 'held' or 'unknown': what the reading before the install says."""
+    prior = before.get(acct_id) if before is not None else None
+    if prior is None:
+        return "unknown"
+    if prior.state in HELD_STATES:
+        return "held"
+    if prior.state in KNOWN_PRIOR_STATES:
+        return "known"
+    return "unknown"
+
+
 def _should_start(acct: Account, before: Optional[Dict[str, Account]]) -> bool:
     if acct.state not in RESTARTABLE_STATES:
         return False
-    prior = before.get(acct.id) if before is not None else None
-    if prior is None:
-        # No reading from before the install: FAILED is never a user's
-        # choice; a STOPPED account might be, so it is left alone.
+    kind = _prior(acct.id, before)
+    if kind == "held":
+        return False
+    if kind == "unknown":
+        # No usable reading from before the install: FAILED is never a
+        # user's choice; a STOPPED account might be, so it is left alone.
         return acct.state == "FAILED"
-    return prior.state not in HELD_STATES
-
-
-def _held(acct_id: str, before: Optional[Dict[str, Account]]) -> bool:
-    prior = before.get(acct_id) if before is not None else None
-    return prior is not None and prior.state in HELD_STATES
+    return True
 
 
 def _settled(acct: Account, before: Optional[Dict[str, Account]]) -> bool:
-    """True when the account needs nothing more: STARTED, or left alone."""
-    if acct.state == OK_STATE or _held(acct.id, before):
+    """True when the account needs nothing more from the watch."""
+    if acct.state == OK_STATE or acct.state == UNREADABLE_STATE:
         return True
-    if before is None or acct.id not in before:
-        # Unknown prior intent: only FAILED is acted on, so anything else
-        # that is not transitional is as settled as it will get.
-        return acct.state not in {"FAILED", "STARTING", "STOPPING", "UPDATING"}
+    kind = _prior(acct.id, before)
+    if kind == "held":
+        return True
+    if kind == "unknown":
+        # Only FAILED is acted on, so anything else that is not
+        # transitional is as settled as it will get.
+        return acct.state != "FAILED" and acct.state not in TRANSITIONAL_STATES
     return False
 
 
@@ -197,95 +259,143 @@ def restart_failed_accounts(
     start_delay_s: int = START_DELAY_S,
     timeout_s: int = TIMEOUT_S,
     poll_s: int = POLL_S,
+    retry_after_s: int = RETRY_AFTER_S,
     sleep: Callable[[float], None] = time.sleep,
     clock: Callable[[], float] = time.time,
     out: Callable[[str], None] = print,
     err: Optional[Callable[[str], None]] = None,
 ) -> int:
-    """Watch the pak's accounts after the install, start the FAILED ones once.
+    """Watch the pak's accounts after the install, start the FAILED ones.
 
     ``before`` is :func:`read_accounts` from before the upload, or None when
     that read failed. Returns 0, or :data:`ACCOUNTS_NOT_STARTED_RC` when an
-    account that was collecting (or FAILED) before the install is not
-    STARTED when the check ends. A state read that fails every time prints
-    ``ACCOUNTS UNCHECKED`` and returns 0: the install itself is not in doubt.
+    account that was collecting or FAILED before the install is not STARTED
+    when the check ends. When the final read failed (or a 401/403 stopped
+    the watch) it prints ``ACCOUNTS UNCHECKED`` and returns 0: the install
+    itself is not in doubt and stale data proves nothing.
     """
     if err is None:
         def err(msg: str) -> None:
             print(msg, file=sys.stderr)
 
+    kinds_text = ", ".join(adapter_kinds)
     t0 = clock()
     accounts: Optional[Dict[str, Account]] = None
-    started: Dict[str, str] = {}      # id -> "" on success, else the refusal
+    last_good_at: Optional[float] = None
     last_error = ""
+    failed_reads = 0
+    auth_refused = False
+    # id -> [(elapsed, refusal or "")] per start sent
+    starts: Dict[str, List[tuple]] = {}
     announced = False
     while True:
         elapsed = clock() - t0
+        remaining = timeout_s - elapsed
+        fresh = False
         try:
-            accounts = read_accounts(client, adapter_kinds)
+            accounts = read_accounts(client, adapter_kinds,
+                                     timeout=max(5.0, min(REQUEST_TIMEOUT_S, remaining)))
+            fresh = True
+            last_good_at = elapsed
             last_error = ""
         except Exception as exc:  # noqa: BLE001  retried until the deadline
+            failed_reads += 1
             last_error = str(exc)
-            err(f"WARN: account state read failed (will retry): {exc}")
-        if accounts is not None and not accounts:
-            out(f"ACCOUNTS: no adapter instance of {', '.join(adapter_kinds)} exists; "
-                f"nothing to start.")
+            if _is_auth_refusal(exc):
+                auth_refused = True
+                err(f"WARN: account state read refused ({exc}) after {failed_reads} "
+                    f"failed read(s); not retrying.")
+                break
+            if failed_reads == 1:
+                err(f"WARN: account state read failed (will retry quietly): {exc}")
+        if fresh and not accounts:
+            out(f"ACCOUNTS: no adapter instance of {kinds_text} exists; nothing to start.")
             return 0
-        if accounts is not None and not announced:
+        if fresh and not announced:
             announced = True
-            out(f"ACCOUNT CHECK: {len(accounts)} adapter instance(s) of "
-                f"{', '.join(adapter_kinds)}; watching for {start_delay_s} s before "
-                f"starting any that the install left FAILED (up to {timeout_s} s).")
-        if accounts is not None and elapsed >= start_delay_s:
+            out(f"ACCOUNT CHECK: {len(accounts)} adapter instance(s) of {kinds_text}; "
+                f"watching for {start_delay_s} s before starting any that the install "
+                f"left FAILED (up to {timeout_s} s).")
+        if fresh and elapsed >= start_delay_s:
             for acct in accounts.values():
-                if acct.id in started or not _should_start(acct, before):
+                sent = starts.get(acct.id, [])
+                if not _should_start(acct, before):
                     continue
+                if sent:
+                    # A second start only for an account that took the first
+                    # one and reads FAILED again a while later.
+                    first_at, first_err = sent[0]
+                    if (len(sent) >= MAX_STARTS or first_err or acct.state != "FAILED"
+                            or elapsed - first_at < retry_after_s):
+                        continue
                 try:
-                    start_account(client, acct.id)
-                    started[acct.id] = ""
+                    start_account(client, acct.id,
+                                  timeout=max(5.0, min(REQUEST_TIMEOUT_S, remaining)))
+                    starts.setdefault(acct.id, []).append((elapsed, ""))
+                    nth = "re-issued" if not sent else "re-issued a second time"
                     out(f"ACCOUNT START SENT: {_label(acct)} read {_state_text(acct)} "
-                        f"{int(elapsed)} s after the install; start monitoring re-issued.")
+                        f"{int(elapsed)} s after the install; start monitoring {nth}.")
                 except Exception as exc:  # noqa: BLE001  reported per account
-                    started[acct.id] = str(exc)
+                    starts.setdefault(acct.id, []).append((elapsed, str(exc)))
                     err(f"WARN: start monitoring refused for {_label(acct)}: {exc}")
             if all(_settled(a, before) for a in accounts.values()):
                 break
         if elapsed >= timeout_s:
             break
-        sleep(max(1.0, min(poll_s, timeout_s - elapsed)))
+        sleep(max(1.0, min(poll_s, remaining)))
 
-    if accounts is None:
-        err(f"WARNING: ACCOUNTS UNCHECKED: could not read the adapter instances of "
-            f"{', '.join(adapter_kinds)} ({last_error}). Check each account's "
-            f"collection state by hand; a remote-collector account may need Start "
-            f"monitoring (lesson remote-collector-upgrade-start-race).")
+    if accounts is None or last_error:
+        why = "a 401/403 stopped the watch" if auth_refused else "the last read failed"
+        if accounts is None:
+            err(f"WARNING: ACCOUNTS UNCHECKED: could not read the adapter instances of "
+                f"{kinds_text} ({failed_reads} failed read(s); last: {last_error}). Check "
+                f"each account's collection state by hand; a remote-collector account "
+                f"may need Start monitoring (lesson remote-collector-upgrade-start-race).")
+        else:
+            err(f"WARNING: ACCOUNTS UNCHECKED: {why} ({failed_reads} failed read(s); "
+                f"last: {last_error}). State as of {int(last_good_at)} s after the "
+                f"install, not a verdict:")
+            for acct in sorted(accounts.values(), key=lambda a: a.name.lower()):
+                n = len([s for s in starts.get(acct.id, []) if not s[1]])
+                sent = f"; {n} start(s) sent" if n else ""
+                err(f"  {_label(acct)}: {_state_text(acct)}{sent}")
+            err("  Check each account by hand; start any that is FAILED (lesson "
+                "remote-collector-upgrade-start-race).")
         return 0
 
     rc = 0
     for acct in sorted(accounts.values(), key=lambda a: a.name.lower()):
         prior = before.get(acct.id) if before is not None else None
+        kind = _prior(acct.id, before)
         was = f"; was {prior.state} before the install" if prior is not None else ""
+        sent = starts.get(acct.id, [])
+        ok_starts = [s for s in sent if not s[1]]
         if acct.state == OK_STATE:
-            how = "restarted" if acct.id in started and not started[acct.id] else "collecting"
+            how = "restarted" if ok_starts else "collecting"
             out(f"ACCOUNT OK ({how}): {_label(acct)}: {_state_text(acct)}{was}.")
-        elif _held(acct.id, before):
+        elif acct.state == UNREADABLE_STATE:
+            err(f"WARNING: ACCOUNT UNCHECKED: {_label(acct)}: state unreadable (the "
+                f"resource carries no status entry){was}. Check it by hand.")
+        elif kind == "held":
             out(f"ACCOUNT LEFT ALONE: {_label(acct)}: {_state_text(acct)}{was}; "
                 f"not started (stopped or in maintenance by choice).")
-        elif prior is None and acct.state not in {"FAILED", "STARTING", "STOPPING", "UPDATING"}:
-            err(f"WARNING: ACCOUNT NOT COLLECTING: {_label(acct)}: {_state_text(acct)}; "
-                f"its state before the install is unknown, so it was not started. "
-                f"Start it by hand if it should collect.")
+        elif kind == "unknown" and acct.state != "FAILED" \
+                and acct.state not in TRANSITIONAL_STATES:
+            err(f"WARNING: ACCOUNT NOT COLLECTING: {_label(acct)}: {_state_text(acct)}"
+                f"{was}; no usable state from before the install, so it was not "
+                f"started. Start it by hand if it should collect.")
         else:
             rc = ACCOUNTS_NOT_STARTED_RC
-            if acct.id in started and started[acct.id]:
-                tried = f"; start monitoring was refused: {started[acct.id]}"
-            elif acct.id in started:
-                tried = "; start monitoring was re-issued once"
+            refused = [s[1] for s in sent if s[1]]
+            if refused:
+                tried = f"; start monitoring was refused: {refused[-1]}"
+            elif ok_starts:
+                tried = f"; start monitoring was re-issued {len(ok_starts)} time(s)"
             else:
                 tried = ""
             err(f"ACCOUNT NOT STARTED: {_label(acct)}: {_state_text(acct)} after "
-                f"{timeout_s} s{was}{tried}. Confirm the collector loaded the new "
-                f"adapter version, then PUT /suite-api/api/adapters/{acct.id}/"
+                f"{int(clock() - t0)} s{was}{tried}. Confirm the collector loaded the "
+                f"new adapter version, then PUT /suite-api/api/adapters/{acct.id}/"
                 f"monitoringstate/start (lesson remote-collector-upgrade-start-race). "
                 f"Do not reinstall.")
     return rc
@@ -301,4 +411,5 @@ def default_suite_factory(host: str, user: str, password: str, verify_ssl: bool)
     """Suite API client for the installer's local account."""
     from vcfcf_common.client import VCFOpsClient
     return VCFOpsClient(host=host, username=user, password=password,
-                        auth_source="Local", verify_ssl=verify_ssl)
+                        auth_source="Local", verify_ssl=verify_ssl,
+                        auth_timeout=REQUEST_TIMEOUT_S)

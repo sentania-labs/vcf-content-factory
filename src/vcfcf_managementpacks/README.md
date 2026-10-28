@@ -66,14 +66,24 @@ collector has loaded the new jar, and every account of the adapter kind
 stays FAILED until someone starts it. Before the upload it reads each
 adapter instance of the pak's `adapter_kinds` and its `resourceState`;
 after the install it watches them for 120 s, then sends
-`PUT /api/adapters/{id}/monitoringstate/start` once to each that reads
-FAILED, STOPPED or NONE, skipping any that was STOPPED or in maintenance
-before the install (the user's choice), and polls until they read STARTED
-or 300 s have passed. Each account's final state is printed (`ACCOUNT OK`,
-`ACCOUNT LEFT ALONE`, `ACCOUNT NOT COLLECTING` when its state before the
-install is unknown and it was not started, or `ACCOUNT NOT STARTED`, which
-sets exit code 3). This adds about 2 minutes when the pak's adapter kind has
-accounts; `--no-restart-failed` skips it, and `--no-wait` never runs it.
+`PUT /api/adapters/{id}/monitoringstate/start` to each that reads FAILED,
+STOPPED or NONE and read STARTED, STARTING, UPDATING or FAILED before the
+install. One that was STOPPED or in maintenance before is never started
+(the user's choice); one with no usable state from before (UNKNOWN, NONE,
+NOT_EXISTING, no status entry, or the read failed) is started only when
+FAILED. An account that reads FAILED again 60 s after its start gets a
+second one, never a third. It polls until they read STARTED or 300 s have
+passed, with a 30 s timeout on every Suite API call, and only ever starts
+from that poll's reading. Each account's final state is printed (`ACCOUNT
+OK`, `ACCOUNT LEFT ALONE`, `ACCOUNT NOT COLLECTING` when it has no usable
+state from before and was not started, `ACCOUNT UNCHECKED` when its state
+is unreadable, or `ACCOUNT NOT STARTED`, which sets exit code 3). Exit 3
+also covers an account that was already FAILED before the install and still
+is (bad credentials, say). When the last read failed, or a 401/403 stopped
+the watch, it prints `ACCOUNTS UNCHECKED` with the state as of the last good
+read and leaves the exit code alone. This adds about 2 minutes when the
+pak's adapter kind has accounts; `--no-restart-failed` skips it, and
+`--no-wait` never runs it.
 After that, `install` checks that each dashboard the pak ships
 finished building (issue #244); when one is still building it waits once
 (180 s by default, `--materialization-wait`, capped at 900 s) before the
@@ -89,7 +99,7 @@ or `VCFCF_SUMMARY_REBIND=0` turns the repair off; the install then only
 reads each copy and prints `SUMMARY OK` or `SUMMARY INCOMPLETE <kind>
 <copy id> (<n> of <m> widgets loading)` as information. `--summary-rebind`
 is accepted and is the default. Exit code 3 means the pak installed but a post-install check failed
-(`ACCOUNT NOT STARTED`, `MATERIALIZATION STALLED`, or with the repair on `SUMMARY NOT REBOUND`,
+(`ACCOUNT NOT STARTED`, including an account already FAILED before the install, `MATERIALIZATION STALLED`, or with the repair on `SUMMARY NOT REBOUND`,
 which quotes the server's HTTP status and answer); do not reinstall on it.
 
 **Credential env vars** (matches the rest of the factory):

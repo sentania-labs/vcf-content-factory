@@ -1108,9 +1108,10 @@ def install_pak(
            and installed version == the uploaded pak's version (issue #202)
       7:   _UISession.logout()
       7a:  account_restart.restart_failed_accounts(): watch the pak's
-           accounts, send Start monitoring once to each the install left
-           FAILED or STOPPED (not those stopped or in maintenance before it),
-           and print each one's final state (lesson
+           accounts, send Start monitoring (twice at most) to each the
+           install left FAILED or STOPPED (not those stopped or in
+           maintenance before it; FAILED only for one with no usable state
+           from before), and print each one's final state (lesson
            remote-collector-upgrade-start-race). Only with ``wait`` and
            ``restart_failed``; adds about 2 minutes when the kind has
            accounts.
@@ -1124,7 +1125,8 @@ def install_pak(
 
     Returns 0, or ``post_install.POST_INSTALL_FAILED_RC`` (3) when the pak
     installed but a post-install dashboard check failed or an account that
-    should collect is not STARTED (``ACCOUNT NOT STARTED``), or
+    was collecting, or already FAILED, before the install is not STARTED
+    (``ACCOUNT NOT STARTED``), or
     :data:`INSTALL_STILL_RUNNING_RC` (4) when ``poll_timeout`` ran out while
     the server still reported the install running (the post-install checks
     did not run). A failed install exits 1 through ``_abort``.

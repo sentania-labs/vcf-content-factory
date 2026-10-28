@@ -57,10 +57,14 @@ class FakeSuite:
     ``(at_elapsed, state)`` applied as the clock passes them (the race: the
     install leaves the account FAILED). ``on_start`` maps id -> the state a
     start produces (default STARTED); ``start_code`` id -> HTTP code.
+    ``fail_reads_from``: every GET at or after that elapsed time raises.
+    ``read_code``: every GET answers that HTTP code. A state of UNKNOWN is
+    served as a resource with no status entry.
     """
 
     def __init__(self, states, clock=None, schedule=None, on_start=None,
-                 start_code=None, kind=KIND, fail_reads=False):
+                 start_code=None, kind=KIND, fail_reads=False,
+                 fail_reads_from=None, read_code=None):
         self.states = dict(states)
         self.clock = clock
         self.t0 = clock.now if clock else 0.0
@@ -69,8 +73,11 @@ class FakeSuite:
         self.start_code = start_code or {}
         self.kind = kind
         self.fail_reads = fail_reads
+        self.fail_reads_from = fail_reads_from
+        self.read_code = read_code
         self.starts = []          # (id, elapsed)
         self.calls = []
+        self.timeouts = []        # (method, path, timeout)
 
     def _tick(self):
         if not self.clock:
@@ -82,9 +89,14 @@ class FakeSuite:
 
     def _request(self, method, path, **kw):
         self.calls.append((method, path, kw.get("params")))
+        self.timeouts.append((method, path, kw.get("timeout")))
         self._tick()
-        if self.fail_reads and method == "GET":
+        el = (self.clock.now - self.t0) if self.clock else 0.0
+        if method == "GET" and (self.fail_reads or (
+                self.fail_reads_from is not None and el >= self.fail_reads_from)):
             raise ConnectionError("connection refused")
+        if method == "GET" and self.read_code is not None:
+            return _Resp(self.read_code, None, "not allowed")
         if method == "GET" and path == "/api/adapters":
             kind = kw["params"]["adapterKindKey"]
             if kind != self.kind:
@@ -97,7 +109,7 @@ class FakeSuite:
         if method == "GET" and path == "/api/resources":
             ids = kw["params"]["resourceId"]
             return _Resp(200, {"resourceList": [
-                {"identifier": aid, "resourceStatusStates": [
+                {"identifier": aid, "resourceStatusStates": [] if self.states[aid] == "UNKNOWN" else [
                     {"adapterInstanceId": aid, "resourceState": self.states[aid],
                      "resourceStatus": "DATA_RECEIVING" if self.states[aid] == "STARTED" else "NONE",
                      "statusMessage": ""}]}
@@ -161,6 +173,42 @@ def test_read_accounts_raises_on_non_200():
         ar.read_accounts(C(), [KIND])
 
 
+def test_read_accounts_two_kinds_one_with_no_instances():
+    calls = []
+
+    class C:
+        def _request(self, method, path, **kw):
+            calls.append((path, kw["params"]))
+            if path == "/api/adapters":
+                if kw["params"]["adapterKindKey"] == "kind_a":
+                    return _Resp(200, {"adapterInstancesInfoDto": [
+                        {"id": "a1", "resourceKey": {"name": "one", "adapterKindKey": "kind_a"}},
+                        {"id": "a2", "resourceKey": {"name": "two", "adapterKindKey": "kind_a"}}]})
+                return _Resp(200, {"adapterInstancesInfoDto": []})
+            return _Resp(200, {"resourceList": [
+                {"identifier": aid, "resourceStatusStates": [
+                    {"adapterInstanceId": aid, "resourceState": "STARTED"}]}
+                for aid in kw["params"]["resourceId"]]})
+
+    got = ar.read_accounts(C(), ["kind_a", "kind_empty"])
+    assert sorted(got) == ["a1", "a2"]
+    assert {a.adapter_kind for a in got.values()} == {"kind_a"}
+    assert all(a.state == "STARTED" for a in got.values())
+    # One GET per kind, then one batched resources GET.
+    assert [p for p, _ in calls] == ["/api/adapters", "/api/adapters", "/api/resources"]
+
+
+def test_read_accounts_one_failing_kind_fails_the_whole_read():
+    class C:
+        def _request(self, method, path, **kw):
+            if kw["params"].get("adapterKindKey") == "bad":
+                return _Resp(500, None, "boom")
+            return _Resp(200, {"adapterInstancesInfoDto": []})
+
+    with pytest.raises(RuntimeError, match="adapterKindKey=bad"):
+        ar.read_accounts(C(), ["good", "bad"])
+
+
 def test_pak_adapter_kinds_splits_the_manifest_field():
     assert ar.pak_adapter_kinds({"adapter_kinds": "a, b,,"}) == ["a", "b"]
     assert ar.pak_adapter_kinds({}) == []
@@ -208,25 +256,211 @@ def test_user_stopped_and_maintained_accounts_are_never_started():
     assert out.count("ACCOUNT LEFT ALONE") == 2
 
 
-def test_start_is_sent_once_and_a_still_failed_account_fails_the_install_check():
+def test_refailing_account_gets_a_second_start_never_a_third():
     clock = _Clock()
     ids = {"a1": "STARTED"}
     suite = FakeSuite({"a1": "FAILED"}, clock=clock, on_start={"a1": "FAILED"})
     rc, out, err = _run(suite, _before(ids), clock)
     assert rc == ar.ACCOUNTS_NOT_STARTED_RC
-    assert len(suite.starts) == 1
+    assert len(suite.starts) == ar.MAX_STARTS == 2
+    (_, first), (_, second) = suite.starts
+    assert first >= ar.START_DELAY_S
+    assert second - first >= ar.RETRY_AFTER_S
+    assert second < ar.TIMEOUT_S
+    assert "re-issued a second time" in out
     assert "ACCOUNT NOT STARTED" in err
-    assert "re-issued once" in err
+    assert "re-issued 2 time(s)" in err
     assert "Do not reinstall" in err
     assert clock.now - 1000.0 >= ar.TIMEOUT_S
 
 
-def test_refused_start_is_reported_with_the_servers_answer():
+def test_second_start_recovers_an_account_whose_first_start_came_too_early():
+    clock = _Clock()
+    suite = FakeSuite({"a1": "FAILED"}, clock=clock, on_start={"a1": "FAILED"})
+    real = suite._request
+
+    def jar_loads_late(method, path, **kw):
+        # The collector has the jar by the second start.
+        if method == "PUT" and suite.starts:
+            suite.on_start["a1"] = "STARTED"
+        return real(method, path, **kw)
+
+    suite._request = jar_loads_late
+    rc, out, err = _run(suite, _before({"a1": "STARTED"}), clock)
+    assert rc == 0, err
+    assert len(suite.starts) == 2
+    assert "ACCOUNT OK (restarted)" in out
+
+
+def test_an_accepted_start_that_holds_is_not_repeated():
+    clock = _Clock()
+    suite = FakeSuite({"a1": "FAILED"}, clock=clock)
+    rc, out, err = _run(suite, _before({"a1": "STARTED"}), clock)
+    assert rc == 0
+    assert len(suite.starts) == 1
+
+
+def test_refused_start_is_reported_with_the_servers_answer_and_not_retried():
     clock = _Clock()
     suite = FakeSuite({"a1": "FAILED"}, clock=clock, start_code={"a1": 500})
     rc, out, err = _run(suite, _before({"a1": "STARTED"}), clock)
     assert rc == ar.ACCOUNTS_NOT_STARTED_RC
+    assert len(suite.starts) == 1
     assert "start monitoring was refused: HTTP 500: server said no" in err
+
+
+# B1: a prior counts as known only for STARTED, STARTING, UPDATING, FAILED.
+
+@pytest.mark.parametrize("prior", ["STARTED", "STARTING", "UPDATING", "FAILED"])
+def test_known_prior_stopped_after_install_is_started(prior):
+    clock = _Clock()
+    suite = FakeSuite({"a1": "STOPPED"}, clock=clock)
+    rc, out, err = _run(suite, _before({"a1": prior}), clock)
+    assert rc == 0, err
+    assert [a for a, _ in suite.starts] == ["a1"]
+
+
+@pytest.mark.parametrize("prior", ["STOPPED", "STOPPING", "MAINTAINED", "MAINTAINED_MANUAL"])
+@pytest.mark.parametrize("post", ["STOPPED", "FAILED"])
+def test_held_prior_is_never_started(prior, post):
+    clock = _Clock()
+    suite = FakeSuite({"a1": post}, clock=clock)
+    rc, out, err = _run(suite, _before({"a1": prior}), clock)
+    assert rc == 0
+    assert suite.starts == []
+    assert "ACCOUNT LEFT ALONE" in out
+
+
+@pytest.mark.parametrize("prior", ["UNKNOWN", "NONE", "NOT_EXISTING", "REMOVING"])
+def test_unusable_prior_stopped_after_install_is_left_alone(prior):
+    clock = _Clock()
+    suite = FakeSuite({"a1": "STOPPED"}, clock=clock)
+    rc, out, err = _run(suite, _before({"a1": prior}), clock)
+    assert rc == 0
+    assert suite.starts == []
+    assert "ACCOUNT NOT COLLECTING" in err
+    # Settles once the watch ends instead of waiting out the timeout.
+    assert clock.now - 1000.0 < ar.TIMEOUT_S
+
+
+@pytest.mark.parametrize("prior", ["UNKNOWN", "NONE", "NOT_EXISTING", "REMOVING"])
+def test_unusable_prior_failed_after_install_is_started(prior):
+    clock = _Clock()
+    suite = FakeSuite({"a1": "FAILED"}, clock=clock)
+    rc, out, err = _run(suite, _before({"a1": prior}), clock)
+    assert rc == 0, err
+    assert [a for a, _ in suite.starts] == ["a1"]
+
+
+def test_prior_read_without_a_status_entry_is_unusable_end_to_end():
+    """read_accounts gives UNKNOWN for a missing status entry; that prior
+    must not license a start of a STOPPED account."""
+    clock = _Clock()
+    pre = FakeSuite({"a1": "UNKNOWN"})
+    before = ar.read_accounts(pre, [KIND])
+    assert before["a1"].state == ar.UNREADABLE_STATE
+    suite = FakeSuite({"a1": "STOPPED"}, clock=clock)
+    rc, out, err = _run(suite, before, clock)
+    assert suite.starts == []
+    assert rc == 0
+
+
+# N4: a missing post-install state is unreadable, not NOT STARTED.
+
+def test_unreadable_post_install_state_is_unchecked_not_a_failure():
+    clock = _Clock()
+    suite = FakeSuite({"a1": "UNKNOWN"}, clock=clock)
+    rc, out, err = _run(suite, _before({"a1": "STARTED"}), clock)
+    assert rc == 0
+    assert suite.starts == []
+    assert "ACCOUNT UNCHECKED" in err and "state unreadable" in err
+    assert "NOT STARTED" not in err
+    assert clock.now - 1000.0 < ar.TIMEOUT_S
+
+
+# W1: never a verdict, or a start, from a stale reading.
+
+def test_failed_final_read_reports_unchecked_not_a_failure():
+    clock = _Clock()
+    # FAILED until reads start failing at 105 s; the account recovers at
+    # 200 s on its own, which the installer never sees.
+    suite = FakeSuite({"a1": "FAILED"}, clock=clock, fail_reads_from=105,
+                      schedule={"a1": [(200, "STARTED")]})
+    rc, out, err = _run(suite, _before({"a1": "STARTED"}), clock)
+    assert rc == 0
+    assert "ACCOUNTS UNCHECKED" in err
+    assert "State as of 90 s" in err      # reads at 0, 15, ... 90 s succeeded
+    assert "NOT STARTED" not in err
+    # The last good read was before the start delay: no start went out.
+    assert suite.starts == []
+
+
+def test_one_warn_for_a_persistent_read_failure():
+    clock = _Clock()
+    suite = FakeSuite({"a1": "FAILED"}, clock=clock, fail_reads=True)
+    rc, out, err = _run(suite, None, clock)
+    assert err.count("WARN: account state read failed") == 1
+    assert "failed read(s)" in err
+
+
+# N2: an auth refusal stops the watch.
+
+@pytest.mark.parametrize("code", [401, 403])
+def test_auth_refusal_stops_polling_with_one_warn(code):
+    clock = _Clock()
+    suite = FakeSuite({"a1": "FAILED"}, clock=clock, read_code=code)
+    rc, out, err = _run(suite, _before({"a1": "STARTED"}), clock)
+    assert rc == 0
+    assert clock.sleeps == []
+    assert err.count("WARN:") == 1
+    assert "not retrying" in err and "1 failed read(s)" in err
+    assert "ACCOUNTS UNCHECKED" in err
+
+
+def test_token_refusal_from_the_client_counts_as_auth_refusal():
+    assert ar._is_auth_refusal(RuntimeError("auth failed (401): bad"))
+    assert not ar._is_auth_refusal(RuntimeError("auth failed (500): oops"))
+
+
+# W2: timeouts on every Suite API call.
+
+def test_every_suite_call_carries_a_timeout():
+    clock = _Clock()
+    suite = FakeSuite({"a1": "FAILED"}, clock=clock)
+    _run(suite, _before({"a1": "STARTED"}), clock)
+    methods = {(m, p.split("/")[-1]) for m, p, _ in suite.timeouts}
+    assert ("PUT", "start") in methods and ("GET", "adapters") in methods \
+        and ("GET", "resources") in methods
+    assert all(t is not None and 0 < t <= ar.REQUEST_TIMEOUT_S
+               for _, _, t in suite.timeouts)
+
+
+def test_read_accounts_default_timeout_is_set():
+    suite = FakeSuite({"a1": "STARTED"})
+    ar.read_accounts(suite, [KIND])
+    assert {t for _, _, t in suite.timeouts} == {ar.REQUEST_TIMEOUT_S}
+
+
+def test_suite_client_token_acquire_gets_the_timeout(monkeypatch):
+    from vcfcf_common import client as common_client
+
+    seen = {}
+
+    class _Sess:
+        headers = {}
+
+        def post(self, url, **kw):
+            seen.update(kw)
+            return _Resp(200, {"token": "t"})
+
+    monkeypatch.setattr(common_client, "new_session", lambda v: _Sess())
+    c = ar.default_suite_factory("ops.example", "u", "p", True)
+    c.authenticate()
+    assert seen["timeout"] == ar.REQUEST_TIMEOUT_S
+    # Other callers keep the old behaviour: no timeout key at all.
+    seen.clear()
+    common_client.VCFOpsClient("ops.example", "u", "p").authenticate()
+    assert "timeout" not in seen
 
 
 def test_stopped_after_install_from_started_gets_a_start():
@@ -400,6 +634,20 @@ def test_before_read_failure_passes_none_and_install_goes_ahead(monkeypatch, tmp
     installer.install_pak(str(pak), materialization_check=False,
                           suite_factory=_factory(events))
     assert "install" in events
+    assert ("restart", (KIND,), None) in events
+
+
+def test_before_read_timeout_lets_the_install_go_ahead(monkeypatch, tmp_path):
+    import requests
+    events, pak = _wire_install(monkeypatch, tmp_path)
+
+    def stalled(client, k):
+        raise requests.exceptions.ReadTimeout("read timed out (30 s)")
+
+    monkeypatch.setattr(ar, "read_accounts", stalled)
+    installer.install_pak(str(pak), materialization_check=False,
+                          suite_factory=_factory(events))
+    assert "upload" in events and "install" in events
     assert ("restart", (KIND,), None) in events
 
 

@@ -570,9 +570,15 @@ stays `resourceState` FAILED (lesson
 Read on devel_9_1 (9.1) on 2026-10-28 against the three `vcfcf_compliance`
 accounts (all STARTED / DATA_RECEIVING at the time); the start call's 200 is
 from the 2026-10-16 and 2026-10-28 manual recoveries. The installer reads
-the states before the upload, waits 120 s after the install verifies, starts
-each FAILED, STOPPED or NONE account once (not one STOPPED or in
-maintenance before the install), and polls to 300 s.
+the states before the upload, waits 120 s after the install verifies, and
+starts each FAILED, STOPPED or NONE account that read STARTED, STARTING,
+UPDATING or FAILED before (never one STOPPED or in maintenance before; one
+with no usable prior only when FAILED). It sends a second start to one that
+reads FAILED again 60 s later and polls to 300 s, with a 30 s timeout on
+every call including the token acquire. When the instance's resource has no
+status entry, the state is unreadable and reported as such. Nothing records
+when the install's verify happens relative to the server's own start task,
+which is why the second start exists.
 
 ## Unsupportability caveat
 
