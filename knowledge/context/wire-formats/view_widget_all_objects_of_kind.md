@@ -128,6 +128,27 @@ above is the same shape the factory renders. The importer binds
 exact name **before** the dashboard imports, or the dashboard sits
 stuck-deferred.
 
+### Caveats before shipping the pattern in a bundle (framework review 2026-10-28)
+
+1. **Install order differs by path.** Factory sync installs custom groups
+   before dashboards (`SYNC_CONTENT_TYPES` in
+   `src/vcfcf_packaging/syncer.py`), which satisfies the rule above. The distributed bundle
+   installer does the opposite: `src/vcfcf_packaging/templates/install.py`
+   imports views + dashboards at `install_order: 2` and upserts custom
+   groups at `install_order: 4`; `install.ps1` runs `Install-Dashboard`
+   before `Install-CustomGroups`. Whether the pin binds at import or at
+   deferred materialization (~2 min,
+   `knowledge/lessons/dashboard-import-deferred-materialization.md`) is
+   unknown, so a bundle carrying a helper group plus a dashboard pinned to
+   it may land stuck-deferred on an operator's instance. Installer
+   reordering is tracked as a separate issue.
+2. **Pinned-to-group import is unproven.** `pin.name` on a non-singleton
+   kind (`Container/Environment`, many groups share it) is the unverified
+   case in `dashboard_view_pin_resolution.md`. Vendor export bytes support
+   it; no live import does yet. The first devel install must confirm the
+   dashboard materializes with a concrete `resourceId` bound to the helper
+   group. **Do not ship the pattern in a distributed bundle until it has.**
+
 ## 4. What the factory can express today
 
 **Dashboard: yes, no change needed.**

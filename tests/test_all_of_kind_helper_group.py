@@ -8,7 +8,8 @@ Covers:
   A. customgroup rule with all_of_kind: true and no conditions loads; the
      REST body (to_wire) matches the 201-accepted payload and the UI import
      ruleGroup (to_ui_wire) matches the vendor shape.
-  B. no conditions without the opt-in still fails; all_of_kind combined
+  B. no conditions without the opt-in still fails (explicit false too);
+     unknown rule keys fail (typo next to the opt-in); all_of_kind combined
      with any condition fails; non-bool all_of_kind fails.
   C. a View widget with self_provider: true and no pin fails validation
      (the renderer would otherwise drop it to selfProvider:false); pinned to
@@ -110,7 +111,28 @@ def test_all_of_kind_with_condition_fails(tmp_path, cond):
         _cg(tmp_path, {**_BASE_RULE, "all_of_kind": True, **cond})
 
 
-@pytest.mark.parametrize("val", ["yes", 1, "true"])
+def test_explicit_false_without_conditions_fails(tmp_path):
+    from vcfcf_core.customgroups.loader import CustomGroupValidationError
+
+    with pytest.raises(CustomGroupValidationError, match="at least one condition"):
+        _cg(tmp_path, {**_BASE_RULE, "all_of_kind": False})
+
+
+@pytest.mark.parametrize("extra", [
+    # misspelled condition key next to the opt-in: must not load as
+    # an over-broad "every object of the kind" group
+    {"all_of_kind": True, "properties": [{"key": "x", "op": "EQ", "value": "y"}]},
+    {"name": [{"op": "CONTAINS", "value": "x"}], "stats": []},
+    {"all_of_kind_s": True},
+])
+def test_unknown_rule_key_fails(tmp_path, extra):
+    from vcfcf_core.customgroups.loader import CustomGroupValidationError
+
+    with pytest.raises(CustomGroupValidationError, match="unknown key"):
+        _cg(tmp_path, {**_BASE_RULE, **extra})
+
+
+@pytest.mark.parametrize("val", ["yes", 1, "true", None])
 def test_all_of_kind_must_be_bool(tmp_path, val):
     from vcfcf_core.customgroups.loader import CustomGroupValidationError
 

@@ -51,6 +51,15 @@ Before writing YAML, pin down:
      self-provider View widget pins to so the view lists every object
      of a kind with no common ancestor. See
      `wire-formats/view_widget_all_objects_of_kind.md`.
+     Unknown rule keys are rejected (a typo such as `properties:` would
+     otherwise vanish and leave an over-broad group). Two caveats before
+     the helper-group pattern ships in a distributed bundle (details in the
+     wire doc): the bundle installer (`install.py` / `install.ps1`) imports
+     dashboards **before** custom groups, the reverse of factory sync, so
+     the pinned dashboard may import before its group exists; and a
+     dashboard pinned to a custom group by name is not yet live-verified.
+     The first devel install must show the dashboard bound to the group
+     before any bundle carries the pattern.
      ```yaml
      rules:
        - resource_kind: "(Custom) Application"

@@ -96,6 +96,11 @@ COMPARE_OPS = {
     "REGEX",
 }
 RELATIONS = {"PARENT", "CHILD", "ANCESTOR", "DESCENDANT"}
+# Keys allowed on one YAML rule entry; anything else is rejected.
+_CONDITION_KEYS = ("stat", "property", "name", "relationship", "tag")
+_RULE_KEYS = frozenset(
+    ("resource_kind", "adapter_kind", "all_of_kind") + _CONDITION_KEYS
+)
 
 # Mapping from REST compareOperator values to UI ruleStringOperator values.
 # Used by CustomGroupDef.to_ui_wire().
@@ -167,6 +172,15 @@ class CustomGroupDef:
         tag = f"{self.name}: rules[{idx}]"
         if not isinstance(rule, dict):
             raise CustomGroupValidationError(f"{tag} must be a mapping")
+        # Reject unknown keys: a misspelled condition key (e.g. `properties:`)
+        # would otherwise be dropped silently, and next to all_of_kind: true
+        # that turns into an over-broad "every object of the kind" group.
+        unknown = sorted(str(k) for k in rule if k not in _RULE_KEYS)
+        if unknown:
+            raise CustomGroupValidationError(
+                f"{tag}: unknown key(s) {unknown}; allowed: "
+                f"{sorted(_RULE_KEYS)}"
+            )
         if not rule.get("resource_kind"):
             raise CustomGroupValidationError(
                 f"{tag}: resource_kind is required"
@@ -178,19 +192,19 @@ class CustomGroupDef:
         # `all_of_kind: true` is the explicit opt-in for a rule with no
         # conditions ("every object of this kind"). Without it, at least
         # one condition list must be non-empty, so a forgotten condition
-        # still fails. Live-proven wire (empty condition lists, 201 on
-        # POST /api/resources/groups): see
-        # knowledge/context/wire-formats/view_widget_all_objects_of_kind.md.
+        # still fails. Evidence for both emitted shapes, in
+        # knowledge/context/wire-formats/view_widget_all_objects_of_kind.md:
+        # REST (to_wire), five empty condition lists, live 201 on
+        # POST /api/resources/groups; UI import (to_ui_wire), ruleGroup
+        # with "rules": [], vendor vmbro hardware vCommunity export
+        # "Dell EMC Servers" (customgroups/Dell EMC Servers.json).
         all_of_kind = rule.get("all_of_kind", False)
         if not isinstance(all_of_kind, bool):
             raise CustomGroupValidationError(
                 f"{tag}: all_of_kind must be true or false, "
                 f"got {all_of_kind!r}"
             )
-        has_conditions = any(
-            rule.get(k)
-            for k in ("stat", "property", "name", "relationship", "tag")
-        )
+        has_conditions = any(rule.get(k) for k in _CONDITION_KEYS)
         if all_of_kind and has_conditions:
             raise CustomGroupValidationError(
                 f"{tag}: all_of_kind: true cannot be combined with "
