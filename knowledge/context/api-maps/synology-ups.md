@@ -1,5 +1,45 @@
 # Synology API Map: UPS (UPS Object)
 
+> **Correction 2026-10-28 (Synology build 35, review B1).** `status` is a
+> DSM string-table key, not a NUT status code. Every NUT claim below
+> (`OL`, `OB`, `LB`, `OB LB`, "follows NUT conventions") is
+> **SUPERSEDED 2026-10-28**. The values are:
+>
+> | `status` | DSM label (`[ups]` string table) | Meaning |
+> |---|---|---|
+> | `usb_ups_status_online` | Connected | On mains |
+> | `usb_ups_status_battery` | On Battery | Power lost, running on battery |
+> | `usb_ups_status_low_batt` | Low Battery | Battery low |
+> | `usb_ups_status_off` | Off | UPS off |
+> | `usb_ups_status_unknown` | (no `[ups]` entry; admin_center.js shows `_T("common","not_support")`) | No UPS / not detected |
+>
+> None of these contains `OB` or `LB`, so a `CONTAINS "OB"` condition never
+> fires. Match with `EQ` on the full key.
+>
+> Evidence:
+> - Live NAS, read-only, 2026-10-28: DS1520+, **DSM 7.4.1-90080**. POST login,
+>   `SYNO.Core.ExternalDevice.UPS get` returned `status: usb_ups_status_unknown`,
+>   `usb_ups_connect: false`, `enable: false`, `mode: SLAVE`. Logged out.
+> - The NAS's own `/webman/texts/enu/strings`, fetched the same day: `[ups]`
+>   holds exactly `usb_ups_status_online` "Connected",
+>   `usb_ups_status_battery` "On Battery", `usb_ups_status_low_batt`
+>   "Low Battery", `usb_ups_status_off` "Off" (plus the
+>   `usb_ups_status_title` label). `[widget]` also carries
+>   `usb_ups_status_battery` and `usb_ups_status_low_batt` as System Health
+>   messages (see `synology-system.md`, SYNO.Core.System.SystemHealth).
+> - `/webman/modules/AdminCenter/admin_center.js` `onClickStatusButton`
+>   renders `_T("ups", this.UPSInfo.status)` and special-cases
+>   `usb_ups_status_online` (plain label) and `usb_ups_status_unknown`
+>   (`common:not_support`); every other status is drawn in red.
+> - Synology pak (`content/sdk-adapters/synology`, branch `build-35`,
+>   commit `2ffd1ed`): CHANGELOG 0.0.0.35 and REFERENCE.md "Bundled alerts"
+>   (UPS On Battery: `EQ usb_ups_status_battery` Warning,
+>   `EQ usb_ups_status_low_batt` Critical);
+>   `knowledge/context/reviews/synology-build-35.md` B1.
+>
+> **Still a gap:** the lab has no UPS. The connected values come from DSM's
+> own UI code and string table; none has been seen on a live UPS.
+
 ## Endpoints
 
 ### SYNO.Core.ExternalDevice.UPS (get)
@@ -45,7 +85,7 @@
 }
 ```
 
-#### Response Schema (UPS connected -- inferred from no-UPS response)
+#### Response Schema (UPS connected -- inferred from no-UPS response; `status` value corrected 2026-10-28, was `"OL"`)
 
 When a UPS is connected, the same fields are expected to be populated:
 ```json
@@ -58,7 +98,7 @@ When a UPS is connected, the same fields are expected to be populated:
     "manufacture": "APC",
     "model": "Back-UPS 1500",
     "mode": "MASTER",
-    "status": "OL",
+    "status": "usb_ups_status_online",
     "usb_ups_connect": true,
     "delay_time": 300,
     "shutdown_device": true
@@ -71,7 +111,7 @@ When a UPS is connected, the same fields are expected to be populated:
 - `battery_runtime` is actually `runtime` (NUMBER, seconds)
 - `ups_load` does NOT appear in the response -- no load field observed. Load may require SNMP or may only appear when a UPS is actually connected.
 - `vendor` is actually `manufacture` (STRING)
-- `status` uses NUT-style codes but the no-UPS value is `"usb_ups_status_unknown"` (not empty or null)
+- ~~`status` uses NUT-style codes but the no-UPS value is `"usb_ups_status_unknown"` (not empty or null)~~ **SUPERSEDED 2026-10-28:** `status` is always a DSM `usb_ups_status_*` key (see the correction at the top); `usb_ups_status_unknown` with no UPS
 - `usb_ups_connect` (BOOLEAN) is the definitive "is a UPS present" flag
 - `enable` (BOOLEAN) indicates whether UPS support is enabled in DSM settings
 - `mode` (STRING) indicates MASTER (USB-connected) or SLAVE (network UPS) mode
@@ -82,7 +122,7 @@ When a UPS is connected, the same fields are expected to be populated:
 |---|---|---|---|---|---|
 | `model` | model | IDENTIFIER / PROPERTY | STRING | | Primary key; also display name. Empty string when no UPS connected. |
 | `manufacture` | vendor | PROPERTY | STRING | | UPS manufacturer (was assumed to be `vendor`) |
-| `status` | status | PROPERTY | STRING | | NUT status codes when connected: "OL", "OB", "LB", "OB LB"; "usb_ups_status_unknown" when not connected |
+| `status` | status | PROPERTY | STRING | | DSM key: `usb_ups_status_online` / `_battery` / `_low_batt` / `_off`; `usb_ups_status_unknown` when not connected. (~~NUT codes "OL", "OB", "LB", "OB LB"~~ superseded 2026-10-28.) |
 | `charge` | battery_charge | METRIC | NUMBER | % | Battery charge level (was assumed to be `battery_charge`). Returns 0 when no UPS connected. |
 | `runtime` | runtime | METRIC | NUMBER | seconds | Estimated battery runtime (confirmed field name). Returns 0 when no UPS connected. |
 | `enable` | ups_enabled | PROPERTY | BOOLEAN | | Whether UPS support is enabled in DSM |
@@ -113,7 +153,8 @@ When a UPS is connected, the same fields are expected to be populated:
   - If no UPS is connected, the API returns successfully but with minimal data (just `enabled: false` or similar)
   - MPB should handle the no-UPS case gracefully: do not create a UPS object if no UPS data is present
   - UPS metrics depend on the UPS model's capability -- basic UPS devices may only report status and charge, not load or runtime
-  - Status values follow NUT conventions, not plain English ("OL" not "Online")
+  - ~~Status values follow NUT conventions, not plain English ("OL" not "Online")~~ **SUPERSEDED 2026-10-28:** status values are DSM string-table keys (`usb_ups_status_*`), neither NUT codes nor plain English. Match the whole key with `EQ`.
+  - DSM omits or blanks `status` on some reads; the build 35 adapter skips the property then rather than publishing `""` (review W1).
   - Battery runtime is estimated, not guaranteed
 
 ## Gaps (partially closed 2026-04-16)
@@ -122,4 +163,4 @@ When a UPS is connected, the same fields are expected to be populated:
 - **Response structure when UPS is connected**: Partially confirmed. The no-UPS response reveals the complete field set. The connected-UPS response is expected to populate the same fields but cannot be verified without a connected UPS. The inferred connected-state schema above is based on the observed field names + logical values.
 - **UPS model as identifier**: Still valid design choice. The `model` field exists (empty string when no UPS). Only one UPS can be connected per NAS (USB or network, controlled by `mode`).
 - **Load metric**: NOT AVAILABLE in the observed response. No `load`, `ups_load`, or similar field. This may be a limitation of the REST API vs. SNMP, or it may only appear with a connected UPS. Flagged as remaining gap.
-- **Status value enumeration**: The no-UPS value is `"usb_ups_status_unknown"` (not a NUT code). Connected-state values are still assumed to follow NUT conventions but cannot be verified without a UPS.
+- **Status value enumeration**: CLOSED from vendor UI code 2026-10-28 (DSM 7.4.1-90080 string table and admin_center.js): `usb_ups_status_online`, `_battery`, `_low_batt`, `_off`, `_unknown`. ~~Connected-state values are still assumed to follow NUT conventions~~ (superseded 2026-10-28). Remaining gap: not yet seen on a live connected UPS.
