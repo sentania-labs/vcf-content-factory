@@ -1,0 +1,26 @@
+id: 6aae4ccd-754c-467c-96b5-2ac7e4a82025
+name: "[VCF Content Factory] Application VM Resources"
+description: >
+  Pick an application group on the left to see its child VMs with CPU, memory
+  and disk consumption versus allocation, with a summary row of totals.
+  The picker lists custom group types; add more resource_kinds entries to
+  include other group types.
+
+widgets:
+  - id: app_picker
+    type: ResourceList
+    title: "Applications"
+    coords: {x: 1, y: 1, w: 4, h: 9}
+    resource_kinds:
+      - {adapter_kind: Container, resource_kind: "(Custom) Application"}
+
+  - id: app_vms
+    type: View
+    title: "VMs in Selected Application"
+    coords: {x: 5, y: 1, w: 8, h: 9}
+    view: "[VCF Content Factory] Application VM Resources"
+
+interactions:
+  - from: app_picker
+    to: app_vms
+    type: resourceId

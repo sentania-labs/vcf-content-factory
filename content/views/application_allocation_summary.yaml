@@ -1,0 +1,29 @@
+id: 8580e840-3f05-42f3-8f73-9ba272172569
+name: "[VCF Content Factory] Application Allocation Summary"
+description: >
+  One row per (Custom) Application group with VM count, vCPU, memory and
+  storage allocation summed over the group's child VMs. The group name is the
+  view's implicit first column. Totals row: Sum on all four.
+
+subject:
+  adapter_kind: Container
+  resource_kind: "(Custom) Application"
+
+summary:
+  - display_name: Total
+    aggregation: SUM
+    columns: [0, 1, 2, 3]
+
+columns:
+  - attribute: 'supermetric:"[VCF Content Factory] Application VM Count"'
+    display_name: "VMs"
+    unit: ""
+  - attribute: 'supermetric:"[VCF Content Factory] Application vCPU Allocated"'
+    display_name: "vCPU Allocated"
+    unit: ""
+  - attribute: 'supermetric:"[VCF Content Factory] Application Memory Allocated (GB)"'
+    display_name: "Memory Allocated (GB)"
+    unit: ""
+  - attribute: 'supermetric:"[VCF Content Factory] Application Storage Provisioned (GB)"'
+    display_name: "Storage Provisioned (GB)"
+    unit: ""

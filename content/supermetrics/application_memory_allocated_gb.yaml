@@ -1,0 +1,13 @@
+id: 47d5fc8f-9b31-4e0e-a4bb-02d418723bf8
+name: "[VCF Content Factory] Application Memory Allocated (GB)"
+resource_kinds:
+  - resource_kind_key: "(Custom) Application"
+    adapter_kind_key: Container
+description: >
+  Total memory allocated to the member VMs of a (Custom) Application custom
+  group, in GB. Sums mem|guest_provisioned (KB) across VMWARE VirtualMachine
+  objects one hop (depth=1) from the group and divides by 1048576 (KB to GB).
+  Unit: GB.
+formula: |
+  sum(${adaptertype=VMWARE, objecttype=VirtualMachine,
+        metric=mem|guest_provisioned, depth=1}) / 1048576

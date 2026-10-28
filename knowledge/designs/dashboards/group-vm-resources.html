@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>[VCF Content Factory] Application VM Resources (mock)</title>
+<style>
+  :root { --bg:#1b1f24; --panel:#23282f; --panel-2:#2a3038; --line:#363d47; --ink:#f2f4f7; --ink-2:#b7bfca; --ink-3:#7f8896; --accent:#3987e5; --red:#e5484d; --orange:#e5822e; --yellow:#e0b400; --green:#2fa36b; --plan:#9b7be0; }
+  * { box-sizing:border-box } body { margin:0; background:var(--bg); color:var(--ink); font:13px/1.4 "Metropolis","Segoe UI",system-ui,sans-serif }
+  .shell { padding:14px 18px 40px; max-width:1500px } .hdr { display:flex; align-items:center; gap:10px; margin-bottom:12px; flex-wrap:wrap } .hdr h1 { font-size:18px; font-weight:600; margin:0 }
+  .badge { font-size:11px; padding:2px 8px; border-radius:10px; background:var(--panel-2); color:var(--ink-2); border:1px solid var(--line) }
+  .badge.plan { color:var(--plan); border-color:var(--plan) }
+  .grid { display:grid; grid-template-columns:repeat(12,1fr); grid-auto-rows:34px; gap:10px }
+  .w { background:var(--panel); border:1px solid var(--line); border-radius:4px; padding:10px 12px; position:relative; overflow:hidden }
+  .w h2 { font-size:13px; font-weight:600; margin:0 0 8px; display:flex; align-items:center; gap:8px } .w h2 .type { margin-left:auto; font-weight:400; font-size:10px; color:var(--ink-3); text-transform:uppercase; letter-spacing:.04em }
+  .note { position:absolute; left:12px; bottom:6px; font-size:10px; color:var(--ink-3) }
+  .tiles { display:grid; grid-template-columns:repeat(4,1fr); gap:8px } .tile { background:var(--panel-2); border-radius:4px; padding:10px 8px; text-align:center; border-top:3px solid var(--line) } .tile .v { font-size:28px; font-weight:600 } .tile .l { font-size:11px; color:var(--ink-2) }
+  .k { color:var(--ink-3); font-size:9px; font-family:ui-monospace,Menlo,monospace; word-break:break-all } .k.p { color:var(--plan) }
+  .txt { color:var(--ink-2); font-size:12px; line-height:1.5 } .txt p { margin:0 0 6px } .txt b { color:var(--ink) }
+  .lv { width:100%; border-collapse:collapse; font-size:12px } .lv th { text-align:left; color:var(--ink-3); font-weight:500; font-size:11px; padding:3px 6px; border-bottom:1px solid var(--line); vertical-align:bottom } .lv td { padding:5px 6px; border-bottom:1px solid var(--line) } .lv .num { text-align:right; font-variant-numeric:tabular-nums } .lv tr.sum td { font-weight:600; background:var(--panel-2) } .lv tr.sel td { background:#2c3b52 }
+  .lv th .k { display:block; font-weight:400 }
+  .grp { text-align:center !important; color:var(--ink-2) !important; border-bottom:none !important }
+  .c-red { color:var(--red) } .c-or { color:var(--orange) } .c-ye { color:var(--yellow) } .c-gr { color:var(--green) }
+  .chip { display:inline-block; min-width:44px; text-align:right; padding:1px 6px; border-radius:3px; font-variant-numeric:tabular-nums }
+  .chip.red { background:rgba(229,72,77,.18); color:var(--red) } .chip.or { background:rgba(229,130,46,.18); color:var(--orange) } .chip.ye { background:rgba(224,180,0,.16); color:var(--yellow) } .chip.gr { background:rgba(47,163,107,.16); color:var(--green) }
+  .chart { width:100%; height:calc(100% - 58px) } .legend { display:flex; gap:14px; font-size:11px; color:var(--ink-2) } .legend i { display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:5px; vertical-align:-1px }
+  .sev { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px }
+  .keybox { border:1px dashed var(--line); color:var(--ink-3); font-size:11px; padding:10px 12px; border-radius:4px; margin-top:14px; line-height:1.6 } .keybox b { color:var(--ink-2) }
+  .wire { position:absolute; right:10px; bottom:6px; font-size:10px; color:var(--accent) }
+
+  .pick div { padding:4px 6px; border-radius:3px; font-size:12px; color:var(--ink-2) } .pick div.sel { background:#2c3b52; color:var(--ink) } .pick .kind { font-size:10px; color:var(--ink-3); margin-left:4px }
+  .hm { display:flex; gap:10px; flex-wrap:wrap } .hm .grpbox { border:1px solid var(--line); border-radius:3px; padding:4px; } .hm .grpbox .t { font-size:10px; color:var(--ink-3); margin-bottom:3px } .hm .cells { display:flex; gap:3px; flex-wrap:wrap; width:150px } .hm .cell { width:46px; height:40px; border-radius:2px; font-size:10px; display:flex; align-items:center; justify-content:center; color:#111; font-weight:600 }
+  .lv td { white-space:nowrap; padding:4px 6px }
+  .props td:first-child { color:var(--ink-3) }
+</style>
+</head><body><div class="shell">
+<div class="hdr"><h1>[VCF Content Factory] Application VM Resources</h1><span class="badge">folder: VCF Content Factory</span><span class="badge plan">MOCK, values SIMULATED</span><span class="badge">target: devel (VCF Ops 9.1)</span></div>
+<div class="grid">
+
+<div class="w" style="grid-column:1 / span 4; grid-row:1 / span 9">
+<h2>W1 Applications <span class="type">Object List (ResourceList)</span></h2>
+<div class="k">resource_kinds: [Container / (Custom) Application] (a list: more group types can be added)</div>
+<div class="k">existing devel groups; rule per group: VM tag <b>bwtest-application</b> EQ AppN</div>
+<div class="pick" style="margin-top:8px">
+<div class="sel">LabApp1 Lab <span class="kind">(Custom) Application, 6 VMs</span></div>
+<div>LabApp2 Lab <span class="kind">(Custom) Application, 4 VMs</span></div>
+<div>LabApp4 Home <span class="kind">(Custom) Application, 9 VMs</span></div>
+<div>LabApp3 Lab <span class="kind">(Custom) Application, 12 VMs</span></div>
+<div>LabApp5 Home <span class="kind">(Custom) Application, 1 VM</span></div>
+</div>
+<div class="wire">selection drives W2 &rarr;</div>
+</div>
+
+<div class="w" style="grid-column:5 / span 8; grid-row:1 / span 9">
+<h2>W2 VMs in LabApp1 Lab <span class="type">View (List) on VirtualMachine, children of selection</span></h2>
+<table class="lv">
+<tr><th></th><th colspan="3" class="grp">CPU</th><th colspan="2" class="grp">Memory (GB)</th><th colspan="2" class="grp">Disk (GB)</th></tr>
+<tr><th>VM</th>
+<th class="num">vCPU<span class="k">config|hardware|num_Cpu</span></th>
+<th class="num">Used MHz<span class="k">cpu|usagemhz_average</span></th>
+<th class="num">Usage %<span class="k">cpu|usage_average</span></th>
+<th class="num">Allocated<span class="k">mem|guest_provisioned (KB&rarr;GB)</span></th>
+<th class="num">Consumed<span class="k">mem|consumed_average (KB&rarr;GB)</span></th>
+<th class="num">Provisioned<span class="k">diskspace|provisionedSpace</span></th>
+<th class="num">Used<span class="k">diskspace|used</span></th></tr>
+<tr><td>hr-web01</td><td class="num">4</td><td class="num">1,840</td><td class="num">17.6</td><td class="num">8.0</td><td class="num">6.1</td><td class="num">80.0</td><td class="num">41.2</td></tr>
+<tr><td>hr-web02</td><td class="num">4</td><td class="num">1,620</td><td class="num">15.5</td><td class="num">8.0</td><td class="num">5.8</td><td class="num">80.0</td><td class="num">39.7</td></tr>
+<tr><td>hr-app01</td><td class="num">8</td><td class="num">5,210</td><td class="num">24.9</td><td class="num">32.0</td><td class="num">27.4</td><td class="num">120.0</td><td class="num">88.3</td></tr>
+<tr><td>hr-app02</td><td class="num">8</td><td class="num">4,980</td><td class="num">23.8</td><td class="num">32.0</td><td class="num">26.9</td><td class="num">120.0</td><td class="num">86.0</td></tr>
+<tr><td>hr-db01</td><td class="num">16</td><td class="num">12,400</td><td class="num">29.6</td><td class="num">128.0</td><td class="num">121.5</td><td class="num">1,024.0</td><td class="num">702.4</td></tr>
+<tr><td>hr-batch01</td><td class="num">2</td><td class="num">310</td><td class="num">5.9</td><td class="num">4.0</td><td class="num">2.2</td><td class="num">60.0</td><td class="num">18.9</td></tr>
+<tr class="sum"><td>Total (6 VMs)</td><td class="num">42</td><td class="num">26,360</td><td class="num">avg 19.6</td><td class="num">212.0</td><td class="num">189.9</td><td class="num">1,484.0</td><td class="num">976.5</td></tr>
+</table>
+<div class="note">Summary row: view summary, Sum per column (Average for Usage %). Values simulated.</div>
+</div>
+
+</div>
+<div class="keybox"><b>Wiring:</b> W1 selection &rarr; W2 (View resource = selected group; rows = VirtualMachine children, depth 1).<br>
+<b>Needs authoring:</b> view "Application VM Resources" (native VM metrics, no super metrics); this dashboard. Groups: the existing "(Custom) Application" groups on devel (no new type).<br>
+<b>Not drawn:</b> a trend chart (list view only). Devel has 3 VMs across LabApp1/2/4; values here are simulated.</div>
+</div></body></html>

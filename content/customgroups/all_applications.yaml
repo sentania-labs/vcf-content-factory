@@ -1,0 +1,13 @@
+name: "[VCF Content Factory] All Applications"
+description: >
+  Helper group listing every (Custom) Application group on the instance,
+  wherever it sits. Serves as the source for the Application Allocation
+  dashboard: its View widget pins to this group so the Application
+  Allocation Summary view shows one row per Application group. Type is
+  Environment (not Application) so the group does not list itself.
+type: Environment
+auto_resolve_membership: true
+rules:
+  - resource_kind: "(Custom) Application"
+    adapter_kind: Container
+    all_of_kind: true
