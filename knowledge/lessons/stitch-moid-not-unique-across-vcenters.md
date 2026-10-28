@@ -36,7 +36,7 @@ trap*) already stated "MOID is not unique across vCenters — join on vCenter
 stitchers still violated it, because the reviewer's hunt is what caught it,
 not authoring discipline.
 
-## The fix pattern (vcommunity build 2 — copy this)
+## The fix pattern (vcommunity build 2, tightened in compliance build 102)
 
 `content/sdk-adapters/vcommunity/src/com/vcfcf/adapters/vcommunity/VCommunityStitcher.java`:
 
@@ -56,9 +56,15 @@ not authoring discipline.
   just on a rarer path. The skill's identity rule (join on vCenter
   `instanceUuid` + MOID) has no unscoped exception, and a missed push for
   one cycle is visible and recoverable where a wrong push is silent.
+- **Duplicate MOID within one vCenter matches neither row**; a row without
+  a usable identifier is skipped and counted, logged once per cycle at INFO
+  with the first one.
 - **Log the scope.** The load line reports `scoped to vCenter <uuid>; skipped
-  N from other vCenters` vs `unscoped — owning vCenter UUID unknown`, so a
-  silently-unscoped cycle is visible in the adapter log.
+  N from other vCenters`; a held-back cycle logs a WARN and sets
+  `Rollup|incomplete`, so a cycle that pushed nothing is visible. (vcommunity
+  build 2 still degrades to unscoped and logs `unscoped — owning vCenter UUID
+  unknown`; copy compliance build 102, not vcommunity, for the unknown-UUID
+  path.)
 
 ## Generalizable rule
 
