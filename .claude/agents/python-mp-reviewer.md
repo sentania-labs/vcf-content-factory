@@ -36,12 +36,15 @@ is `knowledge/context/reviews/python-packs/<fork>-<branch-or-issue>.md`.
    error, empty result for a failed call, or missing `with_error` is
    BLOCKING. The SDK's own "failed login looks like success" behaviour is
    never an excuse for the pack to add another.
-2. **Certificates.** With verify on, the accepted certificate from
-   `get_certificates()` must be applied (pyvmomi `serverPemCert` or a
-   fingerprint match for `requests`); no process-wide SSL override; a
-   verify toggle defaults to on; the endpoint URL list drives the accept
-   dialog. Reproduce the accept and reject paths with a self-signed
-   endpoint when the diff claims them.
+2. **Certificates.** With verify on, the certificates from
+   `get_certificates()` must be applied, and the list may hold only CA
+   certificates and no leaf (`knowledge/context/sdk/accepted_certificate_handoff.md`):
+   chain verification with every received PEM as an anchor first, exact
+   leaf pin (pyvmomi `serverPemCert`, fingerprint match for `requests`)
+   only as the fallback. A pin on `pems[0]` alone is BLOCKING. No
+   process-wide SSL override; a verify toggle defaults to on; the endpoint
+   URL list drives the accept dialog. Reproduce the accept and reject
+   paths with a self-signed endpoint when the diff claims them.
 3. **Credentials and secrets.** Secrets only in credential fields; nothing
    secret in logs, argv, fixtures, screenshots, commit messages or the PR
    body. Grep the diff and the author's scratch logs.

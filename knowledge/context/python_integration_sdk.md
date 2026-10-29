@@ -335,12 +335,41 @@ the context you give it; only on `SSLCertVerificationError` does it reconnect
 and require the peer certificate to **exactly equal** the pinned PEM. An exact
 pin makes hostname and expiry moot.
 
+Because the list can hold CA certificates and not the leaf at all
+(§3.1 correction), do not pin `pems[0]` blindly. Verify by chain first, with
+every received PEM plus the system bundle as anchors, and fall back to an
+exact leaf pin only when chain verification fails:
+
 ```python
-ctx = ssl.create_default_context()          # one context per connection
 pems = [c.get_certificate_string() for c in adapter_instance.get_certificates()]
-si = SmartConnect(host=host, user=user, pwd=pwd, sslContext=ctx,
-                  serverPemCert=pems[0] if pems else None)
+
+def connect(host, user, pwd):
+    # 1. chain: every received PEM (leaf or CA) plus the system bundle
+    ctx = ssl.create_default_context()          # one context per connection
+    for pem in pems:
+        try:
+            ctx.load_verify_locations(cadata=pem)
+        except ssl.SSLError:
+            pass                                 # not a usable anchor
+    ctx.verify_flags |= ssl.VERIFY_X509_PARTIAL_CHAIN
+    try:
+        return SmartConnect(host=host, user=user, pwd=pwd, sslContext=ctx)
+    except ssl.SSLCertVerificationError:
+        pass
+    # 2. exact leaf pin, one PEM per attempt, fresh context each time
+    for pem in pems:
+        try:
+            return SmartConnect(host=host, user=user, pwd=pwd,
+                                sslContext=ssl.create_default_context(),
+                                serverPemCert=pem)
+        except ssl.SSLCertVerificationError:
+            continue
+    raise
 ```
+
+Reference implementation: the vsanhostmetrics fork `app/perfsvc.py`
+(`tuneup/upstream-2026-10`, reviewed in
+`reviews/python-packs/vsanhostmetrics-tuneup-2026-10-28.md`).
 
 Caveats from the source:
 

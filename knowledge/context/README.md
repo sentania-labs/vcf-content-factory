@@ -214,12 +214,17 @@ debugging a specific issue; not required reading.
 - `2026-10-16-synology-32-devel-9-1-proof.md`: Synology dev pak 0.0.0.32 on devel_9_1: install and collection PASS, memory and free-space units fixed, load averages still at DSM's x100 scale (issue #41), three paths not exercised (NFS off, datastore paging, explicit Suite API path); a credential exposure in the session transcript is recorded for rotation.
 - `2026-10-16-unifi-15-devel-9-1-proof.md`: UniFi dev pak 0.0.0.15 on devel_9_1: install and collection PASS, NVR storage key unproven (issue #39), camera key unproven, informing-state gating and pending-adoption skip seen; installed pak postdates the last review round.
 - `2026-10-26-alertlist-depth-semantics.md`: AlertList `depth` is 1 to 10 (0 makes the server throw and the widget shows no list); `relationshipMode` is an int array (parents 1, children -1, self 0; `[0]` self only, `[-1, 0]` self plus children); the editor makes self and parents exclusive. Live replay on 9.0.2 and 8.18.6 plus the 9.0.2 editor JS. Backs the dashboard loader's AlertList `relationship_mode` and depth check.
+- `2026-10-24-devel-summary-rebind-500-and-alertlist-gap.md`: devel 9.0.2 and 8.18.6 Summary rebind error panel is a request-shape mismatch (`dashboardAssociations` vs the 9.1.1 `assignedAssociations`/`resetAssociations`, NullPointerException before any read); the Environment Overview alert list gap was `selectFirstRow: true` on the live provider View scoping the AlertList to the first vCenter, plus a client paging race.
+- `2026-10-26-dashboardaction-associate-evidence.md`: bytecode evidence for #260 W4 (`DashboardAction.associateResourceKindDashboards` on 8.18.6, 9.0.2, 9.1.1); verbatim javap and SPA excerpts live on the holding share (RULE-015), findings summarized in full.
+- `2026-10-28-compliance-103-bulk-equivalence.md`: compliance build 103 bulk `RetrieveProperties` reads vs build 102 per-object reads on devel; the `DevelBulkEquivalence` tool, what the `QueryOptions` comparison ran on, answers review W1/W2.
 - `2026-10-13-vsanhostmetrics-tuneup-assessment.md`: ranked tune-up PRs for the forked vsanhostmetrics Python SDK adapter: accepted certificate ignored (use `get_certificates()` with pyVmomi `serverPemCert`), collect errors silently discarded, one non-vSAN cluster aborts collection, username outside the credential type.
 
 ### `reviews/` — Build and framework review reports
 Point-in-time review records: per-build SDK adapter reviews written by
-`sdk-adapter-reviewer`, and `reviews/framework/` written by
-`framework-reviewer` (the pre-PR gate on `src/vcfcf_*/` changes).
+`sdk-adapter-reviewer`, `reviews/framework/` written by
+`framework-reviewer` (the pre-PR gate on `src/vcfcf_*/` changes), and
+`reviews/python-packs/` written by `python-mp-reviewer` (the gate before a
+forked Python pack is pushed or sent upstream; its `README.md` indexes them).
 Timestamped records, not living docs.
 
 ### `approvals/`: owner decision and approval records
