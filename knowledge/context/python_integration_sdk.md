@@ -338,12 +338,32 @@ pin makes hostname and expiry moot.
 Because the list can hold CA certificates and not the leaf at all
 (§3.1 correction), do not pin `pems[0]` blindly. Verify by chain first, with
 every received PEM plus the system bundle as anchors, and fall back to an
-exact leaf pin only when chain verification fails:
+exact leaf pin only when chain verification fails. Two traps in the
+fallback, both verified in pyVmomi 9.1.0.0 `pyVim/connect.py`:
+
+- `SmartConnect` runs `__FindSupportedVersion` (an HTTPS GET of
+  `vimServiceVersions.xml`) on `sslContext` **before** the SOAP stub exists,
+  and that probe is never pinned. So the fallback cannot reuse a verifying
+  context: it would fail on the probe for the same reason the chain attempt
+  failed. Give the pinned attempt an unverified context (the probe carries no
+  credential) and let the pin do the checking.
+- The pin is enforced on the stub, before the login is sent, and a mismatch
+  surfaces as `ThumbprintMismatchException` wrapped in
+  `vim.fault.HostConnectFault`; walk `__cause__`/`__context__` rather than
+  reading the message. Read the presented leaf first (`ssl.get_server_certificate`)
+  and only attempt the pinned login when its SHA-256 is one of the received
+  certificates, so a wrong certificate never sees a credential.
 
 ```python
+import hashlib, ssl
+from pyVim.connect import SmartConnect
+
 pems = [c.get_certificate_string() for c in adapter_instance.get_certificates()]
 
-def connect(host, user, pwd):
+def sha256_of(pem):
+    return hashlib.sha256(ssl.PEM_cert_to_DER_cert(pem)).hexdigest()
+
+def connect(host, port, user, pwd):
     # 1. chain: every received PEM (leaf or CA) plus the system bundle
     ctx = ssl.create_default_context()          # one context per connection
     for pem in pems:
@@ -353,19 +373,28 @@ def connect(host, user, pwd):
             pass                                 # not a usable anchor
     ctx.verify_flags |= ssl.VERIFY_X509_PARTIAL_CHAIN
     try:
-        return SmartConnect(host=host, user=user, pwd=pwd, sslContext=ctx)
+        return SmartConnect(host=host, port=port, user=user, pwd=pwd,
+                            sslContext=ctx)
     except ssl.SSLCertVerificationError:
         pass
-    # 2. exact leaf pin, one PEM per attempt, fresh context each time
-    for pem in pems:
-        try:
-            return SmartConnect(host=host, user=user, pwd=pwd,
-                                sslContext=ssl.create_default_context(),
-                                serverPemCert=pem)
-        except ssl.SSLCertVerificationError:
-            continue
-    raise
+    # 2. exact leaf pin: read what the server presents, compare, then log in
+    #    on an unverified context (covers the unpinned version probe) with
+    #    pyVmomi checking the pin on the stub before the login goes out
+    presented = sha256_of(ssl.get_server_certificate((host, port)))
+    if presented not in {sha256_of(p) for p in pems}:
+        raise RuntimeError(f"{host} presented an unaccepted certificate "
+                           f"(sha256 {presented})")
+    return SmartConnect(host=host, port=port, user=user, pwd=pwd,
+                        sslContext=ssl._create_unverified_context(),
+                        thumbprint=presented)
 ```
+
+`thumbprint` is marked deprecated in favour of `serverPemCert`, but
+`serverPemCert` is checked by reconnecting only after an
+`SSLCertVerificationError` from the context you passed, so it cannot be
+used on an unverified context; the thumbprint pin is the one that works
+with the probe. `ssl.get_server_certificate` is an unverified read and is
+why the comparison happens before any credential is sent.
 
 Reference implementation: the vsanhostmetrics fork `app/perfsvc.py`
 (`tuneup/upstream-2026-10`, reviewed in
