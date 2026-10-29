@@ -314,10 +314,17 @@ caches the result in `connections.json` and reuses it until the
 certificate is not picked up locally until you delete that key.
 
 Things to assume about the list: it is not keyed by URL (match by trying
-each), it may contain a CA-validated certificate as well as user-accepted
-ones, and the PEM is the presented leaf, not a CA. Whether the platform ever
-sends a chain, and what it sends after the target renews its certificate, was
-not established.
+each), and each entry is one certificate, never a bundled chain.
+
+**Correction 2026-10-28** (`sdk/accepted_certificate_handoff.md`, verified on
+8.18.7, 9.0.2 and 9.1.1): "Review and accept" stores only the presented leaf
+(`chain[0]`), and an operator cannot pick a CA in that dialog. But the platform
+appends **every cluster-wide `CERTIFICATE_AUTHORITY` certificate** to every
+instance's list, and when Ops already trusts the target through such a CA no
+dialog appears and no leaf is stored, so the list can hold only CAs. A
+renewal re-accept adds the new leaf and keeps the old. Verify against all
+received PEMs as CA anchors first, then fall back to an exact leaf pin. The
+earlier "the PEM is the presented leaf, not a CA" was wrong.
 
 ### 3.2 Using the accepted certificate with pyVmomi
 
@@ -810,9 +817,9 @@ current pip (26.2.1), so a base-image rebuild cannot clear them.
 - What the install path checks for a container pak, and whether the image is
   pulled at install or at first container start (§8.3).
 - What `use_default_registry` resolves to on 9.x (§8.2).
-- Whether the platform sends a chain or only the leaf in
-  `certificate_config`, how the list relates to multiple endpoints, and what
-  happens after the target renews its certificate (§3.1).
+- How the certificate list relates to multiple endpoints (§3.1). Chain vs
+  leaf and renewal were settled 2026-10-28 in
+  `sdk/accepted_certificate_handoff.md`.
 - Which Ops principal `cluster_connection_info` carries, its token lifetime,
   and the `host_name` form (FQDN, IP, local name) (§5).
 - Whether 9.x honours `X-vRealizeOps-API-use-unsupported` (§5).

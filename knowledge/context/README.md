@@ -76,6 +76,7 @@ Tier 2 (Java SDK) framework architecture — read when working on SDK adapters.
 | File | Purpose |
 |---|---|
 | `cloud_proxy_detection.md` | How an adapter tells a Cloud Proxy from an analytics node: `collector/collector.properties` `isUnifiedCloudProxy`, or `httpRelayEnabled=true` where that key is absent (six devel nodes, 8.18.6/9.0.2/9.1.1); why `remote=true` is not used; the platform `Crypt` logs a decrypt failure at ERROR itself and returns null, so the only way to avoid that line is not to call it (2026-10-28, compliance#58) |
+| `accepted_certificate_handoff.md` | What "Review and accept certificate" stores (the presented leaf only, `chain[0]`, on 8.18.7/9.0.2/9.1.1; no way to pick a CA) and what an adapter receives in `certificate_config` / `getTrustedCertificates()` (its accepted leaves plus every cluster-wide `CERTIFICATE_AUTHORITY` cert; CA-only when Ops already trusts the target); storage in `kv_certificate`; consequences for exact pins (2026-10-28) |
 | `vanished_object_lifecycle.md` | How an adapter marks an object gone: `AdapterBase.changeResourceState(rc, StateChangeEnum.NOTEXIST)` from `onCollect` (SDK 8.18.7/2.2/9.1.1); what vCenter, vSAN, NSX, VCF, MPB and the Integration SDK container runtime (implicit 12 missed cycles) do; the `DELETED_OBJECTS_RETENTION_IN_HOURS` / `DELETION_SCHEDULING_INTERVAL_IN_HOURS` settings act only on `NOT_EXISTING` objects; why the framework leaves vanished objects `DATA_RECEIVING` (2026-10-28) |
 
 ### `framework_v2_migration.md`
