@@ -2052,6 +2052,20 @@ class Dashboard:
                         f"dashboard {self.name}: widget {w.local_id}: "
                         f"AlertVolume with self_provider=true requires a 'pin' resource kind"
                     )
+            if w.type == "View" and w.self_provider and w.pin is None:
+                # Without a pin the renderer emits selfProvider:false and the
+                # widget imports unbound ("Select the widget source...").
+                # There is no "all objects" source for a View widget; see
+                # knowledge/context/wire-formats/view_widget_all_objects_of_kind.md.
+                raise DashboardValidationError(
+                    f"dashboard {self.name}: widget {w.local_id}: "
+                    f"View with self_provider=true requires a 'pin' resource; "
+                    f"without one the widget imports unbound. To list every "
+                    f"object of a kind, pin to a helper custom group whose rule "
+                    f"sets all_of_kind: true (pin adapter_kind: Container, "
+                    f"resource_kind: <group type>, name: <group name>), see "
+                    f"knowledge/context/wire-formats/view_widget_all_objects_of_kind.md"
+                )
             if w.type == "ProblemAlertsList" and w.self_provider and w.pin is None:
                 raise DashboardValidationError(
                     f"dashboard {self.name}: widget {w.local_id}: "

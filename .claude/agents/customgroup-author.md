@@ -70,6 +70,10 @@ authoritative."
 - Within one rule, all conditions → AND'd.
 - Each rule selects one `(resource_kind, adapter_kind)` pair.
 - Condition types: stat, property, name, relationship, tag.
+- A rule with no conditions is rejected unless it sets `all_of_kind: true`
+  (every object of that kind; never combined with conditions). Use it for
+  a helper group that a View widget pins to so the view lists every object
+  of a kind (`knowledge/context/wire-formats/view_widget_all_objects_of_kind.md`).
 
 ## YAML schema
 

@@ -1,0 +1,50 @@
+id: bd114a78-276f-46d2-a0cd-91e7b797c637
+name: "[VCF Content Factory] Application VM Resources"
+description: >
+  Per-VM CPU, memory and disk allocation and consumption for the VMs in a
+  selected application group. Meant to be embedded in a dashboard and fed a
+  custom group, so rows are the group's child VMs. The VM name is the view's
+  implicit first column. Totals row: Sum for counts, MHz, GB; Average for CPU
+  usage %.
+
+subject:
+  adapter_kind: VMWARE
+  resource_kind: VirtualMachine
+
+summary:
+  - display_name: Total
+    aggregation: SUM
+    columns: [0, 1, 3, 4, 5, 6]
+  - display_name: Average
+    aggregation: AVG
+    columns: [2]
+
+columns:
+  - attribute: config|hardware|num_Cpu
+    display_name: "vCPU"
+    unit: ""
+    transformation: CURRENT
+  - attribute: cpu|usagemhz_average
+    display_name: "CPU Used (MHz)"
+    unit: ""
+    transformation: CURRENT
+  - attribute: cpu|usage_average
+    display_name: "CPU Usage (%)"
+    unit: ""
+    transformation: CURRENT
+  - attribute: mem|guest_provisioned
+    display_name: "Memory Allocated (GB)"
+    unit: gb
+    transformation: CURRENT
+  - attribute: mem|consumed_average
+    display_name: "Memory Consumed (GB)"
+    unit: gb
+    transformation: CURRENT
+  - attribute: diskspace|provisionedSpace
+    display_name: "Disk Provisioned (GB)"
+    unit: gb
+    transformation: CURRENT
+  - attribute: diskspace|used
+    display_name: "Disk Used (GB)"
+    unit: gb
+    transformation: CURRENT

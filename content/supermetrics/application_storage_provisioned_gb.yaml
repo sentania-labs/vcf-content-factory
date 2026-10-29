@@ -1,0 +1,12 @@
+id: 8656f466-c2e2-4e44-bf42-9426e6857132
+name: "[VCF Content Factory] Application Storage Provisioned (GB)"
+resource_kinds:
+  - resource_kind_key: "(Custom) Application"
+    adapter_kind_key: Container
+description: >
+  Total storage provisioned to the member VMs of a (Custom) Application custom
+  group. Sums diskspace|provisionedSpace (already in GB) across VMWARE
+  VirtualMachine objects one hop (depth=1) from the group. Unit: GB.
+formula: |
+  sum(${adaptertype=VMWARE, objecttype=VirtualMachine,
+        metric=diskspace|provisionedSpace, depth=1})

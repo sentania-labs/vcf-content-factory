@@ -1,0 +1,18 @@
+id: dae19dca-23ee-4b5f-8adb-15f05167cbe3
+name: "[VCF Content Factory] Application Allocation"
+description: >
+  One row per application group with VM count and summed vCPU, memory and
+  storage allocation, plus a totals row. No picker; the view lists every
+  group of its subject type.
+
+widgets:
+  - id: app_allocation
+    type: View
+    title: "Allocation by Application"
+    coords: {x: 1, y: 1, w: 12, h: 9}
+    self_provider: true
+    pin:
+      adapter_kind: Container
+      resource_kind: Environment
+      name: "[VCF Content Factory] All Applications"
+    view: "[VCF Content Factory] Application Allocation Summary"
