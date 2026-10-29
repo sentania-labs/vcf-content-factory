@@ -94,7 +94,7 @@ includes the dashboard folder rule; `name_path` defaults to
 ## Widget types quick reference
 
 - **ResourceList** — picker sidebar; produces selection for other widgets
-- **View** — embeds a list view; optionally `self_provider: true` + `pin:`
+- **View** — embeds a list view; `self_provider: true` requires a `pin:` (#303: an unpinned self-provider imports unbound). "Every object of kind X" = pin to a helper group with an `all_of_kind` rule (`knowledge/context/wire-formats/view_widget_all_objects_of_kind.md`)
 - **TextDisplay** — static text or HTML block (`text:` or `html:`)
 - **Scoreboard** — metric tiles with thresholds (`metrics:` array)
 - **MetricChart** — time-series line/area/bar chart (`metrics:` array)

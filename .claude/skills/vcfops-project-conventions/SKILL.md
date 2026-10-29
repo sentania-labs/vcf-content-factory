@@ -11,7 +11,7 @@ description: >
   deleted 2026-05-09 and folded into CLAUDE.md). This skill is
   specific to this project — the domain knowledge lives in the
   vcfops-api, vcfops-content-model, and vcfops-supermetric-dsl
-  global skills.
+  skills (also under `.claude/skills/`).
 ---
 
 # VCF Content Factory — project conventions

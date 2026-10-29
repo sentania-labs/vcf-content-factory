@@ -314,26 +314,107 @@ caches the result in `connections.json` and reuses it until the
 certificate is not picked up locally until you delete that key.
 
 Things to assume about the list: it is not keyed by URL (match by trying
-each), it may contain a CA-validated certificate as well as user-accepted
-ones, and the PEM is the presented leaf, not a CA. Whether the platform ever
-sends a chain, and what it sends after the target renews its certificate, was
-not established.
+each), and each entry is one certificate, never a bundled chain.
+
+**Correction 2026-10-28** (`sdk/accepted_certificate_handoff.md`, verified on
+8.18.7, 9.0.2 and 9.1.1): "Review and accept" stores only the presented leaf
+(`chain[0]`), and an operator cannot pick a CA in that dialog. But the platform
+appends **every cluster-wide `CERTIFICATE_AUTHORITY` certificate** to every
+instance's list, and when Ops already trusts the target through such a CA no
+dialog appears and no leaf is stored, so the list can hold only CAs. A
+renewal re-accept adds the new leaf and keeps the old. Verify against all
+received PEMs as CA anchors first, then fall back to an exact leaf pin. The
+earlier "the PEM is the presented leaf, not a CA" was wrong.
 
 ### 3.2 Using the accepted certificate with pyVmomi
 
-pyVmomi (verified in 9.1.1.0, `pyVmomi/SoapAdapter.py:1092-1142`) does
-exactly the platform's semantics: pass `serverPemCert=<pem>` to
-`SmartConnect` or `SoapStubAdapter`. It first tries normal verification with
-the context you give it; only on `SSLCertVerificationError` does it reconnect
-and require the peer certificate to **exactly equal** the pinned PEM. An exact
-pin makes hostname and expiry moot.
+How pyVmomi enforces a pin depends on the pyVmomi version, and the two
+behaviours need different code. Both read from the source:
+
+- **8.0.x** (`v8.0.3.0.1`, `pyVmomi/SoapAdapter.py:1498-1508`):
+  `SoapStubAdapter.GetConnection` calls `_VerifyThumbprint` after every
+  connect, **unconditionally**. The `thumbprint` pin is checked on every
+  SOAP connection whatever the context's `verify_mode`, so a pinned login may
+  use an unverified context. There is no `serverPemCert`.
+- **9.x** (`v9.1.0.0`, `SoapAdapter.py:1116-1142`): `_Connect` calls
+  `connection.connect()` and only on `SSLCertVerificationError` does it drop
+  to `CERT_NONE`, reconnect and run `_VerifyPinnedIdentity` (`serverPemCert`
+  or `thumbprint`). **An unverified context never raises, so with it the pin
+  is never checked.** The pinned attempt must use a verifying context that
+  fails, and the pin then replaces chain, hostname and expiry.
+
+Two more traps, both in 9.x `pyVim/connect.py`:
+
+- `SmartConnect` runs `__FindSupportedVersion` (an HTTPS GET of
+  `vimServiceVersions.xml`) on `sslContext` before any stub exists, and that
+  probe is never pinned. A verifying context that fails the chain fails the
+  probe too, so on 9.x the pinned path cannot go through `SmartConnect`.
+  Build the `SoapStubAdapter` yourself with an explicit `version` (no
+  probe), then `RetrieveContent` and `Login` on it.
+- A mismatch surfaces as `ThumbprintMismatchException`, on 8.0.x wrapped in
+  `vim.fault.HostConnectFault` by `SmartConnect`; walk
+  `__cause__`/`__context__` rather than reading the message.
+
+Because the list can hold CA certificates and not the leaf at all
+(§3.1 correction), do not pin `pems[0]` blindly. Verify by chain first, with
+every received PEM plus the system bundle as anchors, and fall back to an
+exact leaf pin only when chain verification fails. Read the presented leaf
+first (`ssl.get_server_certificate`, an unverified read) and only attempt the
+pinned login when its SHA-256 is one of the received certificates, so a
+wrong certificate never sees a credential; the pin on the real connection is
+still what protects the login, the pre-read only decides whether to try.
 
 ```python
-ctx = ssl.create_default_context()          # one context per connection
+import hashlib, ssl
+from pyVim.connect import SmartConnect
+from pyVmomi import SoapStubAdapter, vim
+
 pems = [c.get_certificate_string() for c in adapter_instance.get_certificates()]
-si = SmartConnect(host=host, user=user, pwd=pwd, sslContext=ctx,
-                  serverPemCert=pems[0] if pems else None)
+
+def sha256_of(pem):
+    return hashlib.sha256(ssl.PEM_cert_to_DER_cert(pem)).hexdigest()
+
+def connect(host, port, user, pwd):
+    # 1. chain: every received PEM (leaf or CA) plus the system bundle
+    ctx = ssl.create_default_context()          # one context per connection
+    for pem in pems:
+        try:
+            ctx.load_verify_locations(cadata=pem)
+        except ssl.SSLError:
+            pass                                 # not a usable anchor
+    ctx.verify_flags |= ssl.VERIFY_X509_PARTIAL_CHAIN
+    try:
+        return SmartConnect(host=host, port=port, user=user, pwd=pwd,
+                            sslContext=ctx)
+    except ssl.SSLCertVerificationError:
+        pass
+    # 2. exact leaf pin, only if what the server shows is an accepted leaf
+    presented = sha256_of(ssl.get_server_certificate((host, port)))
+    if presented not in {sha256_of(p) for p in pems}:
+        raise RuntimeError(f"{host} presented an unaccepted certificate "
+                           f"(sha256 {presented})")
+    # 9.x: a verifying context (fails the chain, so _Connect pins) and no
+    # SmartConnect (its version probe is unpinned). Every connection the stub
+    # opens goes through _Connect, so every one is pinned.
+    stub = SoapStubAdapter(host=host, port=port, version="vim.version.version14",
+                           sslContext=ssl.create_default_context(),
+                           thumbprint=presented)
+    si = vim.ServiceInstance("ServiceInstance", stub)
+    si.RetrieveContent().sessionManager.Login(user, pwd)   # pin checked first
+    return si
 ```
+
+On 8.0.x the same two-step shape works with `SmartConnect(...,
+sslContext=ssl._create_unverified_context(), thumbprint=presented)` for
+step 2, because the thumbprint is checked on every connection regardless
+of the context; that is what the vsanhostmetrics fork does with its pinned
+`pyvmomi==8.0.3.0.1`. **Do not carry that form to 9.x**: it disables
+verification and never checks the pin. Pin the pyVmomi version the code
+was written against.
+
+Reference implementation: the vsanhostmetrics fork `app/perfsvc.py`
+(`tuneup/upstream-2026-10`, reviewed in
+`reviews/python-packs/vsanhostmetrics-tuneup-2026-10-28.md`).
 
 Caveats from the source:
 
@@ -810,9 +891,9 @@ current pip (26.2.1), so a base-image rebuild cannot clear them.
 - What the install path checks for a container pak, and whether the image is
   pulled at install or at first container start (§8.3).
 - What `use_default_registry` resolves to on 9.x (§8.2).
-- Whether the platform sends a chain or only the leaf in
-  `certificate_config`, how the list relates to multiple endpoints, and what
-  happens after the target renews its certificate (§3.1).
+- How the certificate list relates to multiple endpoints (§3.1). Chain vs
+  leaf and renewal were settled 2026-10-28 in
+  `sdk/accepted_certificate_handoff.md`.
 - Which Ops principal `cluster_connection_info` carries, its token lifetime,
   and the `host_name` form (FQDN, IP, local name) (§5).
 - Whether 9.x honours `X-vRealizeOps-API-use-unsupported` (§5).
