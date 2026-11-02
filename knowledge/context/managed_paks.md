@@ -137,7 +137,16 @@ an `upstream` remote and fast-forward from it); do work on branches.
   branch `tuneup/ci-ghcr-attestation-main` rebased onto it, proof tag
   `v1.4.6-rc.4` (run 38496680141) green; upstream PR
   nickfirefoot/vsanhostmetrics#1 opened 2026-10-13 on Scott's go; fork issues
-  #8 to #11 (his generator tooling) and #12 (object model design question)
+  #8 to #11 (his generator tooling) and #12 (object model design question).
+  Tune-up round (2026-10-28 to 29): branch `tuneup/upstream-2026-10` resolves
+  fork issues #1 to #4, #6, #7, #10, #11 plus the pyVmomi pin guard and the
+  msgpack Trivy id; reviews in `reviews/python-packs/`. Username moved into the
+  credential as a breaking 2.0.0 (the 1.5.0 fallback design was built, tested
+  as rc.2/rc.3 and dropped); `MIGRATION.md` carries the live result. Proven in
+  place on 8.18.7, 9.0.2 and 9.1.1 (1.4.6 to 1.5.0-rc.2, then to 2.0.0-rc.1;
+  the direct 1.4.7 to 2.0.0 install is unproven and said so). Fork tags
+  `v2.0.0-rc.1`, `v2.0.0-rc.2` published. Upstream PR
+  nickfirefoot/vsanhostmetrics#2 opened 2026-10-29 on Scott's go.
 
 ### cluster-perf-risk (fork of gillaspy/cluster-perf-risk)
 
@@ -155,7 +164,13 @@ an `upstream` remote and fast-forward from it); do work on branches.
   token at DEBUG, empty Test Connection, packaging); PRs upstream on Scott's go.
   CI: branch `tuneup/ci-ghcr-attestation` proven by tag `v1.3.0-rc.1` (run
   38471417171, image and pak attested and signed, Trivy gated), see
-  `knowledge/designs/ci/python-pack-ghcr-attestation.md`
+  `knowledge/designs/ci/python-pack-ghcr-attestation.md`.
+  Tune-up round (2026-10-28): branch `tuneup/upstream-2026-10` resolves fork
+  issues #1, #3, #5 to #9 and raises #2 (TLS to the Suite API) as a question;
+  review in `reviews/python-packs/`. Fork tag `v2.1.0-rc.1` published; proven
+  on 8.18.7, 9.0.2 and 9.1.1 via the 1.x to 2.x MIGRATION.md path (9 Suite API
+  calls per cycle, 0 ERROR). Upstream PR gillaspy/cluster-perf-risk#13 opened
+  2026-10-29 on Scott's go.
 
 ## Retired paks
 
