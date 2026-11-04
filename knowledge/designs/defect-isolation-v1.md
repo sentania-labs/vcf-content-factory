@@ -22,9 +22,13 @@ strictness: at push time against the registry beside the clone, fail
 safe, and in CI against a fetched registry, fail closed. Decision 5
 (`/publish` and a `v*` tag equally strict) therefore still stands open
 until the paks adopt the pinned, generated gate or drop the CI gate.
-The consumer-side coupling the design set out to remove is gone: the
-hook reads the consumer's own `defects.local.md`, and a third party's
-pak CI never sees the factory registry.
+Of the consumer-side coupling the design set out to remove, the local
+half is gone: the hook reads the consumer's own `defects.local.md`. The
+CI half is not: a pak instantiated from the template still fetches the
+factory registry (pinned, fail closed) and never consults the consumer's
+local file, so a third party's release is still gated by the factory's
+defects until the template drops that step, as the rollout section
+below still says.
 
 Origin: cross-workspace request `50dc7556` (lab-admin, 2026-09-03),
 relaying Scott's VMware Explore conversation with a Content Factory
