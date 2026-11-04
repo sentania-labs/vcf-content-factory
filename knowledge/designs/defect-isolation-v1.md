@@ -1,6 +1,30 @@
-# Defect gate isolation: user vs maintainer (v1, proposal)
+# Defect gate isolation: user vs maintainer (v1)
 
-Status: **proposal, nothing built.** Building starts on an explicit go.
+Status: **built, with one deliberate divergence** (status reconciled
+2026-11-04). Decisions 1 to 4 and the pre-push hook shipped in PR #151
+(2026-09-10, branch `feat/defect-isolation-and-bootstrap-report`):
+`defects.local.md` is preferred by file presence
+(`vcfcf_packaging/defects.py`), per-entry isolation is RULE-012 in the
+parser, an absent registry warns unless the caller asks it to refuse,
+`.githooks/pre-push` wires `scripts/version_line_guard.sh`, the
+bootstrap sets `core.hooksPath` on every registered pak clone, and the
+doctor offers `defects.local.md` at first run and names it in a gate's
+refusal hint (deliberately not a standing session line). The
+divergence: the pak CI defect gate was **kept, not deleted**. The step
+below under "Where the gate runs" that drops the `curl` and the vendored
+`ci/defect_gate.py` was not done; instead #226 shipped a generator for a
+checksum-verified vendored copy (factory PR #269; no pak and not the
+template has adopted it yet) and template#18 pinned the template's
+registry fetch to `DEFECT_REGISTRY_COMMIT`, while the live paks
+(compliance, synology, unifi) still fetch the registry from the tip of
+factory `main`. So today a `v*` tag is gated twice with different
+strictness: at push time against the registry beside the clone, fail
+safe, and in CI against a fetched registry, fail closed. Decision 5
+(`/publish` and a `v*` tag equally strict) therefore still stands open
+until the paks adopt the pinned, generated gate or drop the CI gate.
+The consumer-side coupling the design set out to remove is gone: the
+hook reads the consumer's own `defects.local.md`, and a third party's
+pak CI never sees the factory registry.
 
 Origin: cross-workspace request `50dc7556` (lab-admin, 2026-09-03),
 relaying Scott's VMware Explore conversation with a Content Factory
