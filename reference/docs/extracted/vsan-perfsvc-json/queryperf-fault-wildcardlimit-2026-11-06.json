@@ -1,0 +1,11 @@
+{
+    "_typeName": "InvalidArgument", 
+    "faultMessage": [
+        {
+            "_typeName": "LocalizableMessage", 
+            "key": "com.vmware.vsan.perfsvc.fault.queryperf.wildcardlimit", 
+            "message": "Invalid Argument. Only one wildcard query allowed in query specs."
+        }
+    ], 
+    "faultstring": "A specified parameter was not correct: "
+}
