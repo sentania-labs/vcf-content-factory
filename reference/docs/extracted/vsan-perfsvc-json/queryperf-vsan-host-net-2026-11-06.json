@@ -1,0 +1,397 @@
+[
+    {
+        "_typeName": "VsanPerfEntityMetricCSV", 
+        "entityRefId": "vsan-host-net:69fd149d-c1b8-aae3-bcb2-3805253936dc", 
+        "sampleInfo": "2026-11-07 05:00:00,2026-11-07 05:05:00", 
+        "value": [
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "portRxDrops", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "0,0"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "portTxDrops", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "0,0"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "rxPackets", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "43342,39960"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "rxPacketsLossRate", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "0,0"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "rxThroughput", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "74168051,59615275"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "txPackets", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "38652,35980"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "txPacketsLossRate", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "0,0"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "txThroughput", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "58116638,49912742"
+            }
+        ]
+    }, 
+    {
+        "_typeName": "VsanPerfEntityMetricCSV", 
+        "entityRefId": "vsan-host-net:69805090-5bba-3949-88f7-38052534dfcc", 
+        "sampleInfo": "2026-11-07 05:00:00,2026-11-07 05:05:00", 
+        "value": [
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "portRxDrops", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "0,0"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "portTxDrops", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "0,0"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "rxPackets", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "52548,49844"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "rxPacketsLossRate", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "0,0"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "rxThroughput", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "81745581,79677822"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "txPackets", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "50785,48738"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "txPacketsLossRate", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "0,0"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "txThroughput", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "70726715,56976829"
+            }
+        ]
+    }, 
+    {
+        "_typeName": "VsanPerfEntityMetricCSV", 
+        "entityRefId": "vsan-host-net:6a8859db-a52e-c523-e78c-3805253a02fc", 
+        "sampleInfo": "2026-11-07 05:00:00,2026-11-07 05:05:00", 
+        "value": [
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "portRxDrops", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "0,0"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "portTxDrops", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "0,0"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "rxPackets", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "37005,33819"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "rxPacketsLossRate", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "0,0"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "rxThroughput", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "54252548,40235099"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "txPackets", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "33592,31165"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "txPacketsLossRate", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "0,0"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "txThroughput", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "68075596,55394277"
+            }
+        ]
+    }, 
+    {
+        "_typeName": "VsanPerfEntityMetricCSV", 
+        "entityRefId": "vsan-host-net:69805998-46aa-aafb-3dd4-38052534e318", 
+        "sampleInfo": "2026-11-07 05:00:00,2026-11-07 05:05:00", 
+        "value": [
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "portRxDrops", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "0,0"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "portTxDrops", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "0,0"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "rxPackets", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "36884,33839"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "rxPacketsLossRate", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "0,0"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "rxThroughput", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "52694712,37627705"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "txPackets", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "32883,30621"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "txPacketsLossRate", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "0,0"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "txThroughput", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "64626048,52525711"
+            }
+        ]
+    }, 
+    {
+        "_typeName": "VsanPerfEntityMetricCSV", 
+        "entityRefId": "vsan-host-net:698054c1-6eb8-30f8-8c1e-38052534ded0", 
+        "sampleInfo": "2026-11-07 05:00:00,2026-11-07 05:05:00", 
+        "value": [
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "portRxDrops", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "0,0"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "portTxDrops", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "0,0"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "rxPackets", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "42194,38368"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "rxPacketsLossRate", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "0,0"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "rxThroughput", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "67657266,51090031"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "txPackets", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "37713,34836"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "txPacketsLossRate", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "0,0"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "txThroughput", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "68546201,53175195"
+            }
+        ]
+    }
+]

@@ -1,0 +1,72 @@
+[
+    {
+        "_typeName": "VsanPerfEntityMetricCSV", 
+        "entityRefId": "cluster-zdom-top-stats:90d067b8-0077-11f1-af60-000c297e270a", 
+        "sampleInfo": "2026-11-07 05:00:00,2026-11-07 05:05:00", 
+        "value": [
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "iopsRead", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "419,1354"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "iopsWrite", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "2411,1763"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "latencyAvgRead", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "3530,6329"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "latencyAvgWrite", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "11630,8080"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "oio", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "25,19"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "throughputRead", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "14677545,53747394"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "throughputWrite", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "41446032,28814733"
+            }
+        ]
+    }
+]

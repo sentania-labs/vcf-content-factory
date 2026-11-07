@@ -6,6 +6,7 @@
 - **Target instance:** vcf-lab-vcenter-mgmt.int.sentania.net:443 (vCenter 9.1.1.0100 build 25784172, one ESA vSAN cluster `vcf-lab-mgmt-cl01`, 5 hosts 9.1.1, 30 VMs; plus one standalone non-vSAN host `vcf-lab-mgmt-esx06`, first noted in the inventory round)
 - **Last updated:** 2026-11-06
 - **Update history:**
+  - 2026-11-06 (late evening) — added "Build 2 entity types (measured 2026-11-06)": the 30 remaining dashboard-scope types over JSON with COVERED labels (per-type table, totals, entityRefId grammar, 6 empty types, join keys verified against PropertyCollector, `QueryVsanManagedDisks` and `QueryDisksForVsan`); 24 verbatim samples and `PROVENANCE-2026-11-06-build2.md` under `reference/docs/extracted/vsan-perfsvc-json/`. Two join-key lines and gaps appended. Earlier sections untouched and not re-verified, apart from the instanceUuid and cluster/node uuid joins, which were re-verified.
   - 2026-11-06 (evening) — added "vim25 inventory over JSON" for design Prerequisite P1: per-object GET vs PropertyCollector for the cluster/host inventory reads, the `configurationEx` sub-path fault, and verbatim JSON samples for `host-domclient`, `host-domowner`, `vsan-pnic-net` (Build 1 labels), `VsanPerfQueryNodeInformation` and the RetrievePropertiesEx read, under `reference/docs/extracted/vsan-perfsvc-json/`. Earlier sections untouched and not re-verified this round.
   - 2026-11-06 (later) — added "JSON API transport": vSphere JSON-over-HTTP (`/sdk/vim25/<release>/vsan/...`) measured against SOAP on the same cluster and window; verbatim samples added under `reference/docs/extracted/vsan-perfsvc-json/`.
   - 2026-11-06 — initial mapping. Answers the collector questions in `knowledge/context/investigations/2026-11-06-vsanhostmetrics-scale-plan.md` §3: batching limits, cluster-omitted calls, labels, window/interval, concurrency, session cost. Also captured one full raw collection cycle to `/mnt/holding/vsan-perfsvc-recording-2026-11-06/` (simulator seed; local-only artifact, outside the repo and not reproducible from it; regenerate with the procedure in the Recording section).
@@ -325,6 +326,90 @@ The three perf types total **390 series**, exactly the design's "up to 390" for 
 - **Non-vSAN host**: `vcf-lab-mgmt-esx06` (standalone, `config.vsanHostConfig.enabled` = `{"_typeName":"boolean","_value":false}`, `clusterInfo.nodeUuid` = `{"_typeName":"string","_value":""}`, an empty string, not absent) appears in **none** of the three responses, and NodeInformation lists only the 5 cluster nodes. All 5 node uuids in every response match the cluster hosts' `nodeUuid` 1:1 `[observed 2026-11-06]`. Because the perf query is cluster-scoped, a host outside a vSAN cluster cannot appear. Not tested, since the lab has none: a non-vSAN or compute-only host *inside* a vSAN cluster, and HCI Mesh client clusters. The inventory should treat an empty `nodeUuid` as "not a vSAN node" and leave it out of the node-to-host map.
 - NodeInformation entries: `version`, `hostname`, `isCmmdsMaster`, `isStatsMaster`, `vsanMasterUuid`, `vsanNodeUuid`, `diagnosticMode`. Only the stats master carries `masterInfo` (`secSinceLastStatsWrite`, `secSinceLastStatsCollect`, `statsIntervalSec` 300, `statsDirectoryPercentFree`, `verboseMode` false). `hostname` is the host's vCenter `name` here (FQDN), but join on `vsanNodeUuid` `[observed 2026-11-06]`.
 
+## Build 2 entity types (measured 2026-11-06)
+
+Every entity type in the Python pack's default dashboard scope (`metric_scope.COVERED`, 33 kinds / 451 labels) that Build 1 does not cover: 30 types, 390 labels. Kind to wire type via `perfsvc_model.ENTITIES`, plus `perfsvc_model_extra.ENTITIES` for 8 COVERED kinds the live model lacks (`cache-disk`, `capacity-disk`, both `*-esa-dedup-domclient-io`, `vsan-direct-cluster`, `vsan-direct-host`, `vsan-file-service`, `ioinsight`); the pack loads both. Same transport as above: release `8.0.3.0`, one session (login, 30 queries, join reads, logout `204`), one wildcard spec per call, `labels` = that kind's COVERED labels, cluster `domain-c6004`, window `2026-11-07T05:01:41Z` to `05:08:41Z` (7 min, UTC), gzip, serial. Provenance and per-file sizes: `reference/docs/extracted/vsan-perfsvc-json/PROVENANCE-2026-11-06-build2.md` `[observed 2026-11-06]`.
+
+### Per-type results
+
+All 30 calls returned HTTP 200; no faults. Every requested label came back on every non-empty type, and no others; `metricsCollectInterval` 300 everywhere `[observed 2026-11-06]`.
+
+| Tier | Type | Labels | Entities | Series | Wire / decoded B | ms |
+|---|---|---|---|---|---|---|
+| cluster | `vsan-cluster-capacity` | 5 | 1 | 5 | 416 / 1,917 | 139 |
+| cluster | `cluster-domclient` | 11 | 1 | 11 | 453 / 3,800 | 216 |
+| cluster | `cluster-domcompmgr` | 12 | 1 | 12 | 443 / 4,100 | 167 |
+| cluster | `cluster-domowner` | 23 | 1 | 23 | 696 / 7,739 | 196 |
+| cluster | `cluster-esa-dedup-domclient-io` | 24 | 1 | 24 | 588 / 8,201 | 145 |
+| cluster | `cluster-rdt-network-latency` | 9 | 1 | 9 | 435 / 3,160 | 125 |
+| cluster | `cluster-zdom-top-stats` | 7 | 1 | 7 | 404 / 2,525 | 121 |
+| cluster | `vsan-direct-cluster` | 8 | **0** | 0 | 127 / 138 | 119 |
+| cluster | `vsan-file-service` | 8 | **0** | 0 | 125 / 136 | 138 |
+| cluster | `ioinsight` | 82 | **0** | 0 | 118 / 128 | 81 |
+| host | `cmmds-net` | 10 | 5 | 50 | 1,178 / 17,293 | 140 |
+| host | `vsan-cpu` | 7 | 5 | 35 | 872 / 12,188 | 120 |
+| host | `vsan-direct-host` | 8 | **0** | 0 | 124 / 135 | 130 |
+| host | `host-domcompmgr` | 16 | 5 | 80 | 2,510 / 27,671 | 127 |
+| host | `host-esa-dedup-domclient-io` | 24 | 5 | 120 | 2,526 / 40,919 | 122 |
+| host | `vsan-host-net` | 8 | 5 | 40 | 1,172 / 14,161 | 122 |
+| host | `host-zdom-top-stats` | 11 | 5 | 55 | 1,859 / 19,225 | 144 |
+| host | `vsan-memory` | 12 | 5 | 60 | 1,986 / 21,576 | 161 |
+| host | `rdt-network-latency` | 11 | 5 | 55 | 1,251 / 18,950 | 116 |
+| host | `vsan-tcpip-stats` | 12 | 5 | 60 | 1,779 / 20,670 | 144 |
+| host | `vsan-vnic-net` | 10 | 5 | 50 | 1,246 / 17,526 | 120 |
+| host | `vnic-rdt-network-latency` | 10 | 5 | 50 | 1,278 / 17,345 | 126 |
+| host | `zdom-vtx` | 10 | 5 | 50 | 1,364 / 17,850 | 125 |
+| disk | `cache-disk` | 8 | **0** | 0 | 119 / 129 | 153 |
+| disk | `capacity-disk` | 13 | **0** | 0 | 121 / 132 | 118 |
+| disk | `vsan-esa-disk-layer` | 5 | 5 | 25 | 920 / 9,417 | 127 |
+| disk | `vsan-esa-disk-scsifw` | 5 | 5 | 25 | 766 / 9,316 | 233 |
+| vm | `virtual-machine` | 6 | 30 | 180 | 4,884 / 65,245 | 111 |
+| vm | `virtual-disk` | 7 | 148 | 1,036 | 19,884 / 372,560 | 253 |
+| vm | `vscsi` | 8 | 148 | 1,184 | 23,786 / 414,348 | 250 |
+
+Tier column follows the design's Build 2 table, not the wire `<type>` prefix.
+
+**Totals (serial, one timer around the 30 calls):** 30 calls, 4.395 s wall, 73,430 B wire, 1,148,500 B decoded, 403 entities, 3,246 series (cluster 91, host 705, disk 50, VM 2,400). Per-call p50 128 ms. Slowest three: `virtual-disk` 253 ms, `vscsi` 250 ms, `vsan-esa-disk-scsifw` 233 ms (next `cluster-domclient` 216 ms) `[observed 2026-11-06]`. With Build 1's three types (390 series, ~0.6 s, 9.1 KB wire, evening round) the full 33-type dashboard scope is about 3,636 series and ~5 s serial per cycle on this cluster `[derived from the two rounds; not run as one set]`.
+
+- **Empty types (6), all the wildcard echo** `[{"_typeName":"VsanPerfEntityMetricCSV","entityRefId":"<type>:*","sampleInfo":""}]` with no `value`: `cache-disk`, `capacity-disk` (OSA only; this cluster is ESA), `vsan-direct-cluster`, `vsan-direct-host` (vSAN Direct not configured), `vsan-file-service` (File Service not enabled), `ioinsight` (no IOInsight capture running). An empty type still costs a full call: 81 to 153 ms, ~120 B wire `[observed 2026-11-06; causes inferred from the lab's configuration, not checked per feature]`. That leaves 27 of 33 types with data, which matches the "~27 after learned skips" figure in "Design answers".
+- **ESA dedup types return data.** `cluster-esa-dedup-domclient-io` (1 entity) and `host-esa-dedup-domclient-io` (5) returned all 24 requested labels. The Python pack carries both only in its provisional `perfsvc_model_extra.py` (0 objects observed, advertised metrics) and the 2026-11-06 recording did not list them among the empty ones; on this 9.1.1 ESA cluster they are live `[observed 2026-11-06]`.
+- **`virtual-disk`: 4 of 7 labels are all `None`.** `NIOPSRead`, `NIOPSReadDelayed`, `NIOPSWrite`, `NIOPSWriteDelayed` arrived for all 148 entities with every token the literal `None` (1,180 tokens; 588 two-bucket series, 4 one-bucket). The other 3 labels have values. Possibly these are IOPS-limit (normalized IOPS) counters that only fill when a storage policy sets an IOPS limit `[observed 2026-11-06; cause unverified]`. `virtual-machine` and `vscsi` had no `None` tokens.
+- **Buckets.** Two 5-minute buckets (`05:00:00,05:05:00`) on every entity, except one VM, one vdisk and one vscsi entity that carried only `05:00:00` (one bucket). The per-`entityRefId` last-pushed timestamp in the design handles this `[observed 2026-11-06]`.
+
+### entityRefId grammar per type
+
+The part after the first `:`. One real example each `[observed 2026-11-06]`:
+
+| Type(s) | Grammar | Example |
+|---|---|---|
+| `vsan-cluster-capacity`, `cluster-domclient`, `cluster-domcompmgr`, `cluster-domowner`, `cluster-esa-dedup-domclient-io`, `cluster-rdt-network-latency`, `cluster-zdom-top-stats` | `<vsan cluster uuid>` | `cluster-domowner:90d067b8-0077-11f1-af60-000c297e270a` |
+| `cmmds-net`, `vsan-cpu`, `host-domcompmgr`, `host-esa-dedup-domclient-io`, `vsan-host-net`, `host-zdom-top-stats`, `vsan-memory`, `rdt-network-latency`, `zdom-vtx` | `<host nodeUuid>` | `zdom-vtx:69fd149d-c1b8-aae3-bcb2-3805253936dc` |
+| `vsan-tcpip-stats` | `<nodeUuid>\|<stack>` | `vsan-tcpip-stats:6a8859db-a52e-c523-e78c-3805253a02fc\|defaultTcpipStack` |
+| `vsan-vnic-net` | `<nodeUuid>\|<stack>\|<vmk>` | `vsan-vnic-net:69fd149d-c1b8-aae3-bcb2-3805253936dc\|defaultTcpipStack\|vmk2` |
+| `vnic-rdt-network-latency` | `<nodeUuid>\|<vmk>` | `vnic-rdt-network-latency:6a8859db-a52e-c523-e78c-3805253a02fc\|vmk2` |
+| `vsan-esa-disk-layer`, `vsan-esa-disk-scsifw` | `<vsan disk uuid>` (no host in the id) | `vsan-esa-disk-layer:52d171f6-2e48-758a-777f-d5098533d861` |
+| `virtual-machine` | `<VM config.instanceUuid>` | `virtual-machine:e8f31d49-d532-4b17-9ef1-7cc33efa33dc` |
+| `vscsi` | `<VM config.instanceUuid>\|<controller>:<unit>` | `vscsi:e8f31d49-d532-4b17-9ef1-7cc33efa33dc\|scsi1:0` |
+| `virtual-disk` | datastore path without `[datastore] `, optionally with a leading `/` | `virtual-disk:2488e26a-77c5-25bd-da80-38052534dfcc/vcf-lab-automation-runtime-vn26h.vmdk` |
+| `vsan-direct-*`, `vsan-file-service`, `ioinsight`, `cache-disk`, `capacity-disk` | not observable here (empty) | n/a |
+
+- Instancing seen: `vsan-tcpip-stats` only `defaultTcpipStack`; `vsan-vnic-net` and `vnic-rdt-network-latency` only `vmk2`; one entity per host for each. `vscsi` controllers `scsi0` (132) and `scsi1` (16), up to 24 devices on one VM `[observed 2026-11-06]`.
+- `virtual-disk` path shapes, 148 refs: `<ns uuid>/<file>.vmdk` 109; `/<ns uuid>/<file>.vmdk` (leading slash) 3, e.g. `/a489e06a-d655-c8f9-da07-38052534e318/adfs1.vmdk`; `<ns uuid>/_00ee/<32-hex>.vmdk` 14; `<ns uuid>/_003e/_000e/<32-hex>.vmdk` 22. All nested ones sit in one namespace (`d7528269-...`), possibly the FCD/CNS volume folder `[observed 2026-11-06; FCD reading inferred from pattern]`. No two refs collide after stripping the leading slash `[observed 2026-11-06]`.
+- Parse rule for a Java client: split on the first `:` for the type; for the pipe types split the rest on `|`; for `virtual-disk` take the rest whole (it contains `/` and never `|` here) `[observed 2026-11-06]`.
+
+### Join keys per target object
+
+Verified in the same session with read-only calls (timings are single runs) `[observed 2026-11-06]`:
+
+- **Cluster types → ClusterComputeResource.** The suffix is the vSAN cluster uuid `90d067b8-0077-11f1-af60-000c297e270a`, equal to every member host's `config.vsanHostConfig.clusterInfo.uuid` (5/5), which the R2 PropertyCollector read already returns (22 ms, 981 B wire this run). Cluster MoRef comes from that read; 7 of 7 cluster types matched.
+- **Host types → HostSystem.** The first `|`-segment is the host's `config.vsanHostConfig.clusterInfo.nodeUuid` from the same R2 read: 5/5 distinct node uuids matched for each of the 12 non-empty host types, no extra uuids.
+- **Disk types → host and disk.** The id carries only the vSAN disk uuid, so the owning host has to come from a per-host disk call. Two read-only calls work over JSON and give the same map (5 disks, one per host, 5/5 matched for both ESA types):
+  - `POST /sdk/vim25/8.0.3.0/vsan/VimClusterVsanVcDiskManagementSystem/vsan-disk-management-system/QueryVsanManagedDisks`, body `{"host":<HostSystem MoRef>}`: `storagePools[].storagePoolDisks[]` with `vsanUuid`, `disk` (a `HostScsiDisk`), `diskType`, `isMounted`, `isEncrypted`, `dekId`. 31 to 79 ms, ~860 B wire per host. This is the ESA-native view and what the Python pack uses for the host binding.
+  - `POST /sdk/vim25/8.0.3.0/HostVsanSystem/<configManager.vsanSystem moId>/QueryDisksForVsan`, body `{}`: every local disk with `state`, `vsanUuid`, `disk`. 7 to 10 ms, ~1.6 KB wire per host. On this ESA cluster the in-use disks report `state: "ineligible"` with a populated `vsanUuid`, and the non-vSAN disks report `ineligible` with `vsanUuid: ""`; key on non-empty `vsanUuid`, not on `state`. The vsanSystem moId needs `configManager.vsanSystem` added to the R2 host pathSet.
+  Either way it is one call per host per inventory refresh; the host is the one the call was made against. Five ESA disks here (one per host), not the seven the Python pack observed on 2026-10-22.
+- **`virtual-machine` and `vscsi` → VirtualMachine.** Key on `config.instanceUuid` (30/30 VMs; 148/148 vscsi refs over 30 VMs). `config.uuid` (SMBIOS) matched 0/30. Map instanceUuid to the VM MoRef from a PropertyCollector read of `VirtualMachine`; the Ops VirtualMachine object is then reached by MoRef + vCenter instance uuid, as the design states.
+- **`virtual-disk` → VirtualMachine.** Strip the leading `/`, then match against each VM's `config.hardware.device[]` `VirtualDisk.backing.fileName` with the `[<datastore>] ` prefix removed: 148/148 refs matched, 30 VMs, no misses. Example backing: `[vcf-lab-mgmt-cl01-vsan] 2488e26a-77c5-25bd-da80-38052534dfcc/vcf-lab-automation-runtime-vn26h.vmdk`. **Cost:** the VM read with `name`, `config.instanceUuid`, `config.uuid`, `config.hardware.device` over a root-folder ContainerView (45 VMs vCenter-wide, 30 on vSAN) was 149 KB wire / 1.09 MB decoded / 70 ms, almost all of it `config.hardware.device`. `virtual-machine`/`vscsi` alone need only `config.instanceUuid`. Scoping the view to the cluster (a ComputeResource is a valid ContainerView container) was not tested.
+
 ## Object Model Candidates
 
 entityRefId formats `[observed 2026-11-06]`: cluster-scoped `<type>:<vsan cluster uuid>`; host-scoped `<type>:<host node uuid>`; `host-cpu:<node>|cpu-N`; `vsan-pnic-net:<node>|vmnicN`; `vsan-vnic-net:<node>|<stack>|vmkN`; `vnic-rdt-network-latency:<node>|vmkN`; `vsan-tcpip-stats:<node>|<stack>`; `dom-world-cpu:<node>|<world name>|<id>`; `vsan-esa-disk-*:<vsan disk uuid>`; `virtual-machine:<VM config.instanceUuid>`; `vscsi:<vm instanceUuid>|scsiX:Y`; `virtual-disk:<namespace uuid>/<path>`. VM perf uuids matched `config.instanceUuid` for 30 of 30 VMs. The full model is already in `content/sdk-adapters/vsanhostmetrics/app/perfsvc_model.py`.
@@ -334,7 +419,9 @@ entityRefId formats `[observed 2026-11-06]`: cluster-scoped `<type>:<vsan cluste
 - `VsanPerfNodeInformation.vsanNodeUuid` = `HostSystem.config.vsanHostConfig.clusterInfo.nodeUuid` = host-scoped entityRefId suffix → binds host-scoped perf entities to HostSystem.
 - `ClusterComputeResource.configurationEx.vsanConfigInfo.defaultConfig.uuid` = cluster-scoped entityRefId suffix.
 - `HostSystem.config.vsanHostConfig.clusterInfo.uuid` = the same vSAN cluster uuid (5 of 5 hosts). Unlike the `configurationEx` sub-paths, this one is retrievable by PropertyCollector `[observed 2026-11-06]`.
-- `VirtualMachine.config.instanceUuid` = `virtual-machine:` / `vscsi:` uuid.
+- `VirtualMachine.config.instanceUuid` = `virtual-machine:` / `vscsi:` uuid `[re-verified 2026-11-06: 30/30 VMs, 148/148 vscsi refs]`.
+- `QueryVsanManagedDisks(host).storagePools[].storagePoolDisks[].vsanUuid` (or non-empty `QueryDisksForVsan()[].vsanUuid`) = `vsan-esa-disk-*` suffix → binds a disk to the host the call was made against `[observed 2026-11-06, 5/5]`.
+- `VirtualDisk.backing.fileName` minus `[<datastore>] ` = `virtual-disk:` suffix minus any leading `/` → binds a vdisk to its VM `[observed 2026-11-06, 148/148]`.
 
 ## Design answers (scale plan §3)
 
@@ -358,4 +445,7 @@ entityRefId formats `[observed 2026-11-06]`: cluster-scoped `<type>:<vsan cluste
 - The query prefix for advertised `domcomp-sched` was not found.
 - Explicit-ref call time (~0.15 to 0.2 s per ref) was measured once per size and not profiled further. A same-session re-run gave 100 refs in 8.4 s (SOAP) / 7.2 s (JSON), so the earlier 15 to 22 s was partly server noise.
 - JSON API: session idle timeout not measured; release ids below 8.0.3.0 only tested for 8.0.0.0 and 7.0.3.0.
+- Build 2 types empty on this lab, so entity id form and payload size are unobserved: `vsan-direct-cluster`, `vsan-direct-host`, `vsan-file-service`, `ioinsight`, `cache-disk`, `capacity-disk`. In particular, whether `vsan-direct-cluster`, `vsan-file-service` and `ioinsight` key on the cluster uuid or a host nodeUuid (the Python pack's provisional model says host) is still open.
+- `virtual-disk` `NIOPS*` labels were all `None`; whether they fill under an IOPS-limit policy is unverified.
+- Only one vSAN stack (`defaultTcpipStack`) and one vSAN vmknic (`vmk2`) per host here, so multi-stack / multi-vmk instancing of `vsan-tcpip-stats`, `vsan-vnic-net`, `vnic-rdt-network-latency` is unobserved.
 - vim25 inventory: no multi-cluster vCenter, so RetrievePropertiesEx paging (`token`) and R2 cost at 70 clusters are unmeasured. A non-vSAN host inside a vSAN cluster was not available. The `vsan-pnic-net` NIC selection rule (vSAN uplinks vs link-up NICs) could not be separated here. The `configurationEx` sub-path fault was seen over JSON only; SOAP was not re-tested.

@@ -1,0 +1,262 @@
+[
+    {
+        "_typeName": "VsanPerfEntityMetricCSV", 
+        "entityRefId": "vsan-esa-disk-scsifw:52d171f6-2e48-758a-777f-d5098533d861", 
+        "sampleInfo": "2026-11-07 05:00:00,2026-11-07 05:05:00", 
+        "value": [
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "latencyDevDAvg", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "771,959"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "latencyDevGAvg", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "774,961"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "latencyDevKAvg", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "2,1"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "latencyDevRead", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "1649,1688"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "latencyDevWrite", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "614,820"
+            }
+        ]
+    }, 
+    {
+        "_typeName": "VsanPerfEntityMetricCSV", 
+        "entityRefId": "vsan-esa-disk-scsifw:52c7ed3e-9dcf-b82e-8177-f704806c2e4a", 
+        "sampleInfo": "2026-11-07 05:00:00,2026-11-07 05:05:00", 
+        "value": [
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "latencyDevDAvg", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "1240,33"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "latencyDevGAvg", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "1242,36"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "latencyDevKAvg", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "2,2"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "latencyDevRead", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "1902,118"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "latencyDevWrite", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "1107,18"
+            }
+        ]
+    }, 
+    {
+        "_typeName": "VsanPerfEntityMetricCSV", 
+        "entityRefId": "vsan-esa-disk-scsifw:52bde68f-b0e5-6952-075b-bcb49bd54fa6", 
+        "sampleInfo": "2026-11-07 05:00:00,2026-11-07 05:05:00", 
+        "value": [
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "latencyDevDAvg", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "51,41"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "latencyDevGAvg", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "53,42"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "latencyDevKAvg", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "1,1"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "latencyDevRead", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "204,182"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "latencyDevWrite", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "29,20"
+            }
+        ]
+    }, 
+    {
+        "_typeName": "VsanPerfEntityMetricCSV", 
+        "entityRefId": "vsan-esa-disk-scsifw:52585910-fedf-604c-04d3-868955bf7f7d", 
+        "sampleInfo": "2026-11-07 05:00:00,2026-11-07 05:05:00", 
+        "value": [
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "latencyDevDAvg", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "718,790"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "latencyDevGAvg", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "720,792"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "latencyDevKAvg", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "2,2"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "latencyDevRead", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "1694,1649"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "latencyDevWrite", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "552,638"
+            }
+        ]
+    }, 
+    {
+        "_typeName": "VsanPerfEntityMetricCSV", 
+        "entityRefId": "vsan-esa-disk-scsifw:52850722-bc18-61ea-8400-190ec367ac70", 
+        "sampleInfo": "2026-11-07 05:00:00,2026-11-07 05:05:00", 
+        "value": [
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "latencyDevDAvg", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "82,2034"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "latencyDevGAvg", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "84,2036"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "latencyDevKAvg", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "2,2"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "latencyDevRead", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "171,2434"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "latencyDevWrite", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "19,1735"
+            }
+        ]
+    }
+]

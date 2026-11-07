@@ -1,0 +1,225 @@
+[
+    {
+        "_typeName": "VsanPerfEntityMetricCSV", 
+        "entityRefId": "cluster-esa-dedup-domclient-io:90d067b8-0077-11f1-af60-000c297e270a", 
+        "sampleInfo": "2026-11-07 05:00:00,2026-11-07 05:05:00", 
+        "value": [
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "dedupChunkReadCount", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "42387,221537"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "dedupChunkWriteCount", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "0,0"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "dedupEngineReadCount", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "0,0"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "dedupEngineWriteCount", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "3891,4556"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "dedupHashReadCount", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "0,0"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "dedupHashWriteCount", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "0,0"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "iopsDedupChunkObjRead", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "139,736"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "iopsDedupChunkObjWrite", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "0,0"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "iopsDedupEngineRead", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "0,0"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "iopsDedupEngineWrite", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "10,13"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "iopsDedupHashObjRead", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "0,0"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "iopsDedupHashObjWrite", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "0,0"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "latencyAvgDedupChunkObjRead", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "3991,5783"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "latencyAvgDedupChunkObjWrite", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "0,0"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "latencyAvgDedupEngineRead", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "0,0"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "latencyAvgDedupEngineWrite", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "12040,15208"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "latencyAvgDedupHashObjRead", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "0,0"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "latencyAvgDedupHashObjWrite", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "0,0"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "tputDedupChunkObjRead", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "4755608,25191313"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "tputDedupChunkObjWrite", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "0,0"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "tputDedupEngineRead", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "0,0"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "tputDedupEngineWrite", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "468683,1756315"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "tputDedupHashObjRead", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "0,0"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "tputDedupHashObjWrite", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "0,0"
+            }
+        ]
+    }
+]

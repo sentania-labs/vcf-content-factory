@@ -1,0 +1,216 @@
+[
+    {
+        "_typeName": "VsanPerfEntityMetricCSV", 
+        "entityRefId": "cluster-domowner:90d067b8-0077-11f1-af60-000c297e270a", 
+        "sampleInfo": "2026-11-07 05:00:00,2026-11-07 05:05:00", 
+        "value": [
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "avgResyncParallelism", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "0,0"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "congestion", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "0,0"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "iopsRead", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "1269,1174"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "iopsRecWrite", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "0,0"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "iopsResyncRead", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "0,0"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "iopsWrite", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "2983,2344"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "latencyAvgRead", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "2376,2447"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "latencyAvgWrite", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "2447,3037"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "numCompleteFullResyncOps", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "0,0"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "numCompleteResyncOps", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "0,0"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "numInflightPriorityResyncJobs", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "0,0"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "numInflightSharedResyncJobs", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "0,0"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "numPendingDecomResyncJobs", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "0,0"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "numPendingFullResyncJobs", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "0,0"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "numPendingResyncJobs", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "0,0"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "numRunningFullResyncJobs", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "0,0"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "numRunningResyncJobs", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "0,0"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "numSuspendedResyncJobs", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "0,0"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "oio", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "26,23"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "readCongestion", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "0,0"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "tputRead", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "37091925,28805124"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "tputWrite", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "64271446,46926983"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "writeCongestion", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "0,0"
+            }
+        ]
+    }
+]
