@@ -1,0 +1,7 @@
+[
+    {
+        "_typeName": "VsanPerfEntityMetricCSV", 
+        "entityRefId": "cluster-resync:*", 
+        "sampleInfo": ""
+    }
+]

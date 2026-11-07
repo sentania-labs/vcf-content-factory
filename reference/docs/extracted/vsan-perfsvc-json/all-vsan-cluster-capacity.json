@@ -1,0 +1,63 @@
+[
+    {
+        "_typeName": "VsanPerfEntityMetricCSV", 
+        "entityRefId": "vsan-cluster-capacity:90d067b8-0077-11f1-af60-000c297e270a", 
+        "sampleInfo": "2026-11-07 13:45:00,2026-11-07 13:50:00", 
+        "value": [
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "total", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "20167745125888,20167750823936"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "used", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "9665387806612,9665347160578"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "free", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "10502357319276,10502403663358"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "savedByDedup", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "1996923517440,1997050269184"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "dedupRatio", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "145,145"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "totalDpOverhead", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "None,None"
+            }
+        ]
+    }
+]

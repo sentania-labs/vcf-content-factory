@@ -1,0 +1,7 @@
+[
+    {
+        "_typeName": "VsanPerfEntityMetricCSV", 
+        "entityRefId": "vsan-distribution:*", 
+        "sampleInfo": ""
+    }
+]
