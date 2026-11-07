@@ -150,6 +150,21 @@ it is not a published pak.
   and `call_timeout_seconds` are Advanced Settings and a slow vCenter shows
   as `clusters_timed_out`; the key grammar stays `vSAN Perf|`, Scott
   2026-11-07).
+  Build 3 (`metric_scope` dashboard | all: every catalog key of the 69 vSAN
+  perf types, 1,805 keys, no labels filter; version 1.2.0, builds 19 to 22,
+  pak PR #11) merged 2026-11-07 (pak main 5528e7d); design
+  `knowledge/designs/vsanperf-mp-v3.md`, review
+  `knowledge/context/reviews/vsanperf-build-19-review.md` (B1, W1 to W4, N1 to
+  N5 fixed in build 20; Codex's case-sensitive `exclude_types` fixed in
+  build 21; a stop-during-call-counted-as-timeout engine race found by a JDK
+  25 CI flake and fixed in build 22). Dev preview 0.0.0.22 on devel 9.0.2:
+  T5 passed at dashboard, all and back (record
+  `vsanperf-t5-devel-9.0-build-22-metric-scope.md`: host 1,282 keys, cluster
+  348, steady 37 calls at `all` with host and cluster tiers, 13 learned-empty
+  and 4 faulting host types, pctMemUsed pushed as integer percent); 8.18 and
+  9.1 at default scope: see `vsanperf-t5-devel-{8.18,9.1}-build-22-default-scope.md`.
+  Not yet tagged (v1.2.0.22 waits for Scott). Disk and VM tiers at scope
+  `all` are proven in the replay harness only (T4 rows d, d', e).
   History 2026-11-06: Build 1 merged (builds 5 to 9, pak PRs
   #2 to #5 and #7), proven on the same three instances (records
   `vsanperf-t5-*-build-5/7/9.md`; build 4 review findings fixed in build 5).
