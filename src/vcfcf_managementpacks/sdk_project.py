@@ -37,6 +37,16 @@ Schema (all fields):
                            content on any other adapter kind unless describe.xml
                            or cross_mp_edges already names it.  Non-empty
                            strings, no duplicates, not this pak's own kind.
+    stitch_targets: list (optional) the other adapters' resource kinds this
+                           pak pushes metrics and properties onto through the
+                           Suite API (ARIA_OPS stitching, e.g. vsanperf onto
+                           VMWARE HostSystem). See StitchTargetInfo below for
+                           the per-entry schema. Consumed by docs_gen.py to
+                           render a "Metrics Pushed Onto" section and to draw
+                           the targets into the inventory tree diagram, so a
+                           pak whose only kind is its adapter instance gets a
+                           landing page that says where its data lands (#310).
+                           Documentation only: it does not change the pak.
 """
 from __future__ import annotations
 
@@ -191,6 +201,174 @@ def _parse_cross_mp_edges(raw: dict, where: str) -> List[CrossMpEdgeInfo]:
 
 
 @dataclass
+class StitchTargetInfo:
+    """One entry of the optional ``stitch_targets`` adapter.yaml stanza (#310).
+
+    A resource kind owned by another adapter that this pak pushes keys onto
+    through the Suite API. describe.xml cannot declare keys on another
+    adapter's kinds, so without this stanza a stitch-only pak's docs show
+    no resource kinds and an empty inventory tree.
+
+    Fields:
+        adapter_kind:  adapter kind that owns the target (e.g. "VMWARE").
+        resource_kind: the target resource kind key (e.g. "HostSystem").
+        identity:      free text: how the pak matches its data to the
+                       target object (e.g. "VMEntityObjectID + VMEntityVCID").
+        key_groups:    key-group prefixes pushed onto the target, in the
+                       order the docs list them (e.g. "vSAN Perf|DOM Owner|*").
+        instanced_by:  optional free text: what an instanced group's
+                       instance name is (e.g. "<vmnic> = vSAN physical NIC").
+
+    ``adapter_kind`` and ``resource_kind`` may hold interior spaces (VMWARE's
+    "VMwareAdapter Instance") but not ``<``, ``>``, ``|``, a backtick, or a
+    control character. ``identity`` and ``instanced_by`` are plain text, not
+    markdown: docs-gen escapes markdown metacharacters in them.
+    """
+
+    adapter_kind: str
+    resource_kind: str
+    identity: str
+    key_groups: List[str] = field(default_factory=list)
+    instanced_by: str = ""
+
+
+_STITCH_TARGET_ALLOWED_KEYS = {
+    "adapter_kind", "resource_kind", "identity", "key_groups", "instanced_by",
+}
+_STITCH_TARGET_REQUIRED_KEYS = {"adapter_kind", "resource_kind", "identity", "key_groups"}
+# adapter_kind / resource_kind become a markdown heading, a quick-reference
+# entry and a diagram node title. Interior spaces stay legal: VMWARE's own
+# "VMwareAdapter Instance" kind key has one.
+_STITCH_KIND_BAD_CHARS = re.compile(r"[<>|`\x00-\x1f\x7f]")
+
+
+def _parse_stitch_targets(raw: dict, where: str,
+                          own_adapter_kind: Optional[str] = None) -> List[StitchTargetInfo]:
+    """Parse and validate the optional ``stitch_targets`` adapter.yaml stanza.
+
+    Schema (list of mappings):
+        stitch_targets:
+          - adapter_kind: VMWARE                          # required, non-empty str
+            resource_kind: HostSystem                     # required, non-empty str
+            identity: "VMEntityObjectID + VMEntityVCID"   # required, non-empty str
+            key_groups:                                   # required, non-empty list
+              - "vSAN Perf|DOM Owner|*"                   #   of non-empty strs, no duplicates
+              - "vSAN Perf|pNIC:<vmnic>|*"
+            instanced_by: "<vmnic> = vSAN physical NIC"   # optional str
+
+    ``own_adapter_kind``, when given, may not appear as a target's
+    ``adapter_kind``: a pak's own kinds belong in describe.xml. The same
+    (adapter_kind, resource_kind) pair may not appear twice; list every
+    group for one target under one entry.
+
+    Returns an empty list if the key is absent (zero-churn default).
+
+    Raises:
+        SdkProjectError: on unknown keys, missing required fields, or bad
+                         types/values, so validate-sdk and docs-gen surface
+                         the same message.
+    """
+    entries = raw.get("stitch_targets")
+    if entries is None:
+        return []
+    if not isinstance(entries, list):
+        raise SdkProjectError(
+            f"{where}: 'stitch_targets' must be a list of mappings; "
+            f"got {type(entries).__name__}"
+        )
+
+    targets: List[StitchTargetInfo] = []
+    seen_pairs: set = set()
+    for i, entry in enumerate(entries):
+        entry_where = f"{where}: stitch_targets[{i}]"
+        if not isinstance(entry, dict):
+            raise SdkProjectError(
+                f"{entry_where}: must be a mapping; got {type(entry).__name__}"
+            )
+
+        unknown = set(entry.keys()) - _STITCH_TARGET_ALLOWED_KEYS
+        if unknown:
+            raise SdkProjectError(
+                f"{entry_where}: unknown key(s) {sorted(unknown, key=str)}; "
+                f"allowed keys are {sorted(_STITCH_TARGET_ALLOWED_KEYS)}"
+            )
+
+        missing = _STITCH_TARGET_REQUIRED_KEYS - set(entry.keys())
+        if missing:
+            raise SdkProjectError(
+                f"{entry_where}: missing required field(s) {sorted(missing)}"
+            )
+
+        values = {}
+        for key in ("adapter_kind", "resource_kind", "identity"):
+            val = entry[key]
+            if not isinstance(val, str) or not val.strip():
+                raise SdkProjectError(
+                    f"{entry_where}: '{key}' must be a non-empty string; got {val!r}"
+                )
+            values[key] = val.strip()
+            if key != "identity" and _STITCH_KIND_BAD_CHARS.search(values[key]):
+                raise SdkProjectError(
+                    f"{entry_where}: '{key}' may not contain '<', '>', '|', a "
+                    f"backtick, or a tab or newline; got {val!r}"
+                )
+
+        if own_adapter_kind and values["adapter_kind"] == own_adapter_kind:
+            raise SdkProjectError(
+                f"{entry_where}: 'adapter_kind' is this pak's own adapter_kind "
+                f"{own_adapter_kind!r}; stitch_targets lists only other "
+                f"adapters' kinds (declare your own kinds in describe.xml)"
+            )
+
+        pair = (values["adapter_kind"], values["resource_kind"])
+        if pair in seen_pairs:
+            raise SdkProjectError(
+                f"{entry_where}: {pair[0]} {pair[1]} is already listed; put "
+                f"every key group for one target under a single entry"
+            )
+        seen_pairs.add(pair)
+
+        groups_raw = entry["key_groups"]
+        if not isinstance(groups_raw, list) or not groups_raw:
+            raise SdkProjectError(
+                f"{entry_where}: 'key_groups' must be a non-empty list of "
+                f"key-group prefixes (e.g. \"vSAN Perf|DOM Owner|*\"); "
+                f"got {groups_raw!r}"
+            )
+        groups: List[str] = []
+        for j, group in enumerate(groups_raw):
+            if not isinstance(group, str) or not group.strip():
+                raise SdkProjectError(
+                    f"{entry_where}: key_groups[{j}] must be a non-empty "
+                    f"string; got {group!r}"
+                )
+            group = group.strip()
+            if group in groups:
+                raise SdkProjectError(
+                    f"{entry_where}: key_groups lists {group!r} twice"
+                )
+            groups.append(group)
+
+        instanced_by = entry.get("instanced_by", "")
+        if instanced_by is None:
+            instanced_by = ""
+        if not isinstance(instanced_by, str):
+            raise SdkProjectError(
+                f"{entry_where}: 'instanced_by' must be a string; got {instanced_by!r}"
+            )
+
+        targets.append(StitchTargetInfo(
+            adapter_kind=values["adapter_kind"],
+            resource_kind=values["resource_kind"],
+            identity=values["identity"],
+            key_groups=groups,
+            instanced_by=instanced_by.strip(),
+        ))
+
+    return targets
+
+
+@dataclass
 class SdkProjectDef:
     """In-memory representation of an adapter.yaml file."""
 
@@ -211,6 +389,8 @@ class SdkProjectDef:
     content_naming_declared: bool = False
     # Opt-in: other adapter kinds bundled symptoms/alerts may target.
     content_foreign_adapter_kinds: List[str] = field(default_factory=list)
+    # Documentation only (#310): other adapters' kinds this pak pushes onto.
+    stitch_targets: List[StitchTargetInfo] = field(default_factory=list)
 
     @property
     def pak_filename(self) -> str:
@@ -357,6 +537,7 @@ def load_sdk_project(path: Path) -> SdkProjectDef:
         )
 
     cross_mp_edges = _parse_cross_mp_edges(raw, where)
+    stitch_targets = _parse_stitch_targets(raw, where, adapter_kind)
 
     content_naming_declared = "content_naming" in raw
     content_naming = raw.get("content_naming", CONTENT_NAMING_DEFAULT)
@@ -384,6 +565,7 @@ def load_sdk_project(path: Path) -> SdkProjectDef:
         content_naming=content_naming,
         content_naming_declared=content_naming_declared,
         content_foreign_adapter_kinds=content_foreign_adapter_kinds,
+        stitch_targets=stitch_targets,
     )
 
 

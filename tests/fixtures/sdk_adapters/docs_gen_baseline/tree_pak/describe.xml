@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<AdapterKind xmlns="http://schemas.vmware.com/vcops/schema"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             key="baseline_tree" nameKey="1" version="1"
+             xsi:schemaLocation="http://schemas.vmware.com/vcops/schema describeSchema.xsd">
+    <ResourceKinds>
+        <ResourceKind key="baseline_tree" nameKey="2" type="7" monitoringInterval="5">
+            <ResourceIdentifier key="host" nameKey="3" required="true" identType="1"/>
+            <ResourceIdentifier key="port" nameKey="4" required="false" identType="2"/>
+        </ResourceKind>
+        <ResourceKind key="BaseSite" nameKey="5" type="1">
+            <ResourceIdentifier key="site_id" nameKey="6" required="true" identType="1"/>
+        </ResourceKind>
+        <ResourceKind key="BaseSwitch" nameKey="7" type="1">
+            <ResourceIdentifier key="switch_id" nameKey="8" required="true" identType="1"/>
+            <ResourceIdentifier key="model" nameKey="9" required="false" identType="2"/>
+        </ResourceKind>
+        <ResourceKind key="BaseSwitchPort" nameKey="10" type="1">
+            <ResourceIdentifier key="port_key" nameKey="11" required="true" identType="1"/>
+        </ResourceKind>
+        <ResourceKind key="BaseVolume" nameKey="12" type="1">
+            <ResourceIdentifier key="volume_id" nameKey="13" required="true" identType="1"/>
+        </ResourceKind>
+    </ResourceKinds>
+    <ResourceTypeAttributes>
+        <TraversalSpecKinds>
+            <TraversalSpecKind name="Baseline Traversal" nameKey="14">
+                <ResourcePath path="baseline_tree::BaseSite||baseline_tree::BaseSwitch::child/recursive||baseline_tree::BaseSwitchPort::child"/>
+                <ResourcePath path="baseline_tree::BaseSite||baseline_tree::BaseVolume::child"/>
+                <ResourcePath path="VMWARE::Datastore::~child||baseline_tree::BaseVolume::child"/>
+            </TraversalSpecKind>
+        </TraversalSpecKinds>
+    </ResourceTypeAttributes>
+    <LicenseConfig enabled="false"/>
+</AdapterKind>
