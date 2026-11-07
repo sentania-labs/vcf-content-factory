@@ -40,6 +40,14 @@ The `vcfops-*` entries below are skills; each lives at
 5. **Handle import-task-busy.** Wait 30s, retry up to 3 times.
 6. **Enable = Default Policy only.**
 7. **Delete only on explicit orchestrator instruction.**
+8. **One log file per instance, never shared.** Several installers may
+   run at once against different profiles. Name every scratch file you
+   write with the profile (`install_<profile>.log`, `api_<profile>.py`)
+   and never read a scratch file you did not write this run: on 2026-11-06
+   three parallel installs shared one `install.log` and each agent reported
+   another instance's output (factory #311, #315). The installer's
+   authentication line names the target host; check it matches your
+   profile before you quote anything from a log.
 
 ## CLI commands
 
