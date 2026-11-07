@@ -324,11 +324,14 @@ a label absent from a response is simply not pushed.
 - Push with the **sample's** timestamp (epoch ms), not "now". Back-dated
   points, including ones older than the newest stored point, are accepted
   (PUSH §Findings "Timestamps").
-- Remember the last pushed sample timestamp **per `entityRefId`** for the
-  life of the instance (each entity carries its own `sampleInfo` and hosts
-  can lag each other by a bucket; a per-type key would drop a lagging host's
-  bucket for good); skip an entity's series whose newest timestamp is not
-  newer than that. T1 covers the lagging-host case. A 7-minute window often holds two 5-minute buckets
+- Remember the last **successfully pushed** sample timestamp **per
+  (`entityRefId`, label)** for the life of the instance; push a value only if
+  its timestamp is newer than that series' mark. Coarser keys lose data: a
+  per-type key drops a lagging host's bucket for good, and a per-entity key
+  drops a label whose value was `None` in the newest bucket (another label
+  advances the entity mark to T, this label selected T-300, and when its T
+  value appears next cycle it is "not newer than T"). T1 covers the
+  lagging-host case and the None-at-T label case. A 7-minute window often holds two 5-minute buckets
   (MAP test 6) and the cycle is not aligned to them, so without this the
   same bucket is pushed twice.
 - Skip a label ending `Actual` (PY: identical to its base). With the labels
@@ -624,7 +627,9 @@ own collector group (PLAN §6).
   (skipped and counted).
 - Per-mille conversion and leaf naming for all 61 keys (table-driven from
   this design, so the design and the code cannot drift).
-- Duplicate-bucket suppression across two simulated cycles.
+- Duplicate-bucket suppression across two simulated cycles, keyed per
+  (entity, label): a label that was `None` at bucket T while a sibling label
+  advanced to T is still pushed when its T value arrives a cycle later.
 - Mixed-timestamp rows (a lagging host, a series whose newest non-`None`
   value is an older bucket) land in separate push batches, each stamped
   with its own sample timestamp; no row is pushed under another row's
