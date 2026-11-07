@@ -857,3 +857,40 @@ samples under `reference/docs/extracted/vsan-perfsvc-json/`). Outcome:
 
 Build 1 is authored on the recommended answers to Q1 through Q5; Q6 and Q7
 remain open for the Build 2 revision.
+
+## Addendum 2026-11-06 (later): collector object, build 7
+
+The devel 9.0.2 proof of build 5 showed the platform never includes the
+adapter instance among the resources it collects, so a cycle that runs in
+`rediscover` cannot report DOWN: an unreachable vCenter showed ERROR
+"Resource discovery failed and there was nothing to collect" (T5 record
+`knowledge/context/reviews/vsanperf-t5-devel-9.0-build-5.md`). Build 7
+applies the build 4 review's W1 fix (`knowledge/context/reviews/vsanperf-build-4-review.md`).
+**This addendum supersedes §Object Model ("the only object the pak creates",
+"new objects per cluster: 0", "no children"), §Relationships item 2 and the
+"delivered in the collect result" line: the pak now declares a second kind,
+`VsanPerfCollector`, one object per adapter instance, a child of the instance
+in the discovery result, carrying no metrics. Self-metrics are addressed to
+the adapter instance resource that `rediscover` hands over and are pushed
+through the Suite API like the host keys.**
+
+- Each instance discovers **one object of its own kind**,
+  `VsanPerfCollector` ("VCF Content Factory vSAN Performance Collector"),
+  and the whole cycle runs in `collect()` for it, as compliance does for
+  `ComplianceWorld`. A failed cycle is a normal collect failure, so an
+  unreachable vCenter maps to DOWN with the credential-free message.
+- **Identity of that object** (permanent once released): `vcenter` (the
+  configured vCenter host, lower-cased) plus `cluster_scope` (the cleaned
+  include list, `*` for all). Not the vCenter instanceUuid, which is only
+  known after a successful login and would leave an unreachable vCenter
+  undiscoverable. This is the same tuple as the account identity, so it
+  stays one object per instance. **Correction (peer review of the records
+  PR):** build 7 normalised the values (host lower-cased, scope trimmed and
+  de-duplicated) while the account identity is the raw strings, so two
+  accounts differing only in case or whitespace would share one object.
+  Build 8 (before the first tag) builds the identity from the trimmed raw
+  values exactly as the account stores them.
+- Self-metrics stay on the adapter instance (proved on 9.0.2, 8.18.7 and 9.1.1); `rediscover`
+  only hands that resource along and never throws.
+- An object discovered in cycle N is first collected in cycle N+1, so a new
+  instance against an unreachable vCenter shows DOWN from the second cycle.
