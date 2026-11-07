@@ -1,0 +1,90 @@
+[
+    {
+        "_typeName": "VsanPerfEntityMetricCSV", 
+        "entityRefId": "cluster-rdt-network-latency:90d067b8-0077-11f1-af60-000c297e270a", 
+        "sampleInfo": "2026-11-07 05:00:00,2026-11-07 05:05:00", 
+        "value": [
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "avgLatency", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "283,141"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "kaReset", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "1177,1177"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "maxLatency", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "420433,292796"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "minLatency", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "66,68"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "numReadyDelay", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "217334,217415"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "rxSbSpaceMin", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "8161036,8163452"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "txCtxQMax", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "0,0"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "txQLatAvg", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "2,3"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "txSbSpaceMin", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "7769776,7889416"
+            }
+        ]
+    }
+]

@@ -1,0 +1,169 @@
+[
+    {
+        "_typeName": "VsanHostDiskResult", 
+        "disk": {
+            "_typeName": "HostScsiDisk", 
+            "deviceName": "/vmfs/devices/disks/t10.NVMe____SHGP312D500GM2D2__________________________FFFFFFFFFFFFFFFF", 
+            "deviceType": "disk", 
+            "key": "key-vim.host.ScsiDisk-056eb001559ca875bb5297fe3efe51471f7227a2af0237b02aff591f051c7a13ea", 
+            "uuid": "056eb001559ca875bb5297fe3efe51471f7227a2af0237b02aff591f051c7a13ea", 
+            "canonicalName": "t10.NVMe____SHGP312D500GM2D2__________________________FFFFFFFFFFFFFFFF", 
+            "displayName": "Local NVMe Disk (t10.NVMe____SHGP312D500GM2D2__________________________FFFFFFFFFFFFFFFF)", 
+            "lunType": "disk", 
+            "vendor": "NVMe", 
+            "model": "SHGP31-500GM-2                          ", 
+            "revision": "41062C20", 
+            "scsiLevel": 0, 
+            "serialNumber": "NVMe____SHGP312D500GM2D2__________________________FFFFFFFFFFFFFFFF", 
+            "queueDepth": 2046, 
+            "operationalState": [
+                "ok"
+            ], 
+            "capabilities": {
+                "_typeName": "ScsiLunCapabilities", 
+                "updateDisplayNameSupported": true
+            }, 
+            "vStorageSupport": "vStorageUnsupported", 
+            "protocolEndpoint": false, 
+            "perenniallyReserved": false, 
+            "clusteredVmdkSupported": false, 
+            "applicationProtocol": "NVMe", 
+            "dispersedNs": false, 
+            "deviceReservation": "LUN_RESERVED_NOT_SUPPORTED", 
+            "capacity": {
+                "_typeName": "HostDiskDimensionsLba", 
+                "blockSize": 512, 
+                "block": 976773168
+            }, 
+            "devicePath": "/vmfs/devices/disks/t10.NVMe____SHGP312D500GM2D2__________________________FFFFFFFFFFFFFFFF", 
+            "ssd": true, 
+            "localDisk": true, 
+            "emulatedDIXDIFEnabled": false, 
+            "scsiDiskType": "emulated512", 
+            "usedByMemoryTiering": false
+        }, 
+        "state": "ineligible", 
+        "vsanUuid": "", 
+        "error": {
+            "_typeName": "DiskHasPartitions", 
+            "device": "t10.NVMe____SHGP312D500GM2D2__________________________FFFFFFFFFFFFFFFF", 
+            "faultstring": "Existing partitions found on disk 't10.NVMe____SHGP312D500GM2D2__________________________FFFFFFFFFFFFFFFF'."
+        }
+    }, 
+    {
+        "_typeName": "VsanHostDiskResult", 
+        "disk": {
+            "_typeName": "HostScsiDisk", 
+            "deviceName": "/vmfs/devices/disks/t10.NVMe____Sabrent_SB2DRKT4P2D1TB____________________8402C07074A77964", 
+            "deviceType": "disk", 
+            "key": "key-vim.host.ScsiDisk-056d1985301cfea06274f46cd8d0fed2dd79c7749794e3808e192dacb548f3e261", 
+            "uuid": "056d1985301cfea06274f46cd8d0fed2dd79c7749794e3808e192dacb548f3e261", 
+            "canonicalName": "t10.NVMe____Sabrent_SB2DRKT4P2D1TB____________________8402C07074A77964", 
+            "displayName": "Local NVMe Disk (t10.NVMe____Sabrent_SB2DRKT4P2D1TB____________________8402C07074A77964)", 
+            "lunType": "disk", 
+            "vendor": "NVMe", 
+            "model": "Sabrent SB-RKT4P-1TB                    ", 
+            "revision": "R4PB47.4", 
+            "scsiLevel": 0, 
+            "serialNumber": "NVMe____Sabrent_SB2DRKT4P2D1TB____________________8402C07074A77964", 
+            "queueDepth": 2046, 
+            "operationalState": [
+                "ok"
+            ], 
+            "capabilities": {
+                "_typeName": "ScsiLunCapabilities", 
+                "updateDisplayNameSupported": true
+            }, 
+            "vStorageSupport": "vStorageUnsupported", 
+            "protocolEndpoint": false, 
+            "perenniallyReserved": false, 
+            "clusteredVmdkSupported": false, 
+            "applicationProtocol": "NVMe", 
+            "dispersedNs": false, 
+            "deviceReservation": "LUN_RESERVED_NOT_SUPPORTED", 
+            "capacity": {
+                "_typeName": "HostDiskDimensionsLba", 
+                "blockSize": 512, 
+                "block": 1953525168
+            }, 
+            "devicePath": "/vmfs/devices/disks/t10.NVMe____Sabrent_SB2DRKT4P2D1TB____________________8402C07074A77964", 
+            "ssd": true, 
+            "localDisk": true, 
+            "physicalLocation": [
+                "PCIE1; relative bdf 00:00.0"
+            ], 
+            "emulatedDIXDIFEnabled": false, 
+            "scsiDiskType": "emulated512", 
+            "usedByMemoryTiering": true
+        }, 
+        "state": "ineligible", 
+        "vsanUuid": "", 
+        "error": {
+            "_typeName": "DiskHasPartitions", 
+            "device": "t10.NVMe____Sabrent_SB2DRKT4P2D1TB____________________8402C07074A77964", 
+            "faultstring": "Existing partitions found on disk 't10.NVMe____Sabrent_SB2DRKT4P2D1TB____________________8402C07074A77964'."
+        }
+    }, 
+    {
+        "_typeName": "VsanHostDiskResult", 
+        "disk": {
+            "_typeName": "HostScsiDisk", 
+            "deviceName": "/vmfs/devices/disks/t10.NVMe____Samsung_SSD_990_PRO_4TB_________________AD47A06142382500", 
+            "deviceType": "disk", 
+            "key": "key-vim.host.ScsiDisk-0558eb30bacb4e1971e16c21d91f5691574645328672d17983759a235144ab0d3c", 
+            "uuid": "0558eb30bacb4e1971e16c21d91f5691574645328672d17983759a235144ab0d3c", 
+            "canonicalName": "t10.NVMe____Samsung_SSD_990_PRO_4TB_________________AD47A06142382500", 
+            "displayName": "Local NVMe Disk (t10.NVMe____Samsung_SSD_990_PRO_4TB_________________AD47A06142382500)", 
+            "lunType": "disk", 
+            "vendor": "NVMe", 
+            "model": "Samsung SSD 990 PRO 4TB                 ", 
+            "revision": "8B2QJXD7", 
+            "scsiLevel": 0, 
+            "serialNumber": "NVMe____Samsung_SSD_990_PRO_4TB_________________AD47A06142382500", 
+            "queueDepth": 2046, 
+            "operationalState": [
+                "ok"
+            ], 
+            "capabilities": {
+                "_typeName": "ScsiLunCapabilities", 
+                "updateDisplayNameSupported": true
+            }, 
+            "vStorageSupport": "vStorageUnsupported", 
+            "protocolEndpoint": false, 
+            "perenniallyReserved": false, 
+            "clusteredVmdkSupported": false, 
+            "applicationProtocol": "NVMe", 
+            "dispersedNs": false, 
+            "deviceReservation": "LUN_RESERVED_NOT_SUPPORTED", 
+            "capacity": {
+                "_typeName": "HostDiskDimensionsLba", 
+                "blockSize": 512, 
+                "block": 7814037168
+            }, 
+            "devicePath": "/vmfs/devices/disks/t10.NVMe____Samsung_SSD_990_PRO_4TB_________________AD47A06142382500", 
+            "ssd": true, 
+            "localDisk": true, 
+            "emulatedDIXDIFEnabled": false, 
+            "vsanDiskInfo": {
+                "_typeName": "VsanHostVsanDiskInfo", 
+                "vsanUuid": "52d171f6-2e48-758a-777f-d5098533d861", 
+                "formatVersion": 24
+            }, 
+            "scsiDiskType": "emulated512", 
+            "usedByMemoryTiering": false
+        }, 
+        "state": "ineligible", 
+        "vsanUuid": "52d171f6-2e48-758a-777f-d5098533d861", 
+        "error": {
+            "_typeName": "VsanFault", 
+            "faultMessage": [
+                {
+                    "_typeName": "LocalizableMessage", 
+                    "key": "vim.hostd.vsanDiskOperation.inUseByStoragePool", 
+                    "message": "Cannot add disk as it's already in use by storage pool."
+                }
+            ], 
+            "faultstring": "General vSAN error."
+        }
+    }
+]

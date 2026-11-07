@@ -1,0 +1,577 @@
+[
+    {
+        "_typeName": "VsanPerfEntityMetricCSV", 
+        "entityRefId": "vsan-memory:69fd149d-c1b8-aae3-bcb2-3805253936dc", 
+        "sampleInfo": "2026-11-07 05:00:00,2026-11-07 05:05:00", 
+        "value": [
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "clomdConsumedSize", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "14004224,14004224"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "clomdReservedSize", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "217055232,217055232"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "cmmdsdConsumedSize", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "9662464,9662464"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "cmmdsdReservedSize", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "48234496,48234496"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "epdConsumedSize", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "7241728,7241728"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "kernelConsumedSize", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "1971270703,1938052279"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "kernelReservedSize", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "20409098351,20428436815"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "osfsdConsumedSize", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "10936320,10936320"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "uwConsumedSize", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "212840448,212840448"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "uwReservedSize", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "880803840,880803840"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "vsandevicemonitordConsumedSize", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "22196224,22196224"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "vsanmgmtdConsumedSize", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "131305472,131305472"
+            }
+        ]
+    }, 
+    {
+        "_typeName": "VsanPerfEntityMetricCSV", 
+        "entityRefId": "vsan-memory:69805090-5bba-3949-88f7-38052534dfcc", 
+        "sampleInfo": "2026-11-07 05:00:00,2026-11-07 05:05:00", 
+        "value": [
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "clomdConsumedSize", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "14487552,14487552"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "clomdReservedSize", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "217055232,217055232"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "cmmdsdConsumedSize", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "9654272,9654272"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "cmmdsdReservedSize", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "48234496,48234496"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "epdConsumedSize", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "7409664,7409664"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "kernelConsumedSize", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "2018859735,1993709175"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "kernelReservedSize", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "20406481623,20439726799"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "osfsdConsumedSize", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "10891264,10891264"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "uwConsumedSize", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "213061632,212803584"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "uwReservedSize", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "880803840,880803840"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "vsandevicemonitordConsumedSize", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "22188032,22188032"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "vsanmgmtdConsumedSize", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "131063808,130805760"
+            }
+        ]
+    }, 
+    {
+        "_typeName": "VsanPerfEntityMetricCSV", 
+        "entityRefId": "vsan-memory:6a8859db-a52e-c523-e78c-3805253a02fc", 
+        "sampleInfo": "2026-11-07 05:00:00,2026-11-07 05:05:00", 
+        "value": [
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "clomdConsumedSize", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "13074432,13074432"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "clomdReservedSize", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "217055232,217055232"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "cmmdsdConsumedSize", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "9658368,9658368"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "cmmdsdReservedSize", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "48234496,48234496"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "epdConsumedSize", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "5595136,5595136"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "kernelConsumedSize", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "1964378631,1952126887"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "kernelReservedSize", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "20446240351,20421219943"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "osfsdConsumedSize", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "10883072,10883072"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "uwConsumedSize", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "235229184,235069440"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "uwReservedSize", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "892264448,892268544"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "vsandevicemonitordConsumedSize", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "22192128,22192128"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "vsanmgmtdConsumedSize", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "156303360,156143616"
+            }
+        ]
+    }, 
+    {
+        "_typeName": "VsanPerfEntityMetricCSV", 
+        "entityRefId": "vsan-memory:69805998-46aa-aafb-3dd4-38052534e318", 
+        "sampleInfo": "2026-11-07 05:00:00,2026-11-07 05:05:00", 
+        "value": [
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "clomdConsumedSize", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "14352384,14352384"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "clomdReservedSize", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "217055232,217055232"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "cmmdsdConsumedSize", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "9654272,9654272"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "cmmdsdReservedSize", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "48234496,48234496"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "epdConsumedSize", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "7421952,7421952"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "kernelConsumedSize", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "1976294095,1980246319"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "kernelReservedSize", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "20430075999,20421576799"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "osfsdConsumedSize", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "11055104,11055104"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "uwConsumedSize", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "212566016,212631552"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "uwReservedSize", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "880803840,880803840"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "vsandevicemonitordConsumedSize", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "22192128,22192128"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "vsanmgmtdConsumedSize", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "130576384,130641920"
+            }
+        ]
+    }, 
+    {
+        "_typeName": "VsanPerfEntityMetricCSV", 
+        "entityRefId": "vsan-memory:698054c1-6eb8-30f8-8c1e-38052534ded0", 
+        "sampleInfo": "2026-11-07 05:00:00,2026-11-07 05:05:00", 
+        "value": [
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "clomdConsumedSize", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "12242944,12242944"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "clomdReservedSize", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "217055232,217055232"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "cmmdsdConsumedSize", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "9654272,9654272"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "cmmdsdReservedSize", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "48234496,48234496"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "epdConsumedSize", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "7319552,7319552"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "kernelConsumedSize", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "1936170815,1872910855"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "kernelReservedSize", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "20396232047,20366141583"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "osfsdConsumedSize", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "10858496,10858496"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "uwConsumedSize", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "210800640,210800640"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "uwReservedSize", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "880803840,880803840"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "vsandevicemonitordConsumedSize", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "22188032,22188032"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "vsanmgmtdConsumedSize", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "131321856,131321856"
+            }
+        ]
+    }
+]

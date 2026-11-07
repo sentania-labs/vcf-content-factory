@@ -709,6 +709,8 @@ Bundled in the pak repo, goes through the RULE-011 wireframe gate.
 
 ## Build 2 (orientation, gets its own design revision)
 
+**Superseded by `knowledge/designs/vsanperf-mp-v2.md`** (Build 2 design revision; its Status block lists what it replaces here).
+
 Parity target: the Python pack's default scope, 451 keys over 33 kinds
 (INV §3; PY `metric_scope.COVERED`). Tiers by entity type (PY kind to type
 mapping via `perfsvc_model.ENTITIES`):

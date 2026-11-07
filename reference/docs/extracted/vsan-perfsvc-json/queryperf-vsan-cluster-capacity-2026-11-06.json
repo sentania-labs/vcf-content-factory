@@ -1,0 +1,54 @@
+[
+    {
+        "_typeName": "VsanPerfEntityMetricCSV", 
+        "entityRefId": "vsan-cluster-capacity:90d067b8-0077-11f1-af60-000c297e270a", 
+        "sampleInfo": "2026-11-07 05:00:00,2026-11-07 05:05:00", 
+        "value": [
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "dedupRatio", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "145,145"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "free", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "10510512416061,10511637478243"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "savedByDedup", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "1990063947776,1991068694016"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "total", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "20166389152256,20166406518784"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "used", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "9655876736195,9654769040541"
+            }
+        ]
+    }
+]

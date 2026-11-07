@@ -1,0 +1,262 @@
+[
+    {
+        "_typeName": "VsanPerfEntityMetricCSV", 
+        "entityRefId": "vsan-esa-disk-layer:52d171f6-2e48-758a-777f-d5098533d861", 
+        "sampleInfo": "2026-11-07 05:00:00,2026-11-07 05:05:00", 
+        "value": [
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "avgLatReadCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "2239,2120"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "avgLatWriteCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "3199,2969"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "avgLatWritePerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "653,760"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "iopsReadCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "2564,2308"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "iopsWriteCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "209,149"
+            }
+        ]
+    }, 
+    {
+        "_typeName": "VsanPerfEntityMetricCSV", 
+        "entityRefId": "vsan-esa-disk-layer:52c7ed3e-9dcf-b82e-8177-f704806c2e4a", 
+        "sampleInfo": "2026-11-07 05:00:00,2026-11-07 05:05:00", 
+        "value": [
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "avgLatReadCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "2242,180"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "avgLatWriteCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "2623,90"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "avgLatWritePerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "1761,55"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "iopsReadCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "667,619"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "iopsWriteCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "188,102"
+            }
+        ]
+    }, 
+    {
+        "_typeName": "VsanPerfEntityMetricCSV", 
+        "entityRefId": "vsan-esa-disk-layer:52bde68f-b0e5-6952-075b-bcb49bd54fa6", 
+        "sampleInfo": "2026-11-07 05:00:00,2026-11-07 05:05:00", 
+        "value": [
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "avgLatReadCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "261,236"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "avgLatWriteCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "133,102"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "avgLatWritePerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "71,61"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "iopsReadCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "1698,1482"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "iopsWriteCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "223,138"
+            }
+        ]
+    }, 
+    {
+        "_typeName": "VsanPerfEntityMetricCSV", 
+        "entityRefId": "vsan-esa-disk-layer:52585910-fedf-604c-04d3-868955bf7f7d", 
+        "sampleInfo": "2026-11-07 05:00:00,2026-11-07 05:05:00", 
+        "value": [
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "avgLatReadCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "2275,2109"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "avgLatWriteCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "2651,2875"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "avgLatWritePerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "551,693"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "iopsReadCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "2739,2318"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "iopsWriteCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "197,140"
+            }
+        ]
+    }, 
+    {
+        "_typeName": "VsanPerfEntityMetricCSV", 
+        "entityRefId": "vsan-esa-disk-layer:52850722-bc18-61ea-8400-190ec367ac70", 
+        "sampleInfo": "2026-11-07 05:00:00,2026-11-07 05:05:00", 
+        "value": [
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "avgLatReadCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "233,3762"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "avgLatWriteCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "95,5023"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "avgLatWritePerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "63,3727"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "iopsReadCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "2210,1885"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "iopsWriteCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "245,143"
+            }
+        ]
+    }
+]

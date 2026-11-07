@@ -1,0 +1,60 @@
+{
+    "_typeName": "VimVsanHostVsanManagedDisksInfo", 
+    "storagePools": [
+        {
+            "_typeName": "VimVsanHostStoragePoolInfo", 
+            "storagePoolDisks": [
+                {
+                    "_typeName": "VimVsanHostStoragePoolDiskInfo", 
+                    "disk": {
+                        "_typeName": "HostScsiDisk", 
+                        "deviceName": "/vmfs/devices/disks/t10.NVMe____Samsung_SSD_990_PRO_4TB_________________AD47A06142382500", 
+                        "deviceType": "disk", 
+                        "key": "key-vim.host.ScsiDisk-0558eb30bacb4e1971e16c21d91f5691574645328672d17983759a235144ab0d3c", 
+                        "uuid": "0558eb30bacb4e1971e16c21d91f5691574645328672d17983759a235144ab0d3c", 
+                        "canonicalName": "t10.NVMe____Samsung_SSD_990_PRO_4TB_________________AD47A06142382500", 
+                        "displayName": "Local NVMe Disk (t10.NVMe____Samsung_SSD_990_PRO_4TB_________________AD47A06142382500)", 
+                        "lunType": "disk", 
+                        "vendor": "NVMe", 
+                        "model": "Samsung SSD 990 PRO 4TB                 ", 
+                        "revision": "8B2QJXD7", 
+                        "scsiLevel": 0, 
+                        "serialNumber": "NVMe____Samsung_SSD_990_PRO_4TB_________________AD47A06142382500", 
+                        "queueDepth": 2046, 
+                        "operationalState": [
+                            "ok"
+                        ], 
+                        "capabilities": {
+                            "_typeName": "ScsiLunCapabilities", 
+                            "updateDisplayNameSupported": true
+                        }, 
+                        "vStorageSupport": "vStorageUnsupported", 
+                        "protocolEndpoint": false, 
+                        "perenniallyReserved": false, 
+                        "clusteredVmdkSupported": false, 
+                        "capacity": {
+                            "_typeName": "HostDiskDimensionsLba", 
+                            "blockSize": 512, 
+                            "block": 7814037168
+                        }, 
+                        "devicePath": "/vmfs/devices/disks/t10.NVMe____Samsung_SSD_990_PRO_4TB_________________AD47A06142382500", 
+                        "ssd": true, 
+                        "localDisk": true, 
+                        "emulatedDIXDIFEnabled": false, 
+                        "vsanDiskInfo": {
+                            "_typeName": "VsanHostVsanDiskInfo", 
+                            "vsanUuid": "52d171f6-2e48-758a-777f-d5098533d861", 
+                            "formatVersion": 24
+                        }, 
+                        "scsiDiskType": "emulated512"
+                    }, 
+                    "vsanUuid": "52d171f6-2e48-758a-777f-d5098533d861", 
+                    "isMounted": true, 
+                    "isEncrypted": false, 
+                    "dekId": "", 
+                    "diskType": "singleTier"
+                }
+            ]
+        }
+    ]
+}

@@ -1,0 +1,487 @@
+[
+    {
+        "_typeName": "VsanPerfEntityMetricCSV", 
+        "entityRefId": "zdom-vtx:69fd149d-c1b8-aae3-bcb2-3805253936dc", 
+        "sampleInfo": "2026-11-07 05:00:00,2026-11-07 05:05:00", 
+        "value": [
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "checkpointWorkerWakeupMs", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "20000,20000"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "latAvgTotalOpIO", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "3127,3354"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "latAvgTxnBank", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "8572,12771"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "maxDiscUsedPct", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "28,29"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "rateBankFlushTotalCacheRef", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "12495,9896"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "rateSegCleaningCtxDataTotalCacheRef", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "4806,2563"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "rateTotalCacheRef", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "97601,72628"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "rateTxnLookupCacheRef", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "287,112"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "rateTxnPrefetchTotalCacheRef", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "5726,2540"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "rateTxnReadWrite", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "2930,2708"
+            }
+        ]
+    }, 
+    {
+        "_typeName": "VsanPerfEntityMetricCSV", 
+        "entityRefId": "zdom-vtx:69805090-5bba-3949-88f7-38052534dfcc", 
+        "sampleInfo": "2026-11-07 05:00:00,2026-11-07 05:05:00", 
+        "value": [
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "checkpointWorkerWakeupMs", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "20000,20000"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "latAvgTotalOpIO", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "2922,3850"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "latAvgTxnBank", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "6996,10954"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "maxDiscUsedPct", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "24,23"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "rateBankFlushTotalCacheRef", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "15814,14171"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "rateSegCleaningCtxDataTotalCacheRef", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "7114,4445"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "rateTotalCacheRef", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "127396,105649"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "rateTxnLookupCacheRef", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "605,4838"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "rateTxnPrefetchTotalCacheRef", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "6795,4712"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "rateTxnReadWrite", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "6986,6786"
+            }
+        ]
+    }, 
+    {
+        "_typeName": "VsanPerfEntityMetricCSV", 
+        "entityRefId": "zdom-vtx:6a8859db-a52e-c523-e78c-3805253a02fc", 
+        "sampleInfo": "2026-11-07 05:00:00,2026-11-07 05:05:00", 
+        "value": [
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "checkpointWorkerWakeupMs", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "20000,20000"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "latAvgTotalOpIO", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "2817,3760"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "latAvgTxnBank", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "8986,14656"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "maxDiscUsedPct", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "28,28"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "rateBankFlushTotalCacheRef", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "22828,15189"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "rateSegCleaningCtxDataTotalCacheRef", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "7671,5091"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "rateTotalCacheRef", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "126649,107748"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "rateTxnLookupCacheRef", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "1103,764"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "rateTxnPrefetchTotalCacheRef", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "7846,5712"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "rateTxnReadWrite", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "3334,3108"
+            }
+        ]
+    }, 
+    {
+        "_typeName": "VsanPerfEntityMetricCSV", 
+        "entityRefId": "zdom-vtx:69805998-46aa-aafb-3dd4-38052534e318", 
+        "sampleInfo": "2026-11-07 05:00:00,2026-11-07 05:05:00", 
+        "value": [
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "checkpointWorkerWakeupMs", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "20000,20000"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "latAvgTotalOpIO", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "2990,4217"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "latAvgTxnBank", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "7448,9647"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "maxDiscUsedPct", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "28,28"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "rateBankFlushTotalCacheRef", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "8210,8919"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "rateSegCleaningCtxDataTotalCacheRef", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "4379,2106"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "rateTotalCacheRef", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "86591,69086"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "rateTxnLookupCacheRef", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "101,291"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "rateTxnPrefetchTotalCacheRef", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "2657,2424"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "rateTxnReadWrite", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "3498,3262"
+            }
+        ]
+    }, 
+    {
+        "_typeName": "VsanPerfEntityMetricCSV", 
+        "entityRefId": "zdom-vtx:698054c1-6eb8-30f8-8c1e-38052534ded0", 
+        "sampleInfo": "2026-11-07 05:00:00,2026-11-07 05:05:00", 
+        "value": [
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "checkpointWorkerWakeupMs", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "20000,20000"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "latAvgTotalOpIO", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "2732,3502"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "latAvgTxnBank", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "10047,15100"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "maxDiscUsedPct", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "28,27"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "rateBankFlushTotalCacheRef", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "22010,12072"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "rateSegCleaningCtxDataTotalCacheRef", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "3631,1210"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "rateTotalCacheRef", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "104744,100173"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "rateTxnLookupCacheRef", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "398,74"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "rateTxnPrefetchTotalCacheRef", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "7889,5837"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "rateTxnReadWrite", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "3594,3403"
+            }
+        ]
+    }
+]
