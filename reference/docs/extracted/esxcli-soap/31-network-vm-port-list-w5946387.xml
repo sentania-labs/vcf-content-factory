@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenc="http://schemas.xmlsoap.org/soap/encoding/"
+ xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
+ xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+ xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+<soapenv:Body>
+<ExecuteSoapResponse xmlns="urn:vim25"><returnval xmlns:reflect="urn:reflect"><reflect:response>&lt;obj xmlns:xsd=&quot;http://www.w3.org/2001/XMLSchema&quot; xmlns:xsi=&quot;http://www.w3.org/2001/XMLSchema-instance&quot; xmlns=&quot;urn:vim25&quot; versionId=&quot;5.0&quot; xsi:type=&quot;ArrayOfDataObject&quot;&gt;&lt;DataObject xsi:type=&quot;VimEsxCLInetworkvmportlistPort&quot;&gt;&lt;DVPortID&gt;72&lt;/DVPortID&gt;&lt;IPAddress&gt;0.0.0.0&lt;/IPAddress&gt;&lt;MACAddress&gt;00:50:56:83:3b:71&lt;/MACAddress&gt;&lt;PortID&gt;67109440&lt;/PortID&gt;&lt;Portgroup&gt;dvportgroup-6023&lt;/Portgroup&gt;&lt;TeamUplink&gt;vmnic2&lt;/TeamUplink&gt;&lt;UplinkPortID&gt;2214592519&lt;/UplinkPortID&gt;&lt;vSwitch&gt;vcf-lab-mgmt-cl01-vds-01&lt;/vSwitch&gt;&lt;/DataObject&gt;&lt;/obj&gt;</reflect:response></returnval></ExecuteSoapResponse>
+</soapenv:Body>
+</soapenv:Envelope>
