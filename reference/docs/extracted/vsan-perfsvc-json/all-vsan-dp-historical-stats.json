@@ -1,0 +1,18 @@
+[
+    {
+        "_typeName": "VsanPerfEntityMetricCSV", 
+        "entityRefId": "vsan-dp-historical-stats:90d067b8-0077-11f1-af60-000c297e270a", 
+        "sampleInfo": "2026-11-07 13:45:00,2026-11-07 13:50:00", 
+        "value": [
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "totalSnapshotCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "64257117696,64257117696"
+            }
+        ]
+    }
+]

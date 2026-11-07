@@ -1,0 +1,11 @@
+{
+    "_typeName": "NotSupported", 
+    "faultMessage": [
+        {
+            "_typeName": "LocalizableMessage", 
+            "key": "com.vmware.vsan.perfsvc.fault.queryperf.pmemisunavailable", 
+            "message": "You can't query PMem performance data for this cluster, because no PMem storage is monitored by vSAN in this cluster."
+        }
+    ], 
+    "faultstring": "The operation is not supported on the object."
+}

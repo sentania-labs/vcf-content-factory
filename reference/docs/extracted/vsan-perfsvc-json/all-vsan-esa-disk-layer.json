@@ -1,0 +1,1747 @@
+[
+    {
+        "_typeName": "VsanPerfEntityMetricCSV", 
+        "entityRefId": "vsan-esa-disk-layer:52d171f6-2e48-758a-777f-d5098533d861", 
+        "sampleInfo": "2026-11-07 13:45:00,2026-11-07 13:50:00", 
+        "value": [
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "tputReadPerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "30499,40949"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "tputReadDiskPerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "30499,40949"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "avgLatReadPerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "1497,518"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "iopsReadPerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "7,9"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "maxReadTimePerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "1078062,1410475"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "minReadTimePerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "127088,62377"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "tputWritePerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "29018718,27607233"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "avgLatWritePerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "349,218"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "iopsWritePerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "5958,5726"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "maxWriteTimePerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "56872114,297919"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "minWriteTimePerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "26109,20418"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "tputReadCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "16421931,15957496"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "tputReadDiskCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "16421931,15957496"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "avgLatReadCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "1337,718"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "iopsReadCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "1961,1892"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "maxReadTimeCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "61803792,3469957"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "minReadTimeCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "16641,15419"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "tputWriteCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "16555709,16316480"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "avgLatWriteCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "1681,1027"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "iopsWriteCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "126,124"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "maxWriteTimeCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "56559478,156253"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "minWriteTimeCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "55865,61636"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "iopsUnmapPerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "10,10"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "tputUnmapPerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "2200566,2112555"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "avgLatUnmapPerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "111,135"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "maxUnmapTimePerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "124433,23865"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "minUnmapTimePerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "23264,14197"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "iopsUnmapCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "0,1"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "tputUnmapCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "82568,148994"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "avgLatUnmapCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "1867,500"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "maxUnmapTimeCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "5076720,67276"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "minUnmapTimeCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "48431,28974"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "readCountPerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "2234,2999"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "writeCountPerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "1787570,1717836"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "readCountCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "588533,567786"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "writeCountCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "37896,37343"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "unmapCountPerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "3195,3192"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "unmapCountCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "189,341"
+            }
+        ]
+    }, 
+    {
+        "_typeName": "VsanPerfEntityMetricCSV", 
+        "entityRefId": "vsan-esa-disk-layer:52c7ed3e-9dcf-b82e-8177-f704806c2e4a", 
+        "sampleInfo": "2026-11-07 13:45:00,2026-11-07 13:50:00", 
+        "value": [
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "tputReadPerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "3099,3495"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "tputReadDiskPerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "3099,3495"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "avgLatReadPerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "1778,2195"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "iopsReadPerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "0,0"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "maxReadTimePerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "0,44309731"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "minReadTimePerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "0,64832"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "tputWritePerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "7483330,7590671"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "avgLatWritePerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "1955,2085"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "iopsWritePerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "964,962"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "maxWriteTimePerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "125906,62071037"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "minWriteTimePerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "45495,21941"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "tputReadCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "9693569,9647297"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "tputReadDiskCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "9693569,9647297"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "avgLatReadCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "1969,1748"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "iopsReadCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "270,383"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "maxReadTimeCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "1707672,71118093"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "minReadTimeCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "134532,10820"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "tputWriteCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "11071093,10395767"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "avgLatWriteCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "2083,2439"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "iopsWriteCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "84,79"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "maxWriteTimeCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "154840,58997414"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "minWriteTimeCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "102833,46607"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "iopsUnmapPerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "1,1"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "tputUnmapPerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "708425,716787"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "avgLatUnmapPerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "160,26"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "maxUnmapTimePerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "0,80641"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "minUnmapTimePerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "0,14778"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "iopsUnmapCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "0,0"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "tputUnmapCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "103562,117989"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "avgLatUnmapCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "2110,2716"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "maxUnmapTimeCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "0,32607486"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "minUnmapTimeCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "0,22292"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "readCountPerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "227,256"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "writeCountPerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "289326,288801"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "readCountCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "81110,115008"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "writeCountCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "25336,23789"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "unmapCountPerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "376,376"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "unmapCountCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "237,270"
+            }
+        ]
+    }, 
+    {
+        "_typeName": "VsanPerfEntityMetricCSV", 
+        "entityRefId": "vsan-esa-disk-layer:52bde68f-b0e5-6952-075b-bcb49bd54fa6", 
+        "sampleInfo": "2026-11-07 13:45:00,2026-11-07 13:50:00", 
+        "value": [
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "tputReadPerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "20086,17501"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "tputReadDiskPerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "20086,17501"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "avgLatReadPerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "236,218"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "iopsReadPerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "4,4"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "maxReadTimePerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "3383264,5593498"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "minReadTimePerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "64100,59712"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "tputWritePerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "22576220,20591828"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "avgLatWritePerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "60,74"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "iopsWritePerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "4334,3996"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "maxWriteTimePerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "1200711,6944802"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "minWriteTimePerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "20999,20008"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "tputReadCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "14185308,13532772"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "tputReadDiskCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "14185308,13532772"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "avgLatReadCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "190,185"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "iopsReadCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "1205,1154"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "maxReadTimeCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "7587588,4842841"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "minReadTimeCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "11391,11001"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "tputWriteCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "15135875,14380714"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "avgLatWriteCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "107,144"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "iopsWriteCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "115,109"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "maxWriteTimeCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "912110,344746"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "minWriteTimeCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "49363,46688"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "iopsUnmapPerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "6,6"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "tputUnmapPerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "1557859,1391017"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "avgLatUnmapPerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "25,30"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "maxUnmapTimePerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "139552,141906"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "minUnmapTimePerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "14627,14948"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "iopsUnmapCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "0,1"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "tputUnmapCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "82585,148966"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "avgLatUnmapCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "36,558"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "maxUnmapTimeCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "64331,73838"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "minUnmapTimeCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "19336,27261"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "readCountPerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "1471,1282"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "writeCountPerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "1300211,1199094"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "readCountCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "361637,346488"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "writeCountCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "34639,32919"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "unmapCountPerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "2093,2096"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "unmapCountCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "189,341"
+            }
+        ]
+    }, 
+    {
+        "_typeName": "VsanPerfEntityMetricCSV", 
+        "entityRefId": "vsan-esa-disk-layer:52585910-fedf-604c-04d3-868955bf7f7d", 
+        "sampleInfo": "2026-11-07 13:45:00,2026-11-07 13:50:00", 
+        "value": [
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "tputReadPerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "30076,34326"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "tputReadDiskPerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "30076,34326"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "avgLatReadPerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "1299,1158"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "iopsReadPerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "7,8"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "maxReadTimePerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "51190783,42606475"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "minReadTimePerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "68539,73578"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "tputWritePerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "32587106,29383514"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "avgLatWritePerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "438,440"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "iopsWritePerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "6615,6085"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "maxWriteTimePerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "57117446,59066642"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "minWriteTimePerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "22332,22572"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "tputReadCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "17807105,17269779"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "tputReadDiskCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "17807105,17269779"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "avgLatReadCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "1254,1488"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "iopsReadCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "2189,2165"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "maxReadTimeCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "67610884,72637630"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "minReadTimeCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "10930,10840"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "tputWriteCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "15346095,16712781"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "avgLatWriteCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "1581,1767"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "iopsWriteCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "117,127"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "maxWriteTimeCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "58394321,73505026"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "minWriteTimeCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "49423,48581"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "iopsUnmapPerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "9,10"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "tputUnmapPerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "2406387,2159457"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "avgLatUnmapPerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "56,119"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "maxUnmapTimePerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "138239,29589015"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "minUnmapTimePerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "14918,15098"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "iopsUnmapCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "1,1"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "tputUnmapCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "165138,142440"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "avgLatUnmapCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "659,1155"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "maxUnmapTimeCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "8457359,5733942"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "minUnmapTimeCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "14267,23604"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "readCountPerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "2203,2514"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "writeCountPerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "1984795,1825516"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "readCountCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "656754,649663"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "writeCountCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "35127,38250"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "unmapCountPerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "2996,3000"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "unmapCountCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "378,326"
+            }
+        ]
+    }, 
+    {
+        "_typeName": "VsanPerfEntityMetricCSV", 
+        "entityRefId": "vsan-esa-disk-layer:52850722-bc18-61ea-8400-190ec367ac70", 
+        "sampleInfo": "2026-11-07 13:45:00,2026-11-07 13:50:00", 
+        "value": [
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "tputReadPerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "4752,3590"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "tputReadDiskPerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "4752,3590"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "avgLatReadPerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "197,176"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "iopsReadPerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "1,0"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "maxReadTimePerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "156584,1161779"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "minReadTimePerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "62908,79379"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "tputWritePerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "5377545,5522572"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "avgLatWritePerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "63,70"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "iopsWritePerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "647,656"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "maxWriteTimePerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "933551,415489"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "minWriteTimePerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "25508,27492"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "tputReadCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "14957765,14310698"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "tputReadDiskCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "14957765,14310698"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "avgLatReadCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "156,151"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "iopsReadCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "1580,1576"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "maxReadTimeCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "4111380,4252394"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "minReadTimeCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "11662,12934"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "tputWriteCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "16073426,15121362"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "avgLatWriteCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "91,103"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "iopsWriteCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "122,115"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "maxWriteTimeCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "380053,993643"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "minWriteTimeCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "45475,49833"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "iopsUnmapPerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "4,4"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "tputUnmapPerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "704610,723539"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "avgLatUnmapPerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "26,27"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "maxUnmapTimePerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "57989,88396"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "minUnmapTimePerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "15329,17904"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "iopsUnmapCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "0,0"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "tputUnmapCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "61612,102239"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "avgLatUnmapCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "41,39"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "maxUnmapTimeCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "53110,80701"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "minUnmapTimeCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "23574,27301"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "readCountPerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "348,263"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "writeCountPerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "194286,197086"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "readCountCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "474160,472853"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "writeCountCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "36784,34609"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "unmapCountPerf", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "1383,1385"
+            }, 
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "unmapCountCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "141,234"
+            }
+        ]
+    }
+]
