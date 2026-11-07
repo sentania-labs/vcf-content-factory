@@ -800,12 +800,90 @@ the adapter's package (or a subpackage) and otherwise names the logger as a
 child of the adapter class, `<adapter class>.<simple name>` (for example
 `com.vcfcf.adapters.unifi.UniFiAdapter.SuiteApiStitcher`), so framework helper
 lines follow exactly the adapter's own level. Reproduced locally against the
-real SDK factory and log4j-core (`ComponentLoggerTest`); a live Cloud Proxy
-check is still owed. Where the Cloud Proxy's package-scoped entry comes from
-(our paks ship no `logging.properties`) is not established; the platform's
-per-adapter log-level setting is the likely writer. A pak that wants INFO
-visible by default could ship `conf/logging.properties` with
-`<its package> = INFO` like vendor paks; the builder does not do that today.
+real SDK factory and log4j-core (`ComponentLoggerTest`).
+
+**Where the governing entry comes from (factory #313, established
+2026-11-07):** the instance appender's level is fixed when the instance first
+looks up a name, from whatever entry covers the bare name at that moment. Only
+two things create one. (1) The pak's `conf/logging.properties`: each key
+(other than `MaxFileSize` / `MaxBackupIndex`) becomes an `AdapterLoggerConfig`
+whose `levelForAdapterLog` is the value, reloaded on every log4j reconfigure.
+(2) A Test Connection side effect: on that path the factory has no instance
+appender, so `componentLogger` / the adapter logger return a bare-name logger,
+and `raiseToInfo` calls `Configurator.setLevel(<bare name>, INFO)`, which
+*adds* a bare-name INFO entry to the live config. Until build-sdk shipped the
+file, (2) was the only writer, so a name looked up during Test Connection
+reached the instance log at INFO and every other name was dropped at root
+WARN: compliance's `ComplianceStitcher` (about 5 INFO lines a cycle) and
+vsanperf's `CycleEngine` (its cycle summary) never appeared, while the
+adapter class, `VSphereClient` and `SuiteApiStitcher` did. Those Test
+Connection entries are additive, so they also copied every instance line into
+`collector.log`; a properties entry by itself does not (its plain level stays
+at the governing WARN). Predicted, not yet tested: after a collector restart
+with no Test Connection, every INFO line of a pak without the file is
+dropped, which likely explains the hot-reload gap below. Evidence (SDK 2.2
+javap, proxy config, log counts):
+`knowledge/context/investigations/2026-11-07-componentlogger-routing.md`.
+
+**Scope: SDK 2.2 (9.0) and 9.1.1 only.** Both of those `AdapterLoggerFactoryImpl`
+builds read the file. The 8.18.7 SDK factory never reads
+`conf/logging.properties` (no `Properties.load`, no `MaxFileSize` /
+`MaxBackupIndex`, no such path string anywhere in the jar; it copies the
+logger's level onto the instance appender), so the file is inert there, and
+8.18 routing is unchanged and unmeasured.
+
+**build-sdk ships the file (buildkit 1.0.25):** every Tier 2 pak gets
+`<adapter_kind>/conf/logging.properties` in `adapters.zip`, one line,
+`<entry_class package>=INFO` (for example `com.vcfcf.adapters.compliance=INFO`),
+the vendor shape (NSX-T: `MaxBackupIndex=15` then `com.vmware.adapter3.nsxt=INFO`;
+no header). That covers every in-package class and the
+`<adapter class>.<Simple>` framework children. adapter.yaml can tune it:
+
+```yaml
+logging:
+  generate: true          # false: ship no generated file
+  level: INFO             # level of the <package> line
+  loggers:                # extra lines, written as key=value
+    com.example.vendorclient: WARN
+    MaxBackupIndex: 10    # SDK appender setting (int); MaxFileSize: 10MB also accepted
+```
+
+The SDK loads an extra `loggers:` name only when the collector's own log4j
+config leaves it to root; a name that config already covers (for example
+`com.integrien.*`, set to ERROR) is skipped silently. A
+`conf/logging.properties` in the adapter source tree ships verbatim instead
+(the stanza is then ignored with a warning; validate-sdk warns on non-ASCII
+bytes and on level names log4j does not know, which the SDK skips silently).
+Operators can still edit the file on the collector.
+
+**Test Connection INFO stops reaching `collector.log`.** Test Connection has
+no instance appender, so its lines only ever land in `collector.log`. With the
+package entry loaded, the bare Test Connection logger now sits under that
+`AdapterLoggerConfig`, whose plain level is the governing WARN: INFO stops
+there, WARN and ERROR still pass. Compliance's `logInfo("Test OK: ...")`
+(`ComplianceAdapter.java` ~382) and its Suite API Test Connection INFO (~426)
+appear nowhere once the pak is rebuilt. Vendor paks behave the same. Put Test
+Connection diagnostics that must be visible in the Test Connection result
+message or log them at WARN. The investigation's technique of timing a Test
+Connection by its bare-name INFO lines in `collector.log` no longer works on a
+rebuilt pak.
+
+**Limit: Test Connection still raises the names it touches (#322).** Its
+`raiseToInfo` is unchanged, so `Configurator.setLevel(<bare name>, INFO)`
+still adds an exact-name INFO entry for every name looked up during a Test
+Connection (the adapter class and the helpers it builds), more specific than
+the package entry. For an instance created after it (the add-account flow),
+those names get INFO in the instance log even when `logging.level` is DEBUG,
+and their lines are copied into `collector.log` again, until the next log4j
+reload or collector restart. Helpers never looked up in Test Connection keep
+the file's level; instances created before the Test Connection are
+unaffected. The framework does **not** pre-raise the bare name in
+`componentLogger` either: through the SDK API (`Logger.getDefaultLogger(name)`)
+a name covered by a properties entry still reads WARN, so a pre-raise would
+add that same shadowing entry for every name. The adapter-base follow-up
+(skip the raise on the no-appender factory, or raise only when no
+`AdapterLoggerConfig` covers the name) is #322, and it has to weigh the
+Test Connection INFO loss above.
 
 **Per-adapter log file appender — classloader behavior on hot-reload
 (proven empirically, synology build 16, devel 9.0.2, 2026-06-10):**
@@ -1317,6 +1395,7 @@ Empirical basis: `knowledge/context/investigations/suiteapi_ambient_auth_devel_2
 |---|---|
 | 2026-11-07 | **Pak install: the account watch was never cross-profile; the `[2/6]` line now names the host (issues #315, #311).** Both reports came from parallel installs on devel, devel_8_18 and devel_9_1 whose output was redirected to one shared `install.log`, so each run's reader saw another instance's lines; `install_pak` hands the watch the host/user from its own `_resolve_credentials(profile=...)`, pinned by tests on the real resolver with two profiles. Give each parallel install its own log file. Factory-only, no `BUILDKIT_VERSION` change. **Adapter adoption:** none. |
 | 2026-11-07 | **docs-gen renders a stitch-only pak's push targets: optional adapter.yaml `stitch_targets` (factory #310, vsanperf build 4 review W2).** A pak whose only kinds are its adapter instance (and a collector) and whose keys are pushed onto another adapter's objects through the Suite API rendered "Resource kinds: 0/1" and an empty diagram: describe.xml cannot declare keys on another adapter's kinds, and `cross_mp_edges` covers relationship edges only. Schema (`sdk_project._parse_stitch_targets`, `StitchTargetInfo`): a list of mappings with `adapter_kind` (e.g. `VMWARE`), `resource_kind` (e.g. `HostSystem`), `identity` (free text, how the pak matches the target object), `key_groups` (non-empty list of key-group prefixes, e.g. `vSAN Perf|DOM Owner|*`, no duplicates), all required, and optional `instanced_by` (free text). Rejected, by validate-sdk (`adapter.yaml validation error: ...`) and docs-gen alike: not a list, a non-mapping entry, an unknown key, a missing or blank required field, an empty or duplicate key group, the pak's own `adapter_kind`, the same adapter/resource kind pair twice (one entry per target), a `<`, `>`, `|`, backtick or control character in `adapter_kind` or `resource_kind` (interior spaces allowed: `VMwareAdapter Instance`). `identity` and `instanced_by` are plain text; their markdown metacharacters are escaped. Rendered: a `## Metrics Pushed Onto` section (one `### <Kind> (<ADAPTER>)` heading per target, Matched on / Instanced by lines, a key-group table) in docs/README.md (between the diagram and Quick Reference, plus a `Metrics pushed onto:` quick-reference line), docs/inventory-tree.md (after Cross-MP Relationships) and the docs/overview.md scaffold (before Cross-Adapter Notes; scaffold-only, so an existing overview.md is not rewritten). The SVG and Excalidraw diagrams draw, right of the pak's own tree, the adapter instance with a dashed orthogonal edge labelled "pushes keys" to one dashed external node per target (title = resource kind, then `<ADAPTER> (external)` and the key groups). Documentation only: the pak, `content_foreign_adapter_kinds` checks and pak bytes are unchanged. No stanza, no change: guard `tests/managementpacks/test_docs_gen_stitch_targets.py` compares two fixtures against docsets captured before the change (`tests/fixtures/sdk_adapters/docs_gen_baseline/`), and the five factory paks with adapter.yaml regenerated byte-identical. **Versioning:** the kit ships `docs_gen.py` and `sdk_project.py`, but `BUILDKIT_VERSION` is not bumped here. A pak pinned to kit 1.0.24 or older accepts any `stitch_targets`, malformed included, without an error (adapter.yaml top-level keys are not closed), and its CI docs omit the section: pak CI checks and renders the stanza only once the pak pins a kit that contains this change. A factory-side `validate-sdk` / `build-sdk` checks it now. |
+| 2026-11-07 | **Buildkit 1.0.25: every Tier 2 pak ships `conf/logging.properties` (factory #313).** §Logging: the per-instance appender's level comes from the entry covering the bare logger name at first lookup; with no pak file the only writer was Test Connection's `setLevel` side effect, so names never looked up there (compliance `ComplianceStitcher`, vsanperf `CycleEngine`) lost their INFO, and the Test-Connection entries copied instance lines into `collector.log`. build-sdk now writes `<adapter_kind>/conf/logging.properties` with `<entry_class package>=INFO` (vendor shape), tunable by an optional adapter.yaml `logging:` stanza (`generate`, `level`, `loggers`); an adapter-source `conf/logging.properties` ships verbatim instead. No framework Java change: a `componentLogger` pre-raise cannot see a properties entry through the SDK API and would shadow it. Replaces the "where the package-scoped entry comes from is not established" paragraph. Read by the SDK 2.2 (9.0) and 9.1.1 logger factory only; inert on 8.18.7, whose factory never loads the file. **Behavior change:** with the package entry loaded, Test Connection INFO no longer reaches `collector.log` (there is no instance log then; WARN and ERROR still do), so Test Connection diagnostics that must be visible go in the result message or at WARN (compliance's `logInfo("Test OK ...")`, `ComplianceAdapter.java` ~382 and ~426, now vanishes). **Limit:** Test Connection's unchanged `raiseToInfo` still adds exact-name INFO entries for the names it looks up, which shadow a stanza DEBUG for those names and copy their lines into `collector.log` until the next log4j reload or collector restart; helpers never looked up in Test Connection keep the file's level. Adapter-base follow-up: #322. **Versioning:** `BUILDKIT_VERSION` 1.0.25 (it also carries #321's `stitch_targets`, which shipped without a bump); after merge push `sdk-buildkit-v1.0.25`. Nothing in the factory release path keys on `BUILDKIT_VERSION`: `publish-buildkit.yml` is tag-driven, and the constant only sets the factory-mode kit version and the framework jar `Implementation-Version`. **Adapter adoption:** each pak repo bumps `BUILDKIT_TAG` in `build-pak-on-tag.yml` and its committed `ci/sdk-buildkit.SHA256SUMS`, then cuts a build; no adapter source change. Compliance (`ComplianceStitcher`) and vsanperf (`CycleEngine`) benefit at once; synology and unifi pick it up on their next build. |
 | 2026-10-28 | **Buildkit 1.0.24: batch Suite API pushes on the stitch facade (compliance#17).** `SuiteApiStitchClient` and `SuiteApiStitcher` gain `pushPropertiesBatch`, `pushStatsBatch` (each with a default-cap and a `maxResources, maxBytes` overload) and `pushBatch` (properties, then stats), returning the new `SuiteApiBatchResult` (sent, batchesOk, batchesFailed, fellBack, skipped, dropped, stopped; `isClean()` false on any skip, drop, failure or stop). Endpoints `POST /api/resources/properties` and `/api/resources/stats`, never the `/adapterkinds/{kind}` variants; `disableAnalyticsProcessing` is never sent (default false, so alerts still evaluate). Bodies: stats `{"resource-stat-content":[{"id",...,"stat-contents":[...]}]}`, properties `{"values":[{"resourceId",...,"property-contents":{"property-content":[...]}}]}`; the per-id builders share the item serializer, output unchanged. Evidence: wire shape from spec + vendor examples; both batches proven landing live on 8.18.7, 9.0.2 and 9.1.1 (properties with a changed value). Chunked by count and UTF-8 bytes (defaults 100 and 1,000,000), serialized and sent one chunk at a time, an oversized resource goes alone; ids checked with `isUuid`, normalized and merged; null keys, null values and non-finite stats dropped and counted. `jsonStr` now escapes every char below U+0020 as `\u00XX` (per-id bodies too). Failure: token fetched before each request, a token failure stops the call with nothing more sent; single 401 re-acquire kept; a 4xx other than 401/429 gets one WARN (count, first three ids) and a per-id re-send of that chunk; 5xx, 429, a persistent 401 or no HTTP status gets one WARN and stops the call (rest counted skipped, `pushBatch` skips stats); the per-id fallback stops on the same conditions. Batch read timeout 120 s (connect stays 30 s). A 2xx is "accepted", not "landed": unknown ids are dropped silently (live test 3), so stale ids belong to the `ForeignResourceResolver` refresh. Evidence: `knowledge/context/api-surface/suite_api_batch_push.md`. Review: `knowledge/context/reviews/framework/adapter-framework-batch-push-2026-10-28.md`. Guards: `adapter_framework/test/com/vcfcf/adapter/stitch/SuiteApiStitchBatchTest.java`, runnable with the other stitch suites by `adapter_framework/run_stitch_tests.sh`. **Versioning:** `BUILDKIT_VERSION` 1.0.24. **Adapter adoption:** opt-in; no pak changes until it calls the batch methods. Compliance adoption is a separate build. |
 | 2026-10-28 | **docs-gen reads the `/recursive`, `/preferred` and `::~child` ResourcePath modifiers (UniFi build 18 review W4).** A `/recursive` level adds the kind's self-edge, so the generated tree, diagram and Parent(s) column show Switch > Switch and AP > AP; `/preferred` and `/skip` (meaning unconfirmed, PR #290) are stripped; foreign levels are keyed `ADAPTER::Kind` and labelled `Kind (ADAPTER)`; `*` levels are a wildcard pseudo-kind; unreachable cycles warn and still render. Every further parent of a kind gets a `*(see above)*` tree line, and same-row and upward diagram edges are routed through lanes between rows instead of a flat line through the row. `::~child` now makes that kind the parent, and top-level nodes are ordered own roots (describe.xml order) then foreign roots (sorted) instead of by set iteration. Synology docs change on the next build: Datastore moves from under the iSCSI LUN to a top-level foreign root `Datastore (VMWARE)` with *(see above)* lines for the iSCSI LUN and NFS Export, the LUN and NFS Export Parent(s) gain `Datastore (VMWARE)`, the tree gains Storage Pool > Disk *(see above)*, and the diagram routes SSD Cache > Disk; compliance has no traversal spec and does not change. See "Generated docset" above. **Versioning:** `BUILDKIT_VERSION` not bumped here; paks get the fix with the next buildkit tag. |
 | 2026-10-28 | **Buildkit 1.0.23: `metric_dynamic` symptoms render as content-import `type="dtmetric"` with `above`/`below`/`abnormal`, not `type="metric" operator="DT_ABOVE"`.** `vcfcf_core/alerts/render.py::_add_condition_element` used the REST spelling in content XML; the importer rejects it (`Invalid operator:dt_above`, 8.18 and 9.1) and drops the symptom, every other symptom in the same alertdefs file, and every alert referencing them, while the pak install reports success (Synology 0.0.0.35). The renderer is shared by factory content zips (`vcfcf_core/packaging/assembly.py`) and SDK pak `content/symptomdefs/` and `content/alertdefs/` (`sdk_builder.py`, the kit's `alerts_render.py` copy). REST (`CONDITION_DT` / `DT_<direction>`) is unchanged. The symptom loader now rejects `metric_dynamic` on a `Super Metric|` key: that is `dtsuper` / `CONDITION_DT_SUPER` on the two wires, which the factory emits on neither, and no content uses it. Evidence: `knowledge/context/wire-formats/symptomdef_dt_condition_import.md`. Guard: `tests/test_symptom_dt_condition_xml.py`. **Versioning:** `BUILDKIT_VERSION` 1.0.23, following the merged 1.0.22 (#287). Factory zips: `CURRENT_TEMPLATE_VERSION` 2026-10-28-2, since `AlertContent.xml` in every zip comes from this renderer (no repo zip carries a DT symptom, but a clone's would be stale). **Adapter adoption:** synology is the only pak with a `metric_dynamic` symptom (`Disk Uncorrectable Sectors Increasing`); rebuild it to land that symptom and the `Disk Failing` alert. No source change. Other paks' built bytes are unchanged. |

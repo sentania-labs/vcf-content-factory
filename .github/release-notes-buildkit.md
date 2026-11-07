@@ -165,6 +165,35 @@ adapter-framework designs round; this is 1.0.18.
 
 Version note: this is 1.0.19, after 1.0.18.
 
+## Behavior since 1.0.25
+
+- Every Tier 2 pak build ships `<adapter_kind>/conf/logging.properties`
+  with `<entry_class package>=INFO` (factory issue #313). The per-instance
+  adapter log takes the level of the log4j entry covering a logger's name
+  at first lookup, so without this file helper-class INFO lines were
+  dropped unless a Test Connection had raised the name first.
+- Optional adapter.yaml `logging:` stanza (`generate`, `level`, `loggers`).
+  A `conf/logging.properties` in the adapter source ships unchanged and
+  wins; `validate-sdk` warns on non-ASCII bytes or unknown level names in
+  it. Extra `loggers:` names the collector's own log4j config already
+  covers (`com.integrien.*`) are skipped by the SDK.
+- **Test Connection INFO no longer reaches `collector.log`** once the pak
+  is rebuilt (there is no instance log during Test Connection; WARN and
+  ERROR still reach `collector.log`). Put Test Connection diagnostics that
+  must be visible in the result message or log them at WARN; compliance's
+  `logInfo("Test OK ...")` is one that now vanishes.
+- `logging.level: DEBUG` is not absolute: a Test Connection still raises
+  the names it looks up (the adapter class and its Test Connection
+  helpers) to INFO for instances created afterwards, and copies their
+  lines into `collector.log`, until the next log4j reload or collector
+  restart. Adapter-base follow-up: factory #322.
+- SDK 2.2 (9.0) and 9.1.1 only: the 8.18.7 SDK never reads the file, so
+  it is inert on 8.18.
+- Also carries the optional adapter.yaml `stitch_targets` stanza (factory
+  #321, docs only), which shipped in the factory without a kit bump.
+- Adoption: no adapter source change. Each pak repo bumps `BUILDKIT_TAG`
+  to `sdk-buildkit-v1.0.25` and its committed SHA256SUMS, then rebuilds.
+
 ## Behavior since 1.0.24
 
 - Batch Suite API pushes (compliance#17). `SuiteApiStitcher` (and
