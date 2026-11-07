@@ -1,0 +1,60 @@
+[
+    {
+        "_typeName": "VsanPerfNodeInformation", 
+        "version": "9.1.1", 
+        "hostname": "vcf-lab-mgmt-esx01.int.sentania.net", 
+        "isCmmdsMaster": false, 
+        "isStatsMaster": false, 
+        "vsanMasterUuid": "6a8859db-a52e-c523-e78c-3805253a02fc", 
+        "vsanNodeUuid": "69805090-5bba-3949-88f7-38052534dfcc", 
+        "diagnosticMode": false
+    }, 
+    {
+        "_typeName": "VsanPerfNodeInformation", 
+        "version": "9.1.1", 
+        "hostname": "vcf-lab-mgmt-esx04.int.sentania.net", 
+        "isCmmdsMaster": false, 
+        "isStatsMaster": false, 
+        "vsanMasterUuid": "6a8859db-a52e-c523-e78c-3805253a02fc", 
+        "vsanNodeUuid": "69fd149d-c1b8-aae3-bcb2-3805253936dc", 
+        "diagnosticMode": false
+    }, 
+    {
+        "_typeName": "VsanPerfNodeInformation", 
+        "version": "9.1.1", 
+        "hostname": "vcf-lab-mgmt-esx03.int.sentania.net", 
+        "isCmmdsMaster": false, 
+        "isStatsMaster": false, 
+        "vsanMasterUuid": "6a8859db-a52e-c523-e78c-3805253a02fc", 
+        "vsanNodeUuid": "69805998-46aa-aafb-3dd4-38052534e318", 
+        "diagnosticMode": false
+    }, 
+    {
+        "_typeName": "VsanPerfNodeInformation", 
+        "version": "9.1.1", 
+        "hostname": "vcf-lab-mgmt-esx05.int.sentania.net", 
+        "isCmmdsMaster": true, 
+        "isStatsMaster": true, 
+        "vsanMasterUuid": "6a8859db-a52e-c523-e78c-3805253a02fc", 
+        "vsanNodeUuid": "6a8859db-a52e-c523-e78c-3805253a02fc", 
+        "masterInfo": {
+            "_typeName": "VsanPerfMasterInformation", 
+            "secSinceLastStatsWrite": 189, 
+            "secSinceLastStatsCollect": 193, 
+            "statsIntervalSec": 300, 
+            "statsDirectoryPercentFree": 96, 
+            "verboseMode": false
+        }, 
+        "diagnosticMode": false
+    }, 
+    {
+        "_typeName": "VsanPerfNodeInformation", 
+        "version": "9.1.1", 
+        "hostname": "vcf-lab-mgmt-esx02.int.sentania.net", 
+        "isCmmdsMaster": false, 
+        "isStatsMaster": false, 
+        "vsanMasterUuid": "6a8859db-a52e-c523-e78c-3805253a02fc", 
+        "vsanNodeUuid": "698054c1-6eb8-30f8-8c1e-38052534ded0", 
+        "diagnosticMode": false
+    }
+]
