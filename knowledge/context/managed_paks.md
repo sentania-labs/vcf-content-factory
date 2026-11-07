@@ -25,8 +25,17 @@ editing when a pak ships a new version.
   `/publish` records a pointer to `<remote>/releases/latest` — it never rebuilds
   or mirrors the `.pak` binary. The pak's own GitHub Release is the single
   source of truth for the artifact.
-- **New pak = template + one line here.** Instantiate the GitHub template repo
-  `sentania-labs/vcf-content-factory-sdk-template`, then add one entry below.
+- **New pak = template + one line here + one secret.** Instantiate the GitHub
+  template repo `sentania-labs/vcf-content-factory-sdk-template`, add one
+  entry below, and before the first `v*` tag give the new repo its
+  `sdk-release` Environment with the `SDK_RUNTIME_SSH_KEY` secret: a fresh
+  ed25519 keypair, public half added as a read-only deploy key on the private
+  `vcf-content-factory-sdk-runtime` repo (title "CI read-only (<name> pak
+  builds)"), private half stored as the Environment secret, private file
+  shredded. Without it the tag build fails at "Fetch Broadcom SDK jar"
+  (vsanperf v1.0.0.9, 2026-11-06). `gh repo create --template` lands the repo
+  under the caller's account unless the name is `sentania-labs/<name>`;
+  transfer it before anything is pushed.
 
 ## Hard rules
 
@@ -120,18 +129,24 @@ it is not a published pak.
   instanced metrics; the Java port of the Python vsanhostmetrics pack.
   Design: `knowledge/designs/vsanperf-mp-v1.md`; plan:
   `knowledge/context/investigations/2026-11-06-vsanhostmetrics-scale-plan.md`.
-  Status 2026-11-06: Build 1 merged (builds 5 to 7, pak PRs #2 and #3);
-  build 7 (dev preview 0.0.0.7) installed and collecting on devel 9.0.2,
-  8.18 and 9.1 against `vcf-lab-vcenter-mgmt` (records in
+  Released: `v1.0.0.9` (2026-11-06, pre-release, build 9, same source as the
+  0.0.0.9 preview on devel). Status 2026-11-06: Build 1 merged (builds 5 to
+  9, pak PRs #2 to #5 and #7); dev previews collecting against
+  `vcf-lab-vcenter-mgmt`: build 9 on devel 9.0.2 (Cloud Proxy), build 8 on
+  8.18 (analytics-node collector only; the Cloud Proxy never received the
+  jar) and on 9.1 (Cloud Proxy); records in
   `knowledge/context/reviews/vsanperf-t5-*.md`; build 4 review findings
-  fixed in build 5, pak CHANGELOG 0.1.0.5). Open before the first `v*` tag:
-  build 8 (collector identity = raw account identity), 8.18 Cloud Proxy
-  start (proxy now readable over SSH, key installed), collector log scan
-  with timing on and the read-back-vs-`PERF`-log comparison,
-  wrong-credential ERROR check, pNIC rendering in the UI,
-  `docs/installing.md` certificate-accept step for 8.18/9.1, T3/T4; factory
-  issues #310 (docs-gen stitch targets) and #311 (install CLI "nothing to
-  start").
+  fixed in build 5 (pak CHANGELOG 0.1.0.5). Open after v1.0.0.9, before the
+  scale release: key-tree alignment with the vsanhostmetrics `cptvsan|`
+  grammar (decision pending, keys are permanent once a customer installs);
+  8.18 Cloud Proxy placement (jar sync timeout, lesson
+  remote-collector-upgrade-start-race.md third mode, factory issue #314);
+  the read-back-vs-`PERF`-log comparison; wrong-credential ERROR check;
+  pNIC rendering in the UI; `docs/installing.md` certificate-accept step for
+  8.18/9.1; T3/T4 (pak issue #6); factory issues #310 (docs-gen stitch
+  targets), #311 and #315 (install CLI account watch: "nothing to start",
+  and `--profile devel_9_1` restarted the 9.0.2 instance), #313
+  (componentLogger lines from helper classes missing from the instance log).
 
 ## Third-party Python Integration SDK paks (forks, contribute upstream)
 

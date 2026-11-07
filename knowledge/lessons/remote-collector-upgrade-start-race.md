@@ -85,3 +85,31 @@ shows "Adapter jar synchronization failed", and a `NOTE` line says the same
 whenever the installer sent a start. If an account is still FAILED after
 its two starts, do the by-hand steps above. A green install still says
 nothing about a collection cycle: verify one.
+
+## Third mode (2026-11-06, vsanperf 0.0.0.7 on devel 8.18): a NEW kind never arrives
+
+The Cloud Proxy fetches a new or updated jar from the analytics node with a
+30 s wait on its "Sync Adapters" request (whether that wait is configurable
+was not tested). On the devel 8.18 proxy the
+transfer took 31.5 s: `Did not receive response from Controller for 'Sync
+Adapters' task`, then `FileNotFoundException: …/plugins/inbound/vcfcf_vsanperf.jar`.
+Nothing retries. For an upgrade this is the second mode above (old jar keeps
+running). For a kind the proxy has never had there is nothing to fall back
+to: every start and stop of an instance placed there fails with `Unknown
+adapter type is specified in collector configuration (Type = <kind>)`, the
+account sits FAILED with an empty status message, and the installer's
+restart watch cannot help because nothing can load. The same proxy overran
+the wait 4 times out of 14 since 2026-10-23; the 9.0.2 proxy hit the same
+race in the same minute and got its file at ~30 s.
+
+What to do: after installing a NEW kind, before creating an instance on a
+remote collector, confirm `plugins/inbound/<kind>.jar` (or the kind's
+directory next to the other paks) exists on that proxy, by SSH or the UI
+Support Logs browser (collector.log "Sync Adapters"). If it is missing,
+re-run the install, which re-sends the Update Adapters task (this fixed the
+upgrade case on 10-28; for a NEW kind it is untested, issue #314), and if the
+jar is still absent restart the collector service on the proxy (also
+untested) before placing an instance; do not create or start the instance
+until the jar is there. Tooling follow-up: issue #314 (verify each proxy
+received the jar before the install reports success). Evidence:
+`knowledge/context/investigations/2026-11-06-vsanperf-proxy-logs.md`.
