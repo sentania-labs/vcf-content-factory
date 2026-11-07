@@ -115,7 +115,7 @@ How the pack currently identifies objects (from the live VsanHostMetrics resourc
 | VsanVirtualMachine | vm_uuid | e8f31d49-d532-4b17-9ef1-7cc33efa33dc |
 | VsanVirtualDisk | vdisk_uuid | a47e8269-1970-fbb7-4be9-38052534ded0/vcf-lab-vcenter-wld01_7.vmdk |
 
-Pack cluster_uuid `90d067b8-0077-11f1-af60-000c297e270a` is the vSAN cluster UUID, same string as in the VMWARE vSAN datastore path (`VSAN:90d067b8007711f1-af60000c297e270a`). The built-in vSAN Cluster object does not expose it as an identifier. Stitching to a VMWARE `ClusterComputeResource` needs the MoRef (`domain-c6004`, identifier `VMEntityObjectID` + `VMEntityVCID`), which is in the built-in cluster ID string. Stitching hosts: pack host_uuid (e.g. `698054c1-...`) is the ESXi hardware/vSAN node UUID, not the MoRef; matching to HostSystem needs a name or the Storage Pool `host-NNNN` ID (INFERRED path, not tested).
+Pack cluster_uuid `90d067b8-0077-11f1-af60-000c297e270a` is the vSAN cluster UUID, same string as in the VMWARE vSAN datastore path (`VSAN:90d067b8007711f1-af60000c297e270a`). The built-in vSAN Cluster object does not expose it as an identifier. Stitching to a VMWARE `ClusterComputeResource` needs the MoRef (`domain-c6004`, identifier `VMEntityObjectID` + `VMEntityVCID`), which is in the built-in cluster ID string. Stitching hosts: pack host_uuid (e.g. `698054c1-...`) is the ESXi hardware/vSAN node UUID, not the MoRef; matching to HostSystem needs the vSAN node uuid to host MoRef join that the pack already makes through vCenter's `HostSystem.configManager.vsanSystem` / vsan node uuid (the API map, same day, observed that join for all 5 hosts); the Storage Pool `host-NNNN` ID is an alternative, untested.
 
 ## 5. Lab reference
 
@@ -126,8 +126,8 @@ Pack cluster_uuid `90d067b8-0077-11f1-af60-000c297e270a` is the vSAN cluster UUI
 | ClusterComputeResource | 3 |
 | Datastore | 12 |
 | Ops version | VCF Operations 9.0.2.0 build 25431135 |
-| Ops nodes | 1 collector/cluster node (172.27.10.12) |
-| Ops node size | UNKNOWN. API gap: no read endpoint reachable (the node resource reports config|numCpu 2.0, numOfvCpus 2.0, which looks wrong for a 9.x node; casa API returns 403). Not asserted. |
+| Ops nodes | 1 analytics node (172.27.10.12) plus a Cloud Proxy (172.27.10.13) that hosts the pack's instance (per the collector sizing report, same day) |
+| Ops node size | UNKNOWN. API gap: no read endpoint reachable (the node resource reports config|numCpu 2.0, numOfvCpus 2.0; the collector sizing report confirmed 2 vCPU / 7.9 GB by SSH the same day, so this is a small node; casa API returns 403). Not asserted. |
 | Pack objects on lab | 424 across 27 kinds plus the adapter instance (148 Vscsi, 148 VirtualDisk, 30 VM, 10 Pnic, rest 1 to 5) |
 
 ## Appendix A: raw stat keys

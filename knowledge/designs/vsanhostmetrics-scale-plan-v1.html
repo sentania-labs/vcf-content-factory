@@ -75,7 +75,7 @@ ol,ul{padding-left:22px;margin:0 0 12px} li{margin-bottom:6px}
 <nav aria-label="Sections">
   <a href="#verdict">Verdict</a>
   <a href="#numbers">Where the numbers come from</a>
-  <a href="#customer">The 70-cluster customer</a>
+  <a href="#customer">The 70-cluster environment</a>
   <a href="#objects">Object model</a>
   <a href="#collector">Collector</a>
   <a href="#jvm">JVM and memory</a>
@@ -90,149 +90,146 @@ ol,ul{padding-left:22px;margin:0 0 12px} li{margin-bottom:6px}
 <main>
 <h1>vSAN Host Metrics at 70 clusters</h1>
 <p class="lede">A plan for porting the vsanhostmetrics pack to a native Java Tier 2 SDK adapter that holds up on one vCenter with 70 vSAN clusters, with answers to the concerns raised about collector memory, metric volume and trending.</p>
-<p class="meta">2026-11-06 · from reading 1.4.7, the open 2.0.0 PR and a recon of a VCF Ops 9.0.2 lab · VCF Content Factory</p>
+<p class="meta">2026-11-06 · from reading 1.4.7 and the open 2.0.0 PR, plus same-day measurements on a VCF Operations lab (8.18.7, 9.0.2, 9.1.1) and its 9.1.1 vCenter · VCF Content Factory</p>
 
 <section id="verdict">
 <div class="verdict">
 <p><strong>Port the design, not the code.</strong> The scaling problem is not the number of metrics defined. It is one Ops object per vSAN entity, which multiplies on hosts, NICs, disks, VMs and virtual disks, and one Performance Service call per entity type per cluster, run one after another.</p>
-<p>A Java port that fixes those two is a good fit for the collector: the Performance Manager answers over plain HTTP and JSON on 8.0.3 and later, so the port needs no vSAN SDK jars, and the Java SDK's Suite API push is the natural way to land metrics on vCenter's own objects, and that is the move that takes the pack from ~110,000 objects to zero. A line-for-line port that keeps today's model moves the problem into the collector JVM, where a failure takes every adapter on the proxy with it.</p>
+<p>The port fixes the first by owning no objects and stitching values onto vCenter's own HostSystem and VirtualMachine, which takes the pack from roughly 180,000 projected objects to zero. It fixes the second by running clusters in parallel. Whether one instance then carries 70 clusters depends on a throughput ceiling the lab cannot measure; the plan says so rather than assuming it. A line-for-line port that keeps today's model moves the problem into the collector JVM, where a failure takes every adapter on the proxy with it.</p>
 </div>
 </section>
 
 <section id="numbers">
 <h2>Where the numbers come from</h2>
 <h3>What Ops charges for</h3>
-<p>Ops sizing is driven by <strong>objects</strong> first and <strong>metric series</strong> second, where a series is one metric key on one object, written once per cycle. Every object carries identity, relationships, a dynamic-threshold model per metric, a row in every list and a node in the relationship graph. A metric on an existing object is cheap by comparison. The pack currently creates an object for everything it sees.</p>
+<p>Ops sizing is driven by <strong>objects</strong> first and <strong>metric series</strong> second, where a series is one metric key on one object, written once per cycle. Every object carries identity, relationships, a dynamic-threshold model per metric, a row in every list and a node in the relationship graph. A series on an existing object is cheap by comparison. The pack creates an object for everything it sees.</p>
+<p>Three things people call "metrics": the 1,595 in the README are <strong>definitions</strong> in describe.xml and cost nothing until emitted; the counts on this page are <strong>series</strong>; each series writes one <strong>data point</strong> per cycle, 288 a day.</p>
 
-<h3>What the pack emits today, default scope</h3>
-<p>Grouped by what each kind multiplies on, from the identity fields in the generated model and the view-derived scope list.</p>
+<h3>What the pack emits today, measured</h3>
+<p>Live footprint of the 2.0.0 fork on three lab instances, all collecting the same vSAN ESA cluster: 5 hosts, 41 VMs by Ops' count (30 by the Performance Service's VM entity count the same day; the difference is unreconciled), one ESA disk per host, default scope.</p>
 <div class="tbl"><table>
-<tr><th>Multiplies on</th><th class="num">Kinds in scope</th><th class="num">Scoped metrics</th><th>Objects per unit, lab</th></tr>
-<tr><td>cluster</td><td class="num">7</td><td class="num">91</td><td>~6 per cluster</td></tr>
-<tr><td>host</td><td class="num">15</td><td class="num">259</td><td>~10 per host, 5 more with ESA dedup, IOInsight, File, Direct</td></tr>
-<tr><td>host × TCP stack / vmknic / vmnic</td><td class="num">4</td><td class="num">49</td><td>~5 per host</td></tr>
-<tr><td>disk</td><td class="num">4</td><td class="num">31</td><td>1 per disk, 5 to 8 per host</td></tr>
-<tr><td>VM</td><td class="num">1</td><td class="num">6</td><td>1 per VM</td></tr>
-<tr><td>virtual disk</td><td class="num">1</td><td class="num">7</td><td>1 per vdisk, ~2 per VM</td></tr>
-<tr><td>VM × vSCSI device</td><td class="num">1</td><td class="num">8</td><td>1 per vdisk, ~3 per VM</td></tr>
+<tr><th>Per instance</th><th class="num">Measured</th><th>For comparison</th></tr>
+<tr><td>Objects</td><td class="num">460</td><td>the vCenter adapter holds ~90 for the same vCenter</td></tr>
+<tr><td>Series per cycle</td><td class="num">6,184</td><td>13.4 per object; the vCenter adapter ~8,000</td></tr>
+<tr><td>Full cycle time</td><td class="num">19 to 115 s</td><td>min to max; per-instance means 28 to 75 s; unit inferred</td></tr>
+<tr><td>Of which Performance Service calls</td><td class="num">6 to 11 s</td><td>33 types, serial, measured directly against the vCenter</td></tr>
+<tr><td>Container</td><td class="num">~90 MB</td><td>of the 1 GB limit, ~2% CPU</td></tr>
 </table></div>
-<p>Roughly <strong>20 objects and 370 metrics per host, 6 objects and 44 metrics per VM, 6 objects and 90 metrics per cluster.</strong> That matches the README's 500 to 850 objects on a four-host lab cluster, and the 424 objects the 1.4.7 install produces on our 10-host, 110-VM lab cluster.</p>
+<p>Per-unit ratios derived from that cluster. The per-VM figures are measured object counts divided by VM count; the per-host figures are what remains.</p>
+<div class="tbl"><table>
+<tr><th>Multiplies on</th><th class="num">Kinds in scope</th><th class="num">Scoped keys</th><th class="num">Objects per unit</th><th class="num">Series per unit</th></tr>
+<tr><td>cluster</td><td class="num">7</td><td class="num">91</td><td class="num">~6</td><td class="num">~90</td></tr>
+<tr><td>host, including NIC, vmknic, TCP stack and disk kinds</td><td class="num">23</td><td class="num">339</td><td class="num">~17 to 20</td><td class="num">~370</td></tr>
+<tr><td>VM, with ~4.5 virtual disks and ~4.2 vSCSI devices each</td><td class="num">3</td><td class="num">21</td><td class="num">~10</td><td class="num">~71</td></tr>
+</table></div>
 
-<h3>The 20-second sample figure</h3>
-<p class="q">"2200 metrics at 20 second intervals in a 5 minute window is 33k per 4 node cluster"</p>
-<div class="a">
-<p>Two corrections, because this sets the wrong design target.</p>
+<h3>The sub-interval sample figure</h3>
+<p>The author's arithmetic, 2,200 metrics times 15 samples of 20 seconds per 5-minute window, sets the wrong design target twice.</p>
 <ol>
-<li><strong>The vSAN Performance Service samples every 5 minutes</strong>, every 1 minute with verbose mode on. The 20-second cadence belongs to vCenter's realtime PerformanceManager counters, which this pack never reads. The pack already pulls a 15-minute window and keeps the last sample.</li>
-<li><strong>Ops wants one value per metric per object per cycle.</strong> Adapters do not replay sub-interval samples. The vCenter adapter averages its 20-second realtime points into one 5-minute value. If a maximum over the interval matters for a particular metric, emit it as a second metric such as <code>latencyRead|max</code>, computed in the adapter, for the few that matter.</li>
+<li><strong>The vSAN Performance Service samples every 5 minutes</strong>, every minute with verbose mode on. Measured on the lab cluster: a 300-second interval, verbose off. The 20-second cadence belongs to vCenter's realtime PerformanceManager counters, which this pack never reads.</li>
+<li><strong>Ops wants one value per metric per object per cycle.</strong> Adapters do not replay sub-interval samples. If a maximum over the interval matters for a particular metric, emit it as a second key for the few that matter.</li>
 </ol>
-<p>So per-cycle load is objects × metrics, once. Nothing is 15×.</p>
-</div>
 </section>
 
 <section id="customer">
-<h2>The 70-cluster customer, worked</h2>
-<p>Assume 6 hosts per cluster and 40 VMs per host. Adjust the inputs; the shape is what matters.</p>
+<h2>The 70-cluster environment, worked</h2>
+<p>Assume 6 hosts per cluster and 40 VMs per host, so 420 hosts and 16,800 VMs, at the ratios measured above. Adjust the inputs; the shape is what matters.</p>
 <div class="tiles">
-<div class="tile warn"><div class="n">~110,000</div><div class="l">new objects from one adapter instance</div></div>
-<div class="tile good"><div class="n">~900,000</div><div class="l">metric series, one per key per object; inside a Small Cloud Proxy's 1.2M</div></div>
-<div class="tile bad"><div class="n">2,310</div><div class="l">Performance Service calls per cycle, serial</div></div>
-<div class="tile bad"><div class="n">~15 min</div><div class="l">collection time at the lab's 0.4 s per call, against a 5-minute cycle</div></div>
+<div class="tile warn"><div class="n">~177,000</div><div class="l">objects under today's model, one per vSAN entity</div></div>
+<div class="tile warn"><div class="n">~1.36 M</div><div class="l">series per 5-minute cycle at default scope</div></div>
+<div class="tile bad"><div class="n">2,310</div><div class="l">Performance Service calls per cycle, the API floor</div></div>
+<div class="tile bad"><div class="n">~7.3 min</div><div class="l">if run serially at the measured 0.19 s median per call, against a 5-minute cycle</div></div>
 </div>
 <div class="tbl"><table>
 <tr><th></th><th class="num">Hosts: 420</th><th class="num">VMs: 16,800</th><th class="num">Clusters: 70</th><th class="num">Total</th></tr>
-<tr><td>Objects</td><td class="num">8,400</td><td class="num">100,800</td><td class="num">420</td><td class="num">~110,000</td></tr>
-<tr><td>Data points per cycle</td><td class="num">155,000</td><td class="num">740,000</td><td class="num">6,300</td><td class="num">~900,000</td></tr>
+<tr><td>Objects, today's model</td><td class="num">8,400</td><td class="num">168,000</td><td class="num">420</td><td class="num">~177,000</td></tr>
+<tr><td>Series per cycle</td><td class="num">155,000</td><td class="num">1,190,000</td><td class="num">6,300</td><td class="num">~1,360,000</td></tr>
 </table></div>
-<p>Three numbers that Ops people all call "metrics": the 1,595 in the README are <strong>definitions</strong> in describe.xml and cost nothing until emitted; the ~900,000 above are <strong>series</strong>, one per metric key per object, which is what sizing tables and dynamic-threshold models count; and each series writes one <strong>data point</strong> per cycle, about 260 million a day at 288 cycles.</p>
-<p>Against Broadcom's <a href="https://knowledge.broadcom.com/external/article/369262/vmware-aria-operations-818-sizing-guidel.html">8.18 sizing guideline</a>, the metric count is not the problem: 900,000 series fit a Small Cloud Proxy (1.2 million) and a Small analytics node (1.6 million). The object count is a real budget line: 110,000 objects needs an Extra Large node (100,000 single-node) or a Medium cluster (136,000), sharded across three Standard Cloud Proxies at 40,000 each. Deployable, but the pack would be adding about six objects per VM to a deployment where the vCenter adapter already carries three or four, roughly doubling the customer's object count for one pack.</p>
-<p>What actually breaks is time. 2,310 serial calls at the lab's 0.4 s each is about 15 minutes against a 5-minute cycle, so a collection never finishes before the next one starts. With the VM tier off, the model is 8,800 objects and 160,000 series, inside a Small Cloud Proxy, and the time problem is unchanged.</p>
+<p>Against Broadcom's <a href="https://knowledge.broadcom.com/external/article/369262/vmware-aria-operations-818-sizing-guidel.html">8.18 sizing guideline</a>: 1.36 million series exceeds a Small Cloud Proxy (1.2 million) and sits just under a Small analytics node (1.6 million), inside a Standard proxy (6 million) or a Medium node (5 million). Once stitched, series arrive through the Suite API on the analytics tier rather than the proxy collector, so they count against node sizing, and Suite API ingest at that rate is not measured anywhere; that is a build 2 question. The 177,000 objects of today's model need a Large cluster, since a Medium cluster tops out at 136,000. After the model change the pack adds no objects.</p>
+<p>What fails regardless of sizing is time. 2,310 serial calls at the measured 0.19-second median is about 7.3 minutes against a 5-minute cycle, before the pack's own inventory work, which on the lab cluster is most of the cycle: 6 to 11 seconds of calls inside a 28 to 75 second cycle.</p>
 </section>
 
 <section id="objects">
-<h2>Object model: stop creating objects</h2>
-<p>A host-scoped vSAN entity (DOM owner, DOM client, component manager, LSOM, memory, CMMDS, RDT, zDOM, TCP/IP) is not an object. It is a <strong>metric group on the host</strong>. Ops already models exactly this: the vCenter adapter puts <code>net:vmnic0|received_average</code> on the HostSystem as an instanced metric, not as a vmnic object. The pack should do the same.</p>
+<h2>Object model: own nothing, stitch</h2>
+<p>A host-scoped vSAN entity (DOM owner, DOM client, component manager, memory, CMMDS, RDT, zDOM, TCP/IP) is not an object. It is a <strong>metric group on the host</strong>. The vCenter adapter already models NICs this way: <code>net:vmnic0|received_average</code> is an instanced key on the HostSystem, not a vmnic object.</p>
 <div class="tbl"><table>
 <tr><th>Today, object per entity</th><th>Target</th><th>Lands on</th></tr>
-<tr><td>VsanHostDomowner, Domclient, Domcompmgr, VsanMemory, VsanCpu, VsanCmmdsNet, VsanRdtLatency, VsanHostNet, VsanZdomVtx, ZdomTopStats, ESA dedup host kinds, VsanIoinsight</td><td>metric groups <code>vSAN Perf|DOM Owner|…</code>, <code>vSAN Perf|Memory|…</code></td><td><span class="pill info">existing</span> VMWARE HostSystem</td></tr>
+<tr><td>Host-scoped kinds: DOM owner, client and component manager, memory, CPU, CMMDS, RDT, host net, zDOM, ESA dedup host kinds, IOInsight</td><td>metric groups <code>vSAN Perf|DOM Owner|…</code></td><td><span class="pill info">existing</span> VMWARE HostSystem</td></tr>
 <tr><td>VsanPnic, VsanVnic, VsanVnicRdtLatency, VsanTcpIp</td><td>instanced groups <code>vSAN Perf|pNIC:vmnic0|…</code>, <code>vSAN Perf|vmknic:vmk1|…</code></td><td>existing HostSystem</td></tr>
-<tr><td>VsanCacheDisk, VsanCapacityDisk, VsanEsaDiskLayer, VsanEsaDiskScsifw</td><td>metric groups, or drop (see lab findings: mostly already collected)</td><td>existing built-in vSAN adapter disk objects; their <code>VSANID</code> equals the pack's disk uuid</td></tr>
-<tr><td>VsanCluster* kinds, VsanClusterCapacity</td><td>metric groups</td><td>existing built-in vSAN Cluster or VMWARE ClusterComputeResource</td></tr>
+<tr><td>Disk kinds</td><td>drop from the default scope, or stitch the leftovers onto the built-in vSAN disk object (see the lab findings)</td><td>built-in vSAN adapter disk objects</td></tr>
+<tr><td>Cluster kinds</td><td>metric groups, or one own-kind cluster object; open until build 2</td><td>built-in vSAN Cluster or VMWARE ClusterComputeResource</td></tr>
 <tr><td>VsanVirtualMachine</td><td>metric group</td><td>existing VMWARE VirtualMachine</td></tr>
 <tr><td>VsanVirtualDisk, VsanVscsi</td><td>instanced <code>vSAN Perf|vDisk:scsi0:0|…</code></td><td>existing VirtualMachine</td></tr>
 </table></div>
-<p><strong>Result: zero new objects</strong> from this pack at the host, disk and VM layers. The 70-cluster customer goes from ~110,000 objects to 0, or 70 if a cluster object is kept as a landing spot for cluster dashboards. The "9 tree structures" disappear; the tree is vCenter's.</p>
-<p>Metrics per cycle do not change by this move alone, which is why scope still matters below. But 900,000 metrics on existing objects is a sizing line item; 110,000 objects is a redesign of the customer's Ops deployment.</p>
+<p><strong>Result: zero new objects</strong> at the host, disk and VM layers, or 70 if a cluster object is kept. The "9 tree structures" disappear; the tree is vCenter's. Series per cycle do not change by this move alone, which is why scope still matters below. But 1.36 million series on existing objects is a sizing line item; 177,000 objects is a redesign of the customer's deployment.</p>
 
 <h3>This is stitching, the pattern the factory already runs</h3>
 <p>Owning no host, VM or disk objects and pushing values onto vCenter's own resources through the Suite API is what the Content Factory calls ARIA_OPS stitching. The compliance adapter does it in production on 8.18.7, 9.0.2 and 9.1.1 with the buildkit's <code>SuiteApiStitcher</code>: batched pushes of about 100 resources per request, a resolver keyed on vCenter instance UUID plus MOID (never MOID alone), an Ops credential on the instance, failures logged and counted rather than thrown into the cycle. The port reuses that as is.</p>
 <p>Stitched keys carry no label or unit, because a pak's describe.xml declares its own adapter kind, not VMWARE's. Compliance already names its keys for people for that reason; the port does the same, unit in the key name, group names settled before the first release.</p>
-<p>Checked today on devel and not previously written down: instanced keys such as <code>pNIC:vmnic0|…</code> stitch and read back one per instance; a pushed value may be older than the newest stored sample; the push returns 200 one to four minutes before the value is readable, so landing checks are reads, not response codes.</p>
-<p>The identity map is the one hard piece, and the pack already has it: vSAN node uuid to host MOID through vCenter (the fix for the 1.4.x hostname-join bug), vdisk uuid to VM, disk uuid to host. Build it once per cycle per cluster and use it to address pushes instead of to add children.</p>
+<p>Checked on devel 9.0.2 today, and not previously written down: instanced keys such as <code>pNIC:vmnic0|…</code> stitch and read back one per instance; a pushed value may be older than the newest stored sample; both push endpoints return 200 and the value becomes readable anywhere from under a minute to over three minutes later, so landing checks are reads. Pushed stats are attributed to the Suite API's own adapter, not to the pak's instance, so the pak's Ops self-metric will not count them; the pak logs its own per-cycle counts and the push results instead. How the Metrics tab draws a stitched instanced key is unverified. Build 1 proves the stitch on 8.18, 9.0 and 9.1, not only on 9.0.2.</p>
+<p>The identity map is the one hard piece, and the pack already has it: vSAN node uuid to host MOID through vCenter (the fix for the 1.4.x hostname-join bug), vdisk uuid to VM, disk uuid to host. The API probe confirmed the node-uuid and VM instanceUuid joins on the lab. Build it once per cluster, cache it, refresh every few cycles, and use it to address pushes.</p>
 </section>
 
 <section id="collector">
 <h2>Collector: what the API allows, measured</h2>
-<p>Current loop: for each cluster, for each entity type, one <code>VsanPerfQueryPerf</code> call with one wildcard spec, serial, 15-minute window. At 70 clusters that is 2,310 calls per cycle. The lab vCenter (9.1.1, one ESA cluster, 5 hosts, 30 VMs) was probed read-only on 2026-11-06 to find out what can change; the full map is in the factory under <code>knowledge/context/api-maps/vsan-performance-service.md</code>.</p>
+<p>Current loop: for each cluster, for each entity type, one <code>VsanPerfQueryPerf</code> call with one wildcard spec, serial, 15-minute window. The lab vCenter (9.1.1, one ESA cluster, 5 hosts, 30 VMs) was probed read-only to find out what can change; the full map is in the factory under <code>knowledge/context/api-maps/vsan-performance-service.md</code>.</p>
 <div class="tbl"><table>
 <tr><th>Question</th><th>Measured answer</th></tr>
 <tr><td>One call for all clusters?</td><td><span class="pill bad">No</span> Omit the cluster argument and vCenter faults with a SystemError. The cluster is required in practice.</td></tr>
-<tr><td>All 33 types in one call per cluster?</td><td><span class="pill bad">No</span> Rejected with <code>InvalidArgument</code>, fault key <code>wildcardlimit</code>: only one wildcard spec per call. Explicit entity refs can batch 100 per call, but the server charges per spec and that was about 6× slower than wildcards.</td></tr>
-<tr><td>Per-cluster floor</td><td>One wildcard call per entity type: 33 calls, 6 to 11 s serial, 109 KB on the wire, 423 entities. Six of the 33 types were empty on this cluster.</td></tr>
-<tr><td>Label filter</td><td><span class="pill good">Halves the bytes</span> 1.31 MB to 0.68 MB for the full cycle, wall time unchanged. Replaces the pack's own client-side metric filtering.</td></tr>
+<tr><td>All 33 types in one call per cluster?</td><td><span class="pill bad">No</span> Rejected with <code>InvalidArgument</code>, fault key <code>wildcardlimit</code>: only one wildcard spec per call. Explicit entity refs can batch 100 per call, but the server charges per spec and that was about 6× slower in total.</td></tr>
+<tr><td>Per-cluster floor</td><td>One wildcard call per entity type: 33 calls, 6 to 11 s serial, median 0.19 s per call, 109 KB on the wire, 423 entities. Six of the 33 types were empty on this cluster.</td></tr>
+<tr><td>Label filter</td><td><span class="pill good">Halves the bytes</span> 1.31 MB to 0.68 MB decoded for the full cycle, wall time unchanged. Replaces the pack's client-side metric filtering.</td></tr>
 <tr><td>Window</td><td>5 minutes dropped 2 of 423 entities; 7 minutes always had a point; 15 minutes carries 3 to 4 points. The <code>interval</code> field is ignored.</td></tr>
 <tr><td>Supported-types call</td><td><span class="pill warn">Does not replace probing</span> It describes the vSAN version, not the cluster: it listed PMem, which then faulted. Four of its ids are not valid query prefixes. Learning per cluster stays, at about 0.05 s per type.</td></tr>
-<tr><td>Concurrency</td><td>Throughput tops out near 7 calls/s with 4 to 16 workers against one cluster; more workers only slow each call. Whether that ceiling is per vCenter or per cluster is unknown until a multi-cluster vCenter is measured.</td></tr>
-<tr><td>Session cost</td><td>Login 0.26 s, a call on a reused session 0.002 to 0.04 s. Seventy logins per cycle would cost 20 s on their own.</td></tr>
+<tr><td>Concurrency</td><td>Throughput tops out near 7 calls/s with 4 to 16 workers against one cluster; more workers only slow each call. Whether that ceiling is per vCenter or per cluster is unknown until a multi-cluster vCenter or the simulator is measured.</td></tr>
+<tr><td>Session cost</td><td>Login 0.26 s, a call on a reused session 0.002 to 0.04 s; the idle timeout is not discoverable. Seventy logins per cycle would cost about 20 s on their own.</td></tr>
 </table></div>
 <h3>What that means at 70 clusters</h3>
-<p>The call floor is 2,310 per cycle, about 1,900 once each cluster skips the types it is known not to have. Serial at 0.19 s per call is 6 to 7.5 minutes, which fails the 5-minute cycle. At the measured 7 calls/s ceiling it is 4.5 to 5.5 minutes, marginal. If the ceiling is per cluster rather than per vCenter, an 8-worker pool across clusters gets close to a minute. <strong>That one measurement on a multi-cluster vCenter decides whether one instance can carry 70 clusters or whether sharding is mandatory.</strong></p>
-<p>One more finding from the live footprint: the pack's full cycle on this same cluster takes 28 to 75 s, while the 33 perf queries take 6 to 11 s. Most of the cycle is inventory walking, name resolution and relationship re-attachment, not the Performance Service. The zero-objects model removes the re-attach work entirely, and the name map can be cached across cycles and refreshed every few.</p>
+<p>The call floor is 2,310 per cycle, about 1,900 once each cluster skips the types it is known not to have. Serial at the 0.19 s median is about 7.3 minutes, which fails the 5-minute cycle. At the measured 7 calls/s ceiling it is about 5.5 minutes, marginal. If the ceiling is per cluster rather than per vCenter, an 8-worker pool across clusters gets close to a minute. <strong>That one measurement decides whether one instance can carry 70 clusters or whether sharding is mandatory.</strong></p>
+<p>The pack's full cycle on the lab cluster takes 28 to 75 s on average while the 33 calls take 6 to 11 s. Most of the cycle is inventory walking, name resolution and relationship re-attachment, not the Performance Service. The zero-objects model removes the re-attach work entirely, and the name map can be cached across cycles.</p>
 <ol class="steps">
 <li><b>Parallelise across clusters with a bounded pool.</b><span class="t">One wildcard call per type is the floor, so the only lever on wall time is running clusters side by side. Size the pool to the measured ceiling, not the cluster count, and bound it: an unbounded pool is exactly what takes a collector down.</span></li>
 <li><b>Learn per cluster which types fault or come back empty.</b><span class="t">Probe once, skip from then on, re-probe daily. On the lab cluster that is 6 of 33 calls saved per cycle.</span></li>
-<li><b>Send the label list on every spec.</b><span class="t">Half the bytes to parse and hold, and the in-scope list already exists in the pack.</span></li>
+<li><b>Send the label list on every spec.</b><span class="t">Half the bytes to parse and hold; the in-scope list already exists in the pack.</span></li>
 <li><b>7-minute window.</b><span class="t">Guarantees one 5-minute bucket; 5 minutes drops entities at the boundary.</span></li>
 <li><b>Process one cluster's responses and discard them before the next.</b><span class="t">Memory then scales with the largest cluster and the pool size, not the vCenter.</span></li>
-<li><b>One vCenter session per instance, reused across cycles.</b><span class="t">Re-login on expiry only.</span></li>
-<li><b>Cache the inventory.</b><span class="t">Host, VM and vdisk name maps and the hardware properties change rarely; rebuild every N cycles or on a known inventory event, not every cycle.</span></li>
-<li><b>Shard by cluster across instances.</b><span class="t">A cluster filter parameter (names or regex) lets the 70-cluster customer run several instances on several Cloud Proxies. Same credential, same pak. If the throughput ceiling is per vCenter, this is the scale-out; if it is per cluster, it is still the fault-isolation story.</span></li>
+<li><b>One vCenter session per instance, reused across cycles.</b><span class="t">Re-login once on NotAuthenticated, since the idle timeout is unmeasured.</span></li>
+<li><b>Cache the inventory.</b><span class="t">Host, VM and vdisk name maps and the hardware properties change rarely; rebuild every N cycles, not every cycle.</span></li>
+<li><b>Shard by cluster across instances.</b><span class="t">A cluster filter parameter (names or regex) lets the 70-cluster environment run several instances on several Cloud Proxies. Same credential, same pak. If the ceiling is per vCenter this is the scale-out; if per cluster, it is still the fault-isolation story.</span></li>
 </ol>
 </section>
 
 <section id="jvm">
 <h2>JVM and memory: what the port inherits by moving into the collector</h2>
-<p class="q">"when you collect 2200 more metrics within the existing jvm's runtime it brings up scaling issues … and if it crashes it'll crash the collector"</p>
-<div class="a">
-<p>Both halves are true. They do not argue against the port; they set its design constraints. A Java adapter shares the collector's heap and threads with every other adapter on that Cloud Proxy, so the port has to be built to a budget from the first commit, not tuned afterwards.</p>
-</div>
+<p>The author's two concerns, that 2,200 more metrics inside the collector JVM raise scaling issues and that a crash takes the collector with it, are both right. They do not argue against the port; they set its design constraints. A Java adapter shares the collector's heap and threads with every other adapter on that collector, so the port is built to a budget from the first commit.</p>
 <h3>What is actually in the heap</h3>
-<p>2,200 metric definitions cost nothing at runtime; describe.xml is parsed once. The heap during a cycle is dominated by three things, none of them the metric count:</p>
+<p>2,200 metric definitions cost nothing at runtime; describe.xml is parsed once. The heap during a cycle is dominated by three things, none of them the definition count. The sizes below are measured for one 5-host cluster; the multiples are inferred.</p>
 <ul>
-<li><strong>Parsed SOAP responses.</strong> A JAX-WS or pyVmomi object tree is 5 to 10× its wire size. One cluster's full entity set is a few megabytes on the wire and tens of megabytes as objects. Hold 70 of them at once and that is the whole budget.</li>
-<li><strong>The result object.</strong> Every object and metric emitted in a cycle sits in memory until the SDK serialises it. 110,000 objects × their metrics is hundreds of megabytes of result before any JSON is written. Zero new objects and batched pushes shrink this to the batch in flight.</li>
-<li><strong>Threads.</strong> Each parallel cluster query holds its response. Parallelism × per-cluster response is the high-water mark, which is why the pool must be bounded and sized to the memory limit, not to the cluster count.</li>
-<li><strong>The collector is not empty.</strong> The lab's 9.0.2 analytics node already shows hundreds of full GCs and one 7-second pause with 12 adapter instances on a 1 GB collector heap. A port that adds a few hundred megabytes of transient SOAP trees per cycle to that JVM is the crash the author is worried about.</li>
+<li><strong>Parsed responses.</strong> One cluster's full cycle is 109 KB on the wire and 1.3 MB decoded as XML or about 2.5 MB pretty-printed as JSON, 0.7 MB with the label filter. Object trees built from that are several times larger again. Hold 70 clusters' responses at once and that is tens to a few hundred megabytes on a heap that has about 65 to spare.</li>
+<li><strong>The result object.</strong> Every series emitted in a cycle sits in memory until it is pushed. Zero own objects and batched pushes shrink this to the batch in flight.</li>
+<li><strong>Threads.</strong> Each parallel cluster call holds its response. Parallelism × per-cluster response is the high-water mark, which is why the pool is bounded and sized to the budget, not the cluster count.</li>
+<li><strong>The collector is not empty.</strong> The lab's devel 9.0.2 analytics node shows hundreds of full GCs and one 7-second pause with 12 adapter instances on a 1 GB collector heap. A port that adds a few hundred megabytes of transient response trees per cycle to that JVM is the crash the author is worried about.</li>
 </ul>
 <h3>What changes when the code moves from a container into the collector</h3>
 <div class="tbl"><table>
 <tr><th></th><th>Container, Python SDK</th><th>Java, Tier 2</th></tr>
-<tr><td>Where it runs</td><td>Its own container on the Cloud Proxy with a hard memory limit, 1 GB in the current config</td><td>Inside the collector JVM, whose heap is fixed at deploy time and shared by every adapter instance on that proxy</td></tr>
-<tr><td>Out of memory</td><td>That container restarts; one adapter instance misses a cycle</td><td>The collector restarts; every adapter on that proxy misses a cycle, including the vCenter adapter</td></tr>
+<tr><td>Where it runs</td><td>Its own container on the Cloud Proxy with a hard memory limit, 1 GB in the current config</td><td>Inside the collector JVM, whose heap is fixed at deploy time and shared by every adapter instance on that collector</td></tr>
+<tr><td>Out of memory</td><td>That container restarts; one adapter instance misses a cycle</td><td>The collector restarts; every adapter on it misses a cycle, including the vCenter adapter</td></tr>
 <tr><td>Runaway thread or stuck call</td><td>Killed with the container on the SDK's timeout</td><td>Holds a collector thread; enough of them and other adapters' cycles queue behind it</td></tr>
 <tr><td>Long GC pauses</td><td>Local to the adapter</td><td>Shared by every adapter on the collector</td></tr>
-<tr><td>Observability</td><td><code>container_memory_limit</code> is the budget and the adapter log shows RSS against it</td><td>The collector's own heap metrics, with no per-adapter attribution</td></tr>
+<tr><td>Observability</td><td>The container limit is the budget and the adapter log shows memory against it</td><td>The collector's own heap metrics, with no per-adapter attribution</td></tr>
 </table></div>
 <div class="note warn"><p><strong>The mitigation is the design in the two sections above:</strong> bounded parallelism, per-cluster process-and-discard, a short window, no retained result, and no objects of its own. A Java port that keeps one object per entity and one call per type ships today's problem into the collector JVM, where a failure has a blast radius.</p></div>
 <h3>Rules for the port</h3>
 <ul>
-<li><strong>Port the Performance Service client first, with its tests.</strong> The Python pack already isolates everything that can be wrong about the data in one module with no SDK imports and 26 offline tests. Port that module to a plain Java class with the same tests before touching the adapter lifecycle. The entityRefId parser, the name map and the last-sample-in-window logic are where the data bugs live.</li>
-<li><strong>Use the JSON transport, no vSAN SDK jars.</strong> Measured 2026-11-06 on the 9.1.1 lab vCenter: <code>POST /sdk/vim25/{release}/vsan/VsanPerformanceManager/vsan-performance-manager/VsanPerfQueryPerf</code> reaches the same vsan-health handlers as SOAP with the same limits, the same fault keys and the same ~7 calls/s ceiling, and the 33-call cycle ran slightly faster (4.6 to 5.0 s against 5.3 to 7.7 s). Java's <code>HttpClient</code> plus Jackson and four small classes replace the vSAN bindings. Details that bit during the probe: every spec needs <code>"_typeName":"VsanPerfQuerySpec"</code>; dates are ISO strings in UTC, a non-UTC offset is silently dropped; release ids 8.0.3.0, 9.0.0.0 and 9.1.1.0 work and older ones fault, so read it from <code>/sdk/vimServiceVersions.xml</code>; the session token comes back in the <code>vmware-api-session-id</code> header; send <code>Accept-Encoding: gzip</code> or one type comes back 17× larger; the values CSV contains literal <code>None</code> tokens; re-login on <code>NotAuthenticated</code> since the idle timeout is not discoverable.</li>
-<li><strong>The heap budget is about 100 MB, not 300.</strong> Measured on the lab's devel 9.0.2 collector: the JVM runs with a 1 GB maximum, holds 230 to 240 MB live after a full GC with 12 adapter instances, peaked at 371 MB over the last eight days and at 682 MB in September against a 683 MB old-gen cap. Against the eight-day peak about 650 MB is free; a new instance that claims a tenth of that is honest, and the replay harness has to show the largest cluster's parsed response × the pool size under it. The lab's Cloud Proxies could not be read yet and are probably smaller and more crowded.</li>
+<li><strong>Port the Performance Service client first, with its tests.</strong> The Python pack isolates everything that can be wrong about the data in one module with no SDK imports and 26 offline tests. Port that module to a plain Java class with the same tests before touching the adapter lifecycle. The entityRefId parser, the name map and the last-sample-in-window logic are where the data bugs live.</li>
+<li><strong>Use the JSON transport, no vSAN SDK jars.</strong> Measured on the 9.1.1 lab vCenter: <code>POST /sdk/vim25/{release}/vsan/VsanPerformanceManager/vsan-performance-manager/VsanPerfQueryPerf</code> reaches the same vsan-health handlers as SOAP with the same limits, fault keys and ~7 calls/s ceiling, and the 33-call cycle ran slightly faster (4.6 to 5.0 s against 5.3 to 7.7 s). Java's <code>HttpClient</code> plus Jackson and four small classes replace the vSAN bindings. Details that bit during the probe: every spec needs <code>"_typeName":"VsanPerfQuerySpec"</code>; dates are ISO strings in UTC and a non-UTC offset is silently dropped; read the release id from <code>/sdk/vimServiceVersions.xml</code>; the session token comes back in the <code>vmware-api-session-id</code> header; send <code>Accept-Encoding: gzip</code> or one type comes back 17× larger; the values CSV contains literal <code>None</code> tokens; re-login on <code>NotAuthenticated</code>. One caveat: this was measured on a 9.1.1 server only. That server accepts release ids 8.0.3.0 and up, but whether an 8.0 U3 vCenter serves the endpoint is untested, and the target environment's vCenter version has to be checked before the transport choice is final.</li>
+<li><strong>The heap budget is about 65 MB per instance.</strong> Measured on the lab's devel 9.0.2 collector: the JVM runs with a 1 GB maximum, holds about 230 to 306 MB live at steady state with 12 adapter instances, and reached 682 MB against a 683 MB old-gen cap during a pressure period in September. A tenth of the roughly 650 MB of headroom is an honest claim, and the replay harness has to show the largest cluster's parsed response × the pool size under it. The lab's Cloud Proxies, where a customer would actually run this, could not be read yet and are probably smaller and more crowded.</li>
 <li>Stream and discard per cluster. Never build a list of all responses.</li>
-<li>One vCenter session per adapter instance, reused across clusters and cycles, re-logged on expiry. Seventy logins per cycle is a vCenter load problem and a token-churn problem.</li>
-<li>Every outbound call carries a timeout, and the collect cycle has a deadline below the collection interval. A stuck SOAP call must never hold a collector thread into the next cycle.</li>
+<li>One vCenter session per adapter instance, reused across cycles, re-logged on expiry. Seventy logins per cycle is a vCenter load problem and a token-churn problem.</li>
+<li>Every outbound call carries a timeout, and the collect cycle has a deadline below the collection interval. A stuck HTTP call must never hold a collector thread into the next cycle.</li>
 <li>Ship the pak with a recommendation to pin the instance to its own collector group. That is an install-time control a customer can apply on day one, and it gives them a per-pack memory reading.</li>
+<li>A distinct adapter kind key, installed side by side with the Python pack. There is no in-place container-to-Java upgrade on 9.0.2: a same-identity pak reports success and leaves the container adapter live. Existing 2.0.0 users uninstall, install, and recreate instances and credentials.</li>
 <li>The support posture is still build-and-figure-it-out: the Ops jars are stubbed by hand and the Java SDK is not Broadcom's documented path. The Content Factory's sdk-template repo, buildkit and CI already carry that cost; start from them rather than from scratch.</li>
 </ul>
 </section>
@@ -245,57 +242,53 @@ ol,ul{padding-left:22px;margin:0 0 12px} li{margin-bottom:6px}
 <li><strong>Exclude list:</strong> free text, kinds or metric groups to drop on top of the tier, so a site trims without waiting on a release.</li>
 <li><strong>Cadence:</strong> collect VM-tier kinds every Nth cycle. N = 3 gives 15-minute VM trends. The window logic already takes the last sample in the window, so gaps are tolerated.</li>
 </ol>
-<p>And measure it: log per cycle the objects touched and metrics emitted per kind and the per-cluster query time, and point users at the adapter instance's own metrics-collected self-metric. The README's "11 to 16 seconds" says nothing about ingest.</p>
+<p>And measure it: log per cycle the objects touched, the series pushed per group, the per-cluster and per-type call time and the push batch results. The adapter instance's own Ops self-metric does not see stitched series, so the log is the number. The README's "11 to 16 seconds" says nothing about ingest.</p>
 </section>
 
 <section id="content">
 <h2>Content: trending comes free once metrics live on the host</h2>
-<p class="q">"views are time period fixed. sparklines aren't really scalable, neither are health scores. so when you click the metric you have to hunt to get from the view to the actual metric trending"</p>
-<div class="a">
-<p>This is a consequence of the object model, not a limit of Ops. Once DOM owner latency is a metric on the HostSystem:</p>
+<p>The author's complaint is that views are fixed to a time period, sparklines and health scores do not scale, and clicking a cell in a view does not reach the metric's trend. That is a consequence of the object model, not a limit of Ops. Once DOM owner latency is a key on the HostSystem:</p>
 <ul>
-<li>The host's <strong>Metrics tab</strong> trends it with the normal time slider, next to CPU, memory and vCenter's own vSAN metrics. No hunt.</li>
+<li>The host's <strong>Metrics tab</strong> trends it with the normal time slider, next to vCenter's CPU, memory and network keys. HostSystem carries no vSAN keys of its own today. No hunt.</li>
 <li>A dashboard is <strong>Object List of hosts in the cluster, then Metric Chart</strong>, with the standard selection interaction. Click a host, see the chart. That is the vCenter adapter's own dashboard pattern.</li>
 <li><strong>Scoreboards follow dashboard time</strong> (the pack's own BACKLOG established the <code>dashboardTime</code> period setting), and a scoreboard of eight hosts × four metrics with sparklines is a normal widget load.</li>
 <li>Symptoms and alerts attach to HostSystem, so an alert on DOM owner write latency shows up where every other host alert does, in the same policy. Health scores are not needed.</li>
 </ul>
 <p>The shipped list views remain useful as tabular drill-down; they stop being the only path.</p>
-</div>
 </section>
 
 <section id="lab">
 <h2>What the lab says</h2>
-<p>Measured on three lab instances (8.18.7, 9.0.2, 9.1.1) that all run the fork at 2.0.0 against the same management vCenter: one vSAN ESA cluster, 5 hosts, 41 VMs, default scope, 5-minute interval.</p>
+<p>Measured on three lab instances (8.18.7, 9.0.2, 9.1.1) that all run the fork at 2.0.0 against the same management vCenter, and a recon of the built-in vSAN adapter on the 9.0.2 instance.</p>
 <div class="tiles">
-<div class="tile warn"><div class="n">460</div><div class="l">objects from the pack for one 5-host, 41-VM cluster; the vCenter adapter has 90 for the same vCenter</div></div>
-<div class="tile"><div class="n">6,184</div><div class="l">metric series per cycle, 13 per object; the vCenter adapter has ~8,000</div></div>
-<div class="tile bad"><div class="n">19 to 115 s</div><div class="l">collection time per cycle for that one cluster, by instance (unit inferred)</div></div>
+<div class="tile warn"><div class="n">460</div><div class="l">objects from the pack for one 5-host cluster; the vCenter adapter has ~90 for the whole vCenter</div></div>
+<div class="tile"><div class="n">6,184</div><div class="l">series per cycle; the vCenter adapter ~8,000</div></div>
+<div class="tile bad"><div class="n">28 to 75 s</div><div class="l">mean cycle time per instance for that one cluster, unit inferred</div></div>
 <div class="tile good"><div class="n">0</div><div class="l">vSAN stat keys on HostSystem from the built-in adapter; it models the cluster in 11 objects</div></div>
 </div>
-<p>The pack adds five times the vCenter adapter's object count and about three quarters of its metric volume for one small cluster. The collection time matters most: one cluster takes 28 s on average on 9.0.2 and 75 s on 8.18.7. Seventy clusters in series at those rates is 33 to 87 minutes per 5-minute cycle, which is why batching and parallelism are step one. Container memory sits near 90 MB against the 1 GB limit and CPU near 2%, so the per-cluster footprint is small; it is the serial loop, not the resource use, that fails to scale.</p>
 <ul>
 <li><strong>The pack's core is not duplicated.</strong> The built-in vSAN adapter exposes nothing for DOM owner, DOM client, component manager, RDT, zDOM, pNIC, vmknic, TCP/IP, CMMDS or per-VM vSAN. Those layers are the pack's reason to exist. The plan only moves where they land.</li>
-<li><strong>The disk tier is largely duplicated.</strong> Built-in <code>vSAN|Performance|*</code> on the ESA disk object covers 8 of 8 cache-disk, 8 of 13 capacity-disk and 4 of 5 ESA disk-layer metrics by name. Drop the disk tier from the default scope, or stitch the leftovers onto the built-in disk object, whose <code>VSANID</code> equals the pack's disk uuid.</li>
+<li><strong>The disk tier overlaps by name.</strong> The built-in ESA disk object has 48 keys, 15 of them under <code>vSAN|Performance</code>, and those names cover 8 of 8 cache-disk, 8 of 13 capacity-disk and 4 of 5 ESA disk-layer keys in the pack. No OSA built-in disk object was observed on the ESA lab, so this is a name match, not a value comparison. The built-in disk's <code>VSANID</code> equals the pack's disk uuid but is not unique on its own; match on it plus the host.</li>
 <li><strong>Cluster stitching has a key.</strong> The built-in cluster ID is <code>vSAN Cluster(domain-cNNNN, datacenter)</code>; parse the MoRef and match the VMWARE cluster on its object id plus vCenter id. Cluster-level DOM metrics overlap the built-in 11 performance keys only by name: the built-in is one aggregate, the pack is per layer. Keep the pack's.</li>
-<li><strong>Host stitching needs no new key.</strong> The pack already resolves vSAN node uuid to host MOID through vCenter.</li>
+<li><strong>Host stitching needs no new key.</strong> The pack already resolves vSAN node uuid to host MOID through vCenter, and the API probe confirmed that join on the lab.</li>
 </ul>
-<p>Still open: whether to keep one own-kind cluster object per vSAN cluster as a landing spot for cluster dashboards, or to push cluster metrics onto the built-in vSAN Cluster object and own nothing. Seventy objects either way; the question is which object customers already navigate to.</p>
+<p>Still open: whether to keep one own-kind cluster object per vSAN cluster as a landing spot for cluster dashboards, or to stitch cluster metrics onto the built-in vSAN Cluster object and own nothing. Seventy objects either way; the question is which object customers already navigate to. Settled in build 2.</p>
 </section>
 
 <section id="other">
 <h2>Other things worth knowing before the rewrite</h2>
 <h3>vCenter is the other side of the scale problem</h3>
-<p>The Performance Service runs inside vCenter's vsan-health process, with its own heap. The built-in vSAN adapter already queries it every cycle for every cluster; this pack doubles that. 70 clusters × 33 types × every 5 minutes is a load the customer's vCenter will notice, and a slow vsan-health answers slowly for the built-in adapter too. Batching per cluster and skipping unsupported types is a courtesy to vCenter as much as to the collector.</p>
+<p>The Performance Service runs inside vCenter's vsan-health process, with its own heap, and the ~7 calls/s ceiling was identical over SOAP and JSON, so it lives there. The built-in vSAN adapter already queries it every cycle for every cluster; this pack doubles that. Skipping known-empty types and sending the label filter is a courtesy to vCenter as much as to the collector.</p>
 <h3>Verbose mode changes the payload</h3>
-<p>A cluster with Performance Service verbose mode on returns 1-minute points, five times the rows for the same window. The window shrink to 7 minutes matters most there. The adapter should not depend on which mode a cluster is in.</p>
+<p>A cluster with Performance Service verbose mode on returns 1-minute points, five times the rows for the same window. The 7-minute window matters most there. The adapter must not depend on which mode a cluster is in.</p>
 <h3>One session, not seventy</h3>
-<p>Log in to vCenter once per cycle, or hold the session across cycles and re-login on expiry. A login per cluster per cycle is 20,000 SSO tokens a day and is the first thing a vCenter admin will see in the logs.</p>
+<p>Log in once per instance and hold the session across cycles, re-logging in once on NotAuthenticated. A login per cluster per cycle is 20,000 tokens a day and is the first thing a vCenter admin will see in the logs.</p>
 <h3>Relationship writes are the sharp edge</h3>
-<p>The pack's own notes record a day when attaching to vCenter objects wiped every child under each host. The SDK serialises relationships parent-centric and treats what you send as the complete set. With zero new objects there is nothing to attach, and that whole class of defect goes away. That is a quiet but real benefit of the object-model change.</p>
-<h3>Dynamic thresholds cost per metric</h3>
-<p>Ops builds a dynamic-threshold model for every metric that has data, nightly. 900,000 metrics is 900,000 models. The tiers and the cadence lever are what keep this reasonable; it is another reason the VM tier should be opt-in.</p>
+<p>The pack's own notes record a day when attaching to vCenter objects wiped every child under each host. The SDK serialises relationships parent-centric and treats what you send as the complete set. With zero new objects there is nothing to attach, and that whole class of defect goes away.</p>
+<h3>Dynamic thresholds cost per series</h3>
+<p>Ops builds a dynamic-threshold model for every series that has data, nightly. 1.36 million series is 1.36 million models. The tiers and the cadence lever are what keep this reasonable; it is another reason the VM tier should be opt-in.</p>
 <h3>Metric key stability</h3>
-<p>Once metrics live on HostSystem, their keys become part of customers' views, symptoms and super metrics. Settle the group naming before the first release of the new model, and treat a renamed key the way the pack already treats a removed kind: a breaking version with a migration note.</p>
+<p>Once keys live on HostSystem they are part of customers' views, symptoms and super metrics. Settle the group naming before the first release, and treat a renamed key the way the pack already treats a removed kind: a breaking version with a migration note.</p>
 <h3>Airgap is the real win of the port</h3>
 <p>A Java pak is one file with no image to pull. For the customers who cannot or will not approve a registry proxy, that is the reason to do this at all, and it is a better reason than memory.</p>
 <h3>Collector placement is a control the customer already has</h3>
@@ -306,11 +299,11 @@ ol,ul{padding-left:22px;margin:0 0 12px} li{margin-bottom:6px}
 <h2>Scale-testing without 70 clusters</h2>
 <p>The author cannot scale-test. He does not need 70 clusters.</p>
 <ol>
-<li><strong>Record</strong> one cluster's Performance Service responses for every entity type, one cycle, raw SOAP or the pyVmomi objects pickled.</li>
-<li><strong>Replay</strong> them through a fake <code>perf</code> object that answers <code>VsanPerfQueryPerf</code> from the recording, with cluster, host, VM and vdisk uuids rewritten per synthetic cluster. 70 synthetic clusters from one recording.</li>
-<li>Run the collect path against it from a plain JUnit test and measure wall time, peak heap, and objects and metrics pushed per cycle. That is the number the customer will ask for, and it runs in CI on every change.</li>
+<li><strong>Record</strong> one cluster's Performance Service responses for every entity type, one cycle, as raw JSON. The API map describes the recording procedure.</li>
+<li><strong>Replay</strong> them through a fake client that answers <code>VsanPerfQueryPerf</code> from the recording, with cluster, host, VM and vdisk uuids rewritten per synthetic cluster. 70 synthetic clusters from one recording.</li>
+<li>Run the collect path against it from a plain JUnit test and measure wall time, peak heap, and series pushed per cycle. That is the number the customer will ask for, and it runs in CI on every change.</li>
 </ol>
-<p>The offline split the Python pack already has, with the Performance Service client carrying no SDK imports, is the shape to keep in Java: the same tests, the same recording, no collector needed.</p>
+<p>The offline split the Python pack already has, with the Performance Service client carrying no SDK imports, is the shape to keep in Java: the same tests, the same recording, no collector needed. What a replay cannot answer is the vsan-health throughput ceiling; that needs the simulator to model the service, or a real multi-cluster vCenter.</p>
 </section>
 
 <section id="order">
@@ -318,22 +311,22 @@ ol,ul{padding-left:22px;margin:0 0 12px} li{margin-bottom:6px}
 <ol class="steps">
 <li><b>Record and measure on the Python pack.</b><span class="t">Capture one cluster's responses, add per-kind logging. That recording is the Java port's test fixture and the before number.</span></li>
 <li><b>Port the Performance Service client to Java with its tests.</b><span class="t">Parser, name map, last-sample logic, replay harness at 70 synthetic clusters. No adapter lifecycle yet.</span></li>
-<li><b>Collector loop.</b><span class="t">Batch per cluster, bounded pool, 7-minute window, learn unsupported types, cluster filter parameter, timeouts and a cycle deadline. Prove heap and wall time against the harness.</span></li>
-<li><b>Model.</b><span class="t">Suite API push of host-scoped kinds onto HostSystem, one kind first (DOM owner, the 38-metric one), prove on the lab for a day, then the rest. VM-scoped kinds last, behind the vm tier. Drop or stitch the disk tier per the lab findings.</span></li>
+<li><b>Collector loop.</b><span class="t">Parallel clusters on a bounded pool, learned types per cluster, labels, 7-minute window, cluster filter parameter, timeouts and a cycle deadline. Prove heap and wall time against the harness.</span></li>
+<li><b>Model.</b><span class="t">Stitch host-scoped kinds onto HostSystem, DOM owner first, prove on all three lab instances, then the rest. VM-scoped kinds last, behind the vm tier. Disk tier per the lab findings.</span></li>
 <li><b>Content.</b><span class="t">Rebuild the dashboards host-centric: Object List, Metric Chart, Scoreboard. Views stay.</span></li>
 <li><b>Scope.</b><span class="t">Tiers, exclude list, cadence.</span></li>
 </ol>
-<div class="note"><p>The open 2.0.0 pull request on the Python pack (certificate handling, surfaced collection errors, per-cluster isolation, username in the credential) is still worth landing: it keeps the shipping pack honest while the port is built, and its per-cluster isolation and credential shape are the behaviour the Java port should match from day one.</p></div>
+<div class="note"><p>The open 2.0.0 pull request on the Python pack (certificate handling, surfaced collection errors, per-cluster isolation, username in the credential) is still worth landing: it keeps the shipping pack honest while the port is built, and its per-cluster isolation and credential shape are the behaviour the Java port matches from day one.</p></div>
 </section>
 
 <section id="decisions">
 <h2>Decisions, 2026-11-06</h2>
 <ul>
-<li><strong>Vehicle:</strong> a native Java Tier 2 adapter in a VCF Content Factory SDK repo, instantiated from the factory's sdk-template. The upstream author reviews; the Python pack keeps shipping meanwhile.</li>
-<li><strong>Build 1, the MVP:</strong> one cluster, host tier only, three groups pushed onto the VMWARE HostSystem: DOM owner, DOM client, pNIC. No VM or disk tier. It proves the push, the identity map and the heap budget.</li>
-<li><strong>Build 2:</strong> metric parity with the Python pack's default scope, 451 keys, on the zero-objects model.</li>
+<li><strong>Vehicle:</strong> a native Java Tier 2 adapter in a VCF Content Factory SDK repo, instantiated from the factory's sdk-template and registered alongside the other managed paks, not a branch of the upstream repo. The upstream author reviews; the Python fork keeps shipping meanwhile.</li>
+<li><strong>Build 1, the MVP:</strong> one cluster, host tier only, three groups stitched onto the VMWARE HostSystem: DOM owner, DOM client, pNIC. No VM or disk tier. It proves the stitch on 8.18, 9.0 and 9.1, the identity map and the heap budget.</li>
+<li><strong>Build 2:</strong> metric parity with the Python pack's default scope, 451 keys, on the zero-objects model; the cluster-object question is settled there.</li>
 <li><strong>Throughput ceiling:</strong> settled when a simulator or a multi-cluster vCenter is available. Until then the adapter carries an advanced instance setting for performance-timing debug logging, off by default: per-cluster and per-type call time and bytes, pool occupancy, cycle total, push batch timings.</li>
-<li><strong>In flight:</strong> JSON transport for the Performance Manager on 9.1, collector JVM heap on the lab Cloud Proxies, and an instanced-key push test onto a devel host.</li>
+<li><strong>Still open:</strong> Cloud Proxy collector heap (needs an SSH credential), UI rendering of stitched instanced keys (build 1 shows it), Suite API ingest at build 2 volume, and the target vCenter's version for the JSON transport.</li>
 </ul>
 </section>
 </main>

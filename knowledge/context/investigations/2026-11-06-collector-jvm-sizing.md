@@ -6,13 +6,13 @@ Read-only recon. SSH `ps`, `cat`, `grep`, `free`, `ls`, `du`, GC-log reads; Suit
 
 | Host | Role | SSH result |
 |---|---|---|
-| 172.27.10.12 (devel, 9.0.2) | analytics node with embedded collector (collector id 1) | OK (key auth, root) |
-| 172.27.10.13 (devel proxy) | Cloud Proxy (collector id 2) | denied (no key; no password in .env) |
-| 172.27.10.10 / .11 (devel_9_1 node / proxy) | analytics node / Cloud Proxy | denied (no password in .env) |
-| 172.27.10.14 / .15 (devel_8_18 node / proxy) | analytics node / Cloud Proxy | denied (no password in .env) |
+| 172.27.10.12 (devel, 9.0.2) | analytics node with embedded collector (collector id 1) | OK |
+| 172.27.10.13 (devel proxy) | Cloud Proxy (collector id 2) | denied (no SSH credential available to the factory) |
+| 172.27.10.10 / .11 (devel_9_1 node / proxy) | analytics node / Cloud Proxy | denied (no SSH credential available to the factory) |
+| 172.27.10.14 / .15 (devel_8_18 node / proxy) | analytics node / Cloud Proxy | denied (no SSH credential available to the factory) |
 | prod vcf-lab-operations (172.27.8.42) | n/a | port 22 connection refused |
 
-.env holds an SSH password only for prod. The three devel profiles have SSHUSER=root and no password; only .12 accepts the local key.
+The factory had an SSH credential for .12 only; the proxies and the other nodes were not readable.
 
 CORRECTION to the footprint report: via `GET /api/adapters` the `VsanHostMetrics` instance `vsan-mgmt` runs on collector id 2, the Cloud Proxy, on all three devel instances (.13, .11, .15). It does NOT run on .14 (8.18.7 analytics node). The "slowest on .14" note there is really the proxy .15.
 
@@ -52,7 +52,7 @@ Heap high-water: highest live old-gen seen in any retained log is 682 MB (Sept l
 
 ### Adapter instances on this node's collector (id 1) and their log folders
 
-12 instances by `/api/adapters` on collector 1: Container, DiagnosticsAdapter, ManagementPackBuilderAdapter, SupervisorAdapter, VMWARE_INFRA_HEALTH, VMWARE_INFRA_MANAGEMENT, unifi_controller, vCenter Operations Adapter, vRealizeOpsMgrAPI, vcfcf_compliance. Log folder sizes in `/usr/lib/vmware-vcops/user/log/adapters/` (24 dirs, some are stale or case-duplicates of old MPB names):
+12 instances by `/api/adapters` on collector 1 (10 distinct adapter kinds named here; two kinds have two instances): Container, DiagnosticsAdapter, ManagementPackBuilderAdapter, SupervisorAdapter, VMWARE_INFRA_HEALTH, VMWARE_INFRA_MANAGEMENT, unifi_controller, vCenter Operations Adapter, vRealizeOpsMgrAPI, vcfcf_compliance. Log folder sizes in `/usr/lib/vmware-vcops/user/log/adapters/` (24 dirs, some are stale or case-duplicates of old MPB names):
 
 | Folder | MB |
 |---|---|
@@ -82,13 +82,13 @@ Not measurable on the readable node: `docker`, `podman`, `crictl`, `nerdctl`, `c
 
 ## Budget
 
-The only collector JVM I could read is the embedded one on the 2 vCPU / 8 GB devel node: `-Xmx1024m`, ParallelGC, 12 adapter instances, heap committed ~485 to 500 MB. At steady state the live set after a Full GC is ~230 to 240 MB (cap-to-live), so about 790 MB of the 1024 MB max is unused by that measure. Against the highest live set in the current 8-day window (371 MB) the headroom is ~650 MB; against the worst retained log (682 MB live at a 683 MB old-gen cap, Sept) it is ~340 MB. State a new Java adapter instance's budget as at most about 10% of the 650 MB figure (~65 MB heap), and treat 340 MB as the number if the node ever repeats the September pressure. The node is itself memory-tight (514 MB available of 7.9 GB, 861 MB of swap in use), and the Oct 26 and Oct 29 logs show Full GCs in the hundreds with a 7 s pause, so adding heap pressure is not free here.
+The only collector JVM I could read is the embedded one on the 2 vCPU / 8 GB devel node: `-Xmx1024m`, ParallelGC, 12 adapter instances, heap committed ~485 to 500 MB. At steady state the live set after a Full GC is ~230 to 306 MB (cap-to-live), so about 790 MB of the 1024 MB max is unused by that measure. Against the highest live set in the current 8-day window (371 MB) the headroom is ~650 MB; against the worst retained log (682 MB live at a 683 MB old-gen cap, Sept) it is ~340 MB. State a new Java adapter instance's budget as at most about 10% of the 650 MB figure (~65 MB heap), and treat 340 MB as the number if the node ever repeats the September pressure. The node is itself memory-tight (514 MB available of 7.9 GB, 861 MB of swap in use), and the Oct 26 and Oct 29 logs show Full GCs in the hundreds with a 7 s pause, so adding heap pressure is not free here.
 
 This is NOT the smallest collector in the lab: the three Cloud Proxies are probably smaller and host more instances, but could not be read. A proxy-based Java adapter budget stays UNKNOWN until one of those has a usable SSH credential.
 
 ## Could not read, and why
 
-- Proxies .13 .11 .15, nodes .10 and .14: SSH denied; no password in .env for these profiles and the local key is only authorized on .12.
+- Proxies .13 .11 .15, nodes .10 and .14: SSH denied; no credential available to the factory for them.
 - Prod: sshd refuses connections on port 22.
 - Collector heap formula (node size to Xmx): generator script not found by grep.
 - Container memory settings for Python SDK adapters: runtime lives on the proxies.

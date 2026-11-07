@@ -84,7 +84,7 @@ The 2 to 36 gap between the resource listing and the adapter's own count is unex
 | `docker|cpu|usage_percent` | 1.7 to 2.5 | 1.7 to 2.3 | 2.2 to 3.0 |
 | `docker|restarts` | 0 | 0 | 0 |
 
-Unit of elapsed_collect_time is NOT stated by the API; values read as milliseconds (19 to 115 s per 5 min cycle) by INFERENCE. Docker memory unit also unstated (MB likely against the 1024 limit; INFERRED). Other keys present on the resource: docker availability, network eth0 rx/tx bytes, relationship_updates, property_value_changes, not_existing_resource_count, no_data_receiving_resource_count, reropted_events (not sampled). The 8.18.7 instance is the slowest (collector 172.27.10.14).
+Unit of elapsed_collect_time is NOT stated by the API; values read as milliseconds (19 to 115 s per 5 min cycle) by INFERENCE. Docker memory unit also unstated (MB likely against the 1024 limit; INFERRED). Other keys present on the resource: docker availability, network eth0 rx/tx bytes, relationship_updates, property_value_changes, not_existing_resource_count, no_data_receiving_resource_count, reropted_events (not sampled). The 8.18.7 instance is the slowest. Correction 2026-11-06 (collector sizing report): the `vsan-mgmt` instance runs on each instance's Cloud Proxy (collector id 2: .13, .11, .15), not on the analytics node, so the slow one is proxy 172.27.10.15, not .14.
 
 ## 5. Instance-wide totals
 
