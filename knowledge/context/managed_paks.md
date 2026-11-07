@@ -125,28 +125,32 @@ it is not a published pak.
 - **Owner:** sentania-labs. Public repo. Instantiated from the sdk-template
   2026-11-06.
 - **Notes:** vSAN Performance Service metrics (JSON transport, one wildcard
-  spec per entity type per cluster) stitched onto VMWARE HostSystem as
-  instanced metrics; the Java port of the Python vsanhostmetrics pack.
-  Design: `knowledge/designs/vsanperf-mp-v1.md`; plan:
+  spec per entity type per cluster) stitched as instanced metrics onto VMWARE
+  HostSystem and ClusterComputeResource (and VirtualMachine when the VM tier
+  is on); the Java port of the Python vsanhostmetrics pack. Designs:
+  `knowledge/designs/vsanperf-mp-v1.md` (Build 1) and `vsanperf-mp-v2.md`
+  (Build 2); plan:
   `knowledge/context/investigations/2026-11-06-vsanhostmetrics-scale-plan.md`.
-  Released: `v1.0.0.9` (2026-11-06, pre-release, build 9, same source as the
-  0.0.0.9 preview on devel). Status 2026-11-06: Build 1 merged (builds 5 to
-  9, pak PRs #2 to #5 and #7); dev previews collecting against
-  `vcf-lab-vcenter-mgmt`: build 9 on devel 9.0.2 (Cloud Proxy), build 8 on
-  8.18 (analytics-node collector only; the Cloud Proxy never received the
-  jar) and on 9.1 (Cloud Proxy); records in
-  `knowledge/context/reviews/vsanperf-t5-*.md`; build 4 review findings
-  fixed in build 5 (pak CHANGELOG 0.1.0.5). Open after v1.0.0.9, before the
-  scale release: key-tree alignment with the vsanhostmetrics `cptvsan|`
-  grammar (decision pending, keys are permanent once a customer installs);
-  8.18 Cloud Proxy placement (jar sync timeout, lesson
-  remote-collector-upgrade-start-race.md third mode, factory issue #314);
-  the read-back-vs-`PERF`-log comparison; wrong-credential ERROR check;
-  pNIC rendering in the UI; `docs/installing.md` certificate-accept step for
-  8.18/9.1; T3/T4 (pak issue #6); factory issues #310 (docs-gen stitch
-  targets), #311 and #315 (install CLI account watch: "nothing to start",
-  and `--profile devel_9_1` restarted the 9.0.2 instance), #313
-  (componentLogger lines from helper classes missing from the instance log).
+  Released: `v1.0.0.9` (2026-11-06, pre-release, Build 1, build 9).
+  Build 2 (dashboard-scope parity in four tiers, version 1.1.0, builds 10 to
+  13, pak PR #8) merged 2026-11-07; build 12 default tiers proven on devel
+  9.0.2, 8.18 (analytics-node collector) and 9.1 (records
+  `knowledge/context/reviews/vsanperf-t5-devel-*-build-12.md`; reviews
+  `vsanperf-build-10-review.md`, `vsanperf-build-11-review.md`); the dev
+  previews on all three devel instances are build 12. Scale tag v1.1.0.x
+  waits on T3/T4 (pak #6, builds 14/15) and the per-vCenter ceiling
+  measurement. History 2026-11-06: Build 1 merged (builds 5 to 9, pak PRs
+  #2 to #5 and #7), proven on the same three instances (records
+  `vsanperf-t5-*-build-5/7/9.md`; build 4 review findings fixed in build 5).
+  Open: key-tree alignment with the vsanhostmetrics `cptvsan|` grammar
+  (decision pending, keys are permanent once a customer installs); 8.18
+  Cloud Proxy placement (jar sync timeout, lesson
+  remote-collector-upgrade-start-race.md third mode, factory #314, parked);
+  the read-back-vs-`PERF`-log comparison; wrong-credential ERROR check; pNIC
+  rendering in the UI; `docs/installing.md` certificate-accept step for
+  8.18/9.1; VM-tier heap at 70 clusters (build 15); factory #322 (Test
+  Connection shadows a logging.properties DEBUG). Closed 2026-11-07: #310
+  (#321), #311/#315 (#319), #313 (#323, buildkit 1.0.25).
 
 ## Third-party Python Integration SDK paks (forks, contribute upstream)
 
