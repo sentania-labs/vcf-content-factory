@@ -147,6 +147,13 @@ an `upstream` remote and fast-forward from it); do work on branches.
   the direct 1.4.7 to 2.0.0 install is unproven and said so). Fork tags
   `v2.0.0-rc.1`, `v2.0.0-rc.2` published. Upstream PR
   nickfirefoot/vsanhostmetrics#2 opened 2026-10-29 on Scott's go.
+  2026-11-06: upstream PR #2 still open, no review. Scale assessment for
+  a 70-cluster vCenter and the decision to port to a native Java Tier 2
+  adapter in a factory SDK repo (MVP: one cluster, host tier, DOM owner /
+  DOM client / pNIC stitched onto HostSystem; build 2: parity with the
+  451 default-scope keys): `investigations/2026-11-06-vsanhostmetrics-scale-plan.md`,
+  API map `api-maps/vsan-performance-service.md`, live footprint, collector
+  sizing and stitch test alongside. The Python fork keeps shipping meanwhile.
 
 ### cluster-perf-risk (fork of gillaspy/cluster-perf-risk)
 
