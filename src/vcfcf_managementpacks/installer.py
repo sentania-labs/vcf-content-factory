@@ -1180,7 +1180,7 @@ def install_pak(
     adapter_kinds = pak_adapter_kinds(manifest)
 
     # UI session login
-    _info(f"[2/6] Authenticating to /ui/ as {user!r} ...")
+    _info(f"[2/6] Authenticating to /ui/ on {host} as {user!r} ...")
     ui = _UISession(
         host=host,
         user=user,
@@ -1436,7 +1436,7 @@ def uninstall_pak(
     effective_verify_ssl = not (skip_ssl_verify or not profile_verify_ssl)
 
     # Step 1: UI session login
-    _info(f"[1/5] Authenticating to /ui/ as {user!r} ...")
+    _info(f"[1/5] Authenticating to /ui/ on {host} as {user!r} ...")
     ui = _UISession(
         host=host,
         user=user,

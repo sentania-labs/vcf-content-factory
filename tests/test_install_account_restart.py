@@ -867,3 +867,121 @@ def test_cli_flag_reaches_install_pak(monkeypatch):
     seen.clear()
     assert cli.main(["install", "x.pak"]) == 0
     assert seen["restart_failed"] is True
+
+
+# ---------------------------------------------------------------------------
+# Issues #315 and #311: the account watch reads the --profile instance
+# ---------------------------------------------------------------------------
+# Both reports came from installs on different instances (devel, devel_8_18,
+# devel_9_1) run in parallel with their output redirected to one shared
+# install.log: each agent read another instance's account lines. These pin
+# that the watch's Suite API client is built from the install's own resolved
+# profile (the real _resolve_credentials, two profiles in the environment),
+# never from a default, and that the output names its host.
+
+_REAL_RESOLVE = installer._resolve_credentials
+_HOST_91 = "devel-91.example"
+_HOST_902 = "devel-902.example"
+
+
+def _two_profiles(monkeypatch, tmp_path):
+    """devel and devel_9_1 profiles in the environment, no .env read; returns
+    (pak, hosts, factory): the factory records each (host, user) it opens."""
+    import os
+    from vcfcf_common import _env
+    _, pak = _wire_install(monkeypatch, tmp_path)
+    monkeypatch.setattr(installer, "_resolve_credentials", _REAL_RESOLVE)
+    monkeypatch.setattr(_env, "_LOADED", True)  # never read the real .env
+    for key in [k for k in os.environ if k.startswith("VCFOPS_")]:
+        monkeypatch.delenv(key)
+    for prof, host in (("DEVEL", _HOST_902), ("DEVEL_9_1", _HOST_91)):
+        monkeypatch.setenv(f"VCFOPS_{prof}_HOST", host)
+        monkeypatch.setenv(f"VCFOPS_{prof}_USER", f"u-{prof.lower()}")
+        monkeypatch.setenv(f"VCFOPS_{prof}_PASSWORD", "pw")
+    hosts = []
+
+    def factory(host, user, password, verify_ssl):
+        hosts.append((host, user))
+        return object()
+
+    return pak, hosts, factory
+
+
+@pytest.mark.parametrize("profile, host, user", [
+    ("devel_9_1", _HOST_91, "u-devel_9_1"),
+    ("devel", _HOST_902, "u-devel"),
+])
+def test_account_watch_uses_the_installs_profile_not_the_default(
+        monkeypatch, tmp_path, profile, host, user):
+    pak, hosts, factory = _two_profiles(monkeypatch, tmp_path)
+    installer.install_pak(str(pak), profile=profile, materialization_check=False,
+                          suite_factory=factory)
+    # Once before the upload, once after the verify: both on the --profile host.
+    assert hosts == [(host, user), (host, user)]
+
+
+def test_account_watch_ignores_vcfops_profile_when_profile_is_given(monkeypatch, tmp_path):
+    pak, hosts, factory = _two_profiles(monkeypatch, tmp_path)
+    monkeypatch.setenv("VCFOPS_PROFILE", "devel")
+    installer.install_pak(str(pak), profile="devel_9_1", materialization_check=False,
+                          suite_factory=factory)
+    assert hosts and {h for h, _ in hosts} == {_HOST_91}
+
+
+def test_cli_profile_reaches_the_account_watch(monkeypatch, tmp_path):
+    pak, hosts, factory = _two_profiles(monkeypatch, tmp_path)
+    real_install = installer.install_pak
+    monkeypatch.setattr(installer, "install_pak",
+                        lambda **kw: real_install(suite_factory=factory, **kw))
+    cli.main(["install", str(pak), "--profile", "devel_9_1",
+              "--skip-materialization-check"])
+    assert hosts and {h for h, _ in hosts} == {_HOST_91}
+
+
+def test_install_output_names_the_target_host(monkeypatch, tmp_path, capsys):
+    # A log that names its host cannot be mistaken for another instance's
+    # when two installs share one output file (#311, #315).
+    pak, hosts, factory = _two_profiles(monkeypatch, tmp_path)
+    secret = "pw-Zq7-must-never-print"
+    monkeypatch.setenv("VCFOPS_DEVEL_9_1_PASSWORD", secret)
+    installer.install_pak(str(pak), profile="devel_9_1", materialization_check=False,
+                          suite_factory=factory)
+    captured = capsys.readouterr()
+    assert f"on {_HOST_91}" in captured.out
+    # Naming the host must not drag the credential into the log.
+    assert secret not in captured.out
+    assert secret not in captured.err
+
+
+def test_default_suite_factory_uses_its_arguments_not_a_profile(monkeypatch):
+    # The factory itself has no profile fallback: with the devel profile in
+    # the environment, the token acquire goes to the host and user it was
+    # handed (here another profile's), never to VCFOPS_DEVEL_*.
+    import os
+    from vcfcf_common import _env
+    from vcfcf_common import client as common_client
+    monkeypatch.setattr(_env, "_LOADED", True)  # never read the real .env
+    for key in [k for k in os.environ if k.startswith("VCFOPS_")]:
+        monkeypatch.delenv(key)
+    monkeypatch.setenv("VCFOPS_PROFILE", "devel")
+    monkeypatch.setenv("VCFOPS_DEVEL_HOST", _HOST_902)
+    monkeypatch.setenv("VCFOPS_DEVEL_USER", "u-devel")
+    monkeypatch.setenv("VCFOPS_DEVEL_PASSWORD", "pw-devel")
+    posts = []
+
+    class _Sess:
+        headers = {}
+
+        def post(self, url, **kw):
+            posts.append((url, kw.get("json") or {}))
+            return _Resp(200, {"token": "t"})
+
+    monkeypatch.setattr(common_client, "new_session", lambda v: _Sess())
+    c = ar.default_suite_factory(_HOST_91, "u-devel_9_1", "pw-91", False)
+    c.authenticate()
+    assert len(posts) == 1
+    url, body = posts[0]
+    assert url == f"https://{_HOST_91}/suite-api/api/auth/token/acquire"
+    assert body["username"] == "u-devel_9_1"
+    assert body["password"] == "pw-91"
+    assert _HOST_902 not in url
