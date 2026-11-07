@@ -2964,13 +2964,17 @@ function Remove-Reports {
 #   ManifestKey     string   key in manifest.content (for install detection; $null = uninstall-only)
 #   InstallLabel    string   human-readable step description for install
 #   InstallFn       string   name of a function to call for install (or $null)
-#   InstallOrder    int      lower runs first during install
+#   InstallOrder    number   sorted numerically, lower runs first during install
 #   UninstallLabel  string   human-readable step description for uninstall
 #   UninstallFn     string   name of a function to call for uninstall (or $null)
-#   UninstallOrder  int      lower runs first during uninstall
+#   UninstallOrder  number   sorted numerically, lower runs first during uninstall
 #   NeedsUi        bool     true = requires Start-UISession before running
 # ---------------------------------------------------------------------------
 
+# Install order (Sort-Object on InstallOrder; list position is not the order):
+# supermetrics 1, customgroups 1.5, views+dashboards 2, sm_enable 3,
+# builtin_metric_enables 3.5, reports 5, symptoms 6, alerts 7. install.py must
+# match (tests/test_installer_install_order.py).
 $script:ContentRegistry = @(
     @{
         ContentType    = "supermetrics"
@@ -3023,10 +3027,17 @@ $script:ContentRegistry = @(
         ManifestKey    = "customgroups"
         InstallLabel   = "Upserting custom group(s)..."
         InstallFn      = "Install-CustomGroups"
-        InstallOrder   = 4
+        # 1.5: after super metrics (1), which a group rule may reference, and
+        # BEFORE dashboards (2). A View widget pinned to a helper custom group
+        # binds the pin by display name at dashboard import, so the group must
+        # already exist or the dashboard stays deferred (#302). Matches the
+        # factory syncer, which creates groups first.
+        InstallOrder   = 1.5
         UninstallLabel = "Deleting custom group(s)..."
         UninstallFn    = "Uninstall-CustomGroups"
-        UninstallOrder = 50
+        # 38: before super metrics (40), the reverse of install, as the
+        # factory syncer uninstalls (reverse sync_order).
+        UninstallOrder = 38
         NeedsUi        = $false
     },
     @{
