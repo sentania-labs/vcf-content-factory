@@ -47,13 +47,41 @@ Schema (all fields):
                            pak whose only kind is its adapter instance gets a
                            landing page that says where its data lands (#310).
                            Documentation only: it does not change the pak.
+    logging:       mapping (optional) the conf/logging.properties build-sdk
+                           ships inside the pak (factory #313).  By default
+                           the pak carries one line, ``<entry_class
+                           package>=INFO``, so every logger in the pak's
+                           package reaches the per-instance adapter log at
+                           INFO.  Keys:
+                             generate  bool, default true; false ships no
+                                       generated file (an explicit
+                                       conf/logging.properties in the
+                                       adapter source still ships).
+                             level     log4j level for the package line,
+                                       default INFO.  A Test Connection
+                                       raises every name it looks up (the
+                                       adapter class, its helpers) to INFO
+                                       until the next log4j reload or
+                                       collector restart, so a DEBUG here
+                                       holds only for names no Test
+                                       Connection touched since (#322).
+                             loggers   mapping of extra lines: logger name
+                                       -> level, plus the SDK's MaxFileSize
+                                       (e.g. 10MB) and MaxBackupIndex (int).
+                                       The SDK skips a name the collector's
+                                       own log4j config already covers
+                                       (e.g. com.integrien.*, set to ERROR).
+                           An adapter-source conf/logging.properties wins
+                           over the generated file.  The file is read by
+                           the SDK 2.2 (9.0) and 9.1.1 logger factory only;
+                           8.18's never loads it.  See LoggingConfig.
 """
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 try:
     import yaml  # type: ignore
@@ -198,6 +226,118 @@ def _parse_cross_mp_edges(raw: dict, where: str) -> List[CrossMpEdgeInfo]:
         ))
 
     return edges
+
+
+# log4j level names Level.toLevel accepts.  The SDK parses logging.properties
+# values with it and an unknown name silently falls back, so reject it here.
+LOG4J_LEVELS = ("OFF", "FATAL", "ERROR", "WARN", "INFO", "DEBUG", "TRACE", "ALL")
+_LOGGING_ALLOWED_KEYS = {"generate", "level", "loggers"}
+_LOGGER_NAME_RE = re.compile(r"[A-Za-z_$][A-Za-z0-9_$]*(\.[A-Za-z_$][A-Za-z0-9_$]*)*")
+
+
+@dataclass
+class LoggingConfig:
+    """The optional ``logging:`` adapter.yaml stanza (factory #313).
+
+    The SDK's per-instance adapter log appender takes the level of the log4j
+    entry covering the bare logger name at the instance's first lookup.
+    Entries from ``<adapter>/conf/logging.properties`` are the vendor
+    mechanism (``com.vmware.adapter3.nsxt=INFO``); without one, a name falls
+    to the collector root (WARN) and its INFO is dropped.  build-sdk ships
+    the file from this config (``sdk_builder._generate_logging_properties``).
+
+    Fields:
+        generate: False ships no generated file.
+        level:    level for the ``<package>`` line (upper-case log4j name).
+                  Not absolute: a Test Connection's ``raiseToInfo`` adds an
+                  exact-name INFO entry for each name it looks up (the
+                  adapter class and the helpers it builds), which shadows a
+                  DEBUG here for instances created after it, until the next
+                  log4j reload or collector restart (#322).
+        loggers:  extra lines in declaration order, (name, value).  The SDK
+                  only loads a name the collector's own log4j config leaves
+                  to root; one it already covers (``com.integrien.*``) is
+                  skipped silently.
+        declared: adapter.yaml carries a ``logging:`` key.
+    """
+
+    generate: bool = True
+    level: str = "INFO"
+    loggers: List[Tuple[str, str]] = field(default_factory=list)
+    declared: bool = False
+
+
+def entry_package_of(entry_class: str) -> str:
+    """Java package of an entry class: the key logging.properties uses.
+
+    A class in the default package (no dot) keys its own name.
+    """
+    dot = entry_class.rfind(".")
+    return entry_class[:dot] if dot > 0 else entry_class
+
+
+def _parse_log_level(value, where: str) -> str:
+    if not isinstance(value, str) or value.strip().upper() not in LOG4J_LEVELS:
+        raise SdkProjectError(
+            f"{where} must be one of {', '.join(LOG4J_LEVELS)}; got {value!r}"
+        )
+    return value.strip().upper()
+
+
+def _parse_logging(raw: dict, where: str) -> LoggingConfig:
+    """Parse and validate the optional ``logging`` adapter.yaml stanza."""
+    if "logging" not in raw:
+        return LoggingConfig()
+    stanza = raw["logging"]
+    if not isinstance(stanza, dict):
+        raise SdkProjectError(
+            f"{where}: 'logging' must be a mapping; got {type(stanza).__name__}"
+        )
+    unknown = set(stanza) - _LOGGING_ALLOWED_KEYS
+    if unknown:
+        raise SdkProjectError(
+            f"{where}: logging: unknown key(s) {sorted(unknown, key=str)}; "
+            f"allowed keys are {sorted(_LOGGING_ALLOWED_KEYS)}"
+        )
+    generate = stanza.get("generate", True)
+    if not isinstance(generate, bool):
+        raise SdkProjectError(
+            f"{where}: logging.generate must be true or false; got {generate!r}"
+        )
+    level = _parse_log_level(stanza.get("level", "INFO"), f"{where}: logging.level")
+    loggers_raw = stanza.get("loggers")
+    if loggers_raw is None:
+        loggers_raw = {}
+    if not isinstance(loggers_raw, dict):
+        raise SdkProjectError(
+            f"{where}: logging.loggers must be a mapping of logger name to level; "
+            f"got {type(loggers_raw).__name__}"
+        )
+    loggers: List[Tuple[str, str]] = []
+    for name, value in loggers_raw.items():
+        key_where = f"{where}: logging.loggers[{name!r}]"
+        if name == "MaxFileSize":
+            if not isinstance(value, str) or not re.fullmatch(r"\d+[GMK]B", value.strip()):
+                raise SdkProjectError(
+                    f"{key_where} must be a size such as 10MB (digits, then GB, "
+                    f"MB or KB); got {value!r}"
+                )
+            loggers.append((name, value.strip()))
+        elif name == "MaxBackupIndex":
+            if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                raise SdkProjectError(
+                    f"{key_where} must be a non-negative integer; got {value!r}"
+                )
+            loggers.append((name, str(value)))
+        else:
+            if not isinstance(name, str) or not _LOGGER_NAME_RE.fullmatch(name):
+                raise SdkProjectError(
+                    f"{where}: logging.loggers key {name!r} is not a logger name "
+                    "(dotted Java identifiers, e.g. com.example.client)"
+                )
+            loggers.append((name, _parse_log_level(value, key_where)))
+    return LoggingConfig(generate=generate, level=level, loggers=loggers,
+                         declared=True)
 
 
 @dataclass
@@ -391,6 +531,13 @@ class SdkProjectDef:
     content_foreign_adapter_kinds: List[str] = field(default_factory=list)
     # Documentation only (#310): other adapters' kinds this pak pushes onto.
     stitch_targets: List[StitchTargetInfo] = field(default_factory=list)
+    # conf/logging.properties the build ships (factory #313).
+    logging: LoggingConfig = field(default_factory=LoggingConfig)
+
+    @property
+    def entry_package(self) -> str:
+        """Java package of entry_class: the logger prefix logging.properties keys."""
+        return entry_package_of(self.entry_class)
 
     @property
     def pak_filename(self) -> str:
@@ -551,6 +698,14 @@ def load_sdk_project(path: Path) -> SdkProjectDef:
         raw, adapter_kind, where,
     )
 
+    logging_config = _parse_logging(raw, where)
+    _package = entry_package_of(entry_class)
+    if any(name == _package for name, _ in logging_config.loggers):
+        raise SdkProjectError(
+            f"{where}: logging.loggers names the adapter package {_package!r}; "
+            "set its level with logging.level instead"
+        )
+
     return SdkProjectDef(
         name=name,
         version=version,
@@ -566,6 +721,7 @@ def load_sdk_project(path: Path) -> SdkProjectDef:
         content_naming_declared=content_naming_declared,
         content_foreign_adapter_kinds=content_foreign_adapter_kinds,
         stitch_targets=stitch_targets,
+        logging=logging_config,
     )
 
 

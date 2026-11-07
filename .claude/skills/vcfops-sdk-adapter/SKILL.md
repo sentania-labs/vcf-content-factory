@@ -175,6 +175,47 @@ adapter's own collect result still go through `RelationshipBuilder`. Do
 not mix the two routes on one parent until a live install proves it
 safe. Contract: `knowledge/context/tier2_architecture.md`.
 
+## Logging: what reaches the per-instance log
+
+Get helper loggers with `componentLogger(Helper.class)`, adapter lines
+with `logInfo` / `logWarn` / `logError`; never hand-roll a logger. The
+SDK fixes each logger's instance-log appender level at the instance's
+first lookup of that name, from the log4j entry covering the **bare**
+name then. Only two things write one: the pak's
+`<adapter_kind>/conf/logging.properties`, and a Test Connection, whose
+bare-name `setLevel(INFO)` side effect adds an INFO entry for every name
+it looks up. A name neither covers sits at the collector root, WARN, and
+its INFO never appears; before the pak shipped the file, that silently
+dropped compliance's `ComplianceStitcher` and vsanperf's `CycleEngine`
+lines, and the Test Connection entries also duplicated instance lines
+into `collector.log` (#313). Since buildkit 1.0.25 build-sdk writes the
+file for you: `<entry_class package>=INFO`, the vendor shape
+(`com.vmware.adapter3.nsxt=INFO`), which covers every in-package class
+and the `<AdapterClass>.<Simple>` framework children. Tune it in
+adapter.yaml with `logging: {level, loggers: {name: LEVEL, MaxBackupIndex:
+N}, generate: false}`, or put your own `conf/logging.properties` in the
+adapter source, which ships verbatim. Extra `loggers:` names the
+collector's own log4j config already covers (`com.integrien.*`) are
+skipped by the SDK. Do not route helpers through the adapter's own logger
+to work around missing INFO: that loses the class name and still depends
+on the same entry.
+
+Three consequences. (1) **Test Connection INFO is gone:** with the
+package entry loaded, Test Connection lines (no instance log exists then)
+reach `collector.log` only at WARN and above, so put diagnostics a user
+must see in the Test Connection result message or log them at WARN;
+compliance's `logInfo("Test OK ...")` (`ComplianceAdapter.java` ~382,
+~426) is the example that now vanishes. (2) **`logging.level: DEBUG` is
+not absolute:** a Test Connection's `raiseToInfo` still adds an INFO
+entry for every name it looks up (the adapter class and the helpers it
+builds), which for instances created afterwards shadows DEBUG and copies
+those lines into `collector.log` until the next log4j reload or
+collector restart; helpers never looked up in Test Connection keep DEBUG
+(adapter-base follow-up #322). (3) **SDK 2.2 (9.0) and 9.1.1 only:** the
+8.18.7 SDK factory never reads `conf/logging.properties`, so the file is
+inert there and 8.18 routing is unchanged and unmeasured. Details:
+`knowledge/context/tier2_architecture.md` §Logging.
+
 ## Target-system TLS: certificate names (opt-in)
 
 `getPlatformSslContext()` / `HttpClientBuilder.platformSsl(this)` check the

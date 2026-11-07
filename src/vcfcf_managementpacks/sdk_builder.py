@@ -28,6 +28,7 @@ Pak structure produced (SDK format — differs from MPB Tier 1):
       <adapter_kind>/
         conf/
           describe.xml
+          logging.properties                          [<package>=INFO, #313]
           resources/resources.properties
         lib/
           vcfcf-adapter-base.jar                      [framework]
@@ -81,6 +82,7 @@ from vcfcf_core.supermetrics import crossref as _crossref
 from .sdk_project import (
     CONTENT_NAMING_DEFAULT,
     CONTENT_NAMING_UNPREFIXED,
+    LOG4J_LEVELS,
     SdkProjectDef,
     SdkProjectError,
     adapter_class_name,
@@ -1633,6 +1635,126 @@ def _generate_version_txt(project: SdkProjectDef) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _generate_logging_properties(project: SdkProjectDef) -> Optional[str]:
+    """Content of the generated ``<adapter>/conf/logging.properties`` (#313).
+
+    The SDK's ``AdapterLoggerFactoryImpl`` loads
+    ``<ADAPTER_HOME>/<adapter jar base name>/conf/logging.properties`` with
+    ``java.util.Properties`` and turns each key other than ``MaxFileSize`` /
+    ``MaxBackupIndex`` into an ``AdapterLoggerConfig`` whose
+    ``levelForAdapterLog`` is the value (``Level.toLevel``).  A logger's
+    per-instance file appender takes that level when the entry covers the
+    bare logger name; without one the collector root (WARN) governs and INFO
+    never reaches ``<Adapter>_<id>.log``.  Vendor paks ship the same shape,
+    ``com.vmware.adapter3.nsxt=INFO``.  Evidence:
+    knowledge/context/investigations/2026-11-07-componentlogger-routing.md.
+
+    Layout follows the vendor files (NSXTAdapter3, LogAssistAdapter,
+    DiagnosticsAdapter3): no header, the appender keys first, then
+    ``<package>=<level>``, one ``key=value`` per line.
+
+    Returns None when adapter.yaml sets ``logging.generate: false``.
+    """
+    cfg = project.logging
+    if not cfg.generate:
+        return None
+    appender = [(k, v) for k, v in cfg.loggers if k in ("MaxFileSize", "MaxBackupIndex")]
+    extra = [(k, v) for k, v in cfg.loggers if k not in ("MaxFileSize", "MaxBackupIndex")]
+    lines = [f"{k}={v}" for k, v in appender]
+    lines.append(f"{project.entry_package}={cfg.level}")
+    lines.extend(f"{k}={v}" for k, v in extra)
+    return "\n".join(lines) + "\n"
+
+
+def _logging_properties_bytes(project: SdkProjectDef,
+                              project_dir: Path) -> Optional[bytes]:
+    """Bytes for ``<adapter>/conf/logging.properties``, or None to ship none.
+
+    An explicit ``conf/logging.properties`` in the adapter source ships
+    verbatim and wins over the generated file (and over the ``logging:``
+    stanza, which is then ignored with a warning).
+    """
+    explicit = project_dir / "conf" / "logging.properties"
+    if explicit.is_file():
+        if project.logging.declared:
+            print(
+                "  build-sdk: warning: conf/logging.properties in the adapter "
+                "source ships as is; the adapter.yaml logging: stanza is ignored",
+                file=sys.stderr,
+            )
+        return explicit.read_bytes()
+    text = _generate_logging_properties(project)
+    if text is None:
+        return None
+    # Properties.load(InputStream) reads ISO-8859-1: escape anything beyond
+    # ASCII as \uXXXX UTF-16 code units (a non-ASCII Java package name).
+    if text.isascii():
+        return text.encode("ascii")
+    out = []
+    for ch in text:
+        if ord(ch) < 128:
+            out.append(ch)
+        else:
+            units = ch.encode("utf-16-be")
+            out.extend(f"\\u{int.from_bytes(units[i:i + 2], 'big'):04x}"
+                       for i in range(0, len(units), 2))
+    return "".join(out).encode("ascii")
+
+
+def check_source_logging_properties(project_dir: Path) -> List[str]:
+    """Warnings for an adapter-source ``conf/logging.properties`` (#313).
+
+    That file ships verbatim, and the SDK reads it with
+    ``Properties.load(InputStream)`` (ISO-8859-1) and ``Level.toLevel(v,
+    null)``, which skips an unknown level without a word.  So flag non-ASCII
+    bytes and level values log4j does not know.  ``MaxFileSize`` /
+    ``MaxBackupIndex`` are appender settings, not levels.  Returns [] when
+    there is no source file.
+    """
+    path = Path(project_dir) / "conf" / "logging.properties"
+    if not path.is_file():
+        return []
+    where = "conf/logging.properties"
+    data = path.read_bytes()
+    warnings: List[str] = []
+    if any(b >= 0x80 for b in data):
+        warnings.append(
+            f"{where}: has non-ASCII bytes; the SDK reads it as ISO-8859-1, "
+            "so write anything beyond ASCII as \\uXXXX"
+        )
+    # java.util.Properties line syntax: '#'/'!' comments, a trailing
+    # backslash continues the line, the key ends at the first unescaped
+    # '=', ':' or whitespace.
+    logical: List[str] = []
+    pending = ""
+    for raw in data.decode("latin-1").splitlines():
+        stripped = raw.lstrip()
+        if not pending and (not stripped or stripped[0] in "#!"):
+            continue
+        line = pending + stripped
+        pending = ""
+        trailing = len(line) - len(line.rstrip("\\"))
+        if trailing % 2 == 1:
+            pending = line[:-1]
+            continue
+        logical.append(line)
+    if pending:
+        logical.append(pending)
+    for line in logical:
+        m = re.match(r"((?:\\.|[^=:\s\\])*)\s*[=:]?\s*(.*)$", line)
+        if not m:
+            continue
+        key, value = m.group(1), m.group(2).strip()
+        if key in ("MaxFileSize", "MaxBackupIndex"):
+            continue
+        if value.upper() not in LOG4J_LEVELS:
+            warnings.append(
+                f"{where}: {key!r} has level {value!r}, which log4j does not "
+                f"know; the SDK skips the line (levels: {', '.join(LOG4J_LEVELS)})"
+            )
+    return warnings
+
+
 def _load_bundled_content(
     raw: dict,
     project_dir: Path,
@@ -1899,6 +2021,7 @@ def _assemble_adapters_zip(
         conf/
           describe.xml
           version.txt
+          logging.properties       [unless logging.generate: false and no source copy]
           resources/resources.properties
           views/
             views.zip                  [optional; present when views_zip_bytes given]
@@ -1977,6 +2100,12 @@ def _assemble_adapters_zip(
             f"{adapter_dir}/conf/version.txt",
             _generate_version_txt(project),
         )
+
+        # conf/logging.properties (factory #313): the vendor mechanism that
+        # gives the pak's loggers their per-instance adapter log level.
+        logging_bytes = _logging_properties_bytes(project, project_dir)
+        if logging_bytes is not None:
+            zf.writestr(f"{adapter_dir}/conf/logging.properties", logging_bytes)
 
         # conf/resources/resources.properties
         if res_file.is_file():
@@ -4855,6 +4984,9 @@ def validate_sdk_project(project_dir: Path) -> List[str]:
         errors.append(f"describe.xml not found in {project_dir}")
     else:
         errors.extend(_validate_describe_symptom_sets(describe_xml))
+
+    for _w in check_source_logging_properties(project_dir):
+        print(f"  validate-sdk: warning: {_w}", file=sys.stderr)
 
     src_dir = project_dir / "src"
     if not src_dir.is_dir():
