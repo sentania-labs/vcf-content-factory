@@ -144,15 +144,17 @@ it is not a published pak.
   builds 14 to 18 (pak PR #10): review `vsanperf-build-15-review.md`
   (approve, W1 to W4 fixed in build 16, CHANGELOG 1.1.0.16; builds 16 to 18
   reviewed by Codex on #10 only). Default tiers at 70 clusters complete
-  under the deadline from cycle 4 at ~7 MB heap, the VM tier ~34 MB. Scale
-  tag v1.1.0.x waits on the per-vCenter ceiling measurement (simulator or a
-  multi-cluster vCenter) and the key-tree decision with the vsanhostmetrics
-  author.
+  under the deadline from cycle 4 at ~7 MB heap, the VM tier ~34 MB.
+  Released: `v1.1.0.18` (2026-11-07, Build 2 plus the scale gate; shipped
+  without a per-vCenter ceiling measurement because `max_parallel_clusters`
+  and `call_timeout_seconds` are Advanced Settings and a slow vCenter shows
+  as `clusters_timed_out`; the key grammar stays `vSAN Perf|`, Scott
+  2026-11-07).
   History 2026-11-06: Build 1 merged (builds 5 to 9, pak PRs
   #2 to #5 and #7), proven on the same three instances (records
   `vsanperf-t5-*-build-5/7/9.md`; build 4 review findings fixed in build 5).
-  Open: key-tree alignment with the vsanhostmetrics `cptvsan|` grammar
-  (decision pending, keys are permanent once a customer installs); 8.18
+  Open: per-vCenter call ceiling (field data or a multi-cluster vCenter;
+  retune the `max_parallel_clusters` default in a 1.1.1 if needed); 8.18
   Cloud Proxy placement (jar sync timeout, lesson
   remote-collector-upgrade-start-race.md third mode, factory #314, parked);
   the read-back-vs-`PERF`-log comparison; wrong-credential ERROR check; pNIC
