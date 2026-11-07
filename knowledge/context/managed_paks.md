@@ -139,13 +139,15 @@ it is not a published pak.
   `vsanperf-build-10-review.md`, `vsanperf-build-11-review.md`); the dev
   previews are build 16 on devel 9.0.2 (VM tier proven there, record
   `vsanperf-t5-devel-9.0-build-16-vm-tier.md`, with live `PERF push`
-  timings) and build 12 on 8.18 and 9.1. T3/T4 (pak #6) delivered in
+  timings) and build 18 on 8.18 and 9.1 (records
+  `vsanperf-t5-devel-{8.18,9.1}-build-18.md`: T5 of the scale build done). T3/T4 (pak #6) delivered in
   builds 14 to 18 (pak PR #10): review `vsanperf-build-15-review.md`
   (approve, W1 to W4 fixed in build 16, CHANGELOG 1.1.0.16; builds 16 to 18
   reviewed by Codex on #10 only). Default tiers at 70 clusters complete
   under the deadline from cycle 4 at ~7 MB heap, the VM tier ~34 MB. Scale
   tag v1.1.0.x waits on the per-vCenter ceiling measurement (simulator or a
-  multi-cluster vCenter) and T5 of the scale build on 8.18 and 9.1.
+  multi-cluster vCenter) and the key-tree decision with the vsanhostmetrics
+  author.
   History 2026-11-06: Build 1 merged (builds 5 to 9, pak PRs
   #2 to #5 and #7), proven on the same three instances (records
   `vsanperf-t5-*-build-5/7/9.md`; build 4 review findings fixed in build 5).
@@ -155,7 +157,7 @@ it is not a published pak.
   remote-collector-upgrade-start-race.md third mode, factory #314, parked);
   the read-back-vs-`PERF`-log comparison; wrong-credential ERROR check; pNIC
   rendering in the UI; `docs/installing.md` certificate-accept step for
-  8.18/9.1; VM-tier heap at 70 clusters (build 15); factory #322 (Test
+  8.18/9.1; factory #322 (Test
   Connection shadows a logging.properties DEBUG). Closed 2026-11-07: #310
   (#321), #311/#315 (#319), #313 (#323, buildkit 1.0.25).
 
