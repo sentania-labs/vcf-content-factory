@@ -120,6 +120,18 @@ it is not a published pak.
   instanced metrics; the Java port of the Python vsanhostmetrics pack.
   Design: `knowledge/designs/vsanperf-mp-v1.md`; plan:
   `knowledge/context/investigations/2026-11-06-vsanhostmetrics-scale-plan.md`.
+  Status 2026-11-06: Build 1 merged (builds 5 to 7, pak PRs #2 and #3);
+  build 7 (dev preview 0.0.0.7) installed and collecting on devel 9.0.2,
+  8.18 and 9.1 against `vcf-lab-vcenter-mgmt` (records in
+  `knowledge/context/reviews/vsanperf-t5-*.md`; build 4 review findings
+  fixed in build 5, pak CHANGELOG 0.1.0.5). Open before the first `v*` tag:
+  build 8 (collector identity = raw account identity), 8.18 Cloud Proxy
+  start (proxy now readable over SSH, key installed), collector log scan
+  with timing on and the read-back-vs-`PERF`-log comparison,
+  wrong-credential ERROR check, pNIC rendering in the UI,
+  `docs/installing.md` certificate-accept step for 8.18/9.1, T3/T4; factory
+  issues #310 (docs-gen stitch targets) and #311 (install CLI "nothing to
+  start").
 
 ## Third-party Python Integration SDK paks (forks, contribute upstream)
 
