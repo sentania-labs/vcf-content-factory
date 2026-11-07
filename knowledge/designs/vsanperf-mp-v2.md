@@ -109,11 +109,11 @@ types, PROV1 for core); "serial ms (steady)" leaves out the empty types.
 |---|---|---|---|---|---|---|---|---|
 | core (Build 1) | 3 | 61 | 20 | 390 | 390 | 3 (3) | 591 (591) | 9,130 / 131,577 |
 | host | 13 | 149 | 60 | 705 | 705 | 12 (13) | 1,570 (1,699) | 19,145 / 245,509 |
-| cluster | 10 | 189 | 7 | 91 | 91 | 7 (10) | 1,108 (1,447) | 3,805 / 31,844 |
+| cluster | 10 | 189 | 7 | 91 | 91 | 8 (10) | 1,189 (1,447) | 3,805 / 31,844 |
 | disk | 4 | 31 | 10 | 50 | 50 | 2 (4) on ESA | 360 (631) | 1,926 / 18,994 |
 | vm | 3 | 21 | 326 | 2,400 | 1,808 | 3 (3) | 613 (613) | 48,554 / 852,153 |
-| **Build 2 (host+cluster+disk+vm)** | **30** | **390** | **403** | **3,246** | **2,654** | **24 (30)** | **3,651 (4,390)** | **73,430 / 1,148,500** |
-| **All (core + Build 2)** | **33** | **451** | **423** | **3,636** | **3,044** | **27 (33)** | **4,242 (4,981)** | **82,560 / 1,280,077** |
+| **Build 2 (host+cluster+disk+vm)** | **30** | **390** | **403** | **3,246** | **2,654** | **25 (30)** | **3,732 (4,390)** | **73,430 / 1,148,500** |
+| **All (core + Build 2)** | **33** | **451** | **423** | **3,636** | **3,044** | **28 (33)** | **4,323 (4,981)** | **82,560 / 1,280,077** |
 
 - The Build 2 totals reproduce PROV2's totals (30 calls, 73,430 B wire, 1,148,500 B decoded, 403 entities, 3,246 series). PROV2's 4.395 s is **wall time** (one timer
   around the serial loop); the per-call sum of its 30 rows is 4,389.5 ms
@@ -1183,15 +1183,15 @@ Inputs: PLAN §1 worked example (70 clusters x 6 hosts, 40 VMs per host =
 16,800 VMs; 2 pNICs per host), lab per-unit ratios above, 7 calls/s
 sustained ceiling (MAP test 7, both transports), 240 s cycle deadline (V1).
 
-- **host on, cluster on** (22 calls per cluster steady, 1,540 per cycle):
+- **host on, cluster on** (23 calls per cluster steady, 1,610 per cycle):
   the two tiers add 65,590 series per cycle (host 59,220 + cluster 6,370) on
   top of core's 32,760, all on objects that already exist, at ~3.4 KB wire
   and ~31 KB decoded per cluster for the cluster tier and ~22 KB / ~288 KB
-  for the host tier. If the ceiling is per vCenter, 1,540 calls take ~220 s,
-  inside the 240 s deadline with ~20 s spare; if it is per cluster, ~59 s at
+  for the host tier. If the ceiling is per vCenter, 1,610 calls take ~230 s,
+  inside the 240 s deadline with ~10 s spare; if it is per cluster, ~60 s at
   4 workers. This is the most that fits the per-vCenter case.
 - **disk off:** 2 calls per cluster (+140 per cycle) push the per-vCenter
-  case to ~240 s, the deadline itself; 24 of its 31 names already exist on
+  case to ~250 s, past the deadline; 24 of its 31 names already exist on
   the built-in disk objects (INV §3); and it adds 420 host calls per
   refresh. Turn it on for small vCenters or after the ceiling is known.
 - **vm off; N = 3 when on:** the call cost is small (3 per cluster; +70 per
@@ -1235,7 +1235,8 @@ the VM types, which are also the ones on a cadence.
 
 ### Perf calls per tier combination
 
-Steady = after the lab's empty types are learned (27 of 33 non-empty);
+Steady = after the lab's empty types are learned (28 of 33 calls: the 27
+non-empty types plus `ioinsight`, which is never learned);
 first = before learning and on the daily re-probe. Serial seconds per
 cluster are the lab's measured per-type sums (steady); per-call latency at
 6 hosts and 240 VMs per cluster is not measured, and the VM calls in
@@ -1248,31 +1249,33 @@ Wall times exclude inventory, identity refreshes and push.
 |---|---|---|---|---|---|---|---|
 | core | 3 (3) | 0.59 | 0.6 s | 210 (210) | 30 s (30 s) | 11 s | 5 s |
 | core + host | 15 (16) | 2.16 | 2.2 s | 1,050 (1,120) | 150 s (160 s) | 39 s | 19 s |
-| core + cluster | 10 (13) | 1.70 | 1.7 s | 700 (910) | 100 s (130 s) | 31 s | 15 s |
+| core + cluster | 11 (13) | 1.78 | 1.8 s | 770 (910) | 110 s (130 s) | 32 s | 16 s |
 | core + disk | 5 (7) | 0.95 | 1.0 s | 350 (490) | 50 s (70 s) | 17 s | 9 s |
 | core + vm | 6 (6) | 1.20 | 1.2 s | 420 (420) | 60 s (60 s) | 22 s | 11 s |
-| **core + host + cluster (recommended default)** | **22 (26)** | **3.27** | **3.3 s** | **1,540 (1,820)** | **220 s (260 s)** | **59 s** | **29 s** |
+| **core + host + cluster (recommended default)** | **23 (26)** | **3.35** | **3.3 s** | **1,610 (1,820)** | **230 s (260 s)** | **60 s** | **30 s** |
 | core + host + disk | 17 (20) | 2.52 | 2.5 s | 1,190 (1,400) | 170 s (200 s) | 45 s | 23 s |
 | core + host + vm | 18 (19) | 2.77 | 2.8 s | 1,260 (1,330) | 180 s (190 s) | 50 s | 25 s |
-| core + cluster + disk | 12 (17) | 2.06 | 2.1 s | 840 (1,190) | 120 s (170 s) | 37 s | 19 s |
-| core + cluster + vm | 13 (16) | 2.31 | 2.3 s | 910 (1,120) | 130 s (160 s) | 42 s | 21 s |
+| core + cluster + disk | 13 (17) | 2.14 | 2.1 s | 910 (1,190) | 130 s (170 s) | 39 s | 19 s |
+| core + cluster + vm | 14 (16) | 2.39 | 2.4 s | 980 (1,120) | 140 s (160 s) | 43 s | 22 s |
 | core + disk + vm | 8 (10) | 1.56 | 1.6 s | 560 (700) | 80 s (100 s) | 28 s | 14 s |
-| core + host + cluster + disk | 24 (30) | 3.63 | 3.6 s | 1,680 (2,100) | 240 s (300 s) | 65 s | 33 s |
-| core + host + cluster + vm | 25 (29) | 3.88 | 3.9 s | 1,750 (2,030) | 250 s (290 s) | 70 s | 35 s |
+| core + host + cluster + disk | 25 (30) | 3.71 | 3.7 s | 1,750 (2,100) | 250 s (300 s) | 67 s | 33 s |
+| core + host + cluster + vm | 26 (29) | 3.96 | 4.0 s | 1,820 (2,030) | 260 s (290 s) | 71 s | 36 s |
 | core + host + disk + vm | 20 (23) | 3.13 | 3.1 s | 1,400 (1,610) | 200 s (230 s) | 56 s | 28 s |
-| core + cluster + disk + vm | 15 (20) | 2.67 | 2.7 s | 1,050 (1,400) | 150 s (200 s) | 48 s | 24 s |
-| core + host + cluster + disk + vm (all) | 27 (33) | 4.24 | 4.2 s | 1,890 (2,310) | 270 s (330 s) | 76 s | 38 s |
+| core + cluster + disk + vm | 16 (20) | 2.75 | 2.8 s | 1,120 (1,400) | 160 s (200 s) | 50 s | 25 s |
+| core + host + cluster + disk + vm (all) | 28 (33) | 4.32 | 4.3 s | 1,960 (2,310) | 280 s (330 s) | 78 s | 39 s |
 
 With the VM tier staggered at N = 3, its row cost is 1/3 of the VM column
-per cycle: recommended default + VM = 1,540 + 70 = **1,610 calls, ~230 s**
-per vCenter; all tiers = 1,680 + 70 = 1,750, ~250 s, over the deadline.
-The 70 x 33 = 2,310 and 70 x ~27 = 1,890 floors match MAP "Design answers".
+per cycle: recommended default + VM = 1,610 + 70 = **1,680 calls, ~240 s**
+per vCenter, the deadline itself; all tiers = 1,750 + 70 = 1,820, ~260 s,
+over the deadline. The 70 x 33 = 2,310 first-cycle floor matches MAP "Design
+answers"; the steady 70 x 28 = 1,960 is one call per cluster above MAP's
+70 x ~27 = 1,890 because `ioinsight` is never learned.
 
 Reading the table: **under the per-vCenter hypothesis no combination beyond
 core + host + cluster fits a 5-minute cycle at 70 clusters, and the first
 cycles of that one do not either** (260 s). The deadline path (push what
 finished, rotate the start, V1) absorbs the first cycles; learning brings it
-to 220 s. Under the per-cluster hypothesis everything fits with 4 workers.
+to 230 s. Under the per-cluster hypothesis everything fits with 4 workers.
 The answer is still D9's; `PERF cycle` gives it from the first multi-cluster
 run.
 
@@ -1369,14 +1372,14 @@ Design consequences (requirements on the author, all checked by T4):
 
 ### Cycle time
 
-From the call-plan table: at 70 clusters, default tiers take ~220 s of perf
-calls if the ~7 calls/s ceiling is per vCenter (deadline 240 s), ~59 s if it
-is per cluster with 4 workers (~29 s with 8). Add per cycle: inventory
+From the call-plan table: at 70 clusters, default tiers take ~230 s of perf
+calls if the ~7 calls/s ceiling is per vCenter (deadline 240 s), ~60 s if it
+is per cluster with 4 workers (~30 s with 8). Add per cycle: inventory
 (~20 ms on the lab, MAP; at 70 clusters unmeasured), push (45 ms for 390
 values on the lab, T5-9; ~98,350 values at the example unmeasured), and on
 refresh cycles the identity reads (disk map ~3 to 4 s serial, VM reads
 ~5.8 MB decoded per cluster read). On the lab (1 cluster), default tiers are ~3.3
-s of serial calls; all tiers ~4.2 s steady, ~5.0 s first.
+s of serial calls; all tiers ~4.3 s steady, ~5.0 s first.
 
 ---
 
@@ -1412,7 +1415,7 @@ With `perf_timing_logging=true` (INFO, `PERF` prefix, `key=value`):
 | Line | Change |
 |---|---|
 | `PERF call` | adds `tier=core\|host\|cluster\|disk\|vm` and `parse=stream`; one line per perf call, as Build 1 |
-| `PERF cluster` | adds `calls_by_tier=core:3,host:12,cluster:7,disk:0,vm:0` and `vm_run=yes\|no` (the cadence decision) |
+| `PERF cluster` | adds `calls_by_tier=core:3,host:12,cluster:8,disk:0,vm:0` and `vm_run=yes\|no` (the cadence decision) |
 | `PERF tier` (new) | per cycle per tier: `calls`, `call_ms_sum`, `wire_bytes`, `decoded_bytes`, `entities`, `series_kept`, `series_pushed`, `unresolved`, `learned_skips` |
 | `PERF identity` (new) | per identity read: `read=ops_clusters\|ops_vms\|disk_map\|vm_read`, cluster (for per-cluster reads), `calls`, `pages`, `ms`, `wire_bytes`, `decoded_bytes`, `count`, `trigger=refresh\|change\|miss`. Never the ContainerView moId (V1) |
 | `PERF pool` | adds `vm_permit_wait_ms_max` (time a worker waited for the one VM-call permit) |
@@ -1517,8 +1520,8 @@ release**), on every change, at 70 clusters x 6 hosts x 2 pNICs x 1 disk x
   completed cycle; under the per-vCenter model with 0.19 s calls and 4
   workers, **cycles 1 to 3 take the deadline path** (26 calls per cluster
   before learning, ~260 s: completed clusters pushed, the rest counted timed
-  out, rotation) and **from cycle 4 on the perf phase is < 240 s** (22 calls
-  per cluster after learning).
+  out, rotation) and **from cycle 4 on the perf phase is < 240 s** (23 calls
+  per cluster after learning, 1,610 per cycle, ~230 s).
 - (b) all tiers, VM N = 3: peak heap < 65 MB; under the per-vCenter model
   the deadline path is exercised (completed clusters pushed, rotation next
   cycle), wall time is not asserted; under the per-cluster model the cycle
@@ -1555,7 +1558,7 @@ in-place pak upgrade, not the cross-runtime case of
 Nothing is renamed: the 61 Build 1 keys, the account identity and the
 collector object identity are unchanged (B1). New keys only. Visible effects
 after the upgrade, with the recommended defaults: host and cluster tiers
-switch on, so the lab goes from 390 to 1,186 series and from 3 to 22 perf
+switch on, so the lab goes from 390 to 1,186 series and from 3 to 23 perf
 calls per cycle (26 for the first cycles), and ClusterComputeResource gains
 `vSAN Perf|*` keys. An admin who wants Build 1 behaviour sets `tier_host`
 and `tier_cluster` to false. Duplicate-bucket marks are in memory and the
@@ -1599,7 +1602,7 @@ key names.
 ## Key Risks (V1 R1 to R9 still apply)
 
 - **R10 The ceiling decides the default's fit (D9).** Default tiers at 70
-  clusters are ~220 s of calls under the per-vCenter hypothesis, ~20 s
+  clusters are ~230 s of calls under the per-vCenter hypothesis, ~10 s
   inside the deadline; first cycles ~260 s. Sharding does not help that
   case. Mitigation: deadline path, rotation, re-probe spread, `PERF tier`.
 - **R11 Suite API ingest at Build 2 volume is unmeasured** (PLAN §1).
