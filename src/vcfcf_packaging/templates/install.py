@@ -1891,8 +1891,8 @@ def _prompt_credentials(args: argparse.Namespace, mode: str) -> tuple:
 #   uninstall_fn   callable(ctx) -> None  runs the uninstall step
 #   install_label  str   human-readable step label for install
 #   uninstall_label str  human-readable step label for uninstall
-#   install_order  int   lower runs first (install)
-#   uninstall_order int  lower runs first (uninstall = reverse install order)
+#   install_order  number  sorted numerically, lower runs first (install)
+#   uninstall_order number sorted numerically, lower runs first (uninstall = reverse install order)
 #   needs_ui       bool  True if this type requires UIClient
 #
 # Detection predicate (install): manifest["content"].get(manifest_key) exists
@@ -2692,7 +2692,10 @@ def _bundle_uninstall_names(bundle: Dict, content_type: str) -> List[str]:
     return [item["name"] for item in (section.get("items") or []) if item.get("name")]
 
 
-# Registry: ordered by install_order.
+# Registry: sorted by install_order at run time (list position is not the order).
+# Install order: supermetrics 1, customgroups 1.5, views+dashboards 2, sm_enable 3,
+# builtin_metric_enables 3.5, reports 5, symptoms 6, alerts 7. install.ps1 must
+# match (tests/test_installer_install_order.py).
 # To add a new content type, append an entry here.  No other changes needed.
 _CONTENT_REGISTRY: List[Dict] = [
     {
@@ -2733,14 +2736,14 @@ _CONTENT_REGISTRY: List[Dict] = [
         "manifest_key": "builtin_metric_enables",
         "install_label": "Enabling built-in metric(s) on Default Policy...",
         "install_fn": _install_builtin_metric_enables,
-        "install_order": 3.5,  # between sm_enable (3) and customgroups (4)
+        "install_order": 3.5,  # after sm_enable (3), before reports (5)
         # Uninstall prints a console note but does NOT disable built-in metrics:
         # Default Policy is shared state; other bundles or the operator may rely
         # on the same metric.  A future --revert-metric-enables flag can add the
         # disable path if explicitly requested.
         "uninstall_label": "Noting built-in metric(s) enabled by this bundle...",
         "uninstall_fn": _uninstall_builtin_metric_enables_note,
-        "uninstall_order": 45,  # after SM uninstall (40) and custom group uninstall (50)
+        "uninstall_order": 45,  # after custom group uninstall (38) and SM uninstall (40)
         "needs_ui": False,
     },
     {
@@ -2748,10 +2751,17 @@ _CONTENT_REGISTRY: List[Dict] = [
         "manifest_key": "customgroups",
         "install_label": "Upserting custom group(s)...",
         "install_fn": _install_customgroups,
-        "install_order": 4,
+        # 1.5: after super metrics (1), which a group rule may reference, and
+        # BEFORE dashboards (2). A View widget pinned to a helper custom group
+        # binds the pin by display name at dashboard import, so the group must
+        # already exist or the dashboard stays deferred (#302). Matches the
+        # factory syncer, which creates groups first.
+        "install_order": 1.5,
         "uninstall_label": "Deleting custom group(s)...",
         "uninstall_fn": _uninstall_customgroups,
-        "uninstall_order": 50,
+        # 38: before super metrics (40), the reverse of install, as the
+        # factory syncer uninstalls (reverse sync_order).
+        "uninstall_order": 38,
         "needs_ui": False,
     },
     {

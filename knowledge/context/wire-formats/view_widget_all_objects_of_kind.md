@@ -130,18 +130,19 @@ stuck-deferred.
 
 ### Caveats before shipping the pattern in a bundle (framework review 2026-10-28)
 
-1. **Install order differs by path.** Factory sync installs custom groups
-   before dashboards (`SYNC_CONTENT_TYPES` in
-   `src/vcfcf_packaging/syncer.py`), which satisfies the rule above. The distributed bundle
-   installer does the opposite: `src/vcfcf_packaging/templates/install.py`
-   imports views + dashboards at `install_order: 2` and upserts custom
-   groups at `install_order: 4`; `install.ps1` runs `Install-Dashboard`
-   before `Install-CustomGroups`. Whether the pin binds at import or at
-   deferred materialization (~2 min,
-   `knowledge/lessons/dashboard-import-deferred-materialization.md`) is
-   unknown, so a bundle carrying a helper group plus a dashboard pinned to
-   it may land stuck-deferred on an operator's instance. Installer
-   reordering is tracked as a separate issue.
+1. **Install order: groups before dashboards on both paths (issue #302,
+   2026-11-07).** Factory sync runs handlers in `sync_order` (custom
+   groups `src/vcfcf_customgroups/handler.py` sync_order 2, views 3,
+   dashboards 4 in `src/vcfcf_dashboards/handler.py`), which satisfies the
+   rule above. The distributed bundle installers now match:
+   `src/vcfcf_packaging/templates/install.py` upserts custom groups at
+   `install_order: 1.5`, before views + dashboards at `install_order: 2`,
+   and `install.ps1` runs `Install-CustomGroups` before `Install-Dashboard`
+   (`InstallOrder` 1.5 vs 2). Uninstall is the reverse: groups (38) go
+   before super metrics (40). `tests/test_installer_install_order.py`
+   pins both installers to the same order. Bundles built before template
+   version `2026-11-07-1` still carry the old dashboards-first order;
+   `check-staleness` flags them.
 2. **Pinned-to-group import is unproven.** `pin.name` on a non-singleton
    kind (`Container/Environment`, many groups share it) is the unverified
    case in `dashboard_view_pin_resolution.md`. Vendor export bytes support

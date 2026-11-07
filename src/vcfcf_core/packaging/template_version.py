@@ -17,6 +17,10 @@ This list is the same one CLAUDE.md carries under "After tooling changes";
 keep the two in step.
 
 History (most recent first):
+  2026-11-07-1  install.py / install.ps1: custom groups install before views +
+                dashboards (install order 1.5, was 4) so a View widget pinned
+                to a helper custom group by name binds at import, and uninstall
+                before super metrics (uninstall order 38, was 50) (issue #302)
   2026-10-28-2  alerts/render.py: AlertContent.xml writes a metric_dynamic
                 symptom condition in content-import form (type="dtmetric",
                 operator above/below/abnormal), not the REST DT_ABOVE on
@@ -43,4 +47,4 @@ History (most recent first):
   2026-08-24-2  install.ps1: uninstall residual-else sites warn and continue
 """
 
-CURRENT_TEMPLATE_VERSION = "2026-10-28-2"
+CURRENT_TEMPLATE_VERSION = "2026-11-07-1"
