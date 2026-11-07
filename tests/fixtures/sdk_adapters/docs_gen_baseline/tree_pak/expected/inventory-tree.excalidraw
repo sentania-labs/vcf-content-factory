@@ -1,0 +1,370 @@
+{
+  "type": "excalidraw",
+  "version": 2,
+  "source": "https://excalidraw.com",
+  "elements": [
+    {
+      "id": "63df8b49",
+      "type": "rectangle",
+      "x": 40,
+      "y": 40,
+      "width": 220,
+      "height": 78,
+      "angle": 0,
+      "strokeColor": "#1565c0",
+      "backgroundColor": "#e3f2fd",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 467866639,
+      "version": 1,
+      "versionNonce": 3777333400,
+      "isDeleted": false,
+      "boundElements": [],
+      "updated": 1700000000000,
+      "link": null,
+      "locked": false,
+      "label": {
+        "text": "Base Site\n  site_id *",
+        "fontSize": 13,
+        "fontFamily": 1,
+        "textAlign": "center",
+        "verticalAlign": "middle"
+      }
+    },
+    {
+      "id": "351093bf",
+      "type": "rectangle",
+      "x": 40,
+      "y": 208,
+      "width": 220,
+      "height": 96,
+      "angle": 0,
+      "strokeColor": "#374151",
+      "backgroundColor": "#ffffff",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 1578834536,
+      "version": 1,
+      "versionNonce": 266792655,
+      "isDeleted": false,
+      "boundElements": [],
+      "updated": 1700000000000,
+      "link": null,
+      "locked": false,
+      "label": {
+        "text": "Base Switch\n  switch_id *\n  model",
+        "fontSize": 13,
+        "fontFamily": 1,
+        "textAlign": "center",
+        "verticalAlign": "middle"
+      }
+    },
+    {
+      "id": "1199b573",
+      "type": "rectangle",
+      "x": 40,
+      "y": 394,
+      "width": 220,
+      "height": 78,
+      "angle": 0,
+      "strokeColor": "#374151",
+      "backgroundColor": "#ffffff",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 256441790,
+      "version": 1,
+      "versionNonce": 3184869456,
+      "isDeleted": false,
+      "boundElements": [],
+      "updated": 1700000000000,
+      "link": null,
+      "locked": false,
+      "label": {
+        "text": "Base Switch Port\n  port_key *",
+        "fontSize": 13,
+        "fontFamily": 1,
+        "textAlign": "center",
+        "verticalAlign": "middle"
+      }
+    },
+    {
+      "id": "64563f81",
+      "type": "rectangle",
+      "x": 320,
+      "y": 208,
+      "width": 220,
+      "height": 78,
+      "angle": 0,
+      "strokeColor": "#374151",
+      "backgroundColor": "#ffffff",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 3629010546,
+      "version": 1,
+      "versionNonce": 2612017878,
+      "isDeleted": false,
+      "boundElements": [],
+      "updated": 1700000000000,
+      "link": null,
+      "locked": false,
+      "label": {
+        "text": "Base Volume\n  volume_id *",
+        "fontSize": 13,
+        "fontFamily": 1,
+        "textAlign": "center",
+        "verticalAlign": "middle"
+      }
+    },
+    {
+      "id": "35eeb243",
+      "type": "arrow",
+      "x": 150.0,
+      "y": 118,
+      "width": 0.0,
+      "height": 90,
+      "angle": 0,
+      "strokeColor": "#374151",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 666732085,
+      "version": 1,
+      "versionNonce": 4157974240,
+      "isDeleted": false,
+      "boundElements": [],
+      "updated": 1700000000000,
+      "link": null,
+      "locked": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          0.0,
+          90
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": {
+        "elementId": "63df8b49",
+        "focus": 0,
+        "gap": 4
+      },
+      "endBinding": {
+        "elementId": "351093bf",
+        "focus": 0,
+        "gap": 4
+      },
+      "startArrowhead": null,
+      "endArrowhead": "arrow",
+      "elbowed": false
+    },
+    {
+      "id": "97e099c2",
+      "type": "arrow",
+      "x": 224,
+      "y": 208,
+      "width": 52,
+      "height": 34,
+      "angle": 0,
+      "strokeColor": "#374151",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": null,
+      "seed": 1707530031,
+      "version": 1,
+      "versionNonce": 3369569152,
+      "isDeleted": false,
+      "boundElements": [],
+      "updated": 1700000000000,
+      "link": null,
+      "locked": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          -16
+        ],
+        [
+          52,
+          -16
+        ],
+        [
+          52,
+          18
+        ],
+        [
+          38,
+          18
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": {
+        "elementId": "351093bf",
+        "focus": 0,
+        "gap": 4
+      },
+      "endBinding": {
+        "elementId": "351093bf",
+        "focus": 0,
+        "gap": 4
+      },
+      "startArrowhead": null,
+      "endArrowhead": "arrow",
+      "elbowed": false
+    },
+    {
+      "id": "58ea4d69",
+      "type": "arrow",
+      "x": 150.0,
+      "y": 304,
+      "width": 0.0,
+      "height": 90,
+      "angle": 0,
+      "strokeColor": "#374151",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 3777234212,
+      "version": 1,
+      "versionNonce": 1280910012,
+      "isDeleted": false,
+      "boundElements": [],
+      "updated": 1700000000000,
+      "link": null,
+      "locked": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          0.0,
+          90
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": {
+        "elementId": "351093bf",
+        "focus": 0,
+        "gap": 4
+      },
+      "endBinding": {
+        "elementId": "1199b573",
+        "focus": 0,
+        "gap": 4
+      },
+      "startArrowhead": null,
+      "endArrowhead": "arrow",
+      "elbowed": false
+    },
+    {
+      "id": "cf4df1cd",
+      "type": "arrow",
+      "x": 150.0,
+      "y": 118,
+      "width": 280.0,
+      "height": 90,
+      "angle": 0,
+      "strokeColor": "#374151",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 448768772,
+      "version": 1,
+      "versionNonce": 3942583423,
+      "isDeleted": false,
+      "boundElements": [],
+      "updated": 1700000000000,
+      "link": null,
+      "locked": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          280.0,
+          90
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": {
+        "elementId": "63df8b49",
+        "focus": 0,
+        "gap": 4
+      },
+      "endBinding": {
+        "elementId": "64563f81",
+        "focus": 0,
+        "gap": 4
+      },
+      "startArrowhead": null,
+      "endArrowhead": "arrow",
+      "elbowed": false
+    }
+  ],
+  "appState": {
+    "gridSize": null,
+    "viewBackgroundColor": "#ffffff"
+  },
+  "files": {}
+}

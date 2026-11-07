@@ -1,0 +1,12 @@
+name: "Baseline Tree Pak"
+version: "1.2.3"
+build_number: 7
+adapter_kind: "baseline_tree"
+tier: 2
+description: "Fixture: an own-kind tree with a foreign parent and a cross-MP edge."
+cross_mp_edges:
+  - parent: "VMWARE HostSystem"
+    child: BaseSwitchPort
+    direction: parent_foreign
+    foreign_adapter_kind: VMWARE
+    description: "Per-vmnic LLDP join via Suite API; additive, optional"

@@ -49,7 +49,12 @@ try:
 except ImportError:
     _YAML_AVAILABLE = False
 
-from .sdk_project import CrossMpEdgeInfo, _parse_cross_mp_edges
+from .sdk_project import (
+    CrossMpEdgeInfo,
+    StitchTargetInfo,
+    _parse_cross_mp_edges,
+    _parse_stitch_targets,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -95,6 +100,7 @@ class AdapterDocModel:
     edges: List[TraversalEdge]              # parent→child pairs, in describe.xml order
     config_fields: List[IdentifierInfo]     # from adapter-instance ResourceIdentifiers
     cross_mp_edges: List[CrossMpEdgeInfo] = field(default_factory=list)  # runtime-only, from adapter.yaml
+    stitch_targets: List[StitchTargetInfo] = field(default_factory=list)  # Suite API push targets, from adapter.yaml (#310)
     # derived
     kind_map: Dict[str, KindInfo] = field(default_factory=dict)
 
@@ -360,6 +366,9 @@ def build_doc_model(
     # caught by generate_docset's except (ValueError, RuntimeError) below):
     # docs-gen refuses to silently drop a malformed stanza.
     cross_mp_edges = _parse_cross_mp_edges(raw, str(adapter_yaml))
+    stitch_targets = _parse_stitch_targets(
+        raw, str(adapter_yaml), raw.get("adapter_kind") or None,
+    )
 
     return AdapterDocModel(
         adapter_kind=adapter_kind,
@@ -371,6 +380,7 @@ def build_doc_model(
         edges=edges,
         config_fields=config_fields,
         cross_mp_edges=cross_mp_edges,
+        stitch_targets=stitch_targets,
         kind_map=kind_map,
     )
 
@@ -633,6 +643,77 @@ def _render_cross_mp_edges_md(model: AdapterDocModel, heading_level: str = "##")
     ])
 
 
+STITCH_TARGETS_HEADING = "Metrics Pushed Onto"
+_STITCH_TARGETS_ANCHOR = "#metrics-pushed-onto"
+
+
+def _stitch_target_label(target: StitchTargetInfo) -> str:
+    """``HostSystem (VMWARE)``: the same form as a foreign tree node.
+
+    Raw text, for the diagram. Markdown callers wrap it in ``_md_prose``.
+    """
+    return f"{target.resource_kind} ({target.adapter_kind})"
+
+
+# Markdown metacharacters _md_prose escapes with a backslash (CommonMark
+# allows a backslash before any ASCII punctuation). Backslash is first so
+# the escapes added for the others are not doubled.
+_MD_PROSE_ESCAPES = ("\\", "*", "_", "`", "[", "]", "<", ">")
+
+
+def _md_prose(value: str) -> str:
+    """Plain text for one markdown line: newlines collapsed, metacharacters escaped.
+
+    ``identity`` and ``instanced_by`` are plain text, not markdown: a
+    placeholder such as ``<vmnic>`` would otherwise be swallowed as an HTML
+    tag, and ``*``, ``_``, backticks or ``[`` would turn into emphasis, code
+    or a link. Also used for the target labels in headings and the quick
+    reference.
+    """
+    out = re.sub(r"\s*[\r\n]+\s*", " ", value)
+    for ch in _MD_PROSE_ESCAPES:
+        out = out.replace(ch, "\\" + ch)
+    return out
+
+
+def _md_code_cell(value: str) -> str:
+    """A key group as inline code inside a table cell (``|`` escaped)."""
+    value = _escape_md_table_cell(value)
+    if "`" in value:
+        return f"`` {value} ``"
+    return f"`{value}`"
+
+
+def _render_stitch_targets_md(model: AdapterDocModel, heading_level: str = "##") -> str:
+    """Render the "Metrics Pushed Onto" section: one key-group table per target.
+
+    Returns "" when adapter.yaml declares no ``stitch_targets``; callers then
+    emit nothing, so a pak without the stanza keeps byte-identical docs.
+    """
+    if not model.stitch_targets:
+        return ""
+
+    sub = heading_level + "#"
+    lines = [
+        f"{heading_level} {STITCH_TARGETS_HEADING}",
+        "",
+        "This pak pushes keys onto resource kinds owned by other management "
+        "packs, through the Suite API at collection time. `describe.xml` "
+        "cannot declare keys on another adapter's kinds, so the targets are "
+        "declared in `adapter.yaml` (`stitch_targets`) and listed here.",
+        "",
+    ]
+    for target in model.stitch_targets:
+        lines += [f"{sub} {_md_prose(_stitch_target_label(target))}", ""]
+        lines.append(f"- **Matched on:** {_md_prose(target.identity)}")
+        if target.instanced_by:
+            lines.append(f"- **Instanced by:** {_md_prose(target.instanced_by)}")
+        lines += ["", "| Key group |", "|-----------|"]
+        lines += [f"| {_md_code_cell(group)} |" for group in target.key_groups]
+        lines.append("")
+    return "\n".join(lines)
+
+
 def generate_inventory_tree_md(model: AdapterDocModel) -> str:
     """Generate docs/inventory-tree.md content."""
     parents_map = _parents_map(model)
@@ -697,6 +778,10 @@ def generate_inventory_tree_md(model: AdapterDocModel) -> str:
     cross_mp_section = _render_cross_mp_edges_md(model)
     if cross_mp_section:
         parts += [cross_mp_section]
+
+    stitch_section = _render_stitch_targets_md(model)
+    if stitch_section:
+        parts += [stitch_section]
 
     return "\n".join(parts)
 
@@ -921,6 +1006,120 @@ def _layout_nodes(model: AdapterDocModel) -> Dict[str, Tuple[float, float, int, 
     return positions
 
 
+# ---------------------------------------------------------------------------
+# Stitch targets in the diagram (#310)
+# ---------------------------------------------------------------------------
+# A block to the right of the pak's own tree (or alone, when the pak has no
+# kinds to draw): the adapter instance on top, one dashed external node per
+# stitch target in a row below it, and a dashed orthogonal edge from the
+# instance to each target labelled "pushes keys". Drawn only when
+# adapter.yaml declares stitch_targets, so other diagrams are unchanged.
+
+_STITCH_EDGE_LABEL = "pushes keys"
+_STITCH_CHAR_W = 7.3       # px per character, 12px monospace identifier lines
+_STITCH_TITLE_CHAR_W = 8.0 # px per character, 13px bold sans title
+_STITCH_PAD = 24           # horizontal padding inside a stitch node
+_STITCH_LABEL_DX = 6       # edge label offset right of the edge's last leg
+_STITCH_FILL = "#fff7ed"
+_STITCH_STROKE = "#c2410c"
+_STITCH_DASH = "6 4"
+
+
+@dataclass
+class _StitchNode:
+    seed: str
+    title: str
+    lines: List[str]
+    x: float
+    y: float
+    w: int
+    h: int
+
+
+@dataclass
+class _StitchLayout:
+    instance: _StitchNode
+    targets: List[_StitchNode]
+    edges: List[List[Tuple[float, float]]]   # one polyline per target
+    labels: List[Tuple[float, float]]        # label anchor (x, baseline y) per edge
+
+
+def _stitch_node_w(title: str, lines: List[str]) -> int:
+    """Node width that holds its title and lines; never below _NODE_W."""
+    need = max(
+        [len(title) * _STITCH_TITLE_CHAR_W]
+        + [len(line) * _STITCH_CHAR_W for line in lines]
+    )
+    return max(_NODE_W, int(math.ceil(need)) + _STITCH_PAD)
+
+
+def _stitch_node_h(lines: List[str]) -> int:
+    """Node height: title, then one _SVG_LINE_H line each, plus bottom padding.
+
+    Tighter than _node_height's per-key step: a target can list a dozen or
+    more key groups, and the wider step would leave a tall empty tail.
+    """
+    return max(_NODE_H_BASE, 44 + len(lines) * _SVG_LINE_H)
+
+
+def _stitch_layout(
+    model: AdapterDocModel,
+    positions: Dict[str, Tuple[float, float, int, int]],
+) -> Optional[_StitchLayout]:
+    """Lay out the stitch block; None when there are no stitch targets."""
+    if not model.stitch_targets:
+        return None
+
+    x0 = (max(x + w for x, y, w, h in positions.values()) + _H_GAP) if positions else _MARGIN
+
+    instance_kind = next((k for k in model.kinds if k.is_adapter_instance), None)
+    inst_title = instance_kind.label if instance_kind else model.adapter_name
+    inst_lines = [f"{model.adapter_kind} adapter instance"]
+    inst_w = _stitch_node_w(inst_title, inst_lines)
+    inst_h = _stitch_node_h(inst_lines)
+
+    target_y = _MARGIN + inst_h + _V_GAP
+    targets: List[_StitchNode] = []
+    x = x0
+    for t in model.stitch_targets:
+        title = t.resource_kind
+        lines = [f"{t.adapter_kind} (external)"] + list(t.key_groups)
+        w = _stitch_node_w(title, lines)
+        h = _stitch_node_h(lines)
+        targets.append(_StitchNode(
+            seed=f"stitch:{t.adapter_kind}::{t.resource_kind}",
+            title=title, lines=lines, x=x, y=target_y, w=w, h=h,
+        ))
+        x += w + _H_GAP
+    row_w = (x - _H_GAP) - x0
+
+    inst_x = x0 + max(0.0, (row_w - inst_w) / 2)
+    instance = _StitchNode(
+        seed="stitch:instance", title=inst_title, lines=inst_lines,
+        x=inst_x, y=_MARGIN, w=inst_w, h=inst_h,
+    )
+
+    sx, sy = inst_x + inst_w / 2, _MARGIN + inst_h
+    mid_y = (sy + target_y) / 2
+    edges: List[List[Tuple[float, float]]] = []
+    labels: List[Tuple[float, float]] = []
+    for node in targets:
+        ex = node.x + node.w / 2
+        edges.append([(sx, sy), (sx, mid_y), (ex, mid_y), (ex, target_y)])
+        labels.append((ex + _STITCH_LABEL_DX, (mid_y + target_y) / 2 + 4))
+    return _StitchLayout(instance=instance, targets=targets, edges=edges, labels=labels)
+
+
+def _stitch_extent(layout: _StitchLayout) -> Tuple[float, float]:
+    """Right and bottom edge of the stitch block, edge labels included."""
+    nodes = [layout.instance] + layout.targets
+    max_x = max(n.x + n.w for n in nodes)
+    max_y = max(n.y + n.h for n in nodes)
+    for lx, _ in layout.labels:
+        max_x = max(max_x, lx + len(_STITCH_EDGE_LABEL) * _STITCH_CHAR_W)
+    return max_x, max_y
+
+
 def _excalidraw_element_rect(
     elem_id: str,
     x: float, y: float, w: int, h: int,
@@ -1090,6 +1289,50 @@ def _excalidraw_polyline_arrow(
     return arrow
 
 
+def _excalidraw_stitch_elements(layout: _StitchLayout) -> List[dict]:
+    """Excalidraw elements of the stitch block: nodes, dashed arrows, labels."""
+    elements: List[dict] = []
+    ids: Dict[str, str] = {}
+    nodes = [(layout.instance, False)] + [(n, True) for n in layout.targets]
+    for node, external in nodes:
+        elem_id = _stable_id(f"rect:{node.seed}")
+        ids[node.seed] = elem_id
+        rect = _excalidraw_element_rect(
+            elem_id=elem_id,
+            x=node.x, y=node.y, w=node.w, h=node.h,
+            label=node.title,
+            id_lines=[f"  {line}" for line in node.lines],
+            is_root=not external,
+        )
+        if external:
+            rect["strokeStyle"] = "dashed"
+            rect["strokeColor"] = _STITCH_STROKE
+            rect["backgroundColor"] = _STITCH_FILL
+        elements.append(rect)
+
+    inst = layout.instance
+    for node, pts, (lx, ly) in zip(layout.targets, layout.edges, layout.labels):
+        arrow = _excalidraw_polyline_arrow(
+            _stable_id(f"arrow:{inst.seed}->{node.seed}"), pts,
+            ids[inst.seed], ids[node.seed],
+        )
+        arrow["strokeStyle"] = "dashed"
+        arrow["strokeColor"] = _STITCH_STROKE
+        elements.append(arrow)
+        text = _excalidraw_element_text(
+            elem_id=_stable_id(f"label:{inst.seed}->{node.seed}"),
+            x=lx, y=ly - _SVG_LINE_H + 3,
+            w=int(math.ceil(len(_STITCH_EDGE_LABEL) * _STITCH_CHAR_W)),
+            h=_SVG_LINE_H,
+            text=_STITCH_EDGE_LABEL,
+            font_size=12,
+        )
+        text["textAlign"] = "left"
+        text["strokeColor"] = _STITCH_STROKE
+        elements.append(text)
+    return elements
+
+
 def generate_excalidraw(model: AdapterDocModel) -> dict:
     """Generate the Excalidraw JSON dict for the inventory tree diagram.
 
@@ -1170,6 +1413,11 @@ def generate_excalidraw(model: AdapterDocModel) -> dict:
         )
         elements.append(arrow)
 
+    # 3. Stitch targets (only when adapter.yaml declares them)
+    stitch = _stitch_layout(model, positions)
+    if stitch is not None:
+        elements.extend(_excalidraw_stitch_elements(stitch))
+
     # Calculate canvas bounds
     if positions:
         max_x = max(x + w for x, y, w, h in positions.values()) + _MARGIN
@@ -1212,6 +1460,53 @@ def _svg_escape(s: str) -> str:
     )
 
 
+def _svg_stitch_parts(layout: _StitchLayout) -> List[str]:
+    """SVG elements of the stitch block: dashed edges, labels, then nodes."""
+    parts: List[str] = []
+    for pts in layout.edges:
+        path = "M " + " L ".join(f"{ptx:.1f},{pty:.1f}" for ptx, pty in pts)
+        parts.append(
+            f'<path d="{path}" fill="none" stroke="{_STITCH_STROKE}" stroke-width="1.5" '
+            f'stroke-dasharray="{_STITCH_DASH}" marker-end="url(#arrow-stitch)"/>'
+        )
+    for lx, ly in layout.labels:
+        parts.append(
+            f'<text x="{lx:.0f}" y="{ly:.0f}" '
+            f'font-family="{_SVG_LABEL_FONT}" font-size="{_SVG_FONT_SIZE}" '
+            f'font-style="italic" fill="{_STITCH_STROKE}" text-anchor="start">'
+            f'{_svg_escape(_STITCH_EDGE_LABEL)}</text>'
+        )
+    nodes = [(layout.instance, False)] + [(n, True) for n in layout.targets]
+    for node, external in nodes:
+        if external:
+            parts.append(
+                f'<rect x="{node.x:.0f}" y="{node.y:.0f}" width="{node.w}" height="{node.h}" '
+                f'rx="6" fill="{_STITCH_FILL}" stroke="{_STITCH_STROKE}" stroke-width="1.5" '
+                f'stroke-dasharray="{_STITCH_DASH}"/>'
+            )
+        else:
+            parts.append(
+                f'<rect x="{node.x:.0f}" y="{node.y:.0f}" width="{node.w}" height="{node.h}" '
+                f'rx="6" fill="#e3f2fd" stroke="#1565c0" stroke-width="2"/>'
+            )
+        label_y = node.y + 22
+        parts.append(
+            f'<text x="{node.x + node.w / 2:.0f}" y="{label_y:.0f}" '
+            f'font-family="{_SVG_LABEL_FONT}" font-size="{_SVG_LABEL_FONT_SIZE}" '
+            f'font-weight="600" fill="#111827" text-anchor="middle">'
+            f'{_svg_escape(node.title)}</text>'
+        )
+        for i, line in enumerate(node.lines):
+            iy = label_y + 18 + i * _SVG_LINE_H
+            parts.append(
+                f'<text x="{node.x + node.w / 2:.0f}" y="{iy:.0f}" '
+                f'font-family="{_SVG_FONT}" font-size="{_SVG_FONT_SIZE}" '
+                f'fill="#374151" text-anchor="middle">'
+                f'{_svg_escape(line)}</text>'
+            )
+    return parts
+
+
 def generate_svg(model: AdapterDocModel) -> str:
     """Generate a headless SVG render of the inventory tree diagram.
 
@@ -1222,8 +1517,9 @@ def generate_svg(model: AdapterDocModel) -> str:
     roots = set(_tree_roots(model))
     row_of = _row_of(model, _assign_depth(model))
     lanes = _edge_lanes(model, row_of)
+    stitch = _stitch_layout(model, positions)
 
-    if not positions:
+    if not positions and stitch is None:
         return '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="100"><text x="10" y="20" font-family="sans-serif" font-size="13">No traversal spec found.</text></svg>'
 
     # Edge polylines first: the canvas must hold every lane and loop too.
@@ -1247,7 +1543,14 @@ def generate_svg(model: AdapterDocModel) -> str:
         edge_paths.append(pts)
 
     # Canvas size
-    max_x, max_y = _canvas_size(positions, edge_paths)
+    if positions:
+        max_x, max_y = _canvas_size(positions, edge_paths)
+    else:
+        max_x, max_y = 0.0, 0.0
+    if stitch is not None:
+        sx_max, sy_max = _stitch_extent(stitch)
+        max_x = max(max_x, sx_max + _MARGIN)
+        max_y = max(max_y, sy_max + _MARGIN)
 
     svg_parts: List[str] = []
     svg_parts.append(
@@ -1260,6 +1563,11 @@ def generate_svg(model: AdapterDocModel) -> str:
         '  <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">'
         '<path d="M0,0 L0,6 L8,3 z" fill="#374151"/></marker>'
     )
+    if stitch is not None:
+        svg_parts.append(
+            '  <marker id="arrow-stitch" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">'
+            f'<path d="M0,0 L0,6 L8,3 z" fill="{_STITCH_STROKE}"/></marker>'
+        )
     svg_parts.append("</defs>")
 
     # Draw edges first (under rectangles)
@@ -1310,6 +1618,9 @@ def generate_svg(model: AdapterDocModel) -> str:
                 f'{_svg_escape(ident.key + marker)}</text>'
             )
 
+    if stitch is not None:
+        svg_parts.extend(_svg_stitch_parts(stitch))
+
     svg_parts.append("</svg>")
     return "\n".join(svg_parts)
 
@@ -1328,6 +1639,12 @@ def generate_overview_md(model: AdapterDocModel) -> str:
         for k in non_instance_kinds
     )
 
+    # Only when adapter.yaml declares stitch_targets, so the scaffold of a
+    # pak without the stanza is unchanged.
+    stitch_section = _render_stitch_targets_md(model)
+    if stitch_section:
+        stitch_section += "\n"
+
     return f"""# Overview: {model.adapter_name}
 
 > **Scaffold:** edit this file to describe your pack. It is generated once and
@@ -1343,7 +1660,7 @@ def generate_overview_md(model: AdapterDocModel) -> str:
 
 {kind_list}
 
-## Cross-Adapter Notes
+{stitch_section}## Cross-Adapter Notes
 
 <!-- Describe LLDP stitching, ARIA_OPS metric stitching, or other cross-adapter
      relationships here. -->
@@ -1448,6 +1765,16 @@ def generate_readme_md(model: AdapterDocModel, index_extra: str = "") -> str:
         )
         cross_mp_section = "\n" + _render_cross_mp_edges_md(model)
 
+    stitch_line = ""
+    stitch_section = ""
+    if model.stitch_targets:
+        targets = ", ".join(_md_prose(_stitch_target_label(t)) for t in model.stitch_targets)
+        stitch_line = (
+            f"- **Metrics pushed onto:** {targets} "
+            f"(see [{STITCH_TARGETS_HEADING}]({_STITCH_TARGETS_ANCHOR}))\n"
+        )
+        stitch_section = "\n" + _render_stitch_targets_md(model)
+
     return f"""# {model.adapter_name} Documentation
 
 > Generated index. The SVG diagram and per-kind table are regenerated on every
@@ -1460,14 +1787,14 @@ def generate_readme_md(model: AdapterDocModel, index_extra: str = "") -> str:
 ## Inventory Tree
 
 ![Inventory Tree](inventory-tree.svg)
-{cross_mp_section}
+{cross_mp_section}{stitch_section}
 ## Quick Reference
 
 - **Adapter kind:** `{model.adapter_kind}`
 - **Version:** {model.adapter_version}
 - **Traversal spec:** {model.traversal_name or "(none)"}
 - **Resource kinds:** {len([k for k in model.kinds if not k.is_adapter_instance])}
-{cross_mp_line}""" + _render_index_extra(index_extra)
+{cross_mp_line}{stitch_line}""" + _render_index_extra(index_extra)
 
 
 def _render_index_extra(index_extra: str) -> str:

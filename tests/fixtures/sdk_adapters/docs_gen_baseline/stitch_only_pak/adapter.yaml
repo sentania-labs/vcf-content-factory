@@ -1,0 +1,8 @@
+name: "Baseline Stitch-Only Pak"
+version: "1.0.0"
+build_number: 3
+adapter_kind: "baseline_stitch"
+tier: 2
+description: >
+  Fixture: the vsanperf shape. An adapter instance and one collector kind,
+  every metric pushed onto VMWARE objects through the Suite API.
