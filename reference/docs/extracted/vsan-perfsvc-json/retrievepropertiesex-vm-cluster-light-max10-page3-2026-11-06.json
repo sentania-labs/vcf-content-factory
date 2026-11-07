@@ -1,0 +1,356 @@
+{
+    "_typeName": "RetrieveResult", 
+    "token": "6", 
+    "objects": [
+        {
+            "_typeName": "ObjectContent", 
+            "obj": {
+                "_typeName": "ManagedObjectReference", 
+                "value": "vm-31210", 
+                "type": "VirtualMachine"
+            }, 
+            "propSet": [
+                {
+                    "_typeName": "DynamicProperty", 
+                    "name": "config.instanceUuid", 
+                    "val": {
+                        "_typeName": "string", 
+                        "_value": "50036cf9-a6b6-8f90-2d71-0361ece2297b"
+                    }
+                }, 
+                {
+                    "_typeName": "DynamicProperty", 
+                    "name": "name", 
+                    "val": {
+                        "_typeName": "string", 
+                        "_value": "proxy"
+                    }
+                }, 
+                {
+                    "_typeName": "DynamicProperty", 
+                    "name": "runtime.host", 
+                    "val": {
+                        "_typeName": "ManagedObjectReference", 
+                        "value": "host-31189", 
+                        "type": "HostSystem"
+                    }
+                }
+            ]
+        }, 
+        {
+            "_typeName": "ObjectContent", 
+            "obj": {
+                "_typeName": "ManagedObjectReference", 
+                "value": "vm-18040", 
+                "type": "VirtualMachine"
+            }, 
+            "propSet": [
+                {
+                    "_typeName": "DynamicProperty", 
+                    "name": "config.instanceUuid", 
+                    "val": {
+                        "_typeName": "string", 
+                        "_value": "50034b2c-675d-7ff1-f4a8-edabd855c08d"
+                    }
+                }, 
+                {
+                    "_typeName": "DynamicProperty", 
+                    "name": "name", 
+                    "val": {
+                        "_typeName": "string", 
+                        "_value": "vcf-services-platform-template-9.0.2.0.25068117"
+                    }
+                }, 
+                {
+                    "_typeName": "DynamicProperty", 
+                    "name": "runtime.host", 
+                    "val": {
+                        "_typeName": "ManagedObjectReference", 
+                        "value": "host-31189", 
+                        "type": "HostSystem"
+                    }
+                }
+            ]
+        }, 
+        {
+            "_typeName": "ObjectContent", 
+            "obj": {
+                "_typeName": "ManagedObjectReference", 
+                "value": "vm-34002", 
+                "type": "VirtualMachine"
+            }, 
+            "propSet": [
+                {
+                    "_typeName": "DynamicProperty", 
+                    "name": "config.instanceUuid", 
+                    "val": {
+                        "_typeName": "string", 
+                        "_value": "5003dc78-3ef3-51b4-942d-3594cab06d69"
+                    }
+                }, 
+                {
+                    "_typeName": "DynamicProperty", 
+                    "name": "name", 
+                    "val": {
+                        "_typeName": "string", 
+                        "_value": "vcf-services-runtime-template-9.1.1.0.25714471"
+                    }
+                }, 
+                {
+                    "_typeName": "DynamicProperty", 
+                    "name": "runtime.host", 
+                    "val": {
+                        "_typeName": "ManagedObjectReference", 
+                        "value": "host-31189", 
+                        "type": "HostSystem"
+                    }
+                }
+            ]
+        }, 
+        {
+            "_typeName": "ObjectContent", 
+            "obj": {
+                "_typeName": "ManagedObjectReference", 
+                "value": "vm-1011", 
+                "type": "VirtualMachine"
+            }, 
+            "propSet": [
+                {
+                    "_typeName": "DynamicProperty", 
+                    "name": "config.instanceUuid", 
+                    "val": {
+                        "_typeName": "string", 
+                        "_value": "5003cd9e-8372-94d6-a12d-49b27326eb2f"
+                    }
+                }, 
+                {
+                    "_typeName": "DynamicProperty", 
+                    "name": "name", 
+                    "val": {
+                        "_typeName": "string", 
+                        "_value": "vcf-lab-operations-networks-collector"
+                    }
+                }, 
+                {
+                    "_typeName": "DynamicProperty", 
+                    "name": "runtime.host", 
+                    "val": {
+                        "_typeName": "ManagedObjectReference", 
+                        "value": "host-15151", 
+                        "type": "HostSystem"
+                    }
+                }
+            ]
+        }, 
+        {
+            "_typeName": "ObjectContent", 
+            "obj": {
+                "_typeName": "ManagedObjectReference", 
+                "value": "vm-31164", 
+                "type": "VirtualMachine"
+            }, 
+            "propSet": [
+                {
+                    "_typeName": "DynamicProperty", 
+                    "name": "config.instanceUuid", 
+                    "val": {
+                        "_typeName": "string", 
+                        "_value": "500053de-e680-f6e8-5580-288774e6bb93"
+                    }
+                }, 
+                {
+                    "_typeName": "DynamicProperty", 
+                    "name": "name", 
+                    "val": {
+                        "_typeName": "string", 
+                        "_value": "worker"
+                    }
+                }, 
+                {
+                    "_typeName": "DynamicProperty", 
+                    "name": "runtime.host", 
+                    "val": {
+                        "_typeName": "ManagedObjectReference", 
+                        "value": "host-15151", 
+                        "type": "HostSystem"
+                    }
+                }
+            ]
+        }, 
+        {
+            "_typeName": "ObjectContent", 
+            "obj": {
+                "_typeName": "ManagedObjectReference", 
+                "value": "vm-25098", 
+                "type": "VirtualMachine"
+            }, 
+            "propSet": [
+                {
+                    "_typeName": "DynamicProperty", 
+                    "name": "config.instanceUuid", 
+                    "val": {
+                        "_typeName": "string", 
+                        "_value": "5003b6fa-ac0e-a111-3c8f-bc4c3d0a6455"
+                    }
+                }, 
+                {
+                    "_typeName": "DynamicProperty", 
+                    "name": "name", 
+                    "val": {
+                        "_typeName": "string", 
+                        "_value": "vcf-lab-operations01"
+                    }
+                }, 
+                {
+                    "_typeName": "DynamicProperty", 
+                    "name": "runtime.host", 
+                    "val": {
+                        "_typeName": "ManagedObjectReference", 
+                        "value": "host-15151", 
+                        "type": "HostSystem"
+                    }
+                }
+            ]
+        }, 
+        {
+            "_typeName": "ObjectContent", 
+            "obj": {
+                "_typeName": "ManagedObjectReference", 
+                "value": "vm-39042", 
+                "type": "VirtualMachine"
+            }, 
+            "propSet": [
+                {
+                    "_typeName": "DynamicProperty", 
+                    "name": "config.instanceUuid", 
+                    "val": {
+                        "_typeName": "string", 
+                        "_value": "5003cf08-0fb7-de9e-02e0-6372a948eb27"
+                    }
+                }, 
+                {
+                    "_typeName": "DynamicProperty", 
+                    "name": "name", 
+                    "val": {
+                        "_typeName": "string", 
+                        "_value": "vcf-services-runtime-template-9.1.1.0100.25801571"
+                    }
+                }, 
+                {
+                    "_typeName": "DynamicProperty", 
+                    "name": "runtime.host", 
+                    "val": {
+                        "_typeName": "ManagedObjectReference", 
+                        "value": "host-15151", 
+                        "type": "HostSystem"
+                    }
+                }
+            ]
+        }, 
+        {
+            "_typeName": "ObjectContent", 
+            "obj": {
+                "_typeName": "ManagedObjectReference", 
+                "value": "vm-2002", 
+                "type": "VirtualMachine"
+            }, 
+            "propSet": [
+                {
+                    "_typeName": "DynamicProperty", 
+                    "name": "config.instanceUuid", 
+                    "val": {
+                        "_typeName": "string", 
+                        "_value": "5003f6a0-ada8-3a73-5f4f-40bde1844c99"
+                    }
+                }, 
+                {
+                    "_typeName": "DynamicProperty", 
+                    "name": "name", 
+                    "val": {
+                        "_typeName": "string", 
+                        "_value": "vcf-lab-nsxmgr-wld01a"
+                    }
+                }, 
+                {
+                    "_typeName": "DynamicProperty", 
+                    "name": "runtime.host", 
+                    "val": {
+                        "_typeName": "ManagedObjectReference", 
+                        "value": "host-15151", 
+                        "type": "HostSystem"
+                    }
+                }
+            ]
+        }, 
+        {
+            "_typeName": "ObjectContent", 
+            "obj": {
+                "_typeName": "ManagedObjectReference", 
+                "value": "vm-37014", 
+                "type": "VirtualMachine"
+            }, 
+            "propSet": [
+                {
+                    "_typeName": "DynamicProperty", 
+                    "name": "config.instanceUuid", 
+                    "val": {
+                        "_typeName": "string", 
+                        "_value": "323597d8-81f7-4b3e-aacc-5107482ecc5c"
+                    }
+                }, 
+                {
+                    "_typeName": "DynamicProperty", 
+                    "name": "name", 
+                    "val": {
+                        "_typeName": "string", 
+                        "_value": "vcf-lab-services-runtime-dw49h"
+                    }
+                }, 
+                {
+                    "_typeName": "DynamicProperty", 
+                    "name": "runtime.host", 
+                    "val": {
+                        "_typeName": "ManagedObjectReference", 
+                        "value": "host-15151", 
+                        "type": "HostSystem"
+                    }
+                }
+            ]
+        }, 
+        {
+            "_typeName": "ObjectContent", 
+            "obj": {
+                "_typeName": "ManagedObjectReference", 
+                "value": "vm-26019", 
+                "type": "VirtualMachine"
+            }, 
+            "propSet": [
+                {
+                    "_typeName": "DynamicProperty", 
+                    "name": "config.instanceUuid", 
+                    "val": {
+                        "_typeName": "string", 
+                        "_value": "50032d62-23e9-7018-daaa-8c77a3d7ecd4"
+                    }
+                }, 
+                {
+                    "_typeName": "DynamicProperty", 
+                    "name": "name", 
+                    "val": {
+                        "_typeName": "string", 
+                        "_value": "vcf-lab-operations02"
+                    }
+                }, 
+                {
+                    "_typeName": "DynamicProperty", 
+                    "name": "runtime.host", 
+                    "val": {
+                        "_typeName": "ManagedObjectReference", 
+                        "value": "host-15151", 
+                        "type": "HostSystem"
+                    }
+                }
+            ]
+        }
+    ]
+}

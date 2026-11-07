@@ -1710,3 +1710,46 @@ Each has a recommendation; the design is written on it unless noted.
     default tiers, get one multi-cluster measurement (their vCenter with
     `perf_timing_logging` on for an hour, or the T3 simulator once it
     exists).
+
+## Addendum 2026-11-06: P2 measured (VM and disk joins, Ops targets)
+
+The P2 round ran the same day (API map "P2: VM and disk joins over JSON, Ops
+cluster and VM targets (measured 2026-11-06)"; verbatim bodies listed in
+`reference/docs/extracted/vsan-perfsvc-json/PROVENANCE-2026-11-06-p2.md`).
+Corrections and confirmations to the body above:
+
+- **VM inventory**: a container view rooted at the cluster returns its VMs
+  (42 on the lab, of which exactly the 30 powered-on ones appear in the perf
+  data; 10 of the 12 others are templates). Light read 4.3 KB wire / 51 KB
+  decoded / 9 ms; with `config.hardware.device` 142 KB / 1.04 MB / 60 ms
+  (~3.4 KB wire, ~25 KB decoded per VM, up to ~31 KB on a 10-VM page). The
+  device array cannot be narrowed by path (`.backing` faults
+  `InvalidProperty`); filter client-side to `VirtualDisk` plus the
+  controllers they reference. Paging with `maxObjects` works (10/10/10/10/2,
+  new token per page, a reused token faults `InvalidArgument`). Cap pages at
+  about 50 VMs (~1.6 MB decoded) given the streaming parser.
+- **Joins confirmed**: `vscsi` instance = `scsi` + controller `busNumber` +
+  `:` + `unitNumber`, 148/148; `virtual-disk` by backing path 148/148; every
+  vdisk bus position is also a `vscsi` id on the same VM (Q5 holds). Only
+  PVSCSI and LSI Logic controllers observed; the SATA/NVMe/IDE prefixes
+  remain unobserved.
+- **`QueryDisksForVsan`**: `POST .../HostVsanSystem/<configManager.vsanSystem moId>/QueryDisksForVsan`
+  with `{}`; bare array of `VsanHostDiskResult`; key on non-empty `vsanUuid`
+  (`state` is `ineligible` for in-use disks too); 8 to 11 ms, ~1.6 KB wire per
+  host. All 5 ESA disk ids matched one host each. `configManager.vsanSystem`
+  reads fine in the PropertyCollector pathSet (Q9 item closed).
+- **Ops targets**: ClusterComputeResource and VirtualMachine carry
+  `VMEntityObjectID` (MoRef) and `VMEntityVCID`, both part of uniqueness;
+  (MoRef, VCID) matched 45/45 VMs. `VMEntityInstanceUUID` is empty on exactly
+  the 30 powered-on vSAN VMs on devel (filled on the other 15 and on the
+  workload vCenters' VMs; cause unknown), so it is **not** usable as a
+  cross-check; resolution stays on (MoRef, VCID). A test push of
+  `VCFCF Test|Build2|clusterKey` onto the cluster and the instanced
+  `VCFCF Test|Build2|vdisk:scsi0:0|probe` onto a VM both read back with the
+  pushed timestamp; the VM key within ~42 s, the cluster key only after
+  ~343 s. **T5 waits at least 6 min before reading cluster keys.** The Ops VM
+  list is ~2.9 KB per VM, not gzipped (~1.45 MB at 500 per page); Ops drops
+  an idle keep-alive after ~30 s, so reconnect between cycles.
+- **Netstacks / vmknics**: hosts carry 8 stacks and 6 to 7 vmknics but only
+  `vmk2` is vSAN-tagged; the perf data reports `defaultTcpipStack` and
+  `vmk2` only. Multi-stack / multi-vmk instancing is still unobserved.

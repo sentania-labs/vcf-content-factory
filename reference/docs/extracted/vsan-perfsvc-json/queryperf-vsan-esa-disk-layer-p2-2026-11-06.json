@@ -1,0 +1,82 @@
+[
+    {
+        "_typeName": "VsanPerfEntityMetricCSV", 
+        "entityRefId": "vsan-esa-disk-layer:52d171f6-2e48-758a-777f-d5098533d861", 
+        "sampleInfo": "2026-11-07 05:20:00,2026-11-07 05:25:00", 
+        "value": [
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "avgLatReadCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "1859,254"
+            }
+        ]
+    }, 
+    {
+        "_typeName": "VsanPerfEntityMetricCSV", 
+        "entityRefId": "vsan-esa-disk-layer:52c7ed3e-9dcf-b82e-8177-f704806c2e4a", 
+        "sampleInfo": "2026-11-07 05:20:00,2026-11-07 05:25:00", 
+        "value": [
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "avgLatReadCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "181,179"
+            }
+        ]
+    }, 
+    {
+        "_typeName": "VsanPerfEntityMetricCSV", 
+        "entityRefId": "vsan-esa-disk-layer:52bde68f-b0e5-6952-075b-bcb49bd54fa6", 
+        "sampleInfo": "2026-11-07 05:20:00,2026-11-07 05:25:00", 
+        "value": [
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "avgLatReadCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "209,207"
+            }
+        ]
+    }, 
+    {
+        "_typeName": "VsanPerfEntityMetricCSV", 
+        "entityRefId": "vsan-esa-disk-layer:52585910-fedf-604c-04d3-868955bf7f7d", 
+        "sampleInfo": "2026-11-07 05:20:00,2026-11-07 05:25:00", 
+        "value": [
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "avgLatReadCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "1678,1808"
+            }
+        ]
+    }, 
+    {
+        "_typeName": "VsanPerfEntityMetricCSV", 
+        "entityRefId": "vsan-esa-disk-layer:52850722-bc18-61ea-8400-190ec367ac70", 
+        "sampleInfo": "2026-11-07 05:20:00,2026-11-07 05:25:00", 
+        "value": [
+            {
+                "_typeName": "VsanPerfMetricSeriesCSV", 
+                "metricId": {
+                    "_typeName": "VsanPerfMetricId", 
+                    "label": "avgLatReadCapacity", 
+                    "metricsCollectInterval": 300
+                }, 
+                "values": "189,3809"
+            }
+        ]
+    }
+]
