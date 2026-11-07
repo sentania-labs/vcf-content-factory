@@ -158,13 +158,19 @@ it is not a published pak.
   N5 fixed in build 20; Codex's case-sensitive `exclude_types` fixed in
   build 21; a stop-during-call-counted-as-timeout engine race found by a JDK
   25 CI flake and fixed in build 22). Dev preview 0.0.0.22 on devel 9.0.2:
-  T5 passed at dashboard, all and back (record
-  `vsanperf-t5-devel-9.0-build-22-metric-scope.md`: host 1,282 keys, cluster
-  348, steady 37 calls at `all` with host and cluster tiers, 13 learned-empty
-  and 4 faulting host types, pctMemUsed pushed as integer percent); 8.18 and
-  9.1 at default scope: see `vsanperf-t5-devel-{8.18,9.1}-build-22-default-scope.md`.
-  Not yet tagged (v1.2.0.22 waits for Scott). Disk and VM tiers at scope
-  `all` are proven in the replay harness only (T4 rows d, d', e).
+  dashboard, all and back to dashboard proven, with the learned-state reset
+  (record `vsanperf-t5-devel-9.0-build-22-metric-scope.md`: host 1,282 keys,
+  cluster 348, steady 37 calls at `all` with host and cluster tiers, 13
+  learned-empty and 4 faulting host types, pctMemUsed an integer percent in
+  Ops); not done there: the same-window JSON comparison of the read-back
+  values, the browser pass and the host reboot of README check 7. 8.18 and
+  9.1 at default scope unchanged from build 18 (records
+  `vsanperf-t5-devel-{8.18,9.1}-build-22-default-scope.md`), but the
+  per-instance adapter log was checked on neither (8.18: analytics node
+  refuses key SSH; 9.1: the new instance's log file was not located,
+  collector.log only). Not yet tagged (v1.2.0.22 waits for Scott; RULE-019
+  gaps above). Disk and VM tiers at scope `all` are proven in the replay
+  harness only (T4 rows d, d', e).
   History 2026-11-06: Build 1 merged (builds 5 to 9, pak PRs
   #2 to #5 and #7), proven on the same three instances (records
   `vsanperf-t5-*-build-5/7/9.md`; build 4 review findings fixed in build 5).

@@ -83,24 +83,32 @@ separate step.
 **Differences from the README's expectations**
 
 - Calls: cycle 1 **56** (README 63), cycles 2 and 3 **54** (61), steady **37**
-  (39). Only **four** of the nine Q5 types are called on this tier set
-  (`heap-memory`, `slab-memory`, `clom-host`, `cmmds-workload`), not nine; the
-  other five were not observed and are presumably in tiers that are off here
-  (not verified). `ioinsight` accounts for the rest of the steady count.
-  Reconciliation (orchestrator, from `EntityType.java`): the README's check 7
-  assumed all four tiers on; this run kept the account's tiers (host and
-  cluster). The five Q5 types not seen are `clom-disk` and `ddh-disk`
-  (`Tier.DISK`) and `remote-virtual-machine`, `remote-vscsi`,
-  `remote-virtual-disk` (`Tier.VM`), so the call counts and the 13 instead of
-  16 learned-empty types are the tier set, not a defect. The disk and VM
+  (39). The README's check 7 assumes all four tiers on; this run kept the
+  account's tiers (host and cluster). Design v3's host+cluster row is
+  56 / 50 / 37; the live 56 / 54 / 37 differs only by the decisions addendum
+  (the four optional host types stay called on cycles 2 and 3). Only four
+  of the nine Q5 types were observed faulting (`heap-memory`, `slab-memory`,
+  `clom-host`, `cmmds-workload`); the other five were not called, and
+  `EntityType.java` places them in the tiers that were off: `clom-disk`,
+  `ddh-disk` (`Tier.DISK`), `remote-virtual-machine`, `remote-vscsi`,
+  `remote-virtual-disk` (`Tier.VM`). Read from code, not observed live.
+  `ioinsight` accounts for the rest of the steady count. The disk and VM
   tiers at scope `all` remain unproven on a live instance (replay harness
   T4 rows d, d', e only).
 - Learned-empty: 13 types, not 16.
-- Series: `series_pushed` 6,758 is the push count, not the key count; the
-  1,282 host and 348 cluster keys match "about 1,280 and 348". The same gap
-  exists at dashboard scope (1,186 pushed against 219 + 91 keys per object).
-- On the return to `dashboard` the first cycle made 26 calls (as the task
-  said), not the README's 30; steady 23 from cycle 4, not 25.
+- Series: `series_pushed` 6,758 is keys times objects exactly, 5 x 1,282 + 348
+  (REFERENCE.md: 6,410 on the five hosts, 348 on the cluster), as 1,186 is
+  5 x 219 + 91 at dashboard scope. No difference; the 1,282 and 348 match
+  "about 1,280 and 348".
+- On the return to `dashboard` the first cycle made 26 calls, not the
+  README's 30; steady 23 from cycle 4, not 25.
+- Upgrade source: from 0.0.0.16 (the dev preview on this instance), not from
+  1.1.0.18 as README check 7.1 reads.
+- Not done from README check 7: 7.5's comparison of each read-back value with
+  a same-window JSON query of the Performance Service (Ops values only above),
+  and the `pctMemUsed` check against the cycle's `PERF` log; 7.6's browser
+  pass (`pCPU` beside `pCPU:cpu-0`, `DOM World:` rendering); 7.8's host
+  reboot.
 - Cycle times are long on `all` (48 / 43 / 39 s, then 14 s) because the service
   answered slowly (call_ms_avg 700 to 850 ms, against 130 to 400 ms on the
   default scope); the same slowdown showed in the dashboard cycles 2 and 3

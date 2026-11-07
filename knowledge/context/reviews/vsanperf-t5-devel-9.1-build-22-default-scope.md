@@ -8,7 +8,8 @@ collector 2 (172.27.10.11), 5-minute interval, one cluster (`vcf-lab-mgmt-cl01`,
 5 hosts). Tiers host and cluster on, disk and VM off, `vm_tier_every_n_cycles` 3.
 Default scope only: `metric_scope` was never changed, no vCenter write, no
 setting change. Times America/Chicago; self-metric times are the 5-minute stat
-bucket labels (:x1:59 / :x6:59), which sit about a minute after the cycle.
+bucket labels, given here to the minute, which sit about a minute after the
+cycle.
 
 | Step | Result |
 |---|---|
@@ -16,7 +17,7 @@ bucket labels (:x1:59 / :x6:59), which sit about a minute after the cycle.
 | 2. Upgrade | **pass**: install exit 0 (started 11:16, "Install completed and verified" about 11:25); solutions endpoint 0.0.0.22; CLI read the instance FAILED at +133 s (the collector had not yet loaded the new adapter type; one collector.log ERROR at 11:20:29, "Unknown adapter type ... (Type = vcfcf_vsanperf)", from the CLI's own start-monitoring during the install) and re-sent start, then STARTED; collector loaded adapter version 0.0.0.0.0.22 at 11:24; instance id unchanged; `metric_scope` present with value `dashboard`, all other settings unchanged |
 | 3. Three cycles and one more | **pass** (table below), zero failures, last_error `none` |
 | 4. Read-back | **pass** (table below) |
-| 5. Logs | **pass for the pak**, with a location deviation (below) |
+| 5. Logs | **collector.log only, adapter log not verified**, with a location deviation (below) |
 
 **Step 3, cycles after the upgrade** (cycle 1 is the first on the new jar):
 
@@ -59,8 +60,11 @@ ERROR lines belong to other adapters, for example EsxHealthOrchestrator);
 stack-trace lines under a vsanperf line: 0 (the grep hits were EsxHealth
 frames); `session[` anywhere in the window: 0; `password` on vsanperf lines: 0.
 The WARN lines in the old `_2342` file (RESOURCE_STATUS_DOWN, 2026-11-06) are
-from the earlier build, not this run. Whether the new build writes its own
-adapter log, and where, was not established.
+from the earlier build, not this run. Build 22 does write its own adapter log
+(the 9.0.2 leg read `VsanPerfAdapter_7083.log`, named after the new adapter
+id), so the files inspected here are the old instance's and the right file was
+not found; the per-instance adapter log check on 9.1 is **not verified** and
+step 5 rests on `collector.log` only.
 
 **Deviations from expectation:** none in the numbers. Two notes: (1) the
 single collector.log ERROR at 11:20:29 during the upgrade window, caused by

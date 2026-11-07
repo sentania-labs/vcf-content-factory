@@ -22,7 +22,7 @@ setting changes. Times America/Chicago. Method as the 9.0.2 record
 **Deviation from expectation:** none in the numbers. Calls up by 3 for cycles
 1 to 3 then back to 23, series_pushed doubled on cycle 1 only, zero failures.
 Cycle times were longer than steady state on cycles 1 to 3 (28.6 / 10.2 / 12.7 s
-against 3 to 7 s) with call latency 360 to 465 ms against 135 to 290 ms before,
+against 3 to 7 s) with call latency 360 to 465 ms against 135 to 271 ms before,
 the same slowdown the 9.0.2 leg saw; nothing timed out. The only open item is
 step 5 (log access).
 
