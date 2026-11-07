@@ -152,7 +152,8 @@ to 91 for the whole vCenter (FOOT §5).
 | `Collection\|hosts_unresolved` | Hosts unresolved | METRIC | node uuids with no HostSystem resource id |
 | `Collection\|push_batches_failed` | Push batches failed | METRIC | from `SuiteApiBatchResult` |
 | `Collection\|cycle_seconds` | Cycle time (s) | METRIC | wall time of collect |
-| `Collection\|perf_calls_per_second` | Performance Service call rate | METRIC | perf_calls / time spent in perf calls (the ceiling, D9) |
+| `Collection\|perf_calls_per_second` | Performance Service call rate | METRIC | perf_calls / elapsed wall-clock seconds of the perf phase (first call start to last call end across all workers); this is aggregate throughput, the D9 ceiling signal |
+| `Collection\|perf_call_ms_avg` | Performance Service call latency (ms) | METRIC | summed per-call wall ms / perf_calls; latency diagnostic, not throughput |
 | `Collection\|last_error` | Last error | PROPERTY | short, credential-free text |
 
 ### Stitch target: VMWARE HostSystem (not declared in describe.xml)
@@ -544,11 +545,13 @@ lines can be grepped and tabulated:
 | `PERF pool` | cycle id, workers, max in-flight, max queue depth |
 | `PERF push` | cycle id, batch no, resources, stat values, bytes, ms, result |
 | `PERF inventory` | cycle id, read (clusters / hosts / ops-resources), ms, count, pages. Never log the ContainerView moId: it embeds the vCenter session key (MAP) |
-| `PERF cycle` | cycle id, clusters, perf calls, total perf-call ms, calls/s, push ms, cycle ms, heap used before/after (Runtime) |
+| `PERF cycle` | cycle id, clusters, perf calls, perf phase wall ms (elapsed, all workers), calls/s (= perf calls / perf phase wall s), summed per-call ms and avg call ms (latency only), push ms, cycle ms, heap used before/after (Runtime) |
 
 **Reading the ceiling (D9).** With several clusters per instance, compare
-`PERF cycle` calls/s against `max_parallel_clusters`: if calls/s stays near
-~7 as workers rise and per-call wall ms grows, the ceiling is per vCenter;
+`PERF cycle` calls/s (perf calls over the perf phase's elapsed wall-clock
+time; dividing by summed per-call time would only give inverse latency and
+hide the pool's effect) against `max_parallel_clusters`: if calls/s stays
+near ~7 as workers rise and avg call ms grows, the ceiling is per vCenter;
 if calls/s scales with workers while each cluster's own rate stays under ~7,
 it is per cluster. The same lines from the replay harness give the
 adapter-side overhead with the server removed.
