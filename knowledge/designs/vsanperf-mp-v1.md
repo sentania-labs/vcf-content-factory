@@ -432,7 +432,7 @@ keeping the vSAN calls on JSON.
 | 1+2. Cluster and host inventory (merged, Addendum) | 1 `RetrievePropertiesEx` over a session-lived container view (plus `ContinueRetrievePropertiesEx` pages; view recreated after re-login) | every cycle | clusters with `name`, `host`; hosts with `name`, vSAN `enabled`, `clusterInfo.uuid`, `nodeUuid`; cluster vSAN flag and uuid derived from members (rule in the Addendum); apply include/exclude; node uuid to host MoRef |
 | 3. Ops resource map | Suite API `GET /api/resources` for VMWARE HostSystem, filtered to this vCenter by VMEntityVCID | every 12th cycle, on a change in the in-scope host set, or when a (MoRef, VCID) misses | compliance `ComplianceStitcher` pattern; resolves (MoRef, VCID) to Ops resource id; also where stale ids are detected (SKILL: a 2xx batch drops unknown ids silently) |
 | 4. Perf queries | **3 per cluster** (one per entity type) | every cycle | the API floor: one wildcard per call, cluster mandatory (MAP test 3, 4) |
-| 5. Stats push | `ceil(hosts / 100)` batch requests (and by ~1 MB) | every cycle | `SuiteApiStitcher.pushStatsBatch`; properties: none |
+| 5. Stats push | per distinct sample timestamp, `ceil(hosts / 100)` batch requests (and by ~1 MB); usually 1 to 2 timestamps per cycle | every cycle | `SuiteApiStitcher.pushStatsBatch`; properties: none |
 
 **Build 1 on the lab (1 cluster, 5 hosts):** steady state 1 + 3 + 1 = 5
 HTTP calls per cycle; 7 on refresh cycles. Perf calls: 3 x ~0.12 to 0.25 s
@@ -455,8 +455,11 @@ collect()
   │                         parse -> compact rows (hostResourceId, key, ts, value)
   │                         discard response body
   │                     hand ClusterResult to a bounded queue
-  └─ caller thread drains the queue: accumulate rows; when >=100 hosts or ~1 MB,
-        pushStatsBatch; at end push the remainder; stop at the cycle deadline
+  └─ caller thread drains the queue: accumulate rows keyed by sample
+        timestamp; a batch holds rows of ONE timestamp (pushStatsBatch takes a
+        single timestamp for the whole batch and statContentArray stamps every
+        value with it); within a timestamp group, split at >=100 hosts or
+        ~1 MB; at end push every remaining group; stop at the cycle deadline
 ```
 
 - **Parallelism is across clusters only.** A cluster's three calls run
@@ -622,6 +625,10 @@ own collector group (PLAN §6).
 - Per-mille conversion and leaf naming for all 61 keys (table-driven from
   this design, so the design and the code cannot drift).
 - Duplicate-bucket suppression across two simulated cycles.
+- Mixed-timestamp rows (a lagging host, a series whose newest non-`None`
+  value is an older bucket) land in separate push batches, each stamped
+  with its own sample timestamp; no row is pushed under another row's
+  timestamp.
 - Identity: node uuid to MoRef to Ops resource id; MoRef present in two
   vCenters resolves only under the matching VCID.
 - Fixtures for `host-domclient`, `host-domowner`, `vsan-pnic-net` are the
