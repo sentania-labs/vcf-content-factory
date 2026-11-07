@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenc="http://schemas.xmlsoap.org/soap/encoding/"
+ xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
+ xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+ xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+<soapenv:Body>
+<ExecuteSoapResponse xmlns="urn:vim25"><returnval xmlns:reflect="urn:reflect"><reflect:response>&lt;obj xmlns:xsd=&quot;http://www.w3.org/2001/XMLSchema&quot; xmlns:xsi=&quot;http://www.w3.org/2001/XMLSchema-instance&quot; xmlns=&quot;urn:vim25&quot; versionId=&quot;5.0&quot; xsi:type=&quot;ArrayOfDataObject&quot;&gt;&lt;DataObject xsi:type=&quot;VimEsxCLInetworkportstatsgetPort&quot;&gt;&lt;Broadcastpacketsreceived&gt;25038051&lt;/Broadcastpacketsreceived&gt;&lt;Broadcastpacketssent&gt;4376&lt;/Broadcastpacketssent&gt;&lt;Bytesreceived&gt;4424716733&lt;/Bytesreceived&gt;&lt;Bytessent&gt;1750003823&lt;/Bytessent&gt;&lt;Multicastpacketsreceived&gt;128837&lt;/Multicastpacketsreceived&gt;&lt;Multicastpacketssent&gt;15161&lt;/Multicastpacketssent&gt;&lt;Packetsreceived&gt;93208167&lt;/Packetsreceived&gt;&lt;Packetssent&gt;55338622&lt;/Packetssent&gt;&lt;PortID&gt;67109150&lt;/PortID&gt;&lt;Receivepacketsdropped&gt;736&lt;/Receivepacketsdropped&gt;&lt;Transmitpacketsdropped&gt;10&lt;/Transmitpacketsdropped&gt;&lt;Unicastpacketsreceived&gt;68041279&lt;/Unicastpacketsreceived&gt;&lt;Unicastpacketssent&gt;55319085&lt;/Unicastpacketssent&gt;&lt;/DataObject&gt;&lt;/obj&gt;</reflect:response></returnval></ExecuteSoapResponse>
+</soapenv:Body>
+</soapenv:Envelope>

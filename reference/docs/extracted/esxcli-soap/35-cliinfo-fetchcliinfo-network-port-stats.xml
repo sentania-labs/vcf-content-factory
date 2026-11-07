@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenc="http://schemas.xmlsoap.org/soap/encoding/"
+ xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
+ xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+ xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+<soapenv:Body>
+<ExecuteSoapResponse xmlns="urn:vim25"><returnval xmlns:reflect="urn:reflect"><reflect:response>&lt;obj xmlns:xsd=&quot;http://www.w3.org/2001/XMLSchema&quot; xmlns:xsi=&quot;http://www.w3.org/2001/XMLSchema-instance&quot; xmlns=&quot;urn:vim25&quot; versionId=&quot;5.0&quot; xsi:type=&quot;VimCLIInfoInfo&quot;&gt;&lt;name&gt;network.port.stats&lt;/name&gt;&lt;displayName&gt;stats&lt;/displayName&gt;&lt;help&gt;Commands to get port statistics&lt;/help&gt;&lt;method&gt;&lt;name&gt;get&lt;/name&gt;&lt;displayName&gt;get&lt;/displayName&gt;&lt;help&gt;Packet statistics for a given port.&lt;/help&gt;&lt;param&gt;&lt;name&gt;portid&lt;/name&gt;&lt;displayName&gt;portid&lt;/displayName&gt;&lt;aliases&gt;-p&lt;/aliases&gt;&lt;aliases&gt;--portid&lt;/aliases&gt;&lt;help&gt;Port ID for the port to get statistics.&lt;/help&gt;&lt;/param&gt;&lt;ret&gt;&lt;name&gt;result&lt;/name&gt;&lt;/ret&gt;&lt;hints&gt;&lt;key&gt;fields:Port&lt;/key&gt;&lt;value&gt;Packets received,Packets sent,Bytes received,Bytes sent,Broadcast packets received,Broadcast packets sent,Multicast packets received,Multicast packets sent,Unicast packets received,Unicast packets sent,Receive packets dropped,Transmit packets dropped&lt;/value&gt;&lt;/hints&gt;&lt;hints&gt;&lt;key&gt;formatter&lt;/key&gt;&lt;value&gt;simple&lt;/value&gt;&lt;/hints&gt;&lt;hints&gt;&lt;key&gt;header:Port&lt;/key&gt;&lt;value&gt;Packet statistics for port %Port ID%&lt;/value&gt;&lt;/hints&gt;&lt;/method&gt;&lt;/obj&gt;</reflect:response></returnval></ExecuteSoapResponse>
+</soapenv:Body>
+</soapenv:Envelope>

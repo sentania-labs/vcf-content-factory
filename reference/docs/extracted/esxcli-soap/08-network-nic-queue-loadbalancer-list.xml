@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenc="http://schemas.xmlsoap.org/soap/encoding/"
+ xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
+ xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+ xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+<soapenv:Body>
+<ExecuteSoapResponse xmlns="urn:vim25"><returnval xmlns:reflect="urn:reflect"><reflect:response>&lt;obj xmlns:xsd=&quot;http://www.w3.org/2001/XMLSchema&quot; xmlns:xsi=&quot;http://www.w3.org/2001/XMLSchema-instance&quot; xmlns=&quot;urn:vim25&quot; versionId=&quot;5.0&quot; xsi:type=&quot;ArrayOfDataObject&quot;&gt;&lt;DataObject xsi:type=&quot;VimEsxCLInetworknicqueueloadbalancerlistSettings&quot;&gt;&lt;DynamicQPool&gt;UA&lt;/DynamicQPool&gt;&lt;GeneveOAM&gt;UA&lt;/GeneveOAM&gt;&lt;LRO&gt;UA&lt;/LRO&gt;&lt;MacLearnLB&gt;NA&lt;/MacLearnLB&gt;&lt;NIC&gt;vmnic0&lt;/NIC&gt;&lt;PreEmptibleQ&gt;UA&lt;/PreEmptibleQ&gt;&lt;RSS&gt;UA&lt;/RSS&gt;&lt;RSSLRO&gt;UA&lt;/RSSLRO&gt;&lt;RxDynamicLB&gt;NA&lt;/RxDynamicLB&gt;&lt;RxQLatency&gt;UA&lt;/RxQLatency&gt;&lt;RxQNoFeature&gt;ND&lt;/RxQNoFeature&gt;&lt;RxQPair&gt;UA&lt;/RxQPair&gt;&lt;/DataObject&gt;&lt;DataObject xsi:type=&quot;VimEsxCLInetworknicqueueloadbalancerlistSettings&quot;&gt;&lt;DynamicQPool&gt;UA&lt;/DynamicQPool&gt;&lt;GeneveOAM&gt;UA&lt;/GeneveOAM&gt;&lt;LRO&gt;UA&lt;/LRO&gt;&lt;MacLearnLB&gt;NA&lt;/MacLearnLB&gt;&lt;NIC&gt;vmnic3&lt;/NIC&gt;&lt;PreEmptibleQ&gt;UA&lt;/PreEmptibleQ&gt;&lt;RSS&gt;UA&lt;/RSS&gt;&lt;RSSLRO&gt;UA&lt;/RSSLRO&gt;&lt;RxDynamicLB&gt;NA&lt;/RxDynamicLB&gt;&lt;RxQLatency&gt;UA&lt;/RxQLatency&gt;&lt;RxQNoFeature&gt;ND&lt;/RxQNoFeature&gt;&lt;RxQPair&gt;UA&lt;/RxQPair&gt;&lt;/DataObject&gt;&lt;/obj&gt;</reflect:response></returnval></ExecuteSoapResponse>
+</soapenv:Body>
+</soapenv:Envelope>

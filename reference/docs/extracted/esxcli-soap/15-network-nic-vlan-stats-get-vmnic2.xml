@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenc="http://schemas.xmlsoap.org/soap/encoding/"
+ xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
+ xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+ xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+<soapenv:Body>
+<ExecuteSoapResponse xmlns="urn:vim25"><returnval xmlns:reflect="urn:reflect"><reflect:fault><reflect:faultMsg>EsxCLI.CLIFault.summary</reflect:faultMsg><reflect:faultDetail>&lt;obj xmlns:xsd=&quot;http://www.w3.org/2001/XMLSchema&quot; xmlns:xsi=&quot;http://www.w3.org/2001/XMLSchema-instance&quot; xmlns=&quot;urn:vim25&quot; versionId=&quot;5.0&quot; xsi:type=&quot;LocalizedMethodFault&quot;&gt;&lt;fault xsi:type=&quot;VimEsxCLICLIFault&quot;&gt;&lt;errMsg&gt;VLAN stats are disabled for vmnic2 please enable them first.&lt;/errMsg&gt;&lt;/fault&gt;&lt;localizedMessage&gt;EsxCLI.CLIFault.summary&lt;/localizedMessage&gt;&lt;/obj&gt;</reflect:faultDetail></reflect:fault></returnval></ExecuteSoapResponse>
+</soapenv:Body>
+</soapenv:Envelope>

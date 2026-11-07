@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenc="http://schemas.xmlsoap.org/soap/encoding/"
+ xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
+ xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+ xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+<soapenv:Body>
+<RetrievePropertiesExResponse xmlns="urn:vim25"><returnval><objects><obj type="VirtualMachine">vm-5017</obj><propSet><name>config.extraConfig[&quot;ethernet0.ctxPerDev&quot;]</name><val xsi:type="OptionValue"><key>ethernet0.ctxPerDev</key><value xsi:type="xsd:string">3</value></val></propSet><propSet><name>config.extraConfig[&quot;ethernet0.pnicFeatures&quot;]</name><val xsi:type="OptionValue"><key>ethernet0.pnicFeatures</key><value xsi:type="xsd:string">4</value></val></propSet><propSet><name>config.extraConfig[&quot;ethernet0.udpRSS&quot;]</name><val xsi:type="OptionValue"><key>ethernet0.udpRSS</key><value xsi:type="xsd:string">1</value></val></propSet><propSet><name>name</name><val xsi:type="xsd:string">vcf-lab-wld01-en01</val></propSet></objects></returnval></RetrievePropertiesExResponse>
+</soapenv:Body>
+</soapenv:Envelope>

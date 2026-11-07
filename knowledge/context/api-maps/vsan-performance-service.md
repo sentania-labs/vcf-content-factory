@@ -486,6 +486,133 @@ All 5 `vsan-esa-disk-layer` ids in a fresh query, all 5 in this session's `vsan-
 - Ops closed an idle keep-alive connection after ~30 s (`RemoteDisconnected` on the next request). A Java client that keeps a Suite API connection between cycles must expect that and reconnect `[observed 2026-11-06, once]`.
 - What remains on devel: the two test keys above, on those two resources; no per-key delete exists, data ages out. One Ops auth token from the first push script was not released (the script stopped on the dropped connection after the push); it expires on its own.
 
+## P3: all 69 types, no labels (measured 2026-11-07)
+
+Answers Prerequisite P3 and open questions Q4 and Q5 of `knowledge/designs/vsanperf-mp-v3.md`. Same vCenter (9.1.1.0100 build 25784172), cluster `domain-c6004` (5 hosts, ESXi 9.1.1.0100 build 25782009) and transport as "Build 2 entity types": release `8.0.3.0`, raw `http.client`, gzip, one session for the 69 queries (logged out `204`), one wildcard spec per call, serial, window `2026-11-07T13:47:50Z` to `13:54:50Z` (7 min), and **no `labels` key** on any call. Types: the 69 keys of the Python pack's `perfsvc_model.ENTITIES` + `perfsvc_model_extra.ENTITIES` at fork tag `v2.0.0-rc.2`, 33 shipped (kind in `metric_scope.COVERED`) and 36 new (exactly the design's §New types). Verbatim bodies, exact requests and per-file sizes: `reference/docs/extracted/vsan-perfsvc-json/PROVENANCE-2026-11-07-all.md` (69 `all-<type>.json`, 26 `probe-explicit-*.json`) `[observed 2026-11-07]`.
+
+### Per-type results
+
+"Labels returned / model" compares the distinct labels returned with the type's label list in the PY model (both files, `Actual` twins included, since the model carries them). "Beyond model" = returned but not in the model. Every type with data returned **every** model label (0 missing on all 41) `[observed 2026-11-07]`.
+
+| Type | Set | Result | Entities | Series | Labels returned / model | Labels beyond model | entityRefId form | Wire / decoded B | ms |
+|---|---|---|---|---|---|---|---|---|---|
+| `cache-disk` | shipped | empty echo | 0 | 0 | 0 / 8 | 0 | n/a (echo) | 119 / 129 | 179.5 |
+| `capacity-disk` | shipped | empty echo | 0 | 0 | 0 / 13 | 0 | n/a (echo) | 121 / 132 | 147.4 |
+| `cluster-domclient` | shipped | data | 1 | 14 | 14 / 14 | 0 | `<vsan cluster uuid>` | 512 / 4,774 | 128.7 |
+| `cluster-domcompmgr` | shipped | data | 1 | 15 | 15 / 15 | 0 | `<vsan cluster uuid>` | 507 / 5,092 | 107.8 |
+| `cluster-domowner` | shipped | data | 1 | 46 | 46 / 46 | 0 | `<vsan cluster uuid>` | 1,045 / 15,407 | 134.3 |
+| `cluster-esa-dedup-domclient-io` | shipped | data | 1 | 42 | 42 / 24 | 18 | `<vsan cluster uuid>` | 823 / 14,182 | 141.8 |
+| `cluster-rdt-network-latency` | shipped | data | 1 | 17 | 17 / 17 | 0 | `<vsan cluster uuid>` | 575 / 5,747 | 112.7 |
+| `cluster-zdom-top-stats` | shipped | data | 1 | 12 | 12 / 12 | 0 | `<vsan cluster uuid>` | 466 / 4,123 | 122.0 |
+| `cmmds-net` | shipped | data | 5 | 50 | 10 / 10 | 0 | `<nodeUuid>` | 1,108 / 17,291 | 164.8 |
+| `host-domclient` | shipped | data | 5 | 390 | 78 / 78 | 0 | `<nodeUuid>` | 7,815 / 129,720 | 131.1 |
+| `host-domcompmgr` | shipped | data | 5 | 410 | 82 / 82 | 0 | `<nodeUuid>` | 8,028 / 136,120 | 121.1 |
+| `host-domowner` | shipped | data | 5 | 1440 | 288 / 288 | 0 | `<nodeUuid>` | 25,488 / 482,103 | 129.0 |
+| `host-esa-dedup-domclient-io` | shipped | data | 5 | 210 | 42 / 24 | 18 | `<nodeUuid>` | 3,830 / 70,831 | 110.0 |
+| `host-zdom-top-stats` | shipped | data | 5 | 95 | 19 / 19 | 0 | `<nodeUuid>` | 2,548 / 32,055 | 107.0 |
+| `ioinsight` | shipped | empty echo | 0 | 0 | 0 / 82 | 0 | n/a (echo) | 118 / 128 | 117.4 |
+| `rdt-network-latency` | shipped | data | 5 | 85 | 17 / 17 | 0 | `<nodeUuid>` | 2,339 / 28,650 | 367.6 |
+| `virtual-disk` | shipped | data | 148 | 1036 | 7 / 7 | 0 | datastore path (`<ns uuid>/...vmdk`) | 20,752 / 372,600 | 273.0 |
+| `virtual-machine` | shipped | data | 30 | 240 | 8 / 8 | 0 | `<VM instanceUuid>` | 5,634 / 84,490 | 142.3 |
+| `vnic-rdt-network-latency` | shipped | data | 5 | 85 | 17 / 17 | 0 | `<nodeUuid>|vmkN` | 2,407 / 28,700 | 115.9 |
+| `vsan-cluster-capacity` | shipped | data | 1 | 6 | 6 / 6 | 0 | `<vsan cluster uuid>` | 427 / 2,245 | 105.0 |
+| `vsan-cpu` | shipped | data | 5 | 35 | 7 / 7 | 0 | `<nodeUuid>` | 865 / 12,188 | 116.2 |
+| `vsan-direct-cluster` | shipped | empty echo | 0 | 0 | 0 / 8 | 0 | n/a (echo) | 127 / 138 | 127.5 |
+| `vsan-direct-host` | shipped | empty echo | 0 | 0 | 0 / 8 | 0 | n/a (echo) | 124 / 135 | 119.5 |
+| `vsan-esa-disk-layer` | shipped | data | 5 | 190 | 38 / 38 | 0 | `<vsan disk uuid>` | 4,122 / 64,047 | 130.0 |
+| `vsan-esa-disk-scsifw` | shipped | data | 5 | 80 | 16 / 16 | 0 | `<vsan disk uuid>` | 2,360 / 27,425 | 123.0 |
+| `vsan-file-service` | shipped | empty echo | 0 | 0 | 0 / 8 | 0 | n/a (echo) | 125 / 136 | 110.1 |
+| `vsan-host-net` | shipped | data | 5 | 80 | 16 / 16 | 0 | `<nodeUuid>` | 2,091 / 27,136 | 135.1 |
+| `vsan-memory` | shipped | data | 5 | 250 | 50 / 50 | 0 | `<nodeUuid>` | 5,960 / 85,581 | 125.2 |
+| `vsan-pnic-net` | shipped | data | 10 | 650 | 65 / 65 | 0 | `<nodeUuid>|vmnicN` | 11,315 / 211,228 | 124.1 |
+| `vsan-tcpip-stats` | shipped | data | 5 | 160 | 32 / 32 | 0 | `<nodeUuid>|defaultTcpipStack` | 3,552 / 53,267 | 122.0 |
+| `vsan-vnic-net` | shipped | data | 5 | 320 | 64 / 64 | 0 | `<nodeUuid>|defaultTcpipStack|vmkN` | 5,658 / 105,441 | 135.3 |
+| `vscsi` | shipped | data | 148 | 1184 | 8 / 8 | 0 | `<VM instanceUuid>|scsiN:M` | 24,059 / 414,216 | 251.3 |
+| `zdom-vtx` | shipped | data | 5 | 355 | 71 / 71 | 0 | `<nodeUuid>` | 6,976 / 119,955 | 109.8 |
+| `clom-disk` | new | fault `InvalidArgument` | - | - | 0 / 3 | 0 | n/a (fault) | 140 / 151 | 38.8 |
+| `clom-host` | new | fault `InvalidArgument` | - | - | 0 / 2 | 0 | n/a (fault) | 140 / 151 | 38.9 |
+| `cluster-esa-dedup-domcompmgr-io` | new | data | 1 | 42 | 42 / 24 | 18 | `<vsan cluster uuid>` | 947 / 14,339 | 163.6 |
+| `cluster-esa-dedup-domowner-io` | new | data | 1 | 82 | 82 / 24 | 58 | `<vsan cluster uuid>` | 1,622 / 28,228 | 140.3 |
+| `cluster-esa-dedup-store-chunksvc` | new | data | 1 | 33 | 33 / 27 | 6 | `<vsan cluster uuid>` | 876 / 11,184 | 117.1 |
+| `cluster-esa-dedup-store-hashsvc` | new | data | 1 | 39 | 39 / 34 | 5 | `<vsan cluster uuid>` | 953 / 13,154 | 123.6 |
+| `cluster-pmem` | new | fault `NotSupported` `pmemisunavailable` | - | - | 0 / 8 | 0 | n/a (fault) | 273 / 426 | 36.8 |
+| `cluster-remotedomclient` | new | empty echo | 0 | 0 | 0 / 8 | 0 | n/a (echo) | 131 / 142 | 91.3 |
+| `cluster-resync` | new | empty echo | 0 | 0 | 0 / 24 | 0 | n/a (echo) | 123 / 133 | 124.7 |
+| `cmmds-workload` | new | fault `InvalidArgument` | - | - | 0 / 23 | 0 | n/a (fault) | 140 / 151 | 40.0 |
+| `computeCluster-remotedomclient` | new | empty echo | 0 | 0 | 0 / 8 | 0 | n/a (echo) | 138 / 149 | 92.6 |
+| `computeHost-remotedomclient` | new | empty echo | 0 | 0 | 0 / 11 | 0 | n/a (echo) | 135 / 146 | 81.8 |
+| `ddh-disk` | new | fault `InvalidArgument` | - | - | 0 / 10 | 0 | n/a (fault) | 140 / 151 | 39.0 |
+| `disk-group` | new | empty echo | 0 | 0 | 0 / 38 | 0 | n/a (echo) | 119 / 129 | 109.8 |
+| `dom-world-cpu` | new | data | 330 | 990 | 3 / 3 | 0 | `<nodeUuid>|VSAN_0x<hex>_<role>|<world id>` | 23,371 / 400,681 | 159.5 |
+| `heap-memory` | new | fault `InvalidArgument` | - | - | 0 / 1 | 0 | n/a (fault) | 140 / 151 | 60.5 |
+| `host-cpu` | new | data | 165 | 495 | 3 / 3 | 0 | `<nodeUuid>|cpu-<n>` (160) and `<nodeUuid>` (5) | 11,776 / 197,161 | 158.8 |
+| `host-esa-dedup-domcompmgr-io` | new | data | 5 | 210 | 42 / 24 | 18 | `<nodeUuid>` | 4,249 / 71,452 | 154.7 |
+| `host-esa-dedup-domowner-io` | new | data | 5 | 410 | 82 / 24 | 58 | `<nodeUuid>` | 7,699 / 140,721 | 127.9 |
+| `host-esa-dedup-store-chunksvc` | new | data | 5 | 165 | 33 / 27 | 6 | `<nodeUuid>` | 3,769 / 55,748 | 105.0 |
+| `host-esa-dedup-store-hashsvc` | new | data | 5 | 195 | 39 / 34 | 5 | `<nodeUuid>` | 4,340 / 65,563 | 119.0 |
+| `host-pmem` | new | fault `NotSupported` `pmemisunavailable` | - | - | 0 / 8 | 0 | n/a (fault) | 273 / 426 | 29.0 |
+| `host-remotedomclient` | new | empty echo | 0 | 0 | 0 / 11 | 0 | n/a (echo) | 128 / 139 | 106.3 |
+| `host-vsansparse` | new | data | 5 | 105 | 21 / 21 | 0 | `<nodeUuid>` | 2,287 / 34,806 | 133.6 |
+| `lsom-world-cpu` | new | empty echo | 0 | 0 | 0 / 2 | 0 | n/a (echo) | 123 / 133 | 116.5 |
+| `rdt-net` | new | data | 5 | 5 | 1 / 1 | 0 | `<nodeUuid>` | 410 / 2,781 | 128.5 |
+| `remote-virtual-disk` | new | fault `InvalidArgument` | - | - | 0 / 3 | 0 | n/a (fault) | 140 / 151 | 43.9 |
+| `remote-virtual-machine` | new | fault `InvalidArgument` | - | - | 0 / 6 | 0 | n/a (fault) | 140 / 151 | 37.3 |
+| `remote-vscsi` | new | fault `InvalidArgument` | - | - | 0 / 6 | 0 | n/a (fault) | 140 / 151 | 38.0 |
+| `slab-memory` | new | fault `InvalidArgument` | - | - | 0 / 1 | 0 | n/a (fault) | 140 / 151 | 40.6 |
+| `system-mem` | new | data | 5 | 15 | 3 / 3 | 0 | `<nodeUuid>` | 564 / 6,016 | 120.5 |
+| `vsan-distribution` | new | empty echo | 0 | 0 | 0 / 5 | 0 | n/a (echo) | 124 / 136 | 120.2 |
+| `vsan-dp-historical-stats` | new | data | 1 | 1 | 1 / 1 | 0 | `<vsan cluster uuid>` | 304 / 594 | 125.9 |
+| `vsan-iscsi-host` | new | empty echo | 0 | 0 | 0 / 10 | 0 | n/a (echo) | 123 / 134 | 118.8 |
+| `vsan-iscsi-lun` | new | empty echo | 0 | 0 | 0 / 10 | 0 | n/a (echo) | 122 / 133 | 104.4 |
+| `vsan-iscsi-target` | new | empty echo | 0 | 0 | 0 / 10 | 0 | n/a (echo) | 125 / 136 | 132.0 |
+
+**Totals:** 69 calls, 8.233 s wall serial, 218,360 B wire, 3,601,561 B decoded, 958 entities, 10,284 series; per-call p50 120.5 ms (128 ms over the 41 data types); slowest `rdt-network-latency` 368 ms (single outlier, 116 ms in Build 2), `virtual-disk` 273, `vscsi` 251. Shipped 33: 27 data / 6 echo / 0 fault, 423 entities, 7,497 series, 151,996 / 2,555,412 B (matches the JSON "no labels" row of the SOAP vs JSON comparison: 423 / 7,497, 153 KB / 2.56 MB). New 36: 14 data / 11 echo / 11 fault, 535 entities, 2,787 series, 66,364 / 1,046,149 B, 3.52 s summed call time `[observed 2026-11-07]`.
+
+- **Every new-type count in the design's REC column holds over JSON:** 14 return entities, 11 empty echo, 11 fault (9 `InvalidArgument: entityRefId`, 2 `NotSupported` `pmemisunavailable`); `host-cpu` 165 entities (160 `cpu-<n>` + 5 aggregate), `dom-world-cpu` 330 (66 per host: 48 `CompServer`, 6 `Owner`, 6 `OwnerHlpr0`, 6 `Client`; no world name repeats within a host); dedup label counts 42/82/33/39 `[observed 2026-11-07]`.
+- **Joins:** the first `|`-segment is the cluster uuid `90d067b8-0077-11f1-af60-000c297e270a` on all 12 cluster-scoped data types, and exactly the 5 node uuids of the R2 read on all 23 host-scoped data types (shipped and new) `[observed 2026-11-07]`.
+- **`dom-world-cpu` ref:** `<nodeUuid>|VSAN_0x<12 hex>_<role>|<world id>`, e.g. `dom-world-cpu:6a8859db-a52e-c523-e78c-3805253a02fc|VSAN_0x432abcf22c40_CompServer|2099225`; role one of `CompServer`, `Owner`, `OwnerHlpr0`, `Client` `[observed 2026-11-07]`.
+- **`host-cpu` ref:** `host-cpu:<nodeUuid>|cpu-<n>` (32 per host) plus a 1-part `host-cpu:<nodeUuid>` per host `[observed 2026-11-07]`.
+- **`None` tokens without the filter:** 2,226 of 20,568 tokens. Concentrated in `virtual-disk` (1,184 of 2,072, the four `NIOPS*` labels as in Build 2), `vsan-vnic-net` (440 / 640), `vsan-pnic-net` (200 / 1,300), `host-domowner` (160 / 2,880), `host-domclient` (100 / 780), `host-domcompmgr` (100 / 820), `vsan-host-net` (40 / 160), `vsan-cluster-capacity` (2 / 12). None on any new type `[observed 2026-11-07]`. Which labels carry them was not broken down beyond `virtual-disk`.
+- **`Actual` twins** are model labels, not extras: `vsan-pnic-net` 24, `vsan-tcpip-stats` 10, `vsan-vnic-net` 7 returned (41) `[observed 2026-11-07]`.
+
+### Labels beyond the Python model (210, ESA dedup types only)
+
+Only the 10 ESA dedup types return labels outside the model. The cluster and host variant of each family return the identical extra set `[observed 2026-11-07]`:
+
+- **`cluster-esa-dedup-domclient-io`, `host-esa-dedup-domclient-io`, `cluster-esa-dedup-domcompmgr-io`, `host-esa-dedup-domcompmgr-io` (18 each, same 18 on all four):** `dedupChunkReadCongestion`, `dedupChunkRecoveryUnmapCongestion`, `dedupChunkRecoveryWriteCongestion`, `dedupChunkResyncReadCongestion`, `dedupChunkUnmapCongestion`, `dedupChunkUnmapCount`, `dedupChunkWriteCongestion`, `dedupEngineReadCongestion`, `dedupEngineWriteCongestion`, `dedupHashReadCongestion`, `dedupHashRecoveryUnmapCongestion`, `dedupHashRecoveryWriteCongestion`, `dedupHashResyncReadCongestion`, `dedupHashUnmapCongestion`, `dedupHashUnmapCount`, `dedupHashWriteCongestion`, `iopsDedupChunkObjUnmap`, `iopsDedupHashObjUnmap`.
+- **`cluster-esa-dedup-domowner-io`, `host-esa-dedup-domowner-io` (58 each):** the 18 above, plus `dedupChunkReadLeafOwnerCountLocal`, `dedupChunkReadLeafOwnerCountRemote`, `dedupChunkWriteLeafOwnerCountLocal`, `dedupChunkWriteLeafOwnerCountRemote`, `dedupHashReadLeafOwnerCountLocal`, `dedupHashReadLeafOwnerCountRemote`, `dedupHashWriteLeafOwnerCountLocal`, `dedupHashWriteLeafOwnerCountRemote`, `iopsDedupChunkReadLeafOwnerLocal`, `iopsDedupChunkReadLeafOwnerRemote`, `iopsDedupChunkWriteLeafOwnerLocal`, `iopsDedupChunkWriteLeafOwnerRemote`, `iopsDedupHashReadLeafOwnerLocal`, `iopsDedupHashReadLeafOwnerRemote`, `iopsDedupHashWriteLeafOwnerLocal`, `iopsDedupHashWriteLeafOwnerRemote`, `latencyAvgDedupChunkReadLeafOwnerLocal`, `latencyAvgDedupChunkReadLeafOwnerRemote`, `latencyAvgDedupChunkWriteLeafOwnerLocal`, `latencyAvgDedupChunkWriteLeafOwnerRemote`, `latencyAvgDedupHashReadLeafOwnerLocal`, `latencyAvgDedupHashReadLeafOwnerRemote`, `latencyAvgDedupHashWriteLeafOwnerLocal`, `latencyAvgDedupHashWriteLeafOwnerRemote`, `tputDedupChunkReadLeafCompLocal`, `tputDedupChunkReadLeafCompRemote`, `tputDedupChunkReadLeafOwnerLocal`, `tputDedupChunkReadLeafOwnerRemote`, `tputDedupChunkWriteLeafCompLocal`, `tputDedupChunkWriteLeafCompRemote`, `tputDedupChunkWriteLeafOwnerLocal`, `tputDedupChunkWriteLeafOwnerRemote`, `tputDedupHashReadLeafCompLocal`, `tputDedupHashReadLeafCompRemote`, `tputDedupHashReadLeafOwnerLocal`, `tputDedupHashReadLeafOwnerRemote`, `tputDedupHashWriteLeafCompLocal`, `tputDedupHashWriteLeafCompRemote`, `tputDedupHashWriteLeafOwnerLocal`, `tputDedupHashWriteLeafOwnerRemote` (40).
+- **`cluster-esa-dedup-store-chunksvc`, `host-esa-dedup-store-chunksvc` (6 each):** `rateAsyncTaskBatches`, `rateChunksOpportunisticDelete`, `rateChunksRetained`, `rateChunksToDelete`, `totalNumBytesRetained`, `totalTputRetained`.
+- **`cluster-esa-dedup-store-hashsvc`, `host-esa-dedup-store-hashsvc` (5 each):** `capBytesPerUnitPerHashObj`, `rateDupEntries`, `rateLiveUniqEntries`, `rateStaleUniqEntries`, `rateUniqEntriesPerUnit`.
+
+2 x (18 + 18 + 58 + 6 + 5) = 210, the design's figure (§Uncataloged labels, Q3). Units for these are not in PY `UNITS`; any unit is `[unverified]`.
+
+### Q4: `pctMemUsed` is integer percent (MiB basis)
+
+- `pctMemUsed` is a **`system-mem`** label, not a `vsan-memory` one. `vsan-memory` returns 50 per-daemon labels (`*ConsumedSize`, `*ReservedSize`, `*MemAllocMax`, `*MemAllocMin`), no percent and no host total. `system-mem` returns `overcommitRatio`, `pctMemUsed`, `totalMbMemUsed` `[observed 2026-11-07]`.
+- `hardware.memorySize` (PropertyCollector, same session as the inventory read) = 269,896,261,632 B on all 5 hosts = 257,393.13 MiB `[observed 2026-11-07]`.
+- On all 10 samples (5 hosts x 2 buckets) `pctMemUsed = floor(100 x totalMbMemUsed / 257,393.13)` exactly, e.g. 132,524 → 51.49 → **51**; 143,904 → 55.91 → **55** (truncates, does not round). A decimal-MB basis gives 49.1 for a reported 51; a per-mille reading would need 515. **Percent, 0 to 100, integer; `totalMbMemUsed` is MiB** `[observed 2026-11-07; arithmetic in the PROVENANCE file]`.
+- So the Python pack's `perfsvc.PERMILLE` entry for `pctMemUsed` (divides by 10) would report 5.1 %; the design's verbatim, no-transform key is correct `[observed 2026-11-07 against PY rc.2 source]`. `overcommitRatio` was 0 on every sample.
+
+### Q5: the 9 `InvalidArgument: entityRefId` types
+
+`VsanPerfGetSupportedEntityTypes` over JSON (`{}`, 117 KB wire / 1.21 MB decoded, 40 ms, not saved) returned 70 entries whose `name` values are exactly the 69 model types (one name twice, not identified); **all 9 are advertised** on 9.1.1 `[observed 2026-11-07]`. This differs from test 2's SOAP reading ("66 advertised directly, 3 renames"), which looked at namespaced ids; the JSON `name` field was not compared with those ids `[unverified which field test 2 used]`.
+
+Explicit-ref probes, one spec per call, same window and cluster. Every form below faulted with a body **byte-identical** to the one an invented prefix (`nosuch-type:*` and `nosuch-type:<nodeUuid>`) returns: HTTP 500, `InvalidArgument`, `faultstring` `A specified parameter was not correct: entityRefId`, no `faultMessage`, 140 B wire, 36 to 65 ms. Control `host-domclient:<nodeUuid>` returned data (1 entity, 195 ms) `[observed 2026-11-07]`.
+
+| Type | Wildcard `:*` | `:<nodeUuid>` | `:<cluster uuid>` | Design form | 9.1.1 mgmt (vSAN ESA) | wld01 / wld02 (9.1.1, no vSAN) | 9.0 / 8.x vCenter |
+|---|---|---|---|---|---|---|---|
+| `clom-host` | fault | fault | fault | `<nodeUuid>` (same) | no working ref | not run | none in lab |
+| `cmmds-workload` | fault | fault | fault | `<nodeUuid>` (same) | no working ref | not run | none in lab |
+| `heap-memory` | fault | fault | fault | `<nodeUuid>\|<heap>`: heap names unknown, not tried | no working ref found | not run | none in lab |
+| `slab-memory` | fault | fault | fault | `<nodeUuid>\|<slab>`: slab names unknown, not tried | no working ref found | not run | none in lab |
+| `clom-disk` | fault | fault | fault | `<vsan disk uuid>` `52d171f6-...`: fault | no working ref | not run | none in lab |
+| `ddh-disk` | fault | fault | fault | `<vsan disk uuid>`: fault | no working ref | not run | none in lab |
+| `remote-virtual-machine` | fault | fault | fault | `<VM instanceUuid>`: fault | no working ref | not run | none in lab |
+| `remote-vscsi` | fault | fault | fault | `<VM instanceUuid>\|scsi1:0`: fault | no working ref | not run | none in lab |
+| `remote-virtual-disk` | fault | fault | fault | vdisk path: fault | no working ref | not run | none in lab |
+
+**Answer on 9.1.1:** advertised, but the query handler rejects every ref form tried, wildcard and explicit, exactly as it rejects an unknown prefix. On this build they behave as "no working prefix" rather than "explicit refs needed" `[observed 2026-11-07]`. Whether they are version-bound is **unanswered**: `.env` names no 9.0 or 8.x vCenter, and the only other lab vCenters (`vcf-lab-vcenter-wld01`, `-wld02`, also what devel 9.0 and 8.18 Ops monitor) are 9.1.1.0100 build 25784172 with `config.vsanHostConfig.enabled` false on all 4 hosts, so the wildcard set was not run there `[observed 2026-11-07]`. For the pak: one ~40 ms fault per type per cluster per day under fault learning, as designed.
+
 ## Object Model Candidates
 
 entityRefId formats `[observed 2026-11-06]`: cluster-scoped `<type>:<vsan cluster uuid>`; host-scoped `<type>:<host node uuid>`; `host-cpu:<node>|cpu-N`; `vsan-pnic-net:<node>|vmnicN`; `vsan-vnic-net:<node>|<stack>|vmkN`; `vnic-rdt-network-latency:<node>|vmkN`; `vsan-tcpip-stats:<node>|<stack>`; `dom-world-cpu:<node>|<world name>|<id>`; `vsan-esa-disk-*:<vsan disk uuid>`; `virtual-machine:<VM config.instanceUuid>`; `vscsi:<vm instanceUuid>|scsiX:Y`; `virtual-disk:<namespace uuid>/<path>`. VM perf uuids matched `config.instanceUuid` for 30 of 30 VMs. The full model is already in `content/sdk-adapters/vsanhostmetrics/app/perfsvc_model.py`.
