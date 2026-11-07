@@ -137,9 +137,16 @@ it is not a published pak.
   9.0.2, 8.18 (analytics-node collector) and 9.1 (records
   `knowledge/context/reviews/vsanperf-t5-devel-*-build-12.md`; reviews
   `vsanperf-build-10-review.md`, `vsanperf-build-11-review.md`); the dev
-  previews on all three devel instances are build 12. Scale tag v1.1.0.x
-  waits on T3/T4 (pak #6, builds 14/15) and the per-vCenter ceiling
-  measurement. History 2026-11-06: Build 1 merged (builds 5 to 9, pak PRs
+  previews are build 16 on devel 9.0.2 (VM tier proven there, record
+  `vsanperf-t5-devel-9.0-build-16-vm-tier.md`, with live `PERF push`
+  timings) and build 12 on 8.18 and 9.1. T3/T4 (pak #6) delivered in
+  builds 14 to 18 (pak PR #10): review `vsanperf-build-15-review.md`
+  (approve, W1 to W4 fixed in build 16, CHANGELOG 1.1.0.16; builds 16 to 18
+  reviewed by Codex on #10 only). Default tiers at 70 clusters complete
+  under the deadline from cycle 4 at ~7 MB heap, the VM tier ~34 MB. Scale
+  tag v1.1.0.x waits on the per-vCenter ceiling measurement (simulator or a
+  multi-cluster vCenter) and T5 of the scale build on 8.18 and 9.1.
+  History 2026-11-06: Build 1 merged (builds 5 to 9, pak PRs
   #2 to #5 and #7), proven on the same three instances (records
   `vsanperf-t5-*-build-5/7/9.md`; build 4 review findings fixed in build 5).
   Open: key-tree alignment with the vsanhostmetrics `cptvsan|` grammar
