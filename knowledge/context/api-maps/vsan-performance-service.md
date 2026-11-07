@@ -3,13 +3,14 @@
 ## Provenance
 
 - **Authored by:** api-cartographer
-- **Target instance:** vcf-lab-vcenter-mgmt.int.sentania.net:443 (vCenter 9.1.1.0100 build 25784172, one ESA vSAN cluster `vcf-lab-mgmt-cl01`, 5 hosts 9.1.1, 30 VMs)
+- **Target instance:** vcf-lab-vcenter-mgmt.int.sentania.net:443 (vCenter 9.1.1.0100 build 25784172, one ESA vSAN cluster `vcf-lab-mgmt-cl01`, 5 hosts 9.1.1, 30 VMs; plus one standalone non-vSAN host `vcf-lab-mgmt-esx06`, first noted in the inventory round)
 - **Last updated:** 2026-11-06
 - **Update history:**
+  - 2026-11-06 (evening) — added "vim25 inventory over JSON" for design Prerequisite P1: per-object GET vs PropertyCollector for the cluster/host inventory reads, the `configurationEx` sub-path fault, and verbatim JSON samples for `host-domclient`, `host-domowner`, `vsan-pnic-net` (Build 1 labels), `VsanPerfQueryNodeInformation` and the RetrievePropertiesEx read, under `reference/docs/extracted/vsan-perfsvc-json/`. Earlier sections untouched and not re-verified this round.
   - 2026-11-06 (later) — added "JSON API transport": vSphere JSON-over-HTTP (`/sdk/vim25/<release>/vsan/...`) measured against SOAP on the same cluster and window; verbatim samples added under `reference/docs/extracted/vsan-perfsvc-json/`.
   - 2026-11-06 — initial mapping. Answers the collector questions in `knowledge/context/investigations/2026-11-06-vsanhostmetrics-scale-plan.md` §3: batching limits, cluster-omitted calls, labels, window/interval, concurrency, session cost. Also captured one full raw collection cycle to `/mnt/holding/vsan-perfsvc-recording-2026-11-06/` (simulator seed; local-only artifact, outside the repo and not reproducible from it; regenerate with the procedure in the Recording section).
 - **Evidence basis:** live API calls (JSON section: raw HTTPS from Python `http.client`, no SDK; other sections: pyVmomi 9.0.0.0 with the pack's vendored bindings, vsan binding version `vsan.version.v9_0_0_0`; server advertises urn:vsan 9.1.1.0); vendored type definitions in `content/sdk-adapters/vsanhostmetrics/app/vendor/vsanmgmtObjects.py`.
-- **Notes:** Read-only. Only `VsanPerfQueryPerf`, `VsanPerfGetSupportedEntityTypes`, `VsanPerfGetAggregatedEntityTypes`, `VsanPerfQueryNodeInformation`, `VsanPerfQueryStatsObjectInformation`, vim25 property reads, and a GET of `/sdk/vsanServiceVersions.xml` were issued. **Only one vSAN cluster exists in this vCenter**, so every cross-cluster conclusion is single-cluster evidence. Timings are wall-clock from a workstation on the lab LAN; serial loops varied 6 to 22 s run to run on the same work, so treat single numbers as noisy.
+- **Notes:** Read-only. Only `VsanPerfQueryPerf`, `VsanPerfGetSupportedEntityTypes`, `VsanPerfGetAggregatedEntityTypes`, `VsanPerfQueryNodeInformation`, `VsanPerfQueryStatsObjectInformation`, vim25 property reads, and a GET of `/sdk/vsanServiceVersions.xml` were issued. The inventory round added only vim25 property GETs, `CreateContainerView`, `RetrievePropertiesEx`, `DestroyView`, Login and Logout. **Only one vSAN cluster exists in this vCenter**, so every cross-cluster conclusion is single-cluster evidence. Timings are wall-clock from a workstation on the lab LAN; serial loops varied 6 to 22 s run to run on the same work, so treat single numbers as noisy.
 
 ## Connection
 
@@ -235,6 +236,95 @@ Top level is a JSON array of `VsanPerfEntityMetricCSV`. Every object carries `_t
 
 Use the JSON API. It reaches the same vsan-health handlers with identical batching limits, fault keys and cluster requirement, matches or beats SOAP on wall time, and has the same ~7 calls/s ceiling, so the collector design from the SOAP sections carries over unchanged. It removes the need for the vim25 and vSAN SDK jars: a Java 11+ `HttpClient` plus Jackson (or Gson) and four small POJOs (`QuerySpec`, `EntityMetricCSV`, `MetricSeriesCSV`, `MetricId`) cover it. Pin the release id to the oldest one the pak supports that the vCenter accepts (8.0.3.0 worked here; 8.0.0.0 did not), or read `about.apiVersion` at connect. Rules to build in: always send `_typeName` on specs, UTC dates only, `Accept-Encoding: gzip`, the `vmware-api-session-id` header on one session per adapter instance reused across cycles (re-login once on `NotAuthenticated`), one wildcard type per call, parse `None` tokens, and dispatch on `faultMessage[].key`. The cost is ~40% more wire bytes and a larger decoded body than SOAP; stream-parse the array if memory matters. Unverified: JSON API availability on vCenter releases older than 8.0U1 (the JSON API arrived in 8.0U1 `[inferred from docs, not checked here]`), and behaviour across multiple clusters.
 
+## vim25 inventory over JSON (measured 2026-11-06)
+
+Answers design Prerequisite P1 (`knowledge/designs/vsanperf-mp-v1.md`). Same vCenter, release id `8.0.3.0` (accepted for Login, vim25 reads and vSAN calls), raw `http.client`, `Accept-Encoding: gzip`, one `vmware-api-session-id` session per run. Two sessions were used (the first exposed the cluster-path fault, the second measured the fix); both were logged out (`204`). Wall times are from a workstation on the lab LAN `[observed 2026-11-06]`.
+
+Lab inventory seen: `group-d1` root, `datacenter-3`, host folder `group-h5`, one cluster `domain-c6004` (`vcf-lab-mgmt-cl01`, 5 hosts, all vSAN ESA) **plus one standalone non-vSAN host** `host-31155` (`vcf-lab-mgmt-esx06`, parent `ComputeResource` `domain-s31156`), 6 HostSystems total `[observed 2026-11-06]`. ServiceContent ids: `propertyCollector` = `propertyCollector`, `viewManager` = `ViewManager`, `rootFolder` = `group-d1` `[observed 2026-11-06]`.
+
+### Per-object property GET: top-level properties only
+
+`GET /sdk/vim25/8.0.3.0/<MoType>/<moId>/<property>` works for a **top-level** property and returns the bare value: `"vcf-lab-mgmt-cl01"` for `name`, a bare JSON array of MoRefs for `host`, a bare MoRef for `Datacenter/.../hostFolder` (no `DynamicProperty` / `_value` wrapper) `[observed 2026-11-06]`.
+
+Any dotted path faults, HTTP 500 `[observed 2026-11-06]`:
+
+| GET | fault body |
+|---|---|
+| `HostSystem/host-6011/config.vsanHostConfig.clusterInfo.nodeUuid` | `{"_typeName":"InvalidType","faultstring":"Managed object type 'HostSystem' doesn't have a 'config.vsanHostConfig.clusterInfo.nodeUuid' property."}` |
+| `HostSystem/.../config.vsanHostConfig`, `configManager.vsanSystem`, `summary.config.name` | same `InvalidType` |
+| `ClusterComputeResource/domain-c6004/configurationEx.vsanConfigInfo` and `....enabled` | same `InvalidType` |
+| `ClusterComputeResource/domain-c6004/configurationEx/vsanConfigInfo` | `{"_typeName":"InvalidRequest","faultstring":"Invalid URI format - too long"}` |
+
+So the GET path can reach the data only by fetching whole objects: cluster `configurationEx` (15,708 B decoded, 2,690 B wire, 3 ms) and per host `configManager` then `HostVsanSystem/<id>/config` (a `VsanHostConfigInfo` with `enabled`, `clusterInfo.uuid`, `clusterInfo.nodeUuid`, 1,107 B). `HostSystem/<id>/config` works but is 2.33 MB decoded / 207 KB wire / 0.14 s per host: never use it. The lab walk (root `childEntity`, `hostFolder`, folder `childEntity`, cluster `name`/`host`/`configurationEx`, host `name` x5) was 11 successful GETs at ~1 ms each; with the 2 extra GETs per host for nodeUuid it is 3 + 3 + 3 x hosts calls (21 here), linear in hosts. Not recommended `[observed 2026-11-06; call count for the nodeUuid variant derived from the per-call measurements]`.
+
+### PropertyCollector: works, with one path restriction
+
+- `POST /sdk/vim25/8.0.3.0/ViewManager/ViewManager/CreateContainerView`, body `{"container":{"_typeName":"ManagedObjectReference","type":"Folder","value":"group-d1"},"type":["ClusterComputeResource"],"recursive":true}`, returns `{"_typeName":"ManagedObjectReference","value":"session[<uuid>]<uuid>","type":"ContainerView"}` (2.3 ms, 174 B). The view moId embeds the vpxd session key, so the view dies with the session `[observed 2026-11-06; lifetime inferred from pattern]`.
+- `POST .../PropertyCollector/propertyCollector/RetrievePropertiesEx`, body `{"specSet":[PropertyFilterSpec],"options":{"_typeName":"RetrieveOptions"}}`. `_typeName` was sent on every spec object; the run did not test omitting it `[observed 2026-11-06]`.
+- `POST .../ContainerView/<view moId>/DestroyView`, body `{}`, returns `204`, 1.2 ms `[observed 2026-11-06]`.
+
+**The cluster vSAN paths in the design are not retrievable.** Every sub-path of `configurationEx` faults `InvalidProperty`, HTTP 500, in RetrievePropertiesEx, whether alone or mixed with valid paths `[observed 2026-11-06]`:
+
+| pathSet entry | fault body |
+|---|---|
+| `configurationEx.vsanConfigInfo.enabled` | `{"_typeName":"InvalidProperty","name":"configurationEx.vsanConfigInfo.enabled"}` |
+| `configurationEx.vsanConfigInfo.defaultConfig.uuid` | same, `name` = that path |
+| `configurationEx.vsanConfigInfo.defaultConfig` | same |
+| `configurationEx.vsanConfigInfo` | same |
+
+`configurationEx` itself works (val `_typeName` `ClusterConfigInfoEx`, with `vsanConfigInfo: {"_typeName":"VsanClusterConfigInfo","enabled":true,"defaultConfig":{"uuid":"90d067b8-...","autoClaimStorage":false},"vsanEsaEnabled":true}`). Probable cause: `configurationEx` is declared as the base type `ComputeResourceConfigInfo` on ComputeResource, so subtype fields are not addressable as paths `[inferred from pattern; SOAP not re-tested]`. Host paths below `config` (`config.vsanHostConfig.enabled`, `.clusterInfo.uuid`, `.clusterInfo.nodeUuid`, `config.network.pnic`) all work `[observed 2026-11-06]`.
+
+Single-call shapes that worked, ContainerView of clusters traversed `view` then `ComputeResource.host`, first call plus 10 repeats on one session (cluster-only: one call) `[observed 2026-11-06]`:
+
+| Shape | Cluster paths | Host paths | time p50 (min/max) | wire / decoded |
+|---|---|---|---|---|
+| R2 (recommended) | `name`, `host` | `name`, `config.vsanHostConfig.enabled`, `config.vsanHostConfig.clusterInfo.uuid`, `config.vsanHostConfig.clusterInfo.nodeUuid` | 16.8 ms (15.7 / 22.5; 22.5 = first call) | 908 B / 9,821 B |
+| R3 | `name`, `configurationEx`, `host` | `name`, `config.vsanHostConfig.clusterInfo.nodeUuid` | 17.9 ms (15.7 / 19.1) | 3,842 B / 31,366 B |
+| cluster only | `name`, `configurationEx` | (none) | 2.8 ms | 3,509 B / 26,824 B |
+| hosts by cluster MoRef, no view | (ObjectSpec per cluster MoRef, `skip:true`, traverse `host`) | `name`, `...nodeUuid` | 14 to 35 ms (n=6) | 555 B / 4,602 B |
+
+R2 request body, verbatim apart from the view moId `[observed 2026-11-06]`:
+
+```json
+{"specSet":[{"_typeName":"PropertyFilterSpec",
+  "propSet":[{"_typeName":"PropertySpec","type":"ClusterComputeResource","pathSet":["name","host"]},
+             {"_typeName":"PropertySpec","type":"HostSystem","pathSet":["name","config.vsanHostConfig.enabled","config.vsanHostConfig.clusterInfo.uuid","config.vsanHostConfig.clusterInfo.nodeUuid"]}],
+  "objectSet":[{"_typeName":"ObjectSpec","obj":{"_typeName":"ManagedObjectReference","value":"<view moId>","type":"ContainerView"},"skip":true,
+    "selectSet":[{"_typeName":"TraversalSpec","name":"v","type":"ContainerView","path":"view","skip":false,
+      "selectSet":[{"_typeName":"TraversalSpec","name":"ch","type":"ComputeResource","path":"host","skip":false}]}]}]}],
+ "options":{"_typeName":"RetrieveOptions"}}
+```
+
+Response shape (verbatim sample `reference/docs/extracted/vsan-perfsvc-json/retrievepropertiesex-cluster-hosts-2026-11-06.json`) `[observed 2026-11-06]`:
+
+- `{"_typeName":"RetrieveResult","objects":[ObjectContent...]}`. No `token` at this size (6 objects), so no `ContinueRetrievePropertiesEx`. At 70 clusters the server's default page size may produce a `token`; handle it `[inferred from pattern, unverified]`.
+- `ObjectContent` = `{"_typeName":"ObjectContent","obj":<MoRef>,"propSet":[DynamicProperty...]}`; `missingSet` absent when all paths resolve.
+- `DynamicProperty` = `{"_typeName":"DynamicProperty","name":<path>,"val":...}`. **Primitives and arrays are boxed**: `{"_typeName":"string","_value":"vcf-lab-mgmt-cl01"}`, `{"_typeName":"boolean","_value":true}`, `{"_typeName":"ArrayOfManagedObjectReference","_value":[MoRef...]}`. MoRefs and data objects are not boxed (`{"_typeName":"ManagedObjectReference","value":"domain-c6004","type":"ClusterComputeResource"}`, `{"_typeName":"ClusterConfigInfoEx",...}`).
+- `propSet` comes back **sorted by path name**, not in request order (`config...nodeUuid` before `name`); `objects` order is not the cluster's `host` order. Key by `name` and `obj.value`.
+- The cluster object and its hosts arrive in the same flat `objects` array; join via the cluster's `host` array.
+
+Cost of the recommended read per cycle: CreateContainerView + RetrievePropertiesEx + DestroyView = 3 calls, ~2.3 + ~17 + ~1.2 ≈ 20 ms, ~1.1 KB wire, for 1 cluster / 5 hosts. Keeping the view for the life of the session cuts it to 1 call per cycle; recreate it after a re-login, since the view is session-scoped `[timings observed 2026-11-06; sum derived; view lifetime inferred]`. The cold create+retrieve+destroy loop was run 5 times, but its retrieve used a faulting pathSet, so there is no measured end-to-end cold figure.
+
+**Recommendation: PropertyCollector over JSON, shape R2, in one call.** It covers design steps 1 and 2 together: cluster `name` and `host`, then for each host `name`, `nodeUuid`, vSAN enabled, and vSAN cluster uuid. Derive the cluster's vSAN-enabled flag and uuid from its member hosts: `config.vsanHostConfig.clusterInfo.uuid` equals the cluster's `configurationEx.vsanConfigInfo.defaultConfig.uuid` (`90d067b8-0077-11f1-af60-000c297e270a`, 5 of 5 hosts) `[observed 2026-11-06]`. To read the cluster flag exactly, use shape R3 (whole `configurationEx`, about 3.5 KB wire per cluster here) and read `vsanConfigInfo` client side. `configurationEx` carries DRS rules, groups and per-VM HA/DRS overrides, so its size grows with cluster config `[inferred from pattern]`. **The JAX-WS fallback is not needed** for inventory.
+
+### Build 1 perf samples over JSON
+
+One wildcard spec per call, cluster `domain-c6004`, window `2026-11-07T02:28:26Z` to `02:35:26Z` (7 min, UTC), `labels` = the design's Build 1 list for the type (6 / 38 / 17). Every requested label came back and no others; `metricsCollectInterval` 300 everywhere; no `None` tokens in these windows; two 5-minute buckets (`02:25:00,02:30:00`) per series `[observed 2026-11-06]`.
+
+| Type | entities | series | time | wire / decoded | file |
+|---|---|---|---|---|---|
+| `host-domclient` | 5 | 30 | 0.162 s | 918 B / 10,777 B | `queryperf-host-domclient-2026-11-06.json` |
+| `host-domowner` | 5 | 190 | 0.175 s | 4,475 B / 64,463 B | `queryperf-host-domowner-2026-11-06.json` |
+| `vsan-pnic-net` | 10 | 170 | 0.254 s | 3,737 B / 56,337 B | `queryperf-vsan-pnic-net-2026-11-06.json` |
+| `VsanPerfQueryNodeInformation` (`{"cluster":<MoRef>}`) | 5 nodes | n/a | 0.034 s | 468 B / 2,207 B | `querynodeinformation-2026-11-06.json` |
+
+The three perf types total **390 series**, exactly the design's "up to 390" for this cluster `[observed 2026-11-06]`.
+
+- **entityRefId formats** `[observed 2026-11-06]`: `host-domclient:<nodeUuid>`, `host-domowner:<nodeUuid>`, and **`vsan-pnic-net:<nodeUuid>|vmnicN`**, with a pipe between the node uuid and the NIC, e.g. `vsan-pnic-net:69fd149d-c1b8-aae3-bcb2-3805253936dc|vmnic1`. This matches the design's entity table (`vsan-pnic-net:<node uuid>|vmnicN`) and the earlier map entry. A `<nodeUuid>:<vmnicN>` form (colon) does **not** occur. Split on the first `:` for the type, then on `|`.
+- **pNICs reported**: vmnic1 and vmnic2 on each of the 5 hosts. Each host has vmnic0 to vmnic3, but only vmnic1/vmnic2 have a `linkSpeed` (link up) in `config.network.pnic`, and vmnic0/vmnic3 are not reported. vSAN uses `vmk2` on every node. This lab cannot tell whether the type reports "uplinks backing the vSAN vmknic" or "all link-up NICs", because they coincide here `[observed 2026-11-06; selection rule unverified]`.
+- **Non-vSAN host**: `vcf-lab-mgmt-esx06` (standalone, `config.vsanHostConfig.enabled` = `{"_typeName":"boolean","_value":false}`, `clusterInfo.nodeUuid` = `{"_typeName":"string","_value":""}`, an empty string, not absent) appears in **none** of the three responses, and NodeInformation lists only the 5 cluster nodes. All 5 node uuids in every response match the cluster hosts' `nodeUuid` 1:1 `[observed 2026-11-06]`. Because the perf query is cluster-scoped, a host outside a vSAN cluster cannot appear. Not tested, since the lab has none: a non-vSAN or compute-only host *inside* a vSAN cluster, and HCI Mesh client clusters. The inventory should treat an empty `nodeUuid` as "not a vSAN node" and leave it out of the node-to-host map.
+- NodeInformation entries: `version`, `hostname`, `isCmmdsMaster`, `isStatsMaster`, `vsanMasterUuid`, `vsanNodeUuid`, `diagnosticMode`. Only the stats master carries `masterInfo` (`secSinceLastStatsWrite`, `secSinceLastStatsCollect`, `statsIntervalSec` 300, `statsDirectoryPercentFree`, `verboseMode` false). `hostname` is the host's vCenter `name` here (FQDN), but join on `vsanNodeUuid` `[observed 2026-11-06]`.
+
 ## Object Model Candidates
 
 entityRefId formats `[observed 2026-11-06]`: cluster-scoped `<type>:<vsan cluster uuid>`; host-scoped `<type>:<host node uuid>`; `host-cpu:<node>|cpu-N`; `vsan-pnic-net:<node>|vmnicN`; `vsan-vnic-net:<node>|<stack>|vmkN`; `vnic-rdt-network-latency:<node>|vmkN`; `vsan-tcpip-stats:<node>|<stack>`; `dom-world-cpu:<node>|<world name>|<id>`; `vsan-esa-disk-*:<vsan disk uuid>`; `virtual-machine:<VM config.instanceUuid>`; `vscsi:<vm instanceUuid>|scsiX:Y`; `virtual-disk:<namespace uuid>/<path>`. VM perf uuids matched `config.instanceUuid` for 30 of 30 VMs. The full model is already in `content/sdk-adapters/vsanhostmetrics/app/perfsvc_model.py`.
@@ -243,6 +333,7 @@ entityRefId formats `[observed 2026-11-06]`: cluster-scoped `<type>:<vsan cluste
 
 - `VsanPerfNodeInformation.vsanNodeUuid` = `HostSystem.config.vsanHostConfig.clusterInfo.nodeUuid` = host-scoped entityRefId suffix → binds host-scoped perf entities to HostSystem.
 - `ClusterComputeResource.configurationEx.vsanConfigInfo.defaultConfig.uuid` = cluster-scoped entityRefId suffix.
+- `HostSystem.config.vsanHostConfig.clusterInfo.uuid` = the same vSAN cluster uuid (5 of 5 hosts). Unlike the `configurationEx` sub-paths, this one is retrievable by PropertyCollector `[observed 2026-11-06]`.
 - `VirtualMachine.config.instanceUuid` = `virtual-machine:` / `vscsi:` uuid.
 
 ## Design answers (scale plan §3)
@@ -267,3 +358,4 @@ entityRefId formats `[observed 2026-11-06]`: cluster-scoped `<type>:<vsan cluste
 - The query prefix for advertised `domcomp-sched` was not found.
 - Explicit-ref call time (~0.15 to 0.2 s per ref) was measured once per size and not profiled further. A same-session re-run gave 100 refs in 8.4 s (SOAP) / 7.2 s (JSON), so the earlier 15 to 22 s was partly server noise.
 - JSON API: session idle timeout not measured; release ids below 8.0.3.0 only tested for 8.0.0.0 and 7.0.3.0.
+- vim25 inventory: no multi-cluster vCenter, so RetrievePropertiesEx paging (`token`) and R2 cost at 70 clusters are unmeasured. A non-vSAN host inside a vSAN cluster was not available. The `vsan-pnic-net` NIC selection rule (vSAN uplinks vs link-up NICs) could not be separated here. The `configurationEx` sub-path fault was seen over JSON only; SOAP was not re-tested.

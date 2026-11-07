@@ -1,0 +1,267 @@
+{
+    "_typeName": "RetrieveResult", 
+    "objects": [
+        {
+            "_typeName": "ObjectContent", 
+            "obj": {
+                "_typeName": "ManagedObjectReference", 
+                "value": "domain-c6004", 
+                "type": "ClusterComputeResource"
+            }, 
+            "propSet": [
+                {
+                    "_typeName": "DynamicProperty", 
+                    "name": "host", 
+                    "val": {
+                        "_typeName": "ArrayOfManagedObjectReference", 
+                        "_value": [
+                            {
+                                "_typeName": "ManagedObjectReference", 
+                                "value": "host-6011", 
+                                "type": "HostSystem"
+                            }, 
+                            {
+                                "_typeName": "ManagedObjectReference", 
+                                "value": "host-6015", 
+                                "type": "HostSystem"
+                            }, 
+                            {
+                                "_typeName": "ManagedObjectReference", 
+                                "value": "host-15151", 
+                                "type": "HostSystem"
+                            }, 
+                            {
+                                "_typeName": "ManagedObjectReference", 
+                                "value": "host-31189", 
+                                "type": "HostSystem"
+                            }, 
+                            {
+                                "_typeName": "ManagedObjectReference", 
+                                "value": "host-6017", 
+                                "type": "HostSystem"
+                            }
+                        ]
+                    }
+                }, 
+                {
+                    "_typeName": "DynamicProperty", 
+                    "name": "name", 
+                    "val": {
+                        "_typeName": "string", 
+                        "_value": "vcf-lab-mgmt-cl01"
+                    }
+                }
+            ]
+        }, 
+        {
+            "_typeName": "ObjectContent", 
+            "obj": {
+                "_typeName": "ManagedObjectReference", 
+                "value": "host-6017", 
+                "type": "HostSystem"
+            }, 
+            "propSet": [
+                {
+                    "_typeName": "DynamicProperty", 
+                    "name": "config.vsanHostConfig.clusterInfo.nodeUuid", 
+                    "val": {
+                        "_typeName": "string", 
+                        "_value": "69805090-5bba-3949-88f7-38052534dfcc"
+                    }
+                }, 
+                {
+                    "_typeName": "DynamicProperty", 
+                    "name": "config.vsanHostConfig.clusterInfo.uuid", 
+                    "val": {
+                        "_typeName": "string", 
+                        "_value": "90d067b8-0077-11f1-af60-000c297e270a"
+                    }
+                }, 
+                {
+                    "_typeName": "DynamicProperty", 
+                    "name": "config.vsanHostConfig.enabled", 
+                    "val": {
+                        "_typeName": "boolean", 
+                        "_value": true
+                    }
+                }, 
+                {
+                    "_typeName": "DynamicProperty", 
+                    "name": "name", 
+                    "val": {
+                        "_typeName": "string", 
+                        "_value": "vcf-lab-mgmt-esx01.int.sentania.net"
+                    }
+                }
+            ]
+        }, 
+        {
+            "_typeName": "ObjectContent", 
+            "obj": {
+                "_typeName": "ManagedObjectReference", 
+                "value": "host-31189", 
+                "type": "HostSystem"
+            }, 
+            "propSet": [
+                {
+                    "_typeName": "DynamicProperty", 
+                    "name": "config.vsanHostConfig.clusterInfo.nodeUuid", 
+                    "val": {
+                        "_typeName": "string", 
+                        "_value": "6a8859db-a52e-c523-e78c-3805253a02fc"
+                    }
+                }, 
+                {
+                    "_typeName": "DynamicProperty", 
+                    "name": "config.vsanHostConfig.clusterInfo.uuid", 
+                    "val": {
+                        "_typeName": "string", 
+                        "_value": "90d067b8-0077-11f1-af60-000c297e270a"
+                    }
+                }, 
+                {
+                    "_typeName": "DynamicProperty", 
+                    "name": "config.vsanHostConfig.enabled", 
+                    "val": {
+                        "_typeName": "boolean", 
+                        "_value": true
+                    }
+                }, 
+                {
+                    "_typeName": "DynamicProperty", 
+                    "name": "name", 
+                    "val": {
+                        "_typeName": "string", 
+                        "_value": "vcf-lab-mgmt-esx05.int.sentania.net"
+                    }
+                }
+            ]
+        }, 
+        {
+            "_typeName": "ObjectContent", 
+            "obj": {
+                "_typeName": "ManagedObjectReference", 
+                "value": "host-15151", 
+                "type": "HostSystem"
+            }, 
+            "propSet": [
+                {
+                    "_typeName": "DynamicProperty", 
+                    "name": "config.vsanHostConfig.clusterInfo.nodeUuid", 
+                    "val": {
+                        "_typeName": "string", 
+                        "_value": "69fd149d-c1b8-aae3-bcb2-3805253936dc"
+                    }
+                }, 
+                {
+                    "_typeName": "DynamicProperty", 
+                    "name": "config.vsanHostConfig.clusterInfo.uuid", 
+                    "val": {
+                        "_typeName": "string", 
+                        "_value": "90d067b8-0077-11f1-af60-000c297e270a"
+                    }
+                }, 
+                {
+                    "_typeName": "DynamicProperty", 
+                    "name": "config.vsanHostConfig.enabled", 
+                    "val": {
+                        "_typeName": "boolean", 
+                        "_value": true
+                    }
+                }, 
+                {
+                    "_typeName": "DynamicProperty", 
+                    "name": "name", 
+                    "val": {
+                        "_typeName": "string", 
+                        "_value": "vcf-lab-mgmt-esx04.int.sentania.net"
+                    }
+                }
+            ]
+        }, 
+        {
+            "_typeName": "ObjectContent", 
+            "obj": {
+                "_typeName": "ManagedObjectReference", 
+                "value": "host-6015", 
+                "type": "HostSystem"
+            }, 
+            "propSet": [
+                {
+                    "_typeName": "DynamicProperty", 
+                    "name": "config.vsanHostConfig.clusterInfo.nodeUuid", 
+                    "val": {
+                        "_typeName": "string", 
+                        "_value": "698054c1-6eb8-30f8-8c1e-38052534ded0"
+                    }
+                }, 
+                {
+                    "_typeName": "DynamicProperty", 
+                    "name": "config.vsanHostConfig.clusterInfo.uuid", 
+                    "val": {
+                        "_typeName": "string", 
+                        "_value": "90d067b8-0077-11f1-af60-000c297e270a"
+                    }
+                }, 
+                {
+                    "_typeName": "DynamicProperty", 
+                    "name": "config.vsanHostConfig.enabled", 
+                    "val": {
+                        "_typeName": "boolean", 
+                        "_value": true
+                    }
+                }, 
+                {
+                    "_typeName": "DynamicProperty", 
+                    "name": "name", 
+                    "val": {
+                        "_typeName": "string", 
+                        "_value": "vcf-lab-mgmt-esx02.int.sentania.net"
+                    }
+                }
+            ]
+        }, 
+        {
+            "_typeName": "ObjectContent", 
+            "obj": {
+                "_typeName": "ManagedObjectReference", 
+                "value": "host-6011", 
+                "type": "HostSystem"
+            }, 
+            "propSet": [
+                {
+                    "_typeName": "DynamicProperty", 
+                    "name": "config.vsanHostConfig.clusterInfo.nodeUuid", 
+                    "val": {
+                        "_typeName": "string", 
+                        "_value": "69805998-46aa-aafb-3dd4-38052534e318"
+                    }
+                }, 
+                {
+                    "_typeName": "DynamicProperty", 
+                    "name": "config.vsanHostConfig.clusterInfo.uuid", 
+                    "val": {
+                        "_typeName": "string", 
+                        "_value": "90d067b8-0077-11f1-af60-000c297e270a"
+                    }
+                }, 
+                {
+                    "_typeName": "DynamicProperty", 
+                    "name": "config.vsanHostConfig.enabled", 
+                    "val": {
+                        "_typeName": "boolean", 
+                        "_value": true
+                    }
+                }, 
+                {
+                    "_typeName": "DynamicProperty", 
+                    "name": "name", 
+                    "val": {
+                        "_typeName": "string", 
+                        "_value": "vcf-lab-mgmt-esx03.int.sentania.net"
+                    }
+                }
+            ]
+        }
+    ]
+}

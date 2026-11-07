@@ -108,6 +108,19 @@ it is not a published pak.
 - **Owner:** sentania-labs. Public repo.
 - **Notes:** Synology DiskStation.
 
+### vsanperf
+
+- **Remote:** https://github.com/sentania-labs/vcf-content-factory-sdk-vsanperf
+- **Target:** `content/sdk-adapters/vsanperf/`
+- **adapter_kind:** vcfcf_vsanperf
+- **Owner:** sentania-labs. Public repo. Instantiated from the sdk-template
+  2026-11-06.
+- **Notes:** vSAN Performance Service metrics (JSON transport, one wildcard
+  spec per entity type per cluster) stitched onto VMWARE HostSystem as
+  instanced metrics; the Java port of the Python vsanhostmetrics pack.
+  Design: `knowledge/designs/vsanperf-mp-v1.md`; plan:
+  `knowledge/context/investigations/2026-11-06-vsanhostmetrics-scale-plan.md`.
+
 ## Third-party Python Integration SDK paks (forks, contribute upstream)
 
 Registered 2026-10-13 on Scott's instruction ("I would like to fork these so we
