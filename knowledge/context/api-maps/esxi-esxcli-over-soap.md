@@ -186,13 +186,13 @@ Every lab host is ESXi 9.1.1.0100 build 25782009 and every vCenter is 9.1.1.0100
 
 ## Object model candidates
 
-- **HostSystem (VMWARE, stitched):** per-vmnic instanced counters from `nic stats get` (key on `Name`); properties driver, firmware, driver version, ENS or not (inferred from the NetQueue fault), RSS/DRSS/VMDQ module parameters.
+- **HostSystem (VMWARE, stitched):** per-vmnic instanced counters from `nic stats get` (key on `NICName`, the stats response's own field; `Name` is the `nic list` field it joins to); properties driver, firmware, driver version, ENS or not (inferred from the NetQueue fault), RSS/DRSS/VMDQ module parameters.
 - **VirtualMachine (VMWARE, stitched):** per-vNIC instanced counters from `port stats get`, keyed by `DVPortID` = `backing.port.portKey`; vmxnet3 RSS keys from vim25 extraConfig.
 
 ## Cross-request join keys
 
 - `HostSystem` MoRef `host-<n>` maps to executer `ManagedMethodExecuter-<n>` and `DynamicTypeManager-<n>` `[observed 2026-11-07]`.
-- `network nic list` Name = PerformanceManager host instance `vmnicN` = `config.network.pnic[].device` `[observed 2026-11-07]`.
+- `network nic list` Name = `network nic stats get` NICName = PerformanceManager host instance `vmnicN` = `config.network.pnic[].device` `[observed 2026-11-07]`.
 - `network vm port list` DVPortID = `config.hardware.device[].backing.port.portKey` `[observed 2026-11-07, 3/3]`; vNIC device key (4000) = PerformanceManager VM instance `[observed 2026-11-07]`.
 - `network vm list` WorldID feeds `vm port list -w`; PortID feeds `port stats get -p` `[observed 2026-11-07]`.
 
