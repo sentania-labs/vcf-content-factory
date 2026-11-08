@@ -708,3 +708,107 @@ decision wins; the body is not edited.
 | Q6 | Remote types resolve **only to an in-scope cluster uuid**; otherwise skipped and counted in `clusters_unresolved`, WARN once per refresh (replaces the per-kind counters in §Remote types) |
 | Q7, Q9, Q10 | Field and T5 measurements |
 | Q8 | `dom-world-cpu` per-world instances and their churn on reboot accepted; documented in REFERENCE.md and README |
+
+---
+
+## 1.2.1: Performance Service disabled (2026-11-08)
+
+Scott, 2026-11-08: "If the performance service is disabled we should cleanly
+skip it and there should be an alert." Version **1.2.1**, build **24**
+(`v1.2.1.24`). Additive to 1.2.0; earlier sections stand. Grounding:
+`knowledge/context/api-maps/vsan-osa-host-side.md` §1 (OSA-MAP),
+`knowledge/context/reviews/vsanperf-t5-devel-9.0-build-22-all-scope-all-tiers.md`
+(T5-22: the probe cluster costs 26 calls at `dashboard`, 61 to 67 at `all`,
+every cycle, pins `clusters_failed=1` and occupies `last_error`).
+
+| # | Decision |
+|---|---|
+| D1 Detection | One `VsanClusterGetConfig` (`/sdk/vim25/<release>/vsan/VsanVcClusterConfigSystem/vsan-cluster-config-system/VsanClusterGetConfig`, same namespace and session as the perf call) per in-scope cluster per cycle, first thing in the cluster task, over the existing JSON transport and session, under `call_timeout_seconds` and the cycle deadline. **Enabled iff `perfsvcConfig.enabled == true`.** Absent key or `false` = disabled (both shapes, since enable-then-disable is unverified, OSA-MAP §1). Call failure or unparseable body = **unknown**: proceed exactly as 1.2.0, push no state value (no guess). Not cached: every cycle (12 to 48 ms, ~0.7 KB, OSA-MAP; 70 clusters x 48 ms is ~3.4 s of worker time spread over `max_parallel_clusters`), so an enable or disable shows within one cycle. Not counted in `perf_calls` |
+| D2 Skip | A disabled cluster makes **zero perf calls** and none of the tier inventory reads that only serve perf (`QueryDisksForVsan`, VM ContainerView). It is a fourth outcome beside ok / failed / timed out: not in `clusters_ok`, `clusters_failed` or `clusters_timed_out`; does not set `last_error`; is never `lastAttempted`, `restartAt` or in `cutLastCycle` (does not consume rotation order). New self-metric **`Collection\|clusters_perfsvc_disabled`** (count). `clusters_in_scope` still counts it. INFO once on each transition ("Performance Service disabled on <moid> (<name>); perf collection skipped" / "...enabled; collecting"), never per cycle. On a disabled-to-enabled transition the cluster's learned state and dedup marks are cleared so its first enabled cycle re-probes. Cycle summary gains `perfsvc_disabled=N` |
+| D3 masternotfound | Unchanged on a cluster D1 reads as enabled or unknown: counted failed, `last_error` set, not learned. A stats-primary re-election (OSA-MAP §1, unverified) stays visible; the config read, not the fault, decides "disabled" |
+| D4 Cluster key | One metric, **`vSAN Perf\|Performance Service\|enabled`**, 1 = enabled, 0 = disabled, no unit suffix (unitless flag), pushed every cycle on every in-scope ClusterComputeResource whose D1 read was definite, both states, so the symptom can cancel. Own group, not `Collection`: `Collection\|*` means adapter-instance self-metrics in this pak (README, REFERENCE), and a cluster-side `Collection` group would read as one. Grammar kept (`vSAN Perf\|<group>\|<metric>`). Cost: one series per cluster, one value per cycle (70 clusters = 70 values against ~2,994 to ~8,270 per cycle): accepted |
+| D5 No property | The brief's companion property `Performance Service = enabled/disabled` is **dropped for 1.2.1**. The push path is stats-only (`CycleEngine` `pushStats`; the only string push, `pushStringProperty`, targets the adapter instance's `last_error`); a property onto a VMWARE object needs a new Suite API call and test surface for a value the metric already carries. Revisit if a user wants it in Summary |
+| D6 Symptom key | Metric, not property: a metric symptom re-evaluates on each pushed value and cancels on the next 1. A property symptom holds the last string indefinitely. Whether a metric symptom cancels when values stop (pak removed, cluster out of scope) is **unverified**; T5 step 4 checks it |
+| D7 Cluster map | The cluster-object map (`refreshClusterMap`) is today read only with `tier_cluster` on (`CycleEngine` line 694). From 1.2.1 it is read whenever a cluster is in scope (same 12-cycle cadence), so D4 lands with `tier_cluster=false`. A cluster with no Ops object counts in `clusters_unresolved`, as the cluster tier does |
+
+**Content shipped in the pak** (`content/sdk-adapters/vsanperf/symptoms/`,
+`alerts/`, `recommendations/`, listed under `bundled_content:` in
+`adapter.yaml` as the Synology pak does). `ops-recon` first (RULE-003):
+**does a native vSAN alert already cover "performance service disabled"**
+(vSAN adapter health-check alerts land on the vSAN cluster object, not
+ClusterComputeResource)? If one exists and is on by default, report it to
+Scott before authoring; his decision stands either way. Then
+`symptom-author`, then `alert-author`, serially.
+
+| Item | Spec |
+|---|---|
+| Symptom | `[VCF Content Factory] vSAN Performance Service Disabled`; adapter kind `VMWARE`, resource kind `ClusterComputeResource`; metric static, `vSAN Perf\|Performance Service\|enabled` `<` 1; severity WARNING; `wait_cycles: 2` (one Ops cycle of slack for the ~6 min cluster read-back, T5-22/V2 P2), `cancel_cycles: 1` (clear on the first 1) |
+| Alert | `[VCF Content Factory] vSAN Performance Service Is Disabled on Cluster`; criticality **WARNING**: nothing is broken in the workload, the cluster just loses its performance history; Immediate would rank it beside capacity and component faults. Impact **RISK**: a monitoring gap is a future-problem exposure (degradation would go unseen), not current health; vSAN's own health check rates it yellow, which agrees. Type/subtype: storage / configuration (alert-author picks the codes); wait/cancel 1/1 (the symptom carries the debounce) |
+| Recommendation | `[VCF Content Factory] Enable the vSAN Performance Service`: "In the vSphere Client select the cluster, then Configure > vSAN > Services > Performance Service > Edit, and enable it. Until it is enabled, VCF Content Factory vSAN Performance collects no vSAN performance metrics for this cluster or its hosts and VMs; collection starts on the first cycle after it is enabled." |
+
+**Test plan.**
+
+T1 (offline, `EngineTest` on `T.CLOCK`; replay fixtures
+`tests/fixtures/vsan-perfsvc-json/vsanclustergetconfig-{enabled,absent}.json`
+copied verbatim from `reference/docs/extracted/vsan-osa-probe/01-esa-` and
+`01-osa-vsanclustergetconfig.json`, plus a synthetic, labelled
+`vsanclustergetconfig-false.json` for `{"enabled": false}`):
+- absent and false: zero perf calls for that cluster, `clusters_perfsvc_disabled` 1,
+  `clusters_failed`/`clusters_timed_out` 0, `last_error` none, value 0 pushed on its cluster
+  resource, `lastAttempted`/`restartAt` never that cluster (two-cluster rotation case);
+- enabled: perf calls as 1.2.0, value 1 pushed;
+- config fault / timeout / bad JSON: perf calls as 1.2.0, no value pushed, not counted disabled;
+- enabled + `masternotfound` on every type: failed, `last_error` set (D3);
+- disabled then enabled: learned state and marks cleared for that cluster only, INFO once per transition;
+- `tier_cluster=false`: cluster map still read, value still pushed (D7);
+- `ReplayBudgetTest`: config call outside `perf_calls`, inside the deadline.
+
+T5 on devel 9.0.2 (`dashboard`, tier_host/cluster true, disk/vm false, N 3,
+as T5-22 pre-state). Scope: `vcf-lab-mgmt-cl01` (on) and
+`vcf-lab-osa-probe-cl01` (off).
+
+| Step | Expected |
+|---|---|
+| 1. Upgrade from build 22 | new engine: cl01 26 for cycles 1 to 3, then **`perf_calls` 23** (not 49), `clusters_failed` 0, `clusters_perfsvc_disabled` 1, `last_error` none, no probe `masternotfound` WARN |
+| 2. Read-back (>= 6 min) | `vSAN Perf\|Performance Service\|enabled` 0 on the probe cluster, 1 on cl01 |
+| 3. Alert | active on the probe cluster within 2 Ops cycles of the first 0; none on cl01 |
+| 4. Scott enables the service on the probe (vCenter write, his) | next cycle INFO transition line, value 1, alert cancels within 1 cycle; `perf_calls` 49 (23 + 26) on cycles 1 to 3 after, then ~46 if the OSA probe learns the same 3 dashboard empties as cl01 (OSA `disk-group`/`cache-disk`/`capacity-disk` may answer data where ESA is empty, OSA-MAP §2; the steady figure is recorded, not gated); probe hosts receive keys |
+| 5. Optional, Scott disables again | capture the `VsanClusterGetConfig` body to settle absent vs `enabled:false` after enable-then-disable (api-cartographer, RULE-016); value 0, alert back. Also remove the probe from `cluster_include` and record whether the alert cancels when values stop (D6) |
+
+Then 8.18 and 9.1 per RULE-019 (no disabled cluster there: check
+`clusters_perfsvc_disabled` 0, value 1, no alert).
+
+**Describe / docs / version.**
+- `describe.xml`: `Collection` group gains `clusters_perfsvc_disabled`,
+  `nameKey="44"`, dataType float; `resources.properties` `44=Clusters with Performance Service disabled`.
+  The cluster key is stitched (ARIA_OPS onto VMWARE): no describe entry, no label/unit.
+- `adapter.yaml`: `version: "1.2.1"`, `bundled_content:` symptoms/alerts/recommendations,
+  `stitch_targets.key_groups` gains `vSAN Perf|Performance Service`.
+- CHANGELOG `1.2.1.24`: "feat(adapter): a cluster whose vSAN Performance Service is disabled is
+  skipped (one `VsanClusterGetConfig` per cycle, no perf calls, not failed); new
+  `Collection|clusters_perfsvc_disabled`; new cluster key `vSAN Perf|Performance Service|enabled`
+  (0/1); bundled symptom, alert and recommendation."
+- README: acceptance **check 8** = the T5 table above.
+- REFERENCE.md: adapter-instance table gains `clusters_perfsvc_disabled`; a new
+  "ClusterComputeResource: Performance Service (always on)" section with one row,
+  `vSAN Perf|Performance Service|enabled`, source `VsanClusterGetConfig`, unit none,
+  Scope **both**; "Collection per cycle" notes disabled clusters make 0 perf calls;
+  a Bundled content section names the three items. (One key, not two: D5.)
+
+**D8 (added 2026-11-08): a server fault is isolated to its type.** Live on devel 9.0.2: with the probe's service now on, `cluster-rdt-network-latency` faults every call (HTTP 500 `SystemError`, "no such column: kaReset", a vSAN stats-DB defect on this OSA 9.0 cluster), and the account showed `clusters_failed=1`, 43 calls (not 46) and 1,633 series (not ~1,934).
+- **Verified from the adapter log (devel 9.0.2, build 22, 2026-11-08 13:29Z to 13:54Z; extract sections A, B, E):** what fails the probe every cycle is the **core** type `vsan-pnic-net`: "vSphere fault SystemError: A general system error occurred: RuntimeError('no such column: pfcCountRaw. DB error code: 1, please check log file for details') (HTTP 500)". `clusterTask` (~1700 to 1740) sets FAILED on a core-tier fault but does not break, so the rest is still pushed (1,633 series). The `kaReset` fault (same text with `kaReset`) hits three **optional** types: `cluster-rdt-network-latency`, `rdt-network-latency`, `vnic-rdt-network-latency`. They are isolated today but never learned (only `faultStrikes` types strike out), so the trio of WARNs repeats every hourly refresh and the calls repeat every cycle. Both are Performance Service SQLite schema errors on this OSA 9.0 cluster, server-side. The 3 calls the probe makes fewer than cl01 are `cluster-zdom-top-stats`, `host-zdom-top-stats` and `zdom-vtx` learned empty (OSA has no zDOM), not faults. The probe makes 20 calls at `dashboard`, cl01 23: 43 total. Only four things abort a cluster's remaining calls: `NotAuthenticated` twice, `ManagedObjectNotFound`, a timeout, and a stop.
+- **Rule (any tier):** a server fault (HTTP 500 vSAN fault, unparseable fault body, or `IOException` other than a timeout) on any type is a **type fault**. The cluster continues. After 3 consecutive faulting cycles (VM tier: VM runs) the type is learned-skipped on that cluster for 24 h and re-probed with the existing spread. WARN at the first fault, INFO at learn, both once per cluster and type per refresh. `faultStrikes` becomes the default for every type except `ioinsight` (exempt) and `isTypeUnavailable` (learned at once, as today). `last_error` = "cluster <moid>: <type>: <fault>" while the type is being called. It reads `none` from the cycle after learning, because a skipped type has no error to report and the learned-skips count plus the INFO line carry it.
+- **Not type faults (unchanged):** `masternotfound` on an enabled or unknown cluster (D3: cluster failed, not learned), timeouts (TIMED_OUT, abort), `NotAuthenticated`, `ManagedObjectNotFound`, batching-fault keys (ERROR, a pack defect, cluster failed).
+- **A cluster counts as failed only when:** the session fails (`NotAuthenticated` after a fresh login), its MoRef is gone (`ManagedObjectNotFound`), `masternotfound` per D3, every perf call it made this cycle failed (W1 rule, kept; config call excluded, zero calls = OK), or the post-call path throws. The vCenter login and the inventory read stay cycle failures, as today. A config-call failure alone is never a cluster failure (D1: unknown).
+- **Counters (1.2.0 semantics kept):** `optional_calls_failed` keeps its meaning (non-core type faults). New `Collection|required_calls_failed` (nameKey 45, `45=Required (core) type calls failed`) counts core-type faults, which no longer fail the cluster.
+- **T1 (EngineTest, `T.CLOCK`):** cluster-tier `SystemError` with later types still called, counted, cluster OK; learned at fault 3, call count -1 from cycle 4, `last_error` none, re-probed after 24 h simulated; core-type fault counted in `required_calls_failed`, cluster OK; an answer between faults resets the strikes; every-call-failed is still FAILED; `masternotfound` and timeout paths unchanged. Fixtures `queryperf-fault-systemerror-pfccountraw.json` (core) and `queryperf-fault-systemerror-kareset.json` (optional) under `tests/fixtures/vsan-perfsvc-json/`: class `SystemError` and faultstring **verbatim from the log lines** (the log carries the fault text, not the raw body), in the HTTP 500 JSON envelope of `reference/docs/extracted/vsan-osa-probe/05-osa-queryperf-disk-group.json`; the provenance line says exactly that. api-cartographer may still capture the raw bodies (RULE-016).
+- **T5 (probe on, `dashboard`, both clusters):** build 22 today: 43 calls, `clusters_failed` 1. 1.2.1, cycles 1 to 3 after learned state settles: `clusters_failed` 0, `required_calls_failed` 1 (`vsan-pnic-net`), `optional_calls_failed` 5 (`vsan-cpu`, `vsan-memory` and the three RDT latency types; measured on build 24), `last_error` names one of them. From cycle 4: both counters 0, steady **37 calls** (43 - 6; cl01 23, probe 14), learned skips +6, `last_error` none. The probe's hosts lose those six types' keys while learned; accepted, they never answer. README check 8 gains: "A type that faults on the server (devel: `cluster-rdt-network-latency` on the OSA probe) is counted, named in `last_error` for three cycles, then skipped for 24 h; the cluster is never counted failed for it."
+
+**1.2.1 amendments, 2026-11-08, after build 23 review** (`knowledge/context/reviews/vsanperf-build-23-review.md`). Orchestrator decisions 2026-11-08 under Scott's direction ("If the performance service is disabled we should cleanly skip it and there should be an alert"); the B1 narrowing (parsed faults only, strikes commit only on an OK cluster) is to be confirmed by Scott. These supersede the D2, D3 and D8 text above where they differ.
+- **D8, what strikes:** only a server-side vSphere fault with a fault class (`SystemError`, `InvalidArgument`, `NotFound`, ...) strikes its type. A transport `IOException` never strikes and keeps 1.2.0 handling: a 5xx with no fault body (`StatusException`), a connection reset, a read error, or an over-cap body (`OverCapException`).
+- **D8, when strikes commit:** at the end of the cluster task, and only when the cluster ends OK with at least one successful call. A cluster where every call failed is FAILED and learns nothing; that cycle's strikes are dropped, because a fault on every call is not a type fault (review B1: a 3-cycle 503 outage learned every type and went silent-OK).
+- **D8, all learned:** a cluster whose types are all learned-skipped makes zero calls. It WARNs once per refresh and `last_error` reads "cluster <moid>: all types learned-skipped; no perf call this cycle". Only zero calls triggers that. **Deliberate:** a cluster whose core types are all learned-skipped but whose other types answer counts `clusters_ok` (the OSA schema-fault probe is exactly that case).
+- **D3 (changed from "unchanged"):** `masternotfound` fails the cluster on **any** tier (1.2.0 failed it on core only) and **breaks** the cluster loop, so a disabled cluster whose config read was unknown makes 1 failing call, not 26 to 67. CHANGELOG says so.
+- **D2, re-enable:** dedup marks are **not** cleared on a disabled-to-enabled transition. They are keyed by entity and label and only suppress buckets already pushed; newer buckets supersede. Only the cluster's learned types and its disk-map and VM-read state are reset.
+- **Alert content, names as authored:** alert `[VCF Content Factory] vSAN Performance Service disabled on cluster (vSAN Perf collection paused)`, recommendation `[VCF Content Factory] vSAN Enable Performance Service`. Alert type **storage** (18), replacing build 23's `type: 16` (Virtualization/Hypervisor, review N5). Record both in `knowledge/designs/alerts/vsanperf-performance-service-disabled.md`.
+- **Tests added by the review:** the verbatim `05-osa-queryperf-disk-group.json` capture as a fixture, asserting `VsanFault.parse(...).isMasterNotFound()` plus one engine cycle through it (W1). Engine cases: a 3-cycle 503 outage then recovery (no learning, FAILED throughout, data on the first good cycle); masternotfound on a non-core type gives FAILED with the loop broken; all types learned gives `last_error` set.
