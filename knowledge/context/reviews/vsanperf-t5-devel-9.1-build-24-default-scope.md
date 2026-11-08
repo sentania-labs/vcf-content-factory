@@ -16,7 +16,7 @@ So the 9.0.2 build 24 behaviour applies, not the single-cluster 23 calls / 1,186
 | 3. Cycles | **pass** (table) |
 | 4. Read-back | **pass**: cl01 `Performance Service\|enabled` 1.0 at 10:29, 10:34, 10:39, 10:44 (probe also 1.0); esx01 `DOM Owner\|iops` 567 / 697 / 884 / 598 at 10:25 to 10:40, advancing |
 | 5. Content | **pass**: symptom (VMWARE/ClusterComputeResource, WARNING, key `vSAN Perf\|Performance Service\|enabled` LT 1.0), alert (waitCycles 1, cancelCycles 1, recommendation attached at priority 1), recommendation `Recommendation-df-VMWARE-vSAN_Enable_Performance_Service` all exist; 0 of 5,260 active alerts are this definition (full scan; the server ignores the `alertDefinitionId` filter) |
-| Logs | adapter log found: `VsanPerfAdapter_2340.log` (the file the running instance writes; last time it was misjudged stale). Since 10:22: ERROR 0, `session[` 0, `password` 0; stack traces: only in the one failed cycle at 10:24 (see deviations), none after |
+| Logs | adapter log found: `VsanPerfAdapter_2340.log` (the file the running instance writes; the build 22 record `vsanperf-t5-devel-9.1-build-22-default-scope.md` misjudged it stale). Since 10:22: ERROR 0, `session[` 0, `password` 0; stack traces: only in the one failed cycle at 10:24 (see deviations), none after |
 
 | Cycle (bucket) | perf_calls | series_pushed | cycle_s | ok / failed / perfsvc_disabled | required / optional failed |
 |---|---|---|---|---|---|
