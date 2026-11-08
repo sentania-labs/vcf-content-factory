@@ -168,7 +168,8 @@ it is not a published pak.
   `vsanperf-t5-devel-{8.18,9.1}-build-22-default-scope.md`), but the
   per-instance adapter log was checked on neither (8.18: analytics node
   refuses key SSH; 9.1: the new instance's log file was not located,
-  collector.log only). Disk and VM tiers at scope `all` proven live
+  collector.log only; the build 24 record found it: `VsanPerfAdapter_2340.log`
+  was the live file all along). Disk and VM tiers at scope `all` proven live
   2026-11-07 (record `vsanperf-t5-devel-9.0-build-22-all-scope-all-tiers.md`:
   cl01 alone 39 steady calls, 42 on settled VM cycles, 7,028 series; whole
   cycle 6 to 29 s with the then-failing probe cluster included). v1.2.0.22
@@ -192,8 +193,15 @@ it is not a published pak.
   off then on: key 0, alert raised, 23 calls, then cancel) waits for Scott's
   vCenter write. Doc gap for the next build: README check 8 lists four
   faulting types, the lab has six (`vsan-cpu`, `vsan-memory` added). 8.18
-  and 9.1 previews of build 24 pending (RULE-019). Tag v1.2.1.24 on Scott's
-  word after phase 2 and the two previews.
+  and 9.1 previews of build 24 passed 2026-11-08 (records
+  `vsanperf-t5-devel-{8.18,9.1}-build-24-default-scope.md`; the probe
+  cluster is in scope on both: 43 calls before, 52 while relearning, 37
+  steady, clusters_failed 0; on 9.1 after one failed login cycle at the
+  restart (30 s vCenter login timeout, recovered unaided); 8.18 adapter log
+  still unreadable (analytics node) and its series drift 1,452 to 1,686
+  unexplained; key read 1 on mgmt-cl01 on both, probe key read on 9.1 only).
+  RULE-019 install record complete on 8.18, 9.0 and 9.1 for build 24; the
+  9.1.1.0100 compile leg is still skipped (jar absent). Tag v1.2.1.24 on Scott's word after phase 2.
   Tests: `T.CLOCK` pinned to 2026-11-07T14:00Z; build 22's tests were
   date-bombed from 2026-11-08 (lesson candidate).
   History 2026-11-06: Build 1 merged (builds 5 to 9, pak PRs
