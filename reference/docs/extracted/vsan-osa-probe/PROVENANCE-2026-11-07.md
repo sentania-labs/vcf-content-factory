@@ -9,7 +9,7 @@ Immutable under RULE-016; later rounds get their own PROVENANCE file.
 - **vCenter:** `vcf-lab-vcenter-mgmt.int.sentania.net`, `VMware vCenter Server 9.1.1.0100.25784172`, apiVersion 9.1.1.0.
 - **OSA cluster:** `vcf-lab-osa-probe-cl01`, MoRef `domain-c39146`, vSAN OSA (`vsanEsaEnabled=false`), vSAN cluster uuid `526f5c80-5b92-4464-0c7a-2a2c74fc2d27`, 3 hosts `vcf-lab-osa-esx01/02/03` (`host-39158`, `host-39155`, `host-39160`), all `VMware ESXi 9.0.0.0.24755229`. One all-flash disk group per host: one 50 GiB NVMe cache disk, one 500 GiB NVMe capacity disk (virtual NVMe, nested hosts).
 - **ESA cluster (comparison):** `vcf-lab-mgmt-cl01`, `domain-c6004`, uuid `90d067b8-0077-11f1-af60-000c297e270a`, 5 hosts ESXi 9.1.1.0100.25782009; host-side calls on esx01 `host-6017`.
-- **Captured:** 2026-11-07 18:41 to 18:50 America/Chicago (2026-11-08 00:41 to 00:50 UTC).
+- **Captured:** 2026-11-07 18:41 to 18:55 America/Chicago (2026-11-08 00:41 to 00:55 UTC); capture 06 last, after 18:50.
 
 ## Transport
 

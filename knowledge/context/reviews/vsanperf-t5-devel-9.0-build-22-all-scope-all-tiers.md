@@ -17,7 +17,7 @@ Performance Service has no master: every type answers HTTP 500
 `com.vmware.vsan.perfsvc.fault.masternotfound` ("The object or item referred to
 could not be found"). Totals (self-metrics) are therefore both clusters; the
 `cl01` columns come from `PERF cluster` lines (timing logging on). It stays
-`clusters_failed=1`, costs 61 calls (67 on its VM run) every cycle under `all`
+`clusters_failed=1`, costs 61 calls (63 on its first cycle before the pmem pair was learned, 67 on its VM run) every cycle under `all`
 and **26 under `dashboard`**, and is never learned (NotFound is not a learned
 fault; only its two `NotSupported` pmem types are). `last_error` carries one of
 its faults throughout. Nothing in the pak was wrong; the cl01 data pushed
@@ -31,7 +31,7 @@ normally.
 | 4. Faulting and learned | **pass**: all nine Q5 types observed faulting and learned; 16 learned-empty (list below) |
 | 5. Keys and read-back | **pass** (below) |
 | 6. Footprint | collector JVM (the adapter runs inside `vcops-collector`, pid 9902) RSS 2,934,256 KB before (16:25), 2,972,872 KB at 17:10, 2,925,452 KB at 17:24; no growth. Adapter `heap_before/after` 0.73 to 1.23 GB across cycles. Host `free`: used 7,925 MB before, 7,972 MB at 17:10 |
-| 7. Log check | **pass**: adapter log from the set to 17:51: 0 ERROR, 0 stack-trace markers, 0 `session[`, 0 `password`; WARN 117 (89 up to cycle 12: 74 are the probe cluster's masternotfound faults, logged once per type per refresh, 15 are the cl01 InvalidArgument faults logged once in cycle 1 and once in cycle 3 for the VM types; 28 more after the revert, all probe cluster) |
+| 7. Log check | **pass**: adapter log from the set to 17:51: 0 ERROR, 0 stack-trace markers, 0 `session[`, 0 `password`; WARN 117 (89 up to cycle 12: 74 are the probe cluster's masternotfound faults, logged once per type per refresh, 15 are cl01 lines for the nine optional types (first-fault WARNs, 6 in cycle 1 and 3 in cycle 3, plus their learned lines; the exact split of the 15 was not recorded); 28 more after the revert, all probe cluster) |
 | 8. Revert | **pass for cl01, see below**: one PUT 17:25:03 (scope `dashboard`, disk false, vm false, timing false), read back as set |
 
 **Step 3, cycles at `metric_scope=all`, all four tiers** (VM = a cl01 VM run;
@@ -73,7 +73,7 @@ cl01 alone, against the README's check 7.2: cycle 1 **63** (63), cycle 2 **61**
 VM runs at cycles 6 and 9 **45** (42 expected: the three VM-only Q5 types are
 still called until the third VM run), VM run at cycle 12 **42** (42). So the
 README holds for cl01 once the VM learning (three VM runs, cycle 9) has settled;
-the first two VM runs after the set cost 45, not 42, and the README's "(VM types:
+the first VM run cost 67 (the README's figure) and the second and third (cycles 6 and 9) 45, not 42, and the README's "(VM types:
 on the first three VM runs)" matches that.
 
 **Step 4, faulting and learned** (cl01 = `domain-c6004`; times of the adapter's
@@ -103,7 +103,7 @@ on the first three VM runs)" matches that.
 - Learned skips: 26 from cycle 4 = cl01 16 empty + 6 Q5 + 2 pmem, plus the probe
   cluster's 2 pmem; 29 from cycle 12 (+3 VM Q5 types).
 - Probe cluster: not learned. All its types except the pmem pair fault NotFound
-  every cycle (61 calls, 67 on its VM run, 58 / 64 optional failures).
+  every cycle (61 calls, 63 on its first, 67 on its VM run, 58 / 64 optional failures).
 
 **Step 5, key counts** (`vSAN Perf|` prefix; `stats/latest`, esx01 =
 `vcf-lab-mgmt-esx01`, cl01 = `vcf-lab-mgmt-cl01`):
