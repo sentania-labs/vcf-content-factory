@@ -1,0 +1,278 @@
+[
+    {
+        "_typeName": "VsanSmartStatsHostSummary", 
+        "hostname": "vcf-lab-osa-esx02.int.sentania.net", 
+        "smartStats": [
+            {
+                "_typeName": "VsanSmartDiskStats", 
+                "disk": "eui.ee56fe0927c046ed000c2969cacdd7e0", 
+                "stats": [
+                    {
+                        "_typeName": "VsanSmartParameter", 
+                        "parameter": "smarthealthstatus", 
+                        "value": 0
+                    }, 
+                    {
+                        "_typeName": "VsanSmartParameter", 
+                        "parameter": "smartpoweronhours", 
+                        "value": 60
+                    }, 
+                    {
+                        "_typeName": "VsanSmartParameter", 
+                        "parameter": "smartpowercyclecount", 
+                        "value": 10
+                    }, 
+                    {
+                        "_typeName": "VsanSmartParameter", 
+                        "parameter": "smartreallocatedsectorct", 
+                        "value": 0, 
+                        "threshold": 100
+                    }, 
+                    {
+                        "_typeName": "VsanSmartParameter", 
+                        "parameter": "smartdrivetemperature", 
+                        "value": 30, 
+                        "threshold": -273
+                    }, 
+                    {
+                        "_typeName": "VsanSmartParameter", 
+                        "parameter": "smartwritesectorstotct", 
+                        "value": 5000
+                    }, 
+                    {
+                        "_typeName": "VsanSmartParameter", 
+                        "parameter": "smartreadsectorstotct", 
+                        "value": 6000
+                    }
+                ]
+            }, 
+            {
+                "_typeName": "VsanSmartDiskStats", 
+                "disk": "eui.855250fe570f0148000c29601c409cce", 
+                "stats": [
+                    {
+                        "_typeName": "VsanSmartParameter", 
+                        "parameter": "smarthealthstatus", 
+                        "value": 0
+                    }, 
+                    {
+                        "_typeName": "VsanSmartParameter", 
+                        "parameter": "smartpoweronhours", 
+                        "value": 60
+                    }, 
+                    {
+                        "_typeName": "VsanSmartParameter", 
+                        "parameter": "smartpowercyclecount", 
+                        "value": 10
+                    }, 
+                    {
+                        "_typeName": "VsanSmartParameter", 
+                        "parameter": "smartreallocatedsectorct", 
+                        "value": 0, 
+                        "threshold": 100
+                    }, 
+                    {
+                        "_typeName": "VsanSmartParameter", 
+                        "parameter": "smartdrivetemperature", 
+                        "value": 30, 
+                        "threshold": -273
+                    }, 
+                    {
+                        "_typeName": "VsanSmartParameter", 
+                        "parameter": "smartwritesectorstotct", 
+                        "value": 5000
+                    }, 
+                    {
+                        "_typeName": "VsanSmartParameter", 
+                        "parameter": "smartreadsectorstotct", 
+                        "value": 6000
+                    }
+                ]
+            }
+        ]
+    }, 
+    {
+        "_typeName": "VsanSmartStatsHostSummary", 
+        "hostname": "vcf-lab-osa-esx03.int.sentania.net", 
+        "smartStats": [
+            {
+                "_typeName": "VsanSmartDiskStats", 
+                "disk": "eui.a1000a7c67c38876000c296e8e9d99d2", 
+                "stats": [
+                    {
+                        "_typeName": "VsanSmartParameter", 
+                        "parameter": "smarthealthstatus", 
+                        "value": 0
+                    }, 
+                    {
+                        "_typeName": "VsanSmartParameter", 
+                        "parameter": "smartpoweronhours", 
+                        "value": 60
+                    }, 
+                    {
+                        "_typeName": "VsanSmartParameter", 
+                        "parameter": "smartpowercyclecount", 
+                        "value": 10
+                    }, 
+                    {
+                        "_typeName": "VsanSmartParameter", 
+                        "parameter": "smartreallocatedsectorct", 
+                        "value": 0, 
+                        "threshold": 100
+                    }, 
+                    {
+                        "_typeName": "VsanSmartParameter", 
+                        "parameter": "smartdrivetemperature", 
+                        "value": 30, 
+                        "threshold": -273
+                    }, 
+                    {
+                        "_typeName": "VsanSmartParameter", 
+                        "parameter": "smartwritesectorstotct", 
+                        "value": 5000
+                    }, 
+                    {
+                        "_typeName": "VsanSmartParameter", 
+                        "parameter": "smartreadsectorstotct", 
+                        "value": 6000
+                    }
+                ]
+            }, 
+            {
+                "_typeName": "VsanSmartDiskStats", 
+                "disk": "eui.a2061d089f34a7da000c296814f68eee", 
+                "stats": [
+                    {
+                        "_typeName": "VsanSmartParameter", 
+                        "parameter": "smarthealthstatus", 
+                        "value": 0
+                    }, 
+                    {
+                        "_typeName": "VsanSmartParameter", 
+                        "parameter": "smartpoweronhours", 
+                        "value": 60
+                    }, 
+                    {
+                        "_typeName": "VsanSmartParameter", 
+                        "parameter": "smartpowercyclecount", 
+                        "value": 10
+                    }, 
+                    {
+                        "_typeName": "VsanSmartParameter", 
+                        "parameter": "smartreallocatedsectorct", 
+                        "value": 0, 
+                        "threshold": 100
+                    }, 
+                    {
+                        "_typeName": "VsanSmartParameter", 
+                        "parameter": "smartdrivetemperature", 
+                        "value": 30, 
+                        "threshold": -273
+                    }, 
+                    {
+                        "_typeName": "VsanSmartParameter", 
+                        "parameter": "smartwritesectorstotct", 
+                        "value": 5000
+                    }, 
+                    {
+                        "_typeName": "VsanSmartParameter", 
+                        "parameter": "smartreadsectorstotct", 
+                        "value": 6000
+                    }
+                ]
+            }
+        ]
+    }, 
+    {
+        "_typeName": "VsanSmartStatsHostSummary", 
+        "hostname": "vcf-lab-osa-esx01.int.sentania.net", 
+        "smartStats": [
+            {
+                "_typeName": "VsanSmartDiskStats", 
+                "disk": "eui.02b32d86f8fccd3e000c296816b66a1a", 
+                "stats": [
+                    {
+                        "_typeName": "VsanSmartParameter", 
+                        "parameter": "smarthealthstatus", 
+                        "value": 0
+                    }, 
+                    {
+                        "_typeName": "VsanSmartParameter", 
+                        "parameter": "smartpoweronhours", 
+                        "value": 60
+                    }, 
+                    {
+                        "_typeName": "VsanSmartParameter", 
+                        "parameter": "smartpowercyclecount", 
+                        "value": 10
+                    }, 
+                    {
+                        "_typeName": "VsanSmartParameter", 
+                        "parameter": "smartreallocatedsectorct", 
+                        "value": 0, 
+                        "threshold": 100
+                    }, 
+                    {
+                        "_typeName": "VsanSmartParameter", 
+                        "parameter": "smartdrivetemperature", 
+                        "value": 30, 
+                        "threshold": -273
+                    }, 
+                    {
+                        "_typeName": "VsanSmartParameter", 
+                        "parameter": "smartwritesectorstotct", 
+                        "value": 5000
+                    }, 
+                    {
+                        "_typeName": "VsanSmartParameter", 
+                        "parameter": "smartreadsectorstotct", 
+                        "value": 6000
+                    }
+                ]
+            }, 
+            {
+                "_typeName": "VsanSmartDiskStats", 
+                "disk": "eui.836e55e34b882b8d000c296fd64536bd", 
+                "stats": [
+                    {
+                        "_typeName": "VsanSmartParameter", 
+                        "parameter": "smarthealthstatus", 
+                        "value": 0
+                    }, 
+                    {
+                        "_typeName": "VsanSmartParameter", 
+                        "parameter": "smartpoweronhours", 
+                        "value": 60
+                    }, 
+                    {
+                        "_typeName": "VsanSmartParameter", 
+                        "parameter": "smartpowercyclecount", 
+                        "value": 10
+                    }, 
+                    {
+                        "_typeName": "VsanSmartParameter", 
+                        "parameter": "smartreallocatedsectorct", 
+                        "value": 0, 
+                        "threshold": 100
+                    }, 
+                    {
+                        "_typeName": "VsanSmartParameter", 
+                        "parameter": "smartdrivetemperature", 
+                        "value": 30, 
+                        "threshold": -273
+                    }, 
+                    {
+                        "_typeName": "VsanSmartParameter", 
+                        "parameter": "smartwritesectorstotct", 
+                        "value": 5000
+                    }, 
+                    {
+                        "_typeName": "VsanSmartParameter", 
+                        "parameter": "smartreadsectorstotct", 
+                        "value": 6000
+                    }
+                ]
+            }
+        ]
+    }
+]

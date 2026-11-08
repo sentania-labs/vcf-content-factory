@@ -1,0 +1,88 @@
+{
+    "_typeName": "VsanObjectInformation", 
+    "directoryName": ".vsan.stats", 
+    "vsanObjectUuid": "59718169-b5bd-a97a-c41d-38052534dfcc", 
+    "vsanHealth": "healthy", 
+    "policyAttributes": [
+        {
+            "_typeName": "KeyValue", 
+            "key": "hostFailuresToTolerate", 
+            "value": "1"
+        }, 
+        {
+            "_typeName": "KeyValue", 
+            "key": "cacheReservation", 
+            "value": "0"
+        }, 
+        {
+            "_typeName": "KeyValue", 
+            "key": "stripeWidth", 
+            "value": "0"
+        }, 
+        {
+            "_typeName": "KeyValue", 
+            "key": "proportionalCapacity", 
+            "value": "0"
+        }, 
+        {
+            "_typeName": "KeyValue", 
+            "key": "forceProvisioning", 
+            "value": "0"
+        }, 
+        {
+            "_typeName": "KeyValue", 
+            "key": "iopsLimit", 
+            "value": "0"
+        }, 
+        {
+            "_typeName": "KeyValue", 
+            "key": "checksumDisabled", 
+            "value": "0"
+        }, 
+        {
+            "_typeName": "KeyValue", 
+            "key": "subFailuresToTolerate", 
+            "value": "0"
+        }, 
+        {
+            "_typeName": "KeyValue", 
+            "key": "spbmProfileGenerationNumber", 
+            "value": "0"
+        }, 
+        {
+            "_typeName": "KeyValue", 
+            "key": "replicaPreference", 
+            "value": "Capacity"
+        }, 
+        {
+            "_typeName": "KeyValue", 
+            "key": "spbmProfileId", 
+            "value": "e5c328f6-0e0d-47ec-a6d2-768965778271"
+        }, 
+        {
+            "_typeName": "KeyValue", 
+            "key": "spbmProfileName", 
+            "value": "vcf-lab-mgmt-cl01 - Optimal Datastore Default Policy - AutoRAID"
+        }, 
+        {
+            "_typeName": "KeyValue", 
+            "key": "compressionDisabled", 
+            "value": "0"
+        }
+    ], 
+    "spbmProfileUuid": "e5c328f6-0e0d-47ec-a6d2-768965778271", 
+    "spbmProfileGenerationId": "0", 
+    "spbmComplianceResult": {
+        "_typeName": "VsanStorageComplianceResult", 
+        "checkTime": "2026-11-08T00:41:22.689467Z", 
+        "profile": "e5c328f6-0e0d-47ec-a6d2-768965778271", 
+        "objectUUID": "59718169-b5bd-a97a-c41d-38052534dfcc", 
+        "complianceStatus": "compliant", 
+        "mismatch": false, 
+        "operationalStatus": {
+            "_typeName": "VsanStorageOperationalStatus", 
+            "healthy": true
+        }, 
+        "objPolicyGenerationId": "0"
+    }
+}

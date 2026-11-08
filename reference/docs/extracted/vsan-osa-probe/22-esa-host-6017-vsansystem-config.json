@@ -1,0 +1,37 @@
+{
+    "_typeName": "VsanHostConfigInfo", 
+    "enabled": true, 
+    "hostSystem": {
+        "_typeName": "ManagedObjectReference", 
+        "value": "host-6017", 
+        "type": "HostSystem"
+    }, 
+    "clusterInfo": {
+        "_typeName": "VsanHostConfigInfoClusterInfo", 
+        "uuid": "90d067b8-0077-11f1-af60-000c297e270a", 
+        "nodeUuid": "69805090-5bba-3949-88f7-38052534dfcc"
+    }, 
+    "storageInfo": {
+        "_typeName": "VsanHostConfigInfoStorageInfo", 
+        "autoClaimStorage": false
+    }, 
+    "networkInfo": {
+        "_typeName": "VsanHostConfigInfoNetworkInfo", 
+        "port": [
+            {
+                "_typeName": "VsanHostConfigInfoNetworkInfoPortConfig", 
+                "ipConfig": {
+                    "_typeName": "VsanHostIpConfig", 
+                    "upstreamIpAddress": "224.1.2.3", 
+                    "downstreamIpAddress": "224.2.3.4"
+                }, 
+                "device": "vmk2"
+            }
+        ]
+    }, 
+    "faultDomainInfo": {
+        "_typeName": "VsanHostFaultDomainInfo", 
+        "name": ""
+    }, 
+    "vsanEsaEnabled": true
+}

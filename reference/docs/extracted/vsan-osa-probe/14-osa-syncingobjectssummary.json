@@ -1,0 +1,4 @@
+{
+    "_typeName": "InvalidType", 
+    "faultstring": "Managed object type 'VsanObjectSystem' doesn't have a 'VsanQuerySyncingVsanObjectsSummary' method."
+}

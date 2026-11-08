@@ -1,0 +1,4 @@
+{
+    "_typeName": "ReflectManagedMethodExecuterSoapResult", 
+    "response": "<obj xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xmlns=\"urn:vim25\" versionId=\"5.0\" xsi:type=\"VimEsxCLIvsanresyncbandwidthgetResyncBandwidth\"><Rate>0</Rate></obj>"
+}

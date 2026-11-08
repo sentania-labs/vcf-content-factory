@@ -1,0 +1,107 @@
+[
+    {
+        "_typeName": "VsanSmartStatsHostSummary", 
+        "hostname": "vcf-lab-mgmt-esx04.int.sentania.net", 
+        "smartStats": [
+            {
+                "_typeName": "VsanSmartDiskStats", 
+                "disk": "t10.NVMe____Samsung_SSD_990_PRO_4TB_________________AD47A06142382500", 
+                "error": {
+                    "_typeName": "VsanFault", 
+                    "faultMessage": [
+                        {
+                            "_typeName": "LocalizableMessage", 
+                            "key": "", 
+                            "message": "Errors: \nError getting Smart Parameters: Cannot open device\n"
+                        }
+                    ], 
+                    "faultstring": "General vSAN error."
+                }
+            }
+        ]
+    }, 
+    {
+        "_typeName": "VsanSmartStatsHostSummary", 
+        "hostname": "vcf-lab-mgmt-esx01.int.sentania.net", 
+        "smartStats": [
+            {
+                "_typeName": "VsanSmartDiskStats", 
+                "disk": "t10.NVMe____Samsung_SSD_990_PRO_4TB_________________A1F4A0514A382500", 
+                "error": {
+                    "_typeName": "VsanFault", 
+                    "faultMessage": [
+                        {
+                            "_typeName": "LocalizableMessage", 
+                            "key": "", 
+                            "message": "Errors: \nError getting Smart Parameters: Cannot open device\n"
+                        }
+                    ], 
+                    "faultstring": "General vSAN error."
+                }
+            }
+        ]
+    }, 
+    {
+        "_typeName": "VsanSmartStatsHostSummary", 
+        "hostname": "vcf-lab-mgmt-esx05.int.sentania.net", 
+        "smartStats": [
+            {
+                "_typeName": "VsanSmartDiskStats", 
+                "disk": "t10.NVMe____Samsung_SSD_990_PRO_4TB_________________538DA06141382500", 
+                "error": {
+                    "_typeName": "VsanFault", 
+                    "faultMessage": [
+                        {
+                            "_typeName": "LocalizableMessage", 
+                            "key": "", 
+                            "message": "Errors: \nError getting Smart Parameters: Cannot open device\n"
+                        }
+                    ], 
+                    "faultstring": "General vSAN error."
+                }
+            }
+        ]
+    }, 
+    {
+        "_typeName": "VsanSmartStatsHostSummary", 
+        "hostname": "vcf-lab-mgmt-esx02.int.sentania.net", 
+        "smartStats": [
+            {
+                "_typeName": "VsanSmartDiskStats", 
+                "disk": "t10.NVMe____Samsung_SSD_990_PRO_4TB_________________33F0A0514C382500", 
+                "error": {
+                    "_typeName": "VsanFault", 
+                    "faultMessage": [
+                        {
+                            "_typeName": "LocalizableMessage", 
+                            "key": "", 
+                            "message": "Errors: \nError getting Smart Parameters: Cannot open device\n"
+                        }
+                    ], 
+                    "faultstring": "General vSAN error."
+                }
+            }
+        ]
+    }, 
+    {
+        "_typeName": "VsanSmartStatsHostSummary", 
+        "hostname": "vcf-lab-mgmt-esx03.int.sentania.net", 
+        "smartStats": [
+            {
+                "_typeName": "VsanSmartDiskStats", 
+                "disk": "t10.NVMe____Samsung_SSD_990_PRO_4TB_________________56F0A0514C382500", 
+                "error": {
+                    "_typeName": "VsanFault", 
+                    "faultMessage": [
+                        {
+                            "_typeName": "LocalizableMessage", 
+                            "key": "", 
+                            "message": "Errors: \nError getting Smart Parameters: Cannot open device\n"
+                        }
+                    ], 
+                    "faultstring": "General vSAN error."
+                }
+            }
+        ]
+    }
+]

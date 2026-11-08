@@ -1,0 +1,491 @@
+{
+    "_typeName": "VsanClusterHealthSummary", 
+    "timestamp": "2026-11-08T00:27:04.967624Z", 
+    "physicalDisksHealth": [
+        {
+            "_typeName": "VsanPhysicalDiskHealthSummary", 
+            "overallHealth": "green", 
+            "disks": [
+                {
+                    "_typeName": "VsanPhysicalDiskHealth", 
+                    "name": "eui.02b32d86f8fccd3e000c296816b66a1a", 
+                    "uuid": "52293862-b50a-1888-1eec-24bbae3e95c9", 
+                    "inCmmds": true, 
+                    "inVsi": true, 
+                    "dedupScope": 0, 
+                    "formatVersion": 21, 
+                    "isAllFlash": 0, 
+                    "congestionValue": 0, 
+                    "congestionArea": "none", 
+                    "congestionHealth": "green", 
+                    "metadataHealth": "green", 
+                    "operationalHealthDescription": "OK", 
+                    "operationalHealth": "green", 
+                    "dedupUsageHealth": "green", 
+                    "capacityHealth": "green", 
+                    "summaryHealth": "green", 
+                    "capacity": 536862523392, 
+                    "usedCapacity": 7805515857, 
+                    "reservedCapacity": 679477248, 
+                    "scsiDisk": {
+                        "_typeName": "HostScsiDisk", 
+                        "deviceName": "/vmfs/devices/disks/eui.02b32d86f8fccd3e000c296816b66a1a", 
+                        "deviceType": "disk", 
+                        "key": "key-vim.host.ScsiDisk-0602b32d86f8fccd3e000c296816b66a1a", 
+                        "uuid": "0602b32d86f8fccd3e000c296816b66a1a", 
+                        "canonicalName": "eui.02b32d86f8fccd3e000c296816b66a1a", 
+                        "displayName": "Local NVMe Disk (eui.02b32d86f8fccd3e000c296816b66a1a)", 
+                        "lunType": "disk", 
+                        "vendor": "NVMe", 
+                        "model": "VMware Virtual NVMe Disk", 
+                        "revision": "1.3", 
+                        "scsiLevel": 0, 
+                        "serialNumber": "02b32d86f8fccd3e000c296816b66a1a", 
+                        "queueDepth": 85, 
+                        "operationalState": [
+                            "ok"
+                        ], 
+                        "capabilities": {
+                            "_typeName": "ScsiLunCapabilities", 
+                            "updateDisplayNameSupported": true
+                        }, 
+                        "vStorageSupport": "vStorageUnsupported", 
+                        "protocolEndpoint": false, 
+                        "perenniallyReserved": false, 
+                        "clusteredVmdkSupported": false, 
+                        "capacity": {
+                            "_typeName": "HostDiskDimensionsLba", 
+                            "blockSize": 512, 
+                            "block": 1048576000
+                        }, 
+                        "devicePath": "/vmfs/devices/disks/eui.02b32d86f8fccd3e000c296816b66a1a", 
+                        "ssd": true, 
+                        "localDisk": true, 
+                        "physicalLocation": [
+                            "nvme0"
+                        ], 
+                        "emulatedDIXDIFEnabled": false, 
+                        "vsanDiskInfo": {
+                            "_typeName": "VsanHostVsanDiskInfo", 
+                            "vsanUuid": "52293862-b50a-1888-1eec-24bbae3e95c9", 
+                            "formatVersion": 21
+                        }, 
+                        "scsiDiskType": "emulated512"
+                    }, 
+                    "usedComponents": 1, 
+                    "maxComponents": 47661, 
+                    "compLimitHealth": "green", 
+                    "encryptionEnabled": false, 
+                    "rebalanceResult": {
+                        "_typeName": "VsanDiskRebalanceResult", 
+                        "status": "imbalancewithintolerance", 
+                        "bytesMoving": 0, 
+                        "remainingBytesToMove": 0, 
+                        "diskUsage": 1.4539129734039307, 
+                        "maxDiskUsage": 1.4539129734039307, 
+                        "minDiskUsage": 1.4218820333480835, 
+                        "avgDiskUsage": 1.443235993385315, 
+                        "diskCompUsage": 0.011110999621450901, 
+                        "maxDiskCompUsage": 0.011110999621450901, 
+                        "minDiskCompUsage": 0.011110999621450901, 
+                        "avgDiskCompUsage": 0.011110999621450901
+                    }, 
+                    "logicalCapacityHealth": "green"
+                }, 
+                {
+                    "_typeName": "VsanPhysicalDiskHealth", 
+                    "name": "eui.836e55e34b882b8d000c296fd64536bd", 
+                    "uuid": "52c8a1a8-bcf0-7304-2d19-ce50c88fb7d7", 
+                    "inCmmds": true, 
+                    "inVsi": true, 
+                    "dedupScope": 0, 
+                    "formatVersion": 21, 
+                    "isAllFlash": 1, 
+                    "congestionValue": 0, 
+                    "congestionArea": "none", 
+                    "congestionHealth": "green", 
+                    "metadataHealth": "green", 
+                    "operationalHealthDescription": "OK", 
+                    "operationalHealth": "green", 
+                    "dedupUsageHealth": "green", 
+                    "capacityHealth": "green", 
+                    "summaryHealth": "green", 
+                    "scsiDisk": {
+                        "_typeName": "HostScsiDisk", 
+                        "deviceName": "/vmfs/devices/disks/eui.836e55e34b882b8d000c296fd64536bd", 
+                        "deviceType": "disk", 
+                        "key": "key-vim.host.ScsiDisk-06836e55e34b882b8d000c296fd64536bd", 
+                        "uuid": "06836e55e34b882b8d000c296fd64536bd", 
+                        "canonicalName": "eui.836e55e34b882b8d000c296fd64536bd", 
+                        "displayName": "Local NVMe Disk (eui.836e55e34b882b8d000c296fd64536bd)", 
+                        "lunType": "disk", 
+                        "vendor": "NVMe", 
+                        "model": "VMware Virtual NVMe Disk", 
+                        "revision": "1.3", 
+                        "scsiLevel": 0, 
+                        "serialNumber": "836e55e34b882b8d000c296fd64536bd", 
+                        "queueDepth": 85, 
+                        "operationalState": [
+                            "ok"
+                        ], 
+                        "capabilities": {
+                            "_typeName": "ScsiLunCapabilities", 
+                            "updateDisplayNameSupported": true
+                        }, 
+                        "vStorageSupport": "vStorageUnsupported", 
+                        "protocolEndpoint": false, 
+                        "perenniallyReserved": false, 
+                        "clusteredVmdkSupported": false, 
+                        "capacity": {
+                            "_typeName": "HostDiskDimensionsLba", 
+                            "blockSize": 512, 
+                            "block": 104857600
+                        }, 
+                        "devicePath": "/vmfs/devices/disks/eui.836e55e34b882b8d000c296fd64536bd", 
+                        "ssd": true, 
+                        "localDisk": true, 
+                        "physicalLocation": [
+                            "nvme0"
+                        ], 
+                        "emulatedDIXDIFEnabled": false, 
+                        "vsanDiskInfo": {
+                            "_typeName": "VsanHostVsanDiskInfo", 
+                            "vsanUuid": "52c8a1a8-bcf0-7304-2d19-ce50c88fb7d7", 
+                            "formatVersion": 21
+                        }, 
+                        "scsiDiskType": "emulated512"
+                    }, 
+                    "compLimitHealth": "green", 
+                    "encryptionEnabled": false, 
+                    "logicalCapacityHealth": "green"
+                }
+            ], 
+            "hostname": "vcf-lab-osa-esx01.int.sentania.net", 
+            "hostDedupScope": 0
+        }, 
+        {
+            "_typeName": "VsanPhysicalDiskHealthSummary", 
+            "overallHealth": "green", 
+            "disks": [
+                {
+                    "_typeName": "VsanPhysicalDiskHealth", 
+                    "name": "eui.a2061d089f34a7da000c296814f68eee", 
+                    "uuid": "526635de-c22d-2cd3-763f-a41a092f83df", 
+                    "inCmmds": true, 
+                    "inVsi": true, 
+                    "dedupScope": 0, 
+                    "formatVersion": 21, 
+                    "isAllFlash": 0, 
+                    "congestionValue": 0, 
+                    "congestionArea": "none", 
+                    "congestionHealth": "green", 
+                    "metadataHealth": "green", 
+                    "operationalHealthDescription": "OK", 
+                    "operationalHealth": "green", 
+                    "dedupUsageHealth": "green", 
+                    "capacityHealth": "green", 
+                    "summaryHealth": "green", 
+                    "capacity": 536862523392, 
+                    "usedCapacity": 7633549393, 
+                    "reservedCapacity": 679477248, 
+                    "scsiDisk": {
+                        "_typeName": "HostScsiDisk", 
+                        "deviceName": "/vmfs/devices/disks/eui.a2061d089f34a7da000c296814f68eee", 
+                        "deviceType": "disk", 
+                        "key": "key-vim.host.ScsiDisk-06a2061d089f34a7da000c296814f68eee", 
+                        "uuid": "06a2061d089f34a7da000c296814f68eee", 
+                        "canonicalName": "eui.a2061d089f34a7da000c296814f68eee", 
+                        "displayName": "Local NVMe Disk (eui.a2061d089f34a7da000c296814f68eee)", 
+                        "lunType": "disk", 
+                        "vendor": "NVMe", 
+                        "model": "VMware Virtual NVMe Disk", 
+                        "revision": "1.3", 
+                        "scsiLevel": 0, 
+                        "serialNumber": "a2061d089f34a7da000c296814f68eee", 
+                        "queueDepth": 85, 
+                        "operationalState": [
+                            "ok"
+                        ], 
+                        "capabilities": {
+                            "_typeName": "ScsiLunCapabilities", 
+                            "updateDisplayNameSupported": true
+                        }, 
+                        "vStorageSupport": "vStorageUnsupported", 
+                        "protocolEndpoint": false, 
+                        "perenniallyReserved": false, 
+                        "clusteredVmdkSupported": false, 
+                        "capacity": {
+                            "_typeName": "HostDiskDimensionsLba", 
+                            "blockSize": 512, 
+                            "block": 1048576000
+                        }, 
+                        "devicePath": "/vmfs/devices/disks/eui.a2061d089f34a7da000c296814f68eee", 
+                        "ssd": true, 
+                        "localDisk": true, 
+                        "physicalLocation": [
+                            "nvme0"
+                        ], 
+                        "emulatedDIXDIFEnabled": false, 
+                        "vsanDiskInfo": {
+                            "_typeName": "VsanHostVsanDiskInfo", 
+                            "vsanUuid": "526635de-c22d-2cd3-763f-a41a092f83df", 
+                            "formatVersion": 21
+                        }, 
+                        "scsiDiskType": "emulated512"
+                    }, 
+                    "usedComponents": 1, 
+                    "maxComponents": 47661, 
+                    "compLimitHealth": "green", 
+                    "encryptionEnabled": false, 
+                    "rebalanceResult": {
+                        "_typeName": "VsanDiskRebalanceResult", 
+                        "status": "imbalancewithintolerance", 
+                        "bytesMoving": 0, 
+                        "remainingBytesToMove": 0, 
+                        "diskUsage": 1.4218820333480835, 
+                        "maxDiskUsage": 1.4539129734039307, 
+                        "minDiskUsage": 1.4218820333480835, 
+                        "avgDiskUsage": 1.443235993385315, 
+                        "diskCompUsage": 0.011110999621450901, 
+                        "maxDiskCompUsage": 0.011110999621450901, 
+                        "minDiskCompUsage": 0.011110999621450901, 
+                        "avgDiskCompUsage": 0.011110999621450901
+                    }, 
+                    "logicalCapacityHealth": "green"
+                }, 
+                {
+                    "_typeName": "VsanPhysicalDiskHealth", 
+                    "name": "eui.a1000a7c67c38876000c296e8e9d99d2", 
+                    "uuid": "520199dc-b846-e0f2-4613-6950832a7841", 
+                    "inCmmds": true, 
+                    "inVsi": true, 
+                    "dedupScope": 0, 
+                    "formatVersion": 21, 
+                    "isAllFlash": 1, 
+                    "congestionValue": 0, 
+                    "congestionArea": "none", 
+                    "congestionHealth": "green", 
+                    "metadataHealth": "green", 
+                    "operationalHealthDescription": "OK", 
+                    "operationalHealth": "green", 
+                    "dedupUsageHealth": "green", 
+                    "capacityHealth": "green", 
+                    "summaryHealth": "green", 
+                    "scsiDisk": {
+                        "_typeName": "HostScsiDisk", 
+                        "deviceName": "/vmfs/devices/disks/eui.a1000a7c67c38876000c296e8e9d99d2", 
+                        "deviceType": "disk", 
+                        "key": "key-vim.host.ScsiDisk-06a1000a7c67c38876000c296e8e9d99d2", 
+                        "uuid": "06a1000a7c67c38876000c296e8e9d99d2", 
+                        "canonicalName": "eui.a1000a7c67c38876000c296e8e9d99d2", 
+                        "displayName": "Local NVMe Disk (eui.a1000a7c67c38876000c296e8e9d99d2)", 
+                        "lunType": "disk", 
+                        "vendor": "NVMe", 
+                        "model": "VMware Virtual NVMe Disk", 
+                        "revision": "1.3", 
+                        "scsiLevel": 0, 
+                        "serialNumber": "a1000a7c67c38876000c296e8e9d99d2", 
+                        "queueDepth": 85, 
+                        "operationalState": [
+                            "ok"
+                        ], 
+                        "capabilities": {
+                            "_typeName": "ScsiLunCapabilities", 
+                            "updateDisplayNameSupported": true
+                        }, 
+                        "vStorageSupport": "vStorageUnsupported", 
+                        "protocolEndpoint": false, 
+                        "perenniallyReserved": false, 
+                        "clusteredVmdkSupported": false, 
+                        "capacity": {
+                            "_typeName": "HostDiskDimensionsLba", 
+                            "blockSize": 512, 
+                            "block": 104857600
+                        }, 
+                        "devicePath": "/vmfs/devices/disks/eui.a1000a7c67c38876000c296e8e9d99d2", 
+                        "ssd": true, 
+                        "localDisk": true, 
+                        "physicalLocation": [
+                            "nvme0"
+                        ], 
+                        "emulatedDIXDIFEnabled": false, 
+                        "vsanDiskInfo": {
+                            "_typeName": "VsanHostVsanDiskInfo", 
+                            "vsanUuid": "520199dc-b846-e0f2-4613-6950832a7841", 
+                            "formatVersion": 21
+                        }, 
+                        "scsiDiskType": "emulated512"
+                    }, 
+                    "compLimitHealth": "green", 
+                    "encryptionEnabled": false, 
+                    "logicalCapacityHealth": "green"
+                }
+            ], 
+            "hostname": "vcf-lab-osa-esx03.int.sentania.net", 
+            "hostDedupScope": 0
+        }, 
+        {
+            "_typeName": "VsanPhysicalDiskHealthSummary", 
+            "overallHealth": "green", 
+            "disks": [
+                {
+                    "_typeName": "VsanPhysicalDiskHealth", 
+                    "name": "eui.ee56fe0927c046ed000c2969cacdd7e0", 
+                    "uuid": "5256e71b-7d80-76a6-7461-16bbe8df0523", 
+                    "inCmmds": true, 
+                    "inVsi": true, 
+                    "dedupScope": 0, 
+                    "formatVersion": 21, 
+                    "isAllFlash": 0, 
+                    "congestionValue": 0, 
+                    "congestionArea": "none", 
+                    "congestionHealth": "green", 
+                    "metadataHealth": "green", 
+                    "operationalHealthDescription": "OK", 
+                    "operationalHealth": "green", 
+                    "dedupUsageHealth": "green", 
+                    "capacityHealth": "green", 
+                    "summaryHealth": "green", 
+                    "capacity": 536862523392, 
+                    "usedCapacity": 7805515857, 
+                    "reservedCapacity": 679477248, 
+                    "scsiDisk": {
+                        "_typeName": "HostScsiDisk", 
+                        "deviceName": "/vmfs/devices/disks/eui.ee56fe0927c046ed000c2969cacdd7e0", 
+                        "deviceType": "disk", 
+                        "key": "key-vim.host.ScsiDisk-06ee56fe0927c046ed000c2969cacdd7e0", 
+                        "uuid": "06ee56fe0927c046ed000c2969cacdd7e0", 
+                        "canonicalName": "eui.ee56fe0927c046ed000c2969cacdd7e0", 
+                        "displayName": "Local NVMe Disk (eui.ee56fe0927c046ed000c2969cacdd7e0)", 
+                        "lunType": "disk", 
+                        "vendor": "NVMe", 
+                        "model": "VMware Virtual NVMe Disk", 
+                        "revision": "1.3", 
+                        "scsiLevel": 0, 
+                        "serialNumber": "ee56fe0927c046ed000c2969cacdd7e0", 
+                        "queueDepth": 85, 
+                        "operationalState": [
+                            "ok"
+                        ], 
+                        "capabilities": {
+                            "_typeName": "ScsiLunCapabilities", 
+                            "updateDisplayNameSupported": true
+                        }, 
+                        "vStorageSupport": "vStorageUnsupported", 
+                        "protocolEndpoint": false, 
+                        "perenniallyReserved": false, 
+                        "clusteredVmdkSupported": false, 
+                        "capacity": {
+                            "_typeName": "HostDiskDimensionsLba", 
+                            "blockSize": 512, 
+                            "block": 1048576000
+                        }, 
+                        "devicePath": "/vmfs/devices/disks/eui.ee56fe0927c046ed000c2969cacdd7e0", 
+                        "ssd": true, 
+                        "localDisk": true, 
+                        "physicalLocation": [
+                            "nvme0"
+                        ], 
+                        "emulatedDIXDIFEnabled": false, 
+                        "vsanDiskInfo": {
+                            "_typeName": "VsanHostVsanDiskInfo", 
+                            "vsanUuid": "5256e71b-7d80-76a6-7461-16bbe8df0523", 
+                            "formatVersion": 21
+                        }, 
+                        "scsiDiskType": "emulated512"
+                    }, 
+                    "usedComponents": 1, 
+                    "maxComponents": 47661, 
+                    "compLimitHealth": "green", 
+                    "encryptionEnabled": false, 
+                    "rebalanceResult": {
+                        "_typeName": "VsanDiskRebalanceResult", 
+                        "status": "imbalancewithintolerance", 
+                        "bytesMoving": 0, 
+                        "remainingBytesToMove": 0, 
+                        "diskUsage": 1.4539129734039307, 
+                        "maxDiskUsage": 1.4539129734039307, 
+                        "minDiskUsage": 1.4218820333480835, 
+                        "avgDiskUsage": 1.443235993385315, 
+                        "diskCompUsage": 0.011110999621450901, 
+                        "maxDiskCompUsage": 0.011110999621450901, 
+                        "minDiskCompUsage": 0.011110999621450901, 
+                        "avgDiskCompUsage": 0.011110999621450901
+                    }, 
+                    "logicalCapacityHealth": "green"
+                }, 
+                {
+                    "_typeName": "VsanPhysicalDiskHealth", 
+                    "name": "eui.855250fe570f0148000c29601c409cce", 
+                    "uuid": "52633b69-ab8f-5604-7558-5bce3895ffd6", 
+                    "inCmmds": true, 
+                    "inVsi": true, 
+                    "dedupScope": 0, 
+                    "formatVersion": 21, 
+                    "isAllFlash": 1, 
+                    "congestionValue": 0, 
+                    "congestionArea": "none", 
+                    "congestionHealth": "green", 
+                    "metadataHealth": "green", 
+                    "operationalHealthDescription": "OK", 
+                    "operationalHealth": "green", 
+                    "dedupUsageHealth": "green", 
+                    "capacityHealth": "green", 
+                    "summaryHealth": "green", 
+                    "scsiDisk": {
+                        "_typeName": "HostScsiDisk", 
+                        "deviceName": "/vmfs/devices/disks/eui.855250fe570f0148000c29601c409cce", 
+                        "deviceType": "disk", 
+                        "key": "key-vim.host.ScsiDisk-06855250fe570f0148000c29601c409cce", 
+                        "uuid": "06855250fe570f0148000c29601c409cce", 
+                        "canonicalName": "eui.855250fe570f0148000c29601c409cce", 
+                        "displayName": "Local NVMe Disk (eui.855250fe570f0148000c29601c409cce)", 
+                        "lunType": "disk", 
+                        "vendor": "NVMe", 
+                        "model": "VMware Virtual NVMe Disk", 
+                        "revision": "1.3", 
+                        "scsiLevel": 0, 
+                        "serialNumber": "855250fe570f0148000c29601c409cce", 
+                        "queueDepth": 85, 
+                        "operationalState": [
+                            "ok"
+                        ], 
+                        "capabilities": {
+                            "_typeName": "ScsiLunCapabilities", 
+                            "updateDisplayNameSupported": true
+                        }, 
+                        "vStorageSupport": "vStorageUnsupported", 
+                        "protocolEndpoint": false, 
+                        "perenniallyReserved": false, 
+                        "clusteredVmdkSupported": false, 
+                        "capacity": {
+                            "_typeName": "HostDiskDimensionsLba", 
+                            "blockSize": 512, 
+                            "block": 104857600
+                        }, 
+                        "devicePath": "/vmfs/devices/disks/eui.855250fe570f0148000c29601c409cce", 
+                        "ssd": true, 
+                        "localDisk": true, 
+                        "physicalLocation": [
+                            "nvme0"
+                        ], 
+                        "emulatedDIXDIFEnabled": false, 
+                        "vsanDiskInfo": {
+                            "_typeName": "VsanHostVsanDiskInfo", 
+                            "vsanUuid": "52633b69-ab8f-5604-7558-5bce3895ffd6", 
+                            "formatVersion": 21
+                        }, 
+                        "scsiDiskType": "emulated512"
+                    }, 
+                    "compLimitHealth": "green", 
+                    "encryptionEnabled": false, 
+                    "logicalCapacityHealth": "green"
+                }
+            ], 
+            "hostname": "vcf-lab-osa-esx02.int.sentania.net", 
+            "hostDedupScope": 0
+        }
+    ], 
+    "overallHealth": "yellow", 
+    "overallHealthDescription": "vSAN HCL warning"
+}

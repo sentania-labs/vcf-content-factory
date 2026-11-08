@@ -1,0 +1,8 @@
+{
+    "_typeName": "ReflectManagedMethodExecuterSoapResult", 
+    "fault": {
+        "_typeName": "ReflectManagedMethodExecuterSoapFault", 
+        "faultMsg": "EsxCLI.CLIFault.summary", 
+        "faultDetail": "<obj xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xmlns=\"urn:vim25\" versionId=\"5.0\" xsi:type=\"LocalizedMethodFault\"><fault xsi:type=\"VimEsxCLICLIFault\"><errMsg> Failed to get vSAN performance service master node.</errMsg></fault><localizedMessage>EsxCLI.CLIFault.summary</localizedMessage></obj>"
+    }
+}

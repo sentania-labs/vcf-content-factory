@@ -1,0 +1,4 @@
+{
+    "_typeName": "ReflectManagedMethodExecuterSoapResult", 
+    "response": "<obj xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xmlns=\"urn:vim25\" versionId=\"5.0\" xsi:type=\"ArrayOfDataObject\"><DataObject xsi:type=\"VimEsxCLIvsandebuglimitgetLimitInfo\"><ComponentLimitHealth>green</ComponentLimitHealth><DiskFreeSpaceHealth>green</DiskFreeSpaceHealth><FreeComponents>8999</FreeComponents><LowestFreeDiskSpace>99</LowestFreeDiskSpace><MaxComponents>9000</MaxComponents><TotalDiskSpace>536862523392</TotalDiskSpace><TotalDiskSpaceGB>499.99 GB</TotalDiskSpaceGB><UsedDiskSpace>7805515857</UsedDiskSpace><UsedDiskSpaceGB>7.27 GB</UsedDiskSpaceGB></DataObject></obj>"
+}
