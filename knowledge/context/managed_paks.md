@@ -192,8 +192,12 @@ it is not a published pak.
   off then on: key 0, alert raised, 23 calls, then cancel) waits for Scott's
   vCenter write. Doc gap for the next build: README check 8 lists four
   faulting types, the lab has six (`vsan-cpu`, `vsan-memory` added). 8.18
-  and 9.1 previews of build 24 pending (RULE-019). Tag v1.2.1.24 on Scott's
-  word after phase 2 and the two previews.
+  and 9.1 previews of build 24 passed 2026-11-08 (records
+  `vsanperf-t5-devel-{8.18,9.1}-build-24-default-scope.md`; the probe
+  cluster is in scope on both, same 43 to 52 to 37 calls and failed 0;
+  9.1's first cycle after the restart failed on a 30 s vCenter login timeout
+  and recovered unaided; 8.18 adapter log still unreadable, analytics node).
+  RULE-019 met for build 24. Tag v1.2.1.24 on Scott's word after phase 2.
   Tests: `T.CLOCK` pinned to 2026-11-07T14:00Z; build 22's tests were
   date-bombed from 2026-11-08 (lesson candidate).
   History 2026-11-06: Build 1 merged (builds 5 to 9, pak PRs
