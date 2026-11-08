@@ -1,0 +1,70 @@
+{
+    "_typeName": "VsanSpaceUsage", 
+    "totalCapacityB": 1610587570176, 
+    "freeCapacityB": 1587342989069, 
+    "spaceOverview": {
+        "_typeName": "VsanObjectSpaceSummary", 
+        "overheadB": 23118751987, 
+        "temporaryOverheadB": 0, 
+        "primaryCapacityB": 125829120, 
+        "provisionCapacityB": 23244581107, 
+        "reservedCapacityB": 0, 
+        "overReservedB": 0, 
+        "physicalUsedB": 255852544, 
+        "usedB": 255852544, 
+        "snapshotUsedB": 0
+    }, 
+    "spaceDetail": {
+        "_typeName": "VsanSpaceUsageDetailResult", 
+        "spaceUsageByObjectType": [
+            {
+                "_typeName": "VsanObjectSpaceSummary", 
+                "objType": "traceobject", 
+                "overheadB": 130023424, 
+                "temporaryOverheadB": 0, 
+                "primaryCapacityB": 125829120, 
+                "reservedCapacityB": 0, 
+                "overReservedB": 0, 
+                "physicalUsedB": 255852544, 
+                "usedB": 255852544, 
+                "objTypeExt": "", 
+                "objTypeExtDesc": "", 
+                "snapshotUsedB": 0
+            }, 
+            {
+                "_typeName": "VsanObjectSpaceSummary", 
+                "objType": "checksumOverhead", 
+                "overheadB": 1966559232, 
+                "temporaryOverheadB": 0, 
+                "primaryCapacityB": 0, 
+                "reservedCapacityB": 0, 
+                "overReservedB": 0, 
+                "physicalUsedB": 0, 
+                "usedB": 1966559232, 
+                "objTypeExt": "", 
+                "objTypeExtDesc": "", 
+                "snapshotUsedB": 0
+            }, 
+            {
+                "_typeName": "VsanObjectSpaceSummary", 
+                "objType": "fileSystemOverhead", 
+                "overheadB": 21022169331, 
+                "temporaryOverheadB": 0, 
+                "primaryCapacityB": 0, 
+                "reservedCapacityB": 0, 
+                "overReservedB": 0, 
+                "physicalUsedB": 0, 
+                "usedB": 21022169331, 
+                "objTypeExt": "", 
+                "objTypeExtDesc": "", 
+                "snapshotUsedB": 0
+            }
+        ]
+    }, 
+    "uncommittedB": 0, 
+    "capacityHealthThreshold": {
+        "_typeName": "VsanHealthThreshold", 
+        "yellowValue": 1127411299123, 
+        "redValue": 1449528813158
+    }
+}

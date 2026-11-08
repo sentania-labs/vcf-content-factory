@@ -1,0 +1,86 @@
+{
+    "_typeName": "VsanConfigInfoEx", 
+    "enabled": true, 
+    "defaultConfig": {
+        "_typeName": "VsanClusterConfigInfoHostDefaultInfo", 
+        "uuid": "90d067b8-0077-11f1-af60-000c297e270a"
+    }, 
+    "vsanEsaEnabled": true, 
+    "dataEfficiencyConfig": {
+        "_typeName": "VsanDataEfficiencyConfig", 
+        "dedupEnabled": true, 
+        "compressionEnabled": true
+    }, 
+    "resyncIopsLimitConfig": {
+        "_typeName": "ResyncIopsInfo", 
+        "resyncIops": 0
+    }, 
+    "iscsiConfig": {
+        "_typeName": "VsanIscsiTargetServiceConfig", 
+        "enabled": false
+    }, 
+    "dataEncryptionConfig": {
+        "_typeName": "VsanDataEncryptionConfig", 
+        "encryptionEnabled": false
+    }, 
+    "extendedConfig": {
+        "_typeName": "VsanExtendedConfig", 
+        "objectRepairTimer": 60, 
+        "disableSiteReadLocality": false, 
+        "enableCustomizedSwapObject": true, 
+        "largeScaleClusterSupport": false, 
+        "proactiveRebalanceInfo": {
+            "_typeName": "VsanProactiveRebalanceInfo", 
+            "enabled": true, 
+            "threshold": 30
+        }, 
+        "capacityReservationInfo": {
+            "_typeName": "VsanCapacityReservationInfo", 
+            "hostRebuildThreshold": "Reported", 
+            "vsanOpSpaceThreshold": "Enforced"
+        }
+    }, 
+    "perfsvcConfig": {
+        "_typeName": "VsanPerfsvcConfig", 
+        "enabled": true
+    }, 
+    "unmapConfig": {
+        "_typeName": "VsanUnmapConfig", 
+        "enable": true
+    }, 
+    "vumConfig": {
+        "_typeName": "VsanVumConfig", 
+        "baselinePreferenceType": "latestRelease"
+    }, 
+    "fileServiceConfig": {
+        "_typeName": "VsanFileServiceConfig", 
+        "enabled": false
+    }, 
+    "rdmaConfig": {
+        "_typeName": "VsanRdmaConfig", 
+        "rdmaEnabled": false
+    }, 
+    "dataInTransitEncryptionConfig": {
+        "_typeName": "VsanDataInTransitEncryptionConfig"
+    }, 
+    "vsanHealthConfig": {
+        "_typeName": "VsanHealthConfigSpec", 
+        "historicalHealthConfig": {
+            "_typeName": "VsanHistoricalHealthConfig", 
+            "enabled": true
+        }
+    }, 
+    "mode": "Mode_None", 
+    "vsanPMemConfig": {
+        "_typeName": "VimVsanVsanPMemConfig", 
+        "enabled": false
+    }, 
+    "vsanEsaConfigInfo": {
+        "_typeName": "VsanEsaConfigInfo", 
+        "hclDiskClaimEnabled": false
+    }, 
+    "datastoreDefaultPolicySelectionConfig": {
+        "_typeName": "VsanDatastoreDefaultPolicySelectionConfig", 
+        "enabled": true
+    }
+}

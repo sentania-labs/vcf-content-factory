@@ -1,0 +1,11 @@
+{
+    "_typeName": "NotFound", 
+    "faultMessage": [
+        {
+            "_typeName": "LocalizableMessage", 
+            "key": "com.vmware.vsan.perfsvc.fault.masternotfound", 
+            "message": "Stats primary cannot be found in the cluster."
+        }
+    ], 
+    "faultstring": "The object or item referred to could not be found."
+}

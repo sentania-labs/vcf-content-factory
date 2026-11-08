@@ -1,0 +1,15 @@
+{
+    "_typeName": "VsanObjectIdentityAndHealth", 
+    "health": {
+        "_typeName": "VsanObjectOverallHealth", 
+        "objectHealthDetail": [
+            {
+                "_typeName": "VsanObjectHealth", 
+                "numObjects": 363, 
+                "health": "healthy"
+            }
+        ], 
+        "objectVersionCompliance": true, 
+        "objectsRelayoutBytes": 0
+    }
+}

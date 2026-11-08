@@ -1,0 +1,4 @@
+{
+    "_typeName": "ReflectManagedMethodExecuterSoapResult", 
+    "response": "<obj xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xmlns=\"urn:vim25\" versionId=\"5.0\" xsi:type=\"ArrayOfDataObject\"><DataObject xsi:type=\"VimEsxCLIvsanstoragepoollistVsanStoragePoolList\"><Checksum>9342870654462185664</Checksum><ChecksumOk>true</ChecksumOk><CreationTime>Mon Feb  9 03:23:37 2026</CreationTime><Device>t10.NVMe____Samsung_SSD_990_PRO_4TB_________________A1F4A0514A382500</Device><DiskType>singleTier</DiskType><DisplayName>t10.NVMe____Samsung_SSD_990_PRO_4TB_________________A1F4A0514A382500</DisplayName><InCMMDS>true</InCMMDS><IsEncrypted>false</IsEncrypted><IsMounted>true</IsMounted><Ondiskformatversion>24</Ondiskformatversion><Usedbythishost>true</Usedbythishost><vSANUUID>52585910-fedf-604c-04d3-868955bf7f7d</vSANUUID></DataObject></obj>"
+}

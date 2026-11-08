@@ -1,0 +1,251 @@
+{
+    "_typeName": "VsanHostConfigInfo", 
+    "enabled": true, 
+    "hostSystem": {
+        "_typeName": "ManagedObjectReference", 
+        "value": "host-39158", 
+        "type": "HostSystem"
+    }, 
+    "clusterInfo": {
+        "_typeName": "VsanHostConfigInfoClusterInfo", 
+        "uuid": "526f5c80-5b92-4464-0c7a-2a2c74fc2d27", 
+        "nodeUuid": "6aefa4b3-dda2-9466-0ed7-005056af5f8f"
+    }, 
+    "storageInfo": {
+        "_typeName": "VsanHostConfigInfoStorageInfo", 
+        "autoClaimStorage": false, 
+        "diskMapping": [
+            {
+                "_typeName": "VsanHostDiskMapping", 
+                "ssd": {
+                    "_typeName": "HostScsiDisk", 
+                    "deviceName": "/vmfs/devices/disks/eui.836e55e34b882b8d000c296fd64536bd", 
+                    "deviceType": "disk", 
+                    "key": "key-vim.host.ScsiDisk-06836e55e34b882b8d000c296fd64536bd", 
+                    "uuid": "06836e55e34b882b8d000c296fd64536bd", 
+                    "canonicalName": "eui.836e55e34b882b8d000c296fd64536bd", 
+                    "displayName": "Local NVMe Disk (eui.836e55e34b882b8d000c296fd64536bd)", 
+                    "lunType": "disk", 
+                    "vendor": "NVMe", 
+                    "model": "VMware Virtual NVMe Disk", 
+                    "revision": "1.3", 
+                    "scsiLevel": 0, 
+                    "serialNumber": "836e55e34b882b8d000c296fd64536bd", 
+                    "queueDepth": 85, 
+                    "operationalState": [
+                        "ok"
+                    ], 
+                    "capabilities": {
+                        "_typeName": "ScsiLunCapabilities", 
+                        "updateDisplayNameSupported": true
+                    }, 
+                    "vStorageSupport": "vStorageUnsupported", 
+                    "protocolEndpoint": false, 
+                    "perenniallyReserved": false, 
+                    "clusteredVmdkSupported": false, 
+                    "applicationProtocol": "NVMe", 
+                    "dispersedNs": false, 
+                    "deviceReservation": "LUN_RESERVED_NOT_SUPPORTED", 
+                    "capacity": {
+                        "_typeName": "HostDiskDimensionsLba", 
+                        "blockSize": 512, 
+                        "block": 104857600
+                    }, 
+                    "devicePath": "/vmfs/devices/disks/eui.836e55e34b882b8d000c296fd64536bd", 
+                    "ssd": true, 
+                    "localDisk": true, 
+                    "physicalLocation": [
+                        "nvme0"
+                    ], 
+                    "emulatedDIXDIFEnabled": false, 
+                    "vsanDiskInfo": {
+                        "_typeName": "VsanHostVsanDiskInfo", 
+                        "vsanUuid": "52c8a1a8-bcf0-7304-2d19-ce50c88fb7d7", 
+                        "formatVersion": 21
+                    }, 
+                    "scsiDiskType": "emulated512", 
+                    "usedByMemoryTiering": false
+                }, 
+                "nonSsd": [
+                    {
+                        "_typeName": "HostScsiDisk", 
+                        "deviceName": "/vmfs/devices/disks/eui.02b32d86f8fccd3e000c296816b66a1a", 
+                        "deviceType": "disk", 
+                        "key": "key-vim.host.ScsiDisk-0602b32d86f8fccd3e000c296816b66a1a", 
+                        "uuid": "0602b32d86f8fccd3e000c296816b66a1a", 
+                        "canonicalName": "eui.02b32d86f8fccd3e000c296816b66a1a", 
+                        "displayName": "Local NVMe Disk (eui.02b32d86f8fccd3e000c296816b66a1a)", 
+                        "lunType": "disk", 
+                        "vendor": "NVMe", 
+                        "model": "VMware Virtual NVMe Disk", 
+                        "revision": "1.3", 
+                        "scsiLevel": 0, 
+                        "serialNumber": "02b32d86f8fccd3e000c296816b66a1a", 
+                        "queueDepth": 85, 
+                        "operationalState": [
+                            "ok"
+                        ], 
+                        "capabilities": {
+                            "_typeName": "ScsiLunCapabilities", 
+                            "updateDisplayNameSupported": true
+                        }, 
+                        "vStorageSupport": "vStorageUnsupported", 
+                        "protocolEndpoint": false, 
+                        "perenniallyReserved": false, 
+                        "clusteredVmdkSupported": false, 
+                        "applicationProtocol": "NVMe", 
+                        "dispersedNs": false, 
+                        "deviceReservation": "LUN_RESERVED_NOT_SUPPORTED", 
+                        "capacity": {
+                            "_typeName": "HostDiskDimensionsLba", 
+                            "blockSize": 512, 
+                            "block": 1048576000
+                        }, 
+                        "devicePath": "/vmfs/devices/disks/eui.02b32d86f8fccd3e000c296816b66a1a", 
+                        "ssd": true, 
+                        "localDisk": true, 
+                        "physicalLocation": [
+                            "nvme0"
+                        ], 
+                        "emulatedDIXDIFEnabled": false, 
+                        "vsanDiskInfo": {
+                            "_typeName": "VsanHostVsanDiskInfo", 
+                            "vsanUuid": "52293862-b50a-1888-1eec-24bbae3e95c9", 
+                            "formatVersion": 21
+                        }, 
+                        "scsiDiskType": "emulated512", 
+                        "usedByMemoryTiering": false
+                    }
+                ]
+            }
+        ], 
+        "diskMapInfo": [
+            {
+                "_typeName": "VsanHostDiskMapInfo", 
+                "mapping": {
+                    "_typeName": "VsanHostDiskMapping", 
+                    "ssd": {
+                        "_typeName": "HostScsiDisk", 
+                        "deviceName": "/vmfs/devices/disks/eui.836e55e34b882b8d000c296fd64536bd", 
+                        "deviceType": "disk", 
+                        "key": "key-vim.host.ScsiDisk-06836e55e34b882b8d000c296fd64536bd", 
+                        "uuid": "06836e55e34b882b8d000c296fd64536bd", 
+                        "canonicalName": "eui.836e55e34b882b8d000c296fd64536bd", 
+                        "displayName": "Local NVMe Disk (eui.836e55e34b882b8d000c296fd64536bd)", 
+                        "lunType": "disk", 
+                        "vendor": "NVMe", 
+                        "model": "VMware Virtual NVMe Disk", 
+                        "revision": "1.3", 
+                        "scsiLevel": 0, 
+                        "serialNumber": "836e55e34b882b8d000c296fd64536bd", 
+                        "queueDepth": 85, 
+                        "operationalState": [
+                            "ok"
+                        ], 
+                        "capabilities": {
+                            "_typeName": "ScsiLunCapabilities", 
+                            "updateDisplayNameSupported": true
+                        }, 
+                        "vStorageSupport": "vStorageUnsupported", 
+                        "protocolEndpoint": false, 
+                        "perenniallyReserved": false, 
+                        "clusteredVmdkSupported": false, 
+                        "applicationProtocol": "NVMe", 
+                        "dispersedNs": false, 
+                        "deviceReservation": "LUN_RESERVED_NOT_SUPPORTED", 
+                        "capacity": {
+                            "_typeName": "HostDiskDimensionsLba", 
+                            "blockSize": 512, 
+                            "block": 104857600
+                        }, 
+                        "devicePath": "/vmfs/devices/disks/eui.836e55e34b882b8d000c296fd64536bd", 
+                        "ssd": true, 
+                        "localDisk": true, 
+                        "physicalLocation": [
+                            "nvme0"
+                        ], 
+                        "emulatedDIXDIFEnabled": false, 
+                        "vsanDiskInfo": {
+                            "_typeName": "VsanHostVsanDiskInfo", 
+                            "vsanUuid": "52c8a1a8-bcf0-7304-2d19-ce50c88fb7d7", 
+                            "formatVersion": 21
+                        }, 
+                        "scsiDiskType": "emulated512", 
+                        "usedByMemoryTiering": false
+                    }, 
+                    "nonSsd": [
+                        {
+                            "_typeName": "HostScsiDisk", 
+                            "deviceName": "/vmfs/devices/disks/eui.02b32d86f8fccd3e000c296816b66a1a", 
+                            "deviceType": "disk", 
+                            "key": "key-vim.host.ScsiDisk-0602b32d86f8fccd3e000c296816b66a1a", 
+                            "uuid": "0602b32d86f8fccd3e000c296816b66a1a", 
+                            "canonicalName": "eui.02b32d86f8fccd3e000c296816b66a1a", 
+                            "displayName": "Local NVMe Disk (eui.02b32d86f8fccd3e000c296816b66a1a)", 
+                            "lunType": "disk", 
+                            "vendor": "NVMe", 
+                            "model": "VMware Virtual NVMe Disk", 
+                            "revision": "1.3", 
+                            "scsiLevel": 0, 
+                            "serialNumber": "02b32d86f8fccd3e000c296816b66a1a", 
+                            "queueDepth": 85, 
+                            "operationalState": [
+                                "ok"
+                            ], 
+                            "capabilities": {
+                                "_typeName": "ScsiLunCapabilities", 
+                                "updateDisplayNameSupported": true
+                            }, 
+                            "vStorageSupport": "vStorageUnsupported", 
+                            "protocolEndpoint": false, 
+                            "perenniallyReserved": false, 
+                            "clusteredVmdkSupported": false, 
+                            "applicationProtocol": "NVMe", 
+                            "dispersedNs": false, 
+                            "deviceReservation": "LUN_RESERVED_NOT_SUPPORTED", 
+                            "capacity": {
+                                "_typeName": "HostDiskDimensionsLba", 
+                                "blockSize": 512, 
+                                "block": 1048576000
+                            }, 
+                            "devicePath": "/vmfs/devices/disks/eui.02b32d86f8fccd3e000c296816b66a1a", 
+                            "ssd": true, 
+                            "localDisk": true, 
+                            "physicalLocation": [
+                                "nvme0"
+                            ], 
+                            "emulatedDIXDIFEnabled": false, 
+                            "vsanDiskInfo": {
+                                "_typeName": "VsanHostVsanDiskInfo", 
+                                "vsanUuid": "52293862-b50a-1888-1eec-24bbae3e95c9", 
+                                "formatVersion": 21
+                            }, 
+                            "scsiDiskType": "emulated512", 
+                            "usedByMemoryTiering": false
+                        }
+                    ]
+                }, 
+                "mounted": true
+            }
+        ]
+    }, 
+    "networkInfo": {
+        "_typeName": "VsanHostConfigInfoNetworkInfo", 
+        "port": [
+            {
+                "_typeName": "VsanHostConfigInfoNetworkInfoPortConfig", 
+                "ipConfig": {
+                    "_typeName": "VsanHostIpConfig", 
+                    "upstreamIpAddress": "224.1.2.3", 
+                    "downstreamIpAddress": "224.2.3.4"
+                }, 
+                "device": "vmk0"
+            }
+        ]
+    }, 
+    "faultDomainInfo": {
+        "_typeName": "VsanHostFaultDomainInfo", 
+        "name": ""
+    }, 
+    "vsanEsaEnabled": false
+}

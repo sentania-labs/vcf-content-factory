@@ -1,0 +1,4 @@
+{
+    "_typeName": "ReflectManagedMethodExecuterSoapResult", 
+    "response": "<obj xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xmlns=\"urn:vim25\" versionId=\"5.0\" xsi:type=\"ArrayOfDataObject\"><DataObject xsi:type=\"VimEsxCLIvsandebugmemorylistMemoryInfo\"><Group>Kernel</Group><MaxinMB>28570.75</MaxinMB><ReservedinMB>19062.25</ReservedinMB><UsageinMB>1770.08</UsageinMB></DataObject><DataObject xsi:type=\"VimEsxCLIvsandebugmemorylistMemoryInfo\"><Group>User World</Group><MaxinMB>487.00</MaxinMB><ReservedinMB>492.00</ReservedinMB><UsageinMB>309.11</UsageinMB></DataObject><DataObject xsi:type=\"VimEsxCLIvsandebugmemorylistMemoryInfo\"><Group>Total</Group><MaxinMB>29057.75</MaxinMB><ReservedinMB>19554.25</ReservedinMB><UsageinMB>2079.19</UsageinMB></DataObject></obj>"
+}

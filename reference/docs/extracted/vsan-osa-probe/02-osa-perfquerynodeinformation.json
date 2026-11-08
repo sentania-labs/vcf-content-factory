@@ -1,0 +1,32 @@
+[
+    {
+        "_typeName": "VsanPerfNodeInformation", 
+        "version": "9.0.0", 
+        "hostname": "vcf-lab-osa-esx03.int.sentania.net", 
+        "isCmmdsMaster": false, 
+        "isStatsMaster": false, 
+        "vsanMasterUuid": "6aefa4b3-dda2-9466-0ed7-005056af5f8f", 
+        "vsanNodeUuid": "6aefa4bd-87e5-ad5a-d451-005056af13da", 
+        "diagnosticMode": false
+    }, 
+    {
+        "_typeName": "VsanPerfNodeInformation", 
+        "version": "9.0.0", 
+        "hostname": "vcf-lab-osa-esx02.int.sentania.net", 
+        "isCmmdsMaster": false, 
+        "isStatsMaster": false, 
+        "vsanMasterUuid": "6aefa4b3-dda2-9466-0ed7-005056af5f8f", 
+        "vsanNodeUuid": "6aefa4ab-dbd6-0a77-fc8d-005056af7093", 
+        "diagnosticMode": false
+    }, 
+    {
+        "_typeName": "VsanPerfNodeInformation", 
+        "version": "9.0.0", 
+        "hostname": "vcf-lab-osa-esx01.int.sentania.net", 
+        "isCmmdsMaster": true, 
+        "isStatsMaster": false, 
+        "vsanMasterUuid": "6aefa4b3-dda2-9466-0ed7-005056af5f8f", 
+        "vsanNodeUuid": "6aefa4b3-dda2-9466-0ed7-005056af5f8f", 
+        "diagnosticMode": false
+    }
+]

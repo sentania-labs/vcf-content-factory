@@ -1,0 +1,7 @@
+[
+    {
+        "_typeName": "VsanPerfEntityMetricCSV", 
+        "entityRefId": "disk-group:*", 
+        "sampleInfo": ""
+    }
+]

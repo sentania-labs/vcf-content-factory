@@ -1,0 +1,15 @@
+{
+    "_typeName": "VsanHostClusterStatus", 
+    "uuid": "526f5c80-5b92-4464-0c7a-2a2c74fc2d27", 
+    "nodeUuid": "6aefa4b3-dda2-9466-0ed7-005056af5f8f", 
+    "health": "healthy", 
+    "nodeState": {
+        "_typeName": "VsanHostClusterStatusState", 
+        "state": "master"
+    }, 
+    "memberUuid": [
+        "6aefa4b3-dda2-9466-0ed7-005056af5f8f", 
+        "6aefa4bd-87e5-ad5a-d451-005056af13da", 
+        "6aefa4ab-dbd6-0a77-fc8d-005056af7093"
+    ]
+}

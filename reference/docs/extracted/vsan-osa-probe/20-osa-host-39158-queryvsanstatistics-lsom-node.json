@@ -1,0 +1,1 @@
+"{\"lsom.node\": {\"pendingComponents\": 0, \"numOpenedComponents\": 1, \"numDataComponents\": 1, \"numPlannedDeltaComponents\": 0, \"numUnplannedDeltaComponents\": 0, \"numRecComponents\": 0, \"numMaxComponents\": 9000, \"numMDs\": 1, \"numDiskGroups\": 1, \"numMaxMDs\": 35, \"numMaxDiskGroups\": 5, \"memScalingFactor\": 1}, \"on-esx-collect-duration\": 0.0007402896881103516}"
