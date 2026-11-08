@@ -72,7 +72,7 @@ The first post-install cycle (09:43:20, timing off, before the PUT) is listed as
 | Symptom `[VCF Content Factory] vSAN Performance Service Disabled` | yes | VMWARE / ClusterComputeResource; WARNING; key `vSAN Perf\|Performance Service\|enabled` `LT` 1.0, static |
 | Alert `[VCF Content Factory] vSAN Performance Service disabled on cluster (vSAN Perf collection paused)` | yes | VMWARE / ClusterComputeResource; type 18 / subType 22; WARNING; impact BADGE risk; one symptom set; **waitCycles 1, cancelCycles 1** |
 | Recommendation `[VCF Content Factory] vSAN Enable Performance Service` | yes | `Recommendation-df-VMWARE-vSAN_Enable_Performance_Service`, attached to the alert at priority 1 |
-| Policy enablement | **not determinable** | `GET /api/policies` lists 20; `GET /api/policies/<id>` returns HTTP 500 "Internal Server error, cause unknown." for all 20; `/api/resources/<id>/policy` 404. Recorded as yesterday. Fallback: the alert is present in `GET /api/alertdefinitions` |
+| Policy enablement | **not determinable** | `GET /api/policies` lists 20; `GET /api/policies/<id>` returns HTTP 500 "Internal Server error, cause unknown." for all 20; `/api/resources/<id>/policy` 404. Same as the 2026-11-07 recon on this instance. Fallback: the alert is present in `GET /api/alertdefinitions` |
 | Active alerts | none | 7,250 active alerts on the instance, 0 for this alert definition |
 
 **Differences from the expectations**
@@ -88,8 +88,8 @@ The first post-install cycle (09:43:20, timing off, before the PUT) is listed as
   learning cycles too (cl01 26, steady 23).
 - `required_calls_failed` and `optional_calls_failed` stayed 1 and 5 through cycle 3 (the strike counter
   commits only when the cluster ended OK with at least one call, D8 amendment 2), then 0 and 0 from cycle 4.
-- Alert `waitCycles` is 1 (YAML `wait_cycles: 1`); README check 8.4 says "wait 2". Doc or YAML to align; the
-  phase 2 timing ("active within 2 Ops cycles") is the check, not the wait value.
+- Alert `waitCycles` 1 / `cancelCycles` 1 and symptom wait 2 / cancel 1 are as the design's content table
+  says (the symptom carries the debounce); README check 8.4's "wait 2, cancel 1" refers to the symptom. No gap.
 - Pre-state `last_error` and cycles 1 to 3 `last_error` were not sampled.
 - The `state 2` pair is in `series_pushed` as the cycle summary now shows; 1,635 vs 1,633 on build 22.
 - Not done: phase 2 (needs Scott to disable the service on the probe); README 8.5 (enable/disable

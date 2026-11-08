@@ -4,7 +4,7 @@
 - **Slug:** vsanperf-performance-service-disabled
 - **Authored YAML:** content/sdk-adapters/vsanperf/symptoms/vsanperf_performance_service_disabled.yaml
 - **Date:** 2026-11-08
-- **Status:** drafted
+- **Status:** authored (pak 1.2.1 build 24, merged 2026-11-08; installed on devel 9.0.2)
 
 ## Initial prompt
 
@@ -17,7 +17,7 @@
   `vSAN Perf|Performance Service|enabled` (0/1, pushed every cycle by the
   vsanperf pak from 1.2.1 on every in-scope cluster, design
   `knowledge/designs/vsanperf-mp-v3.md` § 1.2.1 D4).
-- Condition: value below 1 (`< 1`). Wait 2 cycles, cancel 1 (design D7). A
+- Condition: value below 1 (`< 1`). Wait 2 cycles, cancel 1 (design § 1.2.1 content table, symptom row). A
   metric symptom clears on the next 1; a property symptom would hold its last
   value, which is why the key is a metric.
 - Criticality Warning.

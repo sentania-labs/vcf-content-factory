@@ -170,8 +170,9 @@ it is not a published pak.
   refuses key SSH; 9.1: the new instance's log file was not located,
   collector.log only). Disk and VM tiers at scope `all` proven live
   2026-11-07 (record `vsanperf-t5-devel-9.0-build-22-all-scope-all-tiers.md`:
-  39 steady calls, 42 on VM cycles, 7,028 series, 6 to 12 s). v1.2.0.22 was
-  not tagged; superseded by Build 4.
+  cl01 alone 39 steady calls, 42 on settled VM cycles, 7,028 series; whole
+  cycle 6 to 29 s with the then-failing probe cluster included). v1.2.0.22
+  was not tagged; superseded by Build 4.
   Build 4 (1.2.1, builds 23 to 24, pak PR #12, main 726b0b2, merged
   2026-11-08; Scott: "If the performance service is disabled we should
   cleanly skip it and there should be an alert"): one VsanClusterGetConfig
@@ -184,13 +185,15 @@ it is not a published pak.
   § 1.2.1 D1 to D8; review `vsanperf-build-23-review.md`, B1 transport
   errors must not strike, fixed in build 24). Dev preview 0.0.0.24 on devel
   9.0.2: phase 1 passed (record `vsanperf-t5-devel-9.0-build-24-perfsvc.md`:
-  the OSA probe cluster with six server-side stats DB schema faults goes
-  from failed every cycle to ok at cycle 4, 37 steady calls, key 1 on both
-  clusters, content installed); phase 2 (service off then on: key 0, alert
-  raised, 23 calls, then cancel) waits for Scott's vCenter write. Doc gaps
-  for the next build: README check 8 lists four faulting types, the lab has
-  six (`vsan-cpu`, `vsan-memory` added); alert wait is 1 cycle, README says
-  2. 8.18 and 9.1 previews of build 24 pending. Tag v1.2.1.24 after phase 2.
+  the OSA probe cluster with six server-side stats DB schema faults counts
+  ok from the first cycle (build 22: failed every cycle), its faulting types
+  learned at cycle 4 (52 calls while learning, then 37 steady: cl01 23 +
+  probe 14), key 1 on both clusters, content installed); phase 2 (service
+  off then on: key 0, alert raised, 23 calls, then cancel) waits for Scott's
+  vCenter write. Doc gap for the next build: README check 8 lists four
+  faulting types, the lab has six (`vsan-cpu`, `vsan-memory` added). 8.18
+  and 9.1 previews of build 24 pending (RULE-019). Tag v1.2.1.24 on Scott's
+  word after phase 2 and the two previews.
   Tests: `T.CLOCK` pinned to 2026-11-07T14:00Z; build 22's tests were
   date-bombed from 2026-11-08 (lesson candidate).
   History 2026-11-06: Build 1 merged (builds 5 to 9, pak PRs
