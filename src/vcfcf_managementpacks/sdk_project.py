@@ -1,12 +1,15 @@
 """sdk_project.py — Loader and dataclass for Tier 2 SDK adapter.yaml files.
 
 Schema (all fields):
-    name:          str   — display name (e.g. "VCF Content Factory Hello World SDK")
+    name:          str   — display name (e.g. "VCF Content Factory Hello World SDK");
+                           stripped, non-blank, one line (_ONE_LINE_BAD_CHARS)
     version:       str   — semver string (e.g. "1.0.0")
     build_number:  int   — monotonic build counter (e.g. 1)
     adapter_kind:  str   — adapter kind key; must match describe.xml + adapter.properties
     tier:          int   — must be 2 for SDK adapters
-    description:   str   — optional human-readable description
+    description:   str   — optional human-readable description; stripped,
+                           may span lines (LF, CRLF, tab), otherwise the
+                           _ONE_LINE_BAD_CHARS rule (_MULTI_LINE_BAD_CHARS)
     dependencies:  list  — optional list of vendor JAR names from project lib/
     entry_class:   str   — optional fully-qualified entry class override;
                            default: derived as com.vcfcf.adapters.<adapter_kind>.<CamelCase>Adapter
@@ -120,7 +123,7 @@ CONTENT_NAMING_DEFAULT = CONTENT_NAMING_FACTORY_PREFIXED
 
 # adapter.yaml ``vendor`` default (#336): what build-sdk stamped before the key.
 DEFAULT_VENDOR = "VCF Content Factory"
-# One-line attribution fields (vendor, vendor_contact) reject: C0 controls
+# One-line fields (vendor, vendor_contact, name) reject: C0 controls
 # and DEL (newline, tab, ...), C1 controls (U+0080-U+009F, e.g. NEL), the
 # line and paragraph separators U+2028/U+2029, the Unicode bidi controls
 # (ALM U+061C, LRM/RLM U+200E-U+200F, embeddings and overrides U+202A-U+202E,
@@ -137,6 +140,33 @@ _ONE_LINE_RULE = (
     "(U+061C, U+200E, U+200F, U+202A-U+202E, U+2066-U+2069) or unpaired "
     "surrogate (U+D800-U+DFFF)"
 )
+# ``description`` (#338) is the one-line rule with line breaks allowed: LF,
+# CR only as part of CRLF, and tab.  A lone CR is rejected: HTML turns it
+# into a line feed, so the overview page would not read back as the value.
+_MULTI_LINE_BAD_CHARS = re.compile(r"(?!\r\n|[\n\t])" + _ONE_LINE_BAD_CHARS.pattern)
+_MULTI_LINE_RULE = (
+    "plain text (line feed, CRLF and tab allowed): no other control "
+    "character (lone CR, NUL, U+0080-U+009F), line or paragraph separator "
+    "(U+2028, U+2029), bidi control (U+061C, U+200E, U+200F, U+202A-U+202E, "
+    "U+2066-U+2069) or unpaired surrogate (U+D800-U+DFFF)"
+)
+
+
+def _reject_bad_chars(val: str, key: str, where: str,
+                      pattern=_ONE_LINE_BAD_CHARS, rule: str = _ONE_LINE_RULE) -> None:
+    """Raise when ``val`` holds a character ``pattern`` rejects.
+
+    The shared check for every adapter.yaml string stamped into the pak
+    (vendor, vendor_contact, name, description): what passes encodes in
+    every sink (JSON manifest.txt, the .properties escaper, the HTML
+    escaper) and reads back as itself from the overview pages.
+    """
+    bad = pattern.search(val)
+    if bad:
+        raise SdkProjectError(
+            f"{where}: '{key}' must be {rule}; got "
+            f"U+{ord(bad.group()):04X} at position {bad.start()} of {val!r}"
+        )
 
 
 def _parse_one_line(raw: dict, key: str, where: str) -> Optional[str]:
@@ -158,13 +188,7 @@ def _parse_one_line(raw: dict, key: str, where: str) -> Optional[str]:
             f"{where}: '{key}' is present but blank; set a value or remove "
             f"the key to use the default."
         )
-    bad = _ONE_LINE_BAD_CHARS.search(val.strip())
-    if bad:
-        raise SdkProjectError(
-            f"{where}: '{key}' must be {_ONE_LINE_RULE}; got "
-            f"U+{ord(bad.group()):04X} at position {bad.start()} of "
-            f"{val.strip()!r}"
-        )
+    _reject_bad_chars(val.strip(), key, where)
     return val.strip()
 
 
@@ -795,7 +819,12 @@ def load_sdk_project(path: Path) -> SdkProjectDef:
     if not isinstance(raw, dict):
         raise SdkProjectError(f"{where}: expected a YAML mapping at root level")
 
-    name = _require(raw, "name", str, where)
+    # name is stripped like vendor and description (#338): the stripped value
+    # is the one every sink stamps.
+    name = _require(raw, "name", str, where).strip()
+    if not name:
+        raise SdkProjectError(f"{where}: field 'name' is blank")
+    _reject_bad_chars(name, "name", where)
     version = _require(raw, "version", str, where)
     build_number_raw = _require(raw, "build_number", int, where)
     adapter_kind = _require(raw, "adapter_kind", str, where)
@@ -822,6 +851,9 @@ def load_sdk_project(path: Path) -> SdkProjectDef:
     description = raw.get("description", "")
     if not isinstance(description, str):
         description = str(description)
+    description = description.strip()
+    _reject_bad_chars(description, "description", where,
+                      _MULTI_LINE_BAD_CHARS, _MULTI_LINE_RULE)
 
     dependencies = raw.get("dependencies", [])
     if not isinstance(dependencies, list):
@@ -876,7 +908,7 @@ def load_sdk_project(path: Path) -> SdkProjectDef:
         build_number=int(build_number_raw),
         adapter_kind=adapter_kind,
         tier=tier,
-        description=description.strip(),
+        description=description,
         dependencies=dependencies,
         entry_class=entry_class,
         source_path=path,

@@ -280,3 +280,117 @@ def test_pre_escaped_entity_passes_through_manifest_and_properties(tmp_path):
     props = _generate_outer_resources_properties(p)
     assert _props_line(props, "DISPLAY_NAME") == "A &amp; B"
     assert _props_line(props, "DESCRIPTION") == "C &lt;x&gt; D"
+
+
+# ---------------------------------------------------------------------------
+# Loader: name and description carry the #336 character rules (#338 review W1)
+# ---------------------------------------------------------------------------
+
+from vcfcf_managementpacks.sdk_project import SdkProjectError  # noqa: E402
+
+_PLAIN_DESC = '"Widget pak."'
+
+
+@pytest.mark.parametrize("key", ["name", "description"])
+@pytest.mark.parametrize("yaml_value, code_point", [
+    ('"Pools\\Nvolumes"', "U+0085"),     # C1 NEL: &#133; would read as an ellipsis
+    ('"A\\x80B"', "U+0080"),             # C1: &#128; would read as a euro sign
+    ('"a\\ud800b"', "U+D800"),           # lone surrogate: no sink can encode it
+    ('"evil\\u202Etxt"', "U+202E"),      # bidi override
+    ('"nul\\0here"', "U+0000"),          # NUL
+    ('"a\\u2028b"', "U+2028"),           # line separator
+])
+def test_bad_characters_rejected_at_load(tmp_path, key, yaml_value, code_point):
+    name, desc = (yaml_value, _PLAIN_DESC) if key == "name" else (_PLAIN_NAME, yaml_value)
+    with pytest.raises(SdkProjectError) as exc:
+        _project(tmp_path, name, desc)
+    msg = str(exc.value)
+    assert f"'{key}' must be" in msg
+    assert code_point in msg
+
+
+def test_name_with_newline_rejected(tmp_path):
+    with pytest.raises(SdkProjectError, match=r"'name' must be one line.*U\+000A"):
+        _project(tmp_path, '"Line one\\nLine two"', _PLAIN_DESC)
+
+
+def test_description_with_lone_cr_rejected(tmp_path):
+    with pytest.raises(SdkProjectError, match=r"'description' must be.*U\+000D"):
+        _project(tmp_path, _PLAIN_NAME, '"a\\rb"')
+
+
+def test_blank_name_rejected(tmp_path):
+    with pytest.raises(SdkProjectError, match="'name' is blank"):
+        _project(tmp_path, '"   "', _PLAIN_DESC)
+
+
+def test_name_is_stripped_in_every_sink(tmp_path):
+    p = _project(tmp_path, '"  Padded Name \\t"', _PLAIN_DESC)
+    assert p.name == "Padded Name"
+    loaded = json.loads(_generate_outer_manifest(p))
+    assert loaded["name"] == loaded["display_name"] == "Padded Name"
+    assert _props_line(_generate_outer_resources_properties(p), "DISPLAY_NAME") == "Padded Name"
+    for page in _pages(p).values():
+        assert b"  <title>Padded Name</title>\n" in page
+        assert b"  <h1>Padded Name</h1>\n" in page
+
+
+def test_tab_and_multiline_description_accepted(tmp_path):
+    p = _project(tmp_path, _PLAIN_NAME, "|\n  col\tvalue\n\n  next & last\n")
+    assert p.description == "col\tvalue\n\nnext & last"
+    for page in _pages(p).values():
+        assert b"  <p>col\tvalue\n\nnext &amp; last</p>\n" in page
+        assert _parse(page).text["p"][1] == p.description
+
+
+def test_crlf_description_accepted_and_written_verbatim(tmp_path):
+    p = _project(tmp_path, _PLAIN_NAME, '"first\\r\\nsecond"')
+    assert p.description == "first\r\nsecond"
+    for page in _pages(p).values():
+        # Written as is.  A browser's input stream turns the CRLF into one
+        # line break, as it did before #338; the <p> layout is unchanged.
+        assert b"  <p>first\r\nsecond</p>\n" in page
+        assert _parse(page).text["p"][1] == "first\r\nsecond"
+    assert json.loads(_generate_outer_manifest(p))["description"] == "first\r\nsecond"
+    assert _props_line(_generate_outer_resources_properties(p),
+                       "DESCRIPTION") == "first\\r\\nsecond"
+
+
+def test_every_accepted_character_builds_and_reads_back(tmp_path):
+    # #338 review W1 and its surrogate follow-up: nothing the loader accepts
+    # for name or description may raise in a sink, and the overview page
+    # must decode to the value.  Noncharacters (U+FDD0-U+FDEF, U+xFFFE,
+    # U+xFFFF) are the exception in this check only: the WHATWG HTML parser
+    # decodes their references to themselves, but CPython's html.unescape
+    # follows an older table and drops them, so they are checked as emitted
+    # references instead.
+    from vcfcf_managementpacks.sdk_project import (
+        _MULTI_LINE_BAD_CHARS, _ONE_LINE_BAD_CHARS)
+    from vcfcf_managementpacks.sdk_builder import _html_text
+    p = _project(tmp_path, _PLAIN_NAME, _PLAIN_DESC)
+    for pattern, field_name in ((_ONE_LINE_BAD_CHARS, "name"),
+                                (_MULTI_LINE_BAD_CHARS, "description")):
+        chars = [chr(c) for c in range(0x110000) if not pattern.match(chr(c))]
+        assert "\x85" not in chars and "\ud800" not in chars and "‮" not in chars
+        assert ("\n" in chars) == (field_name == "description")
+        for i in range(0, len(chars), 4096):
+            s = "x" + "".join(chars[i:i + 4096]) + "x"
+            escaped = _html_text(s)
+            assert escaped.isascii()
+            assert html.unescape(escaped) == "".join(
+                c for c in s if not _is_noncharacter(c))
+            setattr(p, field_name, s)
+            _generate_outer_manifest(p).encode("utf-8")
+            _generate_outer_resources_properties(p).encode("utf-8")
+            _build_overview_packed(p)
+        setattr(p, field_name, _PLAIN_NAME.strip('"') if field_name == "name" else "Widget pak.")
+
+
+def _is_noncharacter(c: str) -> bool:
+    cp = ord(c)
+    return 0xFDD0 <= cp <= 0xFDEF or (cp & 0xFFFE) == 0xFFFE
+
+
+def test_noncharacters_are_emitted_as_references():
+    from vcfcf_managementpacks.sdk_builder import _html_text
+    assert _html_text("a\ufdd0\uffff\U0010fffeb") == "a&#64976;&#65535;&#1114110;b"
