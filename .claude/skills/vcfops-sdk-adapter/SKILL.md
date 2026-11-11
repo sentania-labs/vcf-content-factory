@@ -54,6 +54,27 @@ python3 -m vcfcf_managementpacks pak-compare   dist/<built>.pak --reference-dir 
 pak-compare is the install gate.** Bump `adapter.yaml` `build_number`
 and add a `CHANGELOG.md` line every build.
 
+## Pak vendor, contact and licence (optional)
+
+A pak not written by the factory names its own author and terms in
+`adapter.yaml` (#336, buildkit 1.0.26):
+
+```yaml
+vendor: "Example Labs"                     # manifest.txt, resources VENDOR=, overview pages
+vendor_contact: "support@example.com"      # overview pages only, under the vendor
+eula_file: LICENSE                         # project-relative; ships as eula.txt (both copies)
+```
+
+All three are optional; absent, the pak is byte-identical to before
+(`VCF Content Factory`, no contact line, the factory MIT `LICENSE` as
+`eula.txt`). With `eula_file` set, the factory `LICENSE` also ships as
+`<adapter_kind>/lib/vcfcf-adapter-base-LICENSE.txt`. The buildkit and the
+bundled `vcfcf-adapter-base.jar` stay MIT whatever the pak's own licence
+is, and that file is their notice. `validate-sdk` rejects a blank or
+non-string `vendor`/`vendor_contact` (one line, no control characters) and an
+`eula_file` that is missing, not a regular file, empty, not UTF-8, or outside
+the project. `build-sdk` prints the vendor and EULA source it stamped.
+
 ## Classloader isolation — the first-principles constraint
 
 Each pak gets its **own classloader**. You cannot borrow jars from

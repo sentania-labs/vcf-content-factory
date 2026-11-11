@@ -75,6 +75,23 @@ Schema (all fields):
                            over the generated file.  The file is read by
                            the SDK 2.2 (9.0) and 9.1.1 logger factory only;
                            8.18's never loads it.  See LoggingConfig.
+    vendor:        str   (optional) the pak's vendor name (#336), stamped
+                           into manifest.txt "vendor", the solution
+                           resources.properties VENDOR= and both
+                           overview.html pages.  Default
+                           "VCF Content Factory".
+    vendor_contact: str  (optional) free-text contact line (an email
+                           address or URL) shown under the vendor on the
+                           overview pages only.  Absent: no contact line.
+    eula_file:     str   (optional) path, relative to the adapter project,
+                           of the text shipped as the pak's eula.txt (both
+                           copies).  Default: the factory MIT LICENSE.  When
+                           set, the factory LICENSE also ships as
+                           <adapter_kind>/lib/vcfcf-adapter-base-LICENSE.txt,
+                           the notice for the bundled MIT base jar.
+                           A present key must be a non-blank one-line string
+                           (vendor, vendor_contact) or name a non-empty
+                           UTF-8 regular file inside the project (eula_file).
 """
 from __future__ import annotations
 
@@ -98,6 +115,93 @@ CONTENT_NAMING_FACTORY_PREFIXED = "factory_prefixed"
 CONTENT_NAMING_UNPREFIXED = "unprefixed"
 CONTENT_NAMING_VALUES = (CONTENT_NAMING_FACTORY_PREFIXED, CONTENT_NAMING_UNPREFIXED)
 CONTENT_NAMING_DEFAULT = CONTENT_NAMING_FACTORY_PREFIXED
+
+# adapter.yaml ``vendor`` default (#336): what build-sdk stamped before the key.
+DEFAULT_VENDOR = "VCF Content Factory"
+# One-line attribution fields: no control characters (newline, tab, ...).
+_ONE_LINE_BAD_CHARS = re.compile(r"[\x00-\x1f\x7f]")
+
+
+def _parse_one_line(raw: dict, key: str, where: str) -> Optional[str]:
+    """Optional one-line string key: None when absent, stripped otherwise."""
+    if key not in raw:
+        return None
+    val = raw[key]
+    if val is not None and not isinstance(val, str):
+        raise SdkProjectError(
+            f"{where}: '{key}' must be a string; got {type(val).__name__} "
+            f"{val!r}. Quote it, or remove the key to use the default."
+        )
+    if val is None or not val.strip():
+        raise SdkProjectError(
+            f"{where}: '{key}' is present but blank; set a value or remove "
+            f"the key to use the default."
+        )
+    if _ONE_LINE_BAD_CHARS.search(val.strip()):
+        raise SdkProjectError(
+            f"{where}: '{key}' must be one line of text (no newline, tab or "
+            f"other control character); got {val!r}"
+        )
+    return val.strip()
+
+
+def _parse_eula_file(raw: dict, project_dir: Path,
+                     where: str) -> Tuple[str, Optional[Path]]:
+    """Optional ``eula_file`` key: ("", None) when absent.
+
+    The path is relative to the adapter project and must resolve inside it
+    (symlinks followed) to a non-empty regular file that decodes as UTF-8.
+    """
+    if "eula_file" not in raw:
+        return "", None
+    val = raw["eula_file"]
+    if val is not None and not isinstance(val, str):
+        raise SdkProjectError(
+            f"{where}: 'eula_file' must be a path string relative to the "
+            f"adapter project; got {type(val).__name__} {val!r}"
+        )
+    rel = (val or "").strip()
+    if not rel:
+        raise SdkProjectError(
+            f"{where}: 'eula_file' is present but blank; name the licence "
+            f"file (e.g. LICENSE) or remove the key to ship the factory MIT "
+            f"LICENSE."
+        )
+    try:
+        root = project_dir.resolve()
+        target = (project_dir / rel).resolve()
+    except (OSError, ValueError) as exc:
+        raise SdkProjectError(
+            f"{where}: 'eula_file' {rel!r} is not a usable path: {exc}"
+        ) from None
+    try:
+        target.relative_to(root)
+    except ValueError:
+        raise SdkProjectError(
+            f"{where}: 'eula_file' {rel!r} resolves to {target}, outside the "
+            f"adapter project {root}; keep the licence file in the project."
+        ) from None
+    if not target.exists():
+        raise SdkProjectError(f"{where}: 'eula_file' {rel!r} not found ({target})")
+    if not target.is_file():
+        raise SdkProjectError(
+            f"{where}: 'eula_file' {rel!r} is not a regular file ({target})"
+        )
+    try:
+        data = target.read_bytes()
+    except OSError as exc:
+        raise SdkProjectError(
+            f"{where}: 'eula_file' {rel!r} cannot be read: {exc}"
+        ) from None
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise SdkProjectError(
+            f"{where}: 'eula_file' {rel!r} is not UTF-8 text ({exc})"
+        ) from None
+    if not text.strip():
+        raise SdkProjectError(f"{where}: 'eula_file' {rel!r} is empty")
+    return rel, target
 
 
 @dataclass
@@ -533,6 +637,14 @@ class SdkProjectDef:
     stitch_targets: List[StitchTargetInfo] = field(default_factory=list)
     # conf/logging.properties the build ships (factory #313).
     logging: LoggingConfig = field(default_factory=LoggingConfig)
+    # Pak attribution and licence (#336).  ``vendor_declared`` is False when
+    # adapter.yaml omits ``vendor`` (build-sdk then says how to set one).
+    # ``eula_path`` is the resolved file, ``eula_file`` the value as written.
+    vendor: str = DEFAULT_VENDOR
+    vendor_declared: bool = False
+    vendor_contact: str = ""
+    eula_file: str = ""
+    eula_path: Optional[Path] = None
 
     @property
     def entry_package(self) -> str:
@@ -706,6 +818,10 @@ def load_sdk_project(path: Path) -> SdkProjectDef:
             "set its level with logging.level instead"
         )
 
+    vendor = _parse_one_line(raw, "vendor", where)
+    vendor_contact = _parse_one_line(raw, "vendor_contact", where)
+    eula_file, eula_path = _parse_eula_file(raw, path.parent, where)
+
     return SdkProjectDef(
         name=name,
         version=version,
@@ -722,6 +838,11 @@ def load_sdk_project(path: Path) -> SdkProjectDef:
         content_foreign_adapter_kinds=content_foreign_adapter_kinds,
         stitch_targets=stitch_targets,
         logging=logging_config,
+        vendor=vendor if vendor is not None else DEFAULT_VENDOR,
+        vendor_declared=vendor is not None,
+        vendor_contact=vendor_contact or "",
+        eula_file=eula_file,
+        eula_path=eula_path,
     )
 
 
