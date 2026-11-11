@@ -219,9 +219,12 @@ on 2026-05-15 by Navani):
 
 The SDK jar differs per platform version. The shipped compile target is the
 VCF Operations 9.0.2 jar: `/usr/lib/vmware-vcops/common/lib/vrops-adapters-sdk.jar`
-on a 9.0.2 appliance (mode 644, readable over SSH). Both 9.0.2.0 build 25137845
-and 9.0.2.0200 build 25431135 are accepted, by sha256; name it
-`vrops-adapters-sdk-<version>.<build>.jar` after the build it came from.
+on a 9.0.2 appliance (mode 644, readable over SSH), 9.0.2.0 build 25137845 or
+9.0.2.0200 build 25431135. Any jar compiles; its sha256 decides which line's
+compatibility leg it satisfies and what `conf/version.txt`
+`Adapter-Version-Ref` records, and both 9.0.2 builds are recognised as the
+9.0 line. Name it `vrops-adapters-sdk-<version>.<build>.jar` after the build
+it came from.
 
 Two more jars are compile checks only, never on the shipped classpath,
 one leg per supported line (issues #211, #252): `vrops-adapters-sdk-8.18.7.25423534.jar`

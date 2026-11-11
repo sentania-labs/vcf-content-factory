@@ -3645,7 +3645,7 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
      *
      * <p>{@code START} is the one {@code DiscoveryResult$StateChangeEnum}
      * value (NOTEXIST, START, STOP, START_MAINTENANCE, STOP_MAINTENANCE; javap,
-     * the same in 8.18.7, 2.2 and 9.1.1.0100) that names a return to started,
+     * the same in 8.18.7, 9.0.2 and 9.1.1.0100) that names a return to started,
      * sent with {@code AdapterBase.changeResourceState(ResourceConfig,
      * DiscoveryResult$StateChangeEnum)}. Whether the platform takes a
      * NOT_EXISTING resource back to STARTED on it is UNKNOWN: no Broadcom

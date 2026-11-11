@@ -320,7 +320,12 @@ _LINE_CASES = [
 ]
 
 
-@pytest.mark.parametrize("name,major,java,platform,key", _LINE_CASES)
+# The primary (compile) jar: the 9.0 line's jars. Another line's jar there is
+# the wrong jar, not a JDK problem (test_another_lines_jar_as_the_primary_...).
+_PRIMARY_CASES = [c for c in _LINE_CASES if c[4] == "9.0"]
+
+
+@pytest.mark.parametrize("name,major,java,platform,key", _PRIMARY_CASES)
 def test_javac_too_old_for_the_compile_jar_says_so(
     runtime, tmp_path, monkeypatch, name, major, java, platform, key,
 ):
@@ -464,7 +469,7 @@ def _script_tree(tmp_path: Path, javac_version: str) -> tuple:
     fake.write_text(f'#!/bin/sh\necho "javac {javac_version}" >&2\nexit 0\n', encoding="utf-8")
     fake.chmod(0o755)
     for tool in ("dirname", "tr", "awk", "cut", "basename", "python3", "find", "sort",
-                 "wc", "rm", "mkdir", "grep", "sed", "head"):
+                 "wc", "rm", "mkdir", "grep", "sed", "head", "sha256sum"):
         found = shutil.which(tool)
         if found:
             (tools / tool).symlink_to(found)
@@ -478,22 +483,78 @@ def _run(script: Path, env) -> subprocess.CompletedProcess:
                           capture_output=True, text=True, env=env, timeout=120)
 
 
+def _shell_knows(script: Path, real_sha: str, stub: Path) -> None:
+    """Point the copied script's known-jar entry for real_sha at the stub's
+    bytes (stub jars stand in for the Broadcom jars)."""
+    text = script.read_text(encoding="utf-8")
+    assert text.count(real_sha) >= 1
+    script.write_text(text.replace(real_sha, sdk_builder._sha256_of(stub)), encoding="utf-8")
+
+
+_SHA_9_0_2_0 = "2d53a91fc2b9a99d9b685ed10c1e37a471c2f71f04e7ae0fb2c53fdaa14b4f54"
+_SHA_9_1_1 = "79f7b12340906359e04f3619dd87c7e67a9493b3fa5d86bdffe9242da67f46f7"
+
+
+def test_build_framework_knows_the_same_jars_as_sdk_builder():
+    text = _BUILD_FRAMEWORK.read_text(encoding="utf-8")
+    block = text.split('KNOWN_SDK_JARS="', 1)[1].split('"', 1)[0]
+    shell = {tuple(row.split("|")) for row in block.splitlines()}
+    py = {(k.sha256, line.key, k.platform)
+          for line in sdk_builder._SDK_COMPAT_LINES for k in line.jars}
+    assert shell == py
+    former = text.split('PRIMARY_FORMER_SHA="', 1)[1].split('"', 1)[0]
+    assert former == sdk_builder._SDK_JAR_9_0_2_0.sha256
+
+
 def test_build_framework_stops_plainly_on_a_javac_too_old(tmp_path):
+    rt, script, env = _script_tree(tmp_path, "11.0.24")
+    jar = _jar(rt / "vrops-adapters-sdk-9.0.2.0.25137845.jar", major=61)
+    _shell_knows(script, _SHA_9_0_2_0, jar)
+    r = _run(script, env)
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert ("javac 11 cannot read vrops-adapters-sdk-9.0.2.0.25137845.jar "
+            "(VCF Operations 9.0.2.0 build 25137845 (9.0 line))") in r.stderr
+    assert "class files are Java 17 (class-file major 61), so it needs JDK 17 or newer" in r.stderr
+
+
+def test_build_framework_does_not_claim_a_line_from_the_file_name(tmp_path):
+    """Review WARNING 2: an unknown jar under a 9.0.2 name is not "the 9.0
+    line's SDK jar"; the shell decides by hash."""
     rt, script, env = _script_tree(tmp_path, "11.0.24")
     _jar(rt / "vrops-adapters-sdk-9.0.2.0.25137845.jar", major=61)
     r = _run(script, env)
     assert r.returncode == 1, r.stdout + r.stderr
-    assert ("javac 11 cannot read vrops-adapters-sdk-9.0.2.0.25137845.jar "
-            "(the 9.0 line's SDK jar)") in r.stderr
-    assert "class files are Java 17 (class-file major 61), so it needs JDK 17 or newer" in r.stderr
+    assert "9.0 line" not in r.stderr
+    assert "matches no known SDK jar" in r.stderr
 
 
-def test_build_framework_accepts_the_former_name_with_a_note(tmp_path):
-    rt, script, env = _script_tree(tmp_path, "11.0.24")
-    _jar(rt / "vrops-adapters-sdk-2.2.jar", major=61)
+def test_build_framework_names_another_lines_jar_as_the_wrong_jar(tmp_path):
+    """Review WARNING 2: the 9.1 jar under the 9.0.2 name on JDK 17 is told
+    to use a 9.0.2 jar, not to install JDK 25."""
+    rt, script, env = _script_tree(tmp_path, "17.0.2")
+    jar = _jar(rt / "vrops-adapters-sdk-9.0.2.0.25137845.jar", major=69, tag="9.1")
+    _shell_knows(script, _SHA_9_1_1, jar)
     r = _run(script, env)
-    assert "INFO: vrops-adapters-sdk-2.2.jar is the former name of" in r.stdout
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert ("vrops-adapters-sdk-9.0.2.0.25137845.jar is the 9.1.1.0100 line's SDK jar "
+            "(VCF Operations 9.1.1.0100 build 25795063), not a 9.0.2 jar") in r.stderr
+    assert "vrops-adapters-sdk-9.0.2.0200.25431135.jar" in r.stderr
+    assert "a 9.0.2 jar needs JDK 17 or newer" in r.stderr
+    assert "Install JDK 25" not in r.stderr
+
+
+def test_build_framework_former_name_note_needs_the_right_bytes(tmp_path):
+    rt, script, env = _script_tree(tmp_path, "11.0.24")
+    jar = _jar(rt / "vrops-adapters-sdk-2.2.jar", major=61)
+    r = _run(script, env)  # unknown bytes under the former name
+    assert ("INFO: vrops-adapters-sdk-2.2.jar is the former name of "
+            "vrops-adapters-sdk-9.0.2.0.25137845.jar, but this file is not that jar") in r.stdout
+    assert "it still works" not in r.stdout
     assert "cannot read vrops-adapters-sdk-2.2.jar" in r.stderr  # it found and checked it
+    _shell_knows(script, _SHA_9_0_2_0, jar)  # now its bytes are the 9.0.2.0 jar's
+    r = _run(script, env)
+    assert ("INFO: vrops-adapters-sdk-2.2.jar is the former name of "
+            "vrops-adapters-sdk-9.0.2.0.25137845.jar; it still works.") in r.stdout
 
 
 def test_build_framework_refuses_two_9_0_jars(tmp_path):
@@ -510,3 +571,58 @@ def test_build_framework_without_the_jar_gives_the_real_path(tmp_path):
     r = _run(script, env)
     assert r.returncode == 1
     assert "/usr/lib/vmware-vcops/common/lib/vrops-adapters-sdk.jar" in r.stderr
+
+
+# ---------------------------------------------------------------------------
+# Review follow-ups (2026-11-11): wrong-line primary jar, former-name note
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("name,major,key,platform", [
+    ("vrops-adapters-sdk-9.1.1.0100.25795063.jar", 69, "9.1.1.0100",
+     "VCF Operations 9.1.1.0100 build 25795063"),
+    ("vrops-adapters-sdk-8.18.7.25423534.jar", 55, "8.18.7",
+     "Aria Operations 8.18.7 build 25423534"),
+])
+def test_another_lines_jar_as_the_primary_is_named_the_wrong_jar(
+    runtime, tmp_path, monkeypatch, name, major, key, platform,
+):
+    """Review WARNING 2: under any name, a known non-9.0 jar as the shipped
+    compile target is the wrong jar; a JDK upgrade is not the advice."""
+    jar = _jar(tmp_path / "vrops-adapters-sdk-9.0.2.0.25137845.jar", major=major, tag=key)
+    _lines_with(monkeypatch, **{name: sdk_builder._sha256_of(jar)})
+    monkeypatch.setattr(sdk_builder, "_javac_major", lambda _j: (major - 44) - 1)
+    with pytest.raises(SdkBuildError) as exc:
+        sdk_builder._require_javac_reads_jar("/usr/bin/javac", jar)
+    msg = str(exc.value)
+    assert f"is the {key} line's jar ({platform}), not a 9.0.2 jar" in msg
+    assert "vrops-adapters-sdk-9.0.2.0.25137845.jar (VCF Operations 9.0.2.0 build 25137845)" in msg
+    assert "vrops-adapters-sdk-9.0.2.0200.25431135.jar (VCF Operations 9.0.2.0200 build 25431135)" in msg
+    assert "needs JDK 17 or newer" in msg
+    assert "Install JDK" not in msg
+    assert "--sdk-compat-jar" in msg
+
+
+def test_former_name_note_only_when_the_bytes_match(runtime, monkeypatch, capsys):
+    """Review NIT 2: a former name with other bytes is not "it still works"."""
+    jar = _jar(runtime / "vrops-adapters-sdk-2.2.jar", tag="not-ga")
+    sdk_builder._primary_sdk_jar()
+    err = capsys.readouterr().err
+    assert ("INFO: vrops-adapters-sdk-2.2.jar is the former name of "
+            "vrops-adapters-sdk-9.0.2.0.25137845.jar (VCF Operations 9.0.2.0 "
+            "build 25137845), but this file is not that jar") in err
+    assert "matches no known platform" in err
+    assert "it still works" not in err
+    monkeypatch.setattr(sdk_builder, "_FORMER_NAMES_NOTED", set())
+    _lines_with(monkeypatch, **{
+        "vrops-adapters-sdk-9.0.2.0.25137845.jar": sdk_builder._sha256_of(jar)})
+    sdk_builder._primary_sdk_jar()
+    err = capsys.readouterr().err
+    assert "it still works" in err and "not that jar" not in err
+
+
+def test_the_howto_does_not_claim_a_hash_check_on_the_compile():
+    """Review NIT 3: any jar compiles; the hash decides the leg and the stamp."""
+    howto = sdk_builder._SDK_JAR_HOWTO
+    assert "accepted" not in howto
+    assert "Any jar compiles" in howto and "Adapter-Version-Ref" in howto

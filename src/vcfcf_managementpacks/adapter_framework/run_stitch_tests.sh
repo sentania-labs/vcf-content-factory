@@ -42,8 +42,26 @@ if [ -z "$SDK_JAR" ]; then
         if [ -f "$RUNTIME_DIR/$name" ]; then
             SDK_JAR="$RUNTIME_DIR/$name"
             if [ "$name" = vrops-adapters-sdk-2.2.jar ]; then
-                echo "run_stitch_tests: INFO: $name is the former name of" \
-                     "vrops-adapters-sdk-9.0.2.0.25137845.jar; it still works"
+                # The name alone proves nothing: say "former name" only
+                # when the bytes are the 9.0.2.0 jar's.
+                sha=""
+                if command -v sha256sum >/dev/null 2>&1; then
+                    sha="$(sha256sum "$SDK_JAR" | awk '{print $1}')"
+                elif command -v shasum >/dev/null 2>&1; then
+                    sha="$(shasum -a 256 "$SDK_JAR" | awk '{print $1}')"
+                fi
+                if [ "$sha" = 2d53a91fc2b9a99d9b685ed10c1e37a471c2f71f04e7ae0fb2c53fdaa14b4f54 ]; then
+                    echo "run_stitch_tests: INFO: $name is the former name of" \
+                         "vrops-adapters-sdk-9.0.2.0.25137845.jar; it still works"
+                elif [ -n "$sha" ]; then
+                    echo "run_stitch_tests: INFO: $name is the former name of" \
+                         "vrops-adapters-sdk-9.0.2.0.25137845.jar, but this file is" \
+                         "not that jar (sha256 $(printf '%s' "$sha" | cut -c1-12))"
+                else
+                    echo "run_stitch_tests: INFO: $name is the former name of" \
+                         "vrops-adapters-sdk-9.0.2.0.25137845.jar; this file was not" \
+                         "hash-checked (no sha256sum or shasum)"
+                fi
             fi
             break
         fi

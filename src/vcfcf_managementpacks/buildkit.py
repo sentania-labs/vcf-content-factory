@@ -375,9 +375,10 @@ ship in a public toolchain tarball.
 ### Which jar
 
 The SDK jar differs per platform version. The shipped compile target is
-the VCF Operations 9.0.2 jar; either 9.0.2 build below is accepted. A
-supplied jar is identified by its sha256, so its file name does not matter
-(the appliance calls every one vrops-adapters-sdk.jar):
+the VCF Operations 9.0.2 jar, either 9.0.2 build below. Any jar compiles;
+its sha256, not its file name (the appliance calls every one
+vrops-adapters-sdk.jar), decides which line's compatibility leg it
+satisfies and what conf/version.txt Adapter-Version-Ref records:
 
     line        platform                                    name in the kit                               class files  JDK   role
     9.0         VCF Operations 9.0.2.0 build 25137845       vrops-adapters-sdk-9.0.2.0.25137845.jar       Java 17      17+   compile target (either 9.0 jar)
@@ -481,7 +482,7 @@ from pathlib import Path
 _SDK_JAR_HELP = (
     "Path to the VCF Operations 9.0.2 SDK jar, copied from a 9.0.2 appliance's "
     "/usr/lib/vmware-vcops/common/lib/vrops-adapters-sdk.jar (Broadcom; not "
-    "shipped in this kit; any file name, identified by sha256; needs JDK 17+ — "
+    "shipped in this kit; any file name: its sha256 says which line it is; needs JDK 17+ — "
     "see the consumer contract in __init__.py). "
     "Alternatively set the VCFCF_SDK_JAR environment variable. "
     "Required when running outside the VCF Content Factory repo."

@@ -24,7 +24,7 @@ pattern this borrows) and asserts:
      parsed.
 
 Both builds are expected to fail downstream at the Java/SDK-jar step (no
-vrops-adapters-sdk-2.2.jar in CI/test envs) — sdk_builder logs the version
+SDK jar in CI/test envs) — sdk_builder logs the version
 stamp (sdk_builder.py:_stamp_build_version) *before* it reaches
 _ensure_framework_jar(), so the marker line is reliably present on stderr
 regardless of that later failure.

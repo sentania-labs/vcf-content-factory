@@ -1050,7 +1050,7 @@ def build_parser() -> argparse.ArgumentParser:
             "path to the VCF Operations 9.0.2 SDK jar (Broadcom; not shipped "
             "in the buildkit tarball), copied from a 9.0.2 appliance's "
             "/usr/lib/vmware-vcops/common/lib/vrops-adapters-sdk.jar; any file "
-            "name (identified by sha256); needs JDK 17+. Alternatively set "
+            "name (its sha256 says which line it is); needs JDK 17+. Alternatively set "
             "VCFCF_SDK_JAR env var. "
             "In the factory, the jar is already in adapter_runtime/ and this "
             "flag is not needed."

@@ -12,7 +12,7 @@ framework source tree; stub jars compiled by the javac on PATH):
 
   - the compat jar never joins the primary classpath, the primary SDK jar
     glob, or the Adapter-Version-Ref detection, even though it sits beside
-    the 2.2 jar in adapter_runtime/;
+    the 9.0.2 jar in adapter_runtime/;
   - the pass passes when the referenced class is in the compat jar and
     fails, naming the class, when it is not;
   - a missing jar or a too-old JDK is a loud skip, and a failure when
@@ -201,7 +201,7 @@ def test_compat_jar_alone_is_not_a_primary_sdk_jar(runtime, tmp_path):
 ])
 def test_a_second_sdk_jar_under_any_name_is_an_error(runtime, tmp_path, stray):
     """Review B1: the 9.1.1 jar copied under its appliance name used to join
-    the primary classpath beside 2.2 while the compat pass skipped."""
+    the primary classpath beside the 9.0.2 jar while the compat pass skipped."""
     _touch_jar(runtime / "vrops-adapters-sdk-2.2.jar")
     _touch_jar(runtime / stray)
     with pytest.raises(SdkBuildError) as exc:
@@ -224,7 +224,7 @@ def test_env_sdk_jar_is_the_only_sdk_jar_on_the_classpath(runtime, tmp_path, mon
     monkeypatch.setenv("VCFCF_SDK_JAR", str(env_jar))
     jars = sdk_builder._build_classpath_jars(tmp_path)
     assert jars[0] == env_jar
-    assert _sdk_jars_on(jars) == []  # the runtime 2.2 copy stays off
+    assert _sdk_jars_on(jars) == []  # the runtime 9.0.2 copy stays off
 
 
 def test_framework_compile_refuses_two_sdk_jars(runtime):
@@ -612,7 +612,7 @@ def test_build_framework_import_failure_is_could_not_run(tmp_path):
 def test_validate_with_an_empty_adapter_runtime_skips_like_main(
     runtime, tmp_path, monkeypatch, capsys,
 ):
-    """The public CI runner has no SDK jar at all (the 2.2 jar is private).
+    """The public CI runner has no SDK jar at all (the 9.0.2 jar is private).
     `python3 -m vcfcf_managementpacks validate` must skip the compile checks
     with the existing notice and pass, exactly as on main: the one-SDK-jar
     rule fires only for two or more jars, never for none, and no compat box
@@ -837,7 +837,7 @@ def test_each_leg_picks_its_own_jdk(runtime, tmp_path, monkeypatch, capsys):
 
 def test_legs_compile_main_sources_only(runtime, tmp_path):
     """Framework tests (adapter_framework/test/) and the pak's tests/ never
-    reach a leg: CertificateReviewTest calls a 2.2-only member."""
+    reach a leg: CertificateReviewTest calls a member the 9.0.2 jar has and 8.18.7 lacks."""
     fw = _write_java(sdk_builder._ADAPTER_FRAMEWORK_SRC_DIR, "fw/F.java", "package fw; class F {}\n")
     _write_java(
         sdk_builder._ADAPTER_FRAMEWORK_SRC_DIR.parent / "test", "fw/FTest.java",
@@ -861,7 +861,7 @@ def test_build_framework_runs_legs_from_the_list_env_var(tmp_path):
 
 
 def test_the_8_18_jar_in_adapter_runtime_is_a_leg_not_a_primary_jar(runtime, tmp_path):
-    """Issue #252: vrops-adapters-sdk-8.18.7.jar beside the 2.2 jar is the
+    """Issue #252: vrops-adapters-sdk-8.18.7.jar beside the 9.0.2 jar is the
     8.18 leg, never a second primary SDK jar; both known compat jars are
     legs, oldest first."""
     primary = _touch_jar(runtime / "vrops-adapters-sdk-2.2.jar")
@@ -897,12 +897,13 @@ def test_ci_sdk_compat_matrix_has_the_8_18_and_9_1_legs():
     assert by_sdk["9.1.1.0100"]["jdk"] == "25"
     assert by_sdk["9.0"]["jdk"] == "17"
     # One row per supported line; the row's sdk is the VCFCF_SDK_COMPAT_LEGS
-    # key and its jar a name the kit knows for that line (the row names the
-    # file in the pinned runtime repo commit, current or former name).
+    # key and its jar that line's current reference jar name (for 9.0 the
+    # 9.0.2.0 jar, which the runtime repo holds).
     lines = {line.key: line for line in sdk_builder._SDK_COMPAT_LINES}
     assert sorted(by_sdk) == sorted(lines) and len(legs) == len(lines)
+    # The pinned runtime repo commit holds the current names only.
     for leg in legs:
-        assert leg["jar"] in lines[leg["sdk"]].names, leg
+        assert leg["jar"] == lines[leg["sdk"]].jar_name, leg
     job = yaml.safe_load(ci.read_text(encoding="utf-8"))["jobs"]["sdk-compat"]
     env = next(s["env"] for s in job["steps"] if s.get("name", "").startswith("Compile"))
     assert env["VCFCF_SDK_COMPAT_LEGS"] == "${{ matrix.sdk }}"
@@ -923,32 +924,74 @@ def _write_src(tmp_path: Path, name: str, body: str) -> Path:
     return _write_java(tmp_path / "usersrc", f"user/{name}.java", f"package user;\n{body}\n")
 
 
+def _provenance_section_rows(prov: str, heading: str):
+    """The table rows ("|" lines naming a jar) under one PROVENANCE.md
+    heading, up to the next heading of any level."""
+    rows, inside = [], False
+    for row in prov.splitlines():
+        if row.startswith("#"):
+            inside = row.strip() == heading
+            continue
+        if inside and row.startswith("|") and "`vrops-adapters-sdk-" in row:
+            rows.append(row)
+    return rows
+
+
+def _check_provenance(prov: str) -> None:
+    import re
+
+    known = [k for l in sdk_builder._SDK_COMPAT_LINES for k in l.jars]
+    # The compile-targets table: each known jar's current name in exactly one
+    # row, carrying exactly its hash; no other jar row there.
+    main = _provenance_section_rows(prov, "## The compile targets")
+    assert len(main) == len(known), main
+    for k in known:
+        rows = [r for r in main if f"`{k.file_name}`" in r]
+        assert len(rows) == 1, (k.file_name, rows)
+        assert set(re.findall(r"\b[0-9a-f]{64}\b", rows[0])) == {k.sha256}, k.file_name
+    # The former-name table: each former name in exactly one row, with the
+    # current name and that jar's hash; nothing else there.
+    former = _provenance_section_rows(prov, "### Former names")
+    pairs = [(n, k) for k in known for n in k.former_names]
+    assert len(former) == len(pairs), former
+    for name, k in pairs:
+        rows = [r for r in former if f"`{name}`" in r]
+        assert len(rows) == 1, (name, rows)
+        assert f"`{k.file_name}`" in rows[0], name
+        assert set(re.findall(r"\b[0-9a-f]{64}\b", rows[0])) == {k.sha256}, name
+
+
 def test_line_hashes_match_provenance():
     prov = (Path(sdk_builder.__file__).parent / "adapter_runtime" / "PROVENANCE.md").read_text(
         encoding="utf-8")
-    import re
-
-    # Every name of every known jar (CI looks a jar up by the name in its
-    # matrix row, current or former) finds table rows carrying exactly that
-    # jar's hash.
-    for line in sdk_builder._SDK_COMPAT_LINES:
-        for known in line.jars:
-            for name in (known.file_name,) + known.former_names:
-                rows = [r for r in prov.splitlines() if r.startswith("|") and f"`{name}`" in r]
-                assert rows, name
-                hashes = set(re.findall(r"\b[0-9a-f]{64}\b", "\n".join(rows)))
-                assert hashes == {known.sha256}, name
-    # And the table names no other jar hash: four known jars, four hashes.
-    table = [r for r in prov.splitlines() if r.startswith("|") and "`vrops-adapters-sdk-" in r]
-    all_hashes = set(re.findall(r"\b[0-9a-f]{64}\b", "\n".join(table)))
-    assert all_hashes == {k.sha256 for l in sdk_builder._SDK_COMPAT_LINES for k in l.jars}
+    _check_provenance(prov)
     assert [l.key for l in sdk_builder._SDK_COMPAT_LINES] == ["8.18.7", "9.0", "9.1.1.0100"]
     assert [len(l.jars) for l in sdk_builder._SDK_COMPAT_LINES] == [1, 2, 1]
 
 
+def test_provenance_check_notices_a_missing_compile_target_row():
+    """Review WARNING 1: the former-name table carries every current name and
+    hash too, so a deleted compile-targets row must still fail the check."""
+    prov = (Path(sdk_builder.__file__).parent / "adapter_runtime" / "PROVENANCE.md").read_text(
+        encoding="utf-8")
+    for k in [k for l in sdk_builder._SDK_COMPAT_LINES for k in l.jars]:
+        broken = "\n".join(
+            r for r in prov.splitlines()
+            if not (r.startswith(("| Primary", "| Known jar", "| Compat leg"))
+                    and f"`{k.file_name}`" in r))
+        assert broken != prov, k.file_name
+        with pytest.raises(AssertionError):
+            _check_provenance(broken)
+    # And a former-name row missing fails too.
+    broken = "\n".join(r for r in prov.splitlines()
+                       if not r.startswith("| `vrops-adapters-sdk-2.2.jar`"))
+    with pytest.raises(AssertionError):
+        _check_provenance(broken)
+
+
 def test_leg_release_follows_the_jar_class_files():
     assert sdk_builder._compat_leg_release(11) == 11   # 8.18.7, major 55
-    assert sdk_builder._compat_leg_release(17) == 17   # 2.2 (9.0), major 61
+    assert sdk_builder._compat_leg_release(17) == 17   # 9.0.2 (9.0), major 61
     assert sdk_builder._compat_leg_release(25) == 25   # 9.1.1.0100, major 69
     assert sdk_builder._compat_leg_release(8) == 11    # never below the shipped release
 
@@ -1030,7 +1073,7 @@ def test_sdk_miss_is_blamed_on_the_jar(runtime, tmp_path, monkeypatch):
 
 
 def _renewal_stub(tmp_path: Path, jar_name: str) -> Path:
-    """A stub SDK jar whose AdapterBase has getCertificateRenewalUrls (as 2.2
+    """A stub SDK jar whose AdapterBase has getCertificateRenewalUrls (as 9.0.2
     and 9.1.1 do; 8.18 does not)."""
     src = _write_java(
         tmp_path / ("rs_" + jar_name), "sdkstub/AdapterBase.java",

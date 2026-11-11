@@ -529,7 +529,9 @@ _PROVENANCE_REF = (
 _SDK_JAR_HOWTO = (
     "The SDK jar differs per platform version. The shipped compile target is "
     "the VCF Operations 9.0.2 jar (9.0.2.0 build 25137845 or 9.0.2.0200 build "
-    "25431135; either is accepted, by sha256, under any file name). Copy it "
+    "25431135, under any file name). Any jar compiles; its sha256 decides "
+    "which line's compatibility leg it satisfies and what conf/version.txt "
+    "Adapter-Version-Ref records. Copy it "
     "from a 9.0.2 appliance over SSH (the file is mode 644):\n"
     "  scp root@<appliance>:/usr/lib/vmware-vcops/common/lib/vrops-adapters-sdk.jar .\n"
     "Its class files are Java 17, so it needs JDK 17 or newer. The 8.18.7 "
@@ -584,15 +586,32 @@ _FORMER_NAMES_NOTED: set = set()
 
 
 def _note_former_name(jar: Path) -> None:
-    """One INFO line the first time a jar under a former kit name is used."""
+    """One INFO line the first time a jar under a former kit name is used.
+
+    The name alone proves nothing: the line says "former name of X" only
+    when the bytes are X's, and otherwise that the contents are not X.
+    """
     known = _known_jar_for_former_name(jar.name)
     if known is None or jar.name in _FORMER_NAMES_NOTED:
         return
     _FORMER_NAMES_NOTED.add(jar.name)
+    try:
+        sha = _sha256_of(jar)
+    except OSError:
+        sha = ""
+    if sha == known.sha256:
+        print(
+            f"  INFO: {jar.name} is the former name of {known.file_name} "
+            f"({known.platform}); it still works. Jars are now named "
+            f"vrops-adapters-sdk-<version>.<build>.jar (hashes: {_PROVENANCE_REF}).",
+            file=sys.stderr,
+        )
+        return
     print(
         f"  INFO: {jar.name} is the former name of {known.file_name} "
-        f"({known.platform}); it still works. Jars are now named "
-        f"vrops-adapters-sdk-<version>.<build>.jar (hashes: {_PROVENANCE_REF}).",
+        f"({known.platform}), but this file is not that jar (sha256 "
+        f"{sha[:12] or 'unreadable'}: {_jar_identity(jar)}); it is used as "
+        f"what its bytes are (hashes: {_PROVENANCE_REF}).",
         file=sys.stderr,
     )
 
@@ -682,6 +701,26 @@ def _require_javac_reads_jar(javac: str, jar: Optional[Path]) -> None:
     have = _javac_major(javac)
     if not need or have is None or have >= need:
         return
+    try:
+        found = _known_jar_for_sha(_sha256_of(jar))
+    except OSError:
+        found = None
+    if found is not None and found[0].key != _PRIMARY_LINE_KEY:
+        # Another line's jar as the shipped compile target: a newer JDK would
+        # "fix" this by compiling the pak against the wrong line's API.
+        line, known = found
+        primary = next(l for l in _SDK_COMPAT_LINES if l.key == _PRIMARY_LINE_KEY)
+        names = " or ".join(f"{k.file_name} ({k.platform})" for k in primary.jars)
+        raise SdkBuildError(
+            f"The SDK jar {jar} is the {line.key} line's jar ({known.platform}), "
+            f"not a 9.0.2 jar. The shipped compile (framework and adapter) must "
+            f"use a 9.0.2 jar: {names}. Pass it with --sdk-jar / VCFCF_SDK_JAR "
+            f"(or put it in adapter_runtime/ as {_SDK_PRIMARY_JAR_NAME}); a 9.0.2 "
+            f"jar's class files are Java 17, so it needs JDK 17 or newer. Pass "
+            f"this jar with --sdk-compat-jar instead. (javac {have} cannot read "
+            f"this jar either: its class files are Java {need}, class-file "
+            f"major {need + 44}.)"
+        )
     raise SdkBuildError(
         f"javac {have} cannot read the SDK jar {jar} ({_jar_identity(jar)}): "
         f"its class files are Java {need} (class-file major {need + 44}), so "

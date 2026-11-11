@@ -76,7 +76,7 @@ Schema (all fields):
                                        (e.g. com.integrien.*, set to ERROR).
                            An adapter-source conf/logging.properties wins
                            over the generated file.  The file is read by
-                           the SDK 2.2 (9.0) and 9.1.1 logger factory only;
+                           the 9.0.2 and 9.1.1 SDK jars' logger factory only;
                            8.18's never loads it.  See LoggingConfig.
     vendor:        str   (optional) the pak's vendor name (#336), stamped
                            into manifest.txt "vendor", the solution
