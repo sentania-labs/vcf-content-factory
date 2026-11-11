@@ -1555,6 +1555,54 @@ have checked only Java 11's, which is why the legs use their own release.
 Devel's one outlier is the `VrAdapter` pack's bundled copy (0f2f3a8c5722, a
 smaller build). The `2.2` and `1.0` in file names are names, not versions.
 
+### Re-read over SSH, all three devel appliances (2026-11-11)
+
+Read-only (find, sha256sum, python zipfile in place, `sftp ls`); no jar
+left a box. Corrects the devel row above: devel is no longer 9.0.2.0
+build 25137845. It was patched 2026-10-14 to 9.0.2.0200 (pak
+`vRealizeOperationsManagerEnterprise-902020025431133`; Suite API
+`versions/current`: "VCF Operations 9.0.2.0" build 25431135; RPM
+`vmware-vcops-9.0.2.0-25429562`), and its jar is new bytes.
+
+| Appliance | Suite API version, build | `common/lib/vrops-adapters-sdk.jar` sha256 (12), size | Class major | Collector Java | Matches recorded |
+|---|---|---|---|---|---|
+| devel | VCF Operations 9.0.2.0, 25431135 (9.0.2.0200) | a8e9ebbdc8c6, 1,002,682 | 61 (Java 17), 480 classes | OpenJDK 17.0.16 | no (2d53a91fc2b9 is 9.0.2.0 GA; not on the box any more) |
+| devel_8_18 | VMware Aria Operations 8.18.7, 25423534 | 45d54c6403ac, 965,383 | 55 (Java 11), 471 | OpenJDK 11.0.30 | yes |
+| devel_9_1 | VCF Operations 9.1.1.0, 25795063 (9.1.1.0100) | 79f7b1234090, 1,001,091 | 69 (Java 25), 474 | OpenJDK 25.0.3 | yes |
+
+- The 9.0.2.0200 jar is a rebuild, not an API change: per-entry CRC32 and
+  size are identical to the 2.2 jar for all 480 classes; only
+  `META-INF/maven/.../pom.properties` (build timestamp) and `pom.xml`
+  (`bora-25137845` vs `bora-25429562` build paths) differ. It compiles the
+  same, but its sha256 matches no line in `_SDK_COMPAT_LINES`.
+- Version strings disagree on every box: `lastbuildversion.txt` and the RPM
+  say 9.0.2.0 / 8.18.6 build 25423535 / 9.0.0.0 build 25794169; trust the
+  Suite API and the `vrops-init` RPM (9.0.2.0200, 8.18.7.0, 9.1.1.0100).
+- Collector classpath on all three: `user/conf/collector/wrapper-classpath.conf`,
+  `wrapper.java.classpath.60=%ALIVE_BASE%/common/lib/vrops-adapters-sdk.jar`
+  (`.61=` on 9.1). That is the canonical copy; `common/lib/vrops-adapters-sdk-1.0.jar`
+  beside it is the same bytes.
+- Every other `vrops-adapters-sdk*.jar` (`find / -xdev`: 26 on devel, 19 on
+  8.18, 33 on 9.1) is a copy inside a webapp (`tomcat-enterprise`,
+  `tomcat-web-app`, `vmware-casa`), a controller plugin, or a pack's own
+  `user/plugins/inbound/<pack>/lib/`. All are the canonical bytes except
+  devel's `VrAdapter` copy (0f2f3a8c5722, 847,726 bytes, Java 8 major 52).
+  Versioned names: only `-1.0` everywhere, plus
+  `LogAssistAdapter/lib/vrops-adapters-sdk-2.2.jar` on devel and
+  `LogAssistAdapter/lib/vrops-adapters-sdk-9.1.1.0.jar` on 9.1 (both
+  canonical bytes). No `-2.2` file on 8.18.
+- Absent on all three: `/usr/lib/vmware-vcops/common-lib/` (the directory),
+  `common-lib/vrops-adapters-sdk-2.2.jar`, and
+  `/usr/lib/vmware-vcops/suite-api/` (the directory). The Suite API's copy is
+  `tomcat-enterprise/webapps/suite-api/WEB-INF/lib/vrops-adapters-sdk-1.0.jar`
+  (canonical bytes, mode 640 admin:admin).
+- Fetching: the canonical jar is 644 admin:admin in a 755 dir, so any SSH
+  user can read it; root SSH was on (`PermitRootLogin yes`, sshd enabled) and
+  `sftp ls` of the path works on all three, so `scp` (SFTP mode) of
+  `common/lib/vrops-adapters-sdk.jar` is realistic where SSH is enabled.
+  Root's password expires on 8.18 and 9.1 (90 days) and an expired one
+  blocks scp. 9.1 has no `unzip`, none has `xxd`.
+
 ### API delta for the classes we use (read 2026-10-13)
 
 Class files: every class in the 9.0.2 jar is major version 61 (Java 17);
