@@ -272,3 +272,30 @@ Guards to add (tooling, then framework-reviewer):
    any is in the stock manifest.
 4. The name-based view/dashboard deletes skip anything that lacks the
    factory prefix or is not in the bundle's own id list.
+
+## Restore performed (2026-11-11)
+
+The 64 view definitions were exported from a 9.1.1.0100 instance and imported
+on devel 9.0.2 with `force=true`: `imported=64, skipped=0, failed=0`, view
+count 787 to 851, all 64 ids present, and every View widget on the 29 stock
+dashboards that use them resolves again. All 64 render server-side
+(`/internal/views/{id}/data/export`, HTTP 200). No browser pass was done. A
+pre-import export of all 787 views was taken first.
+
+The definitions are the 9.1.1 ones, not the 9.0.2 originals, so the restore is
+not exact:
+
+- `9e427b59` is a different view in 9.1.1 ("Distribution of clusters by DRS
+  Automation Level"; 9.0.2 had "Configuration | Cluster DRS Migration
+  Threshold"). The "DRS Migration Threshold" widget on "Cluster Configuration
+  New" now shows the automation-level distribution.
+- `4d9b6ad6` and `524d0468` use host property `summary|version_4d`, which
+  9.0.2 hosts do not carry (they have `summary|version`): one column is null,
+  one distribution is empty.
+- Nine ids carry their 9.1.1 names (for example `fcab0100` "DRS Enabled?"
+  where 9.0.2 had "Configuration | Cluster DRS Enabled").
+- Eleven views return a valid but empty result. Five are rule-violation
+  distributions, plausibly empty because nothing violates; six trend views
+  returning no series are unexplained.
+
+An exact restore needs a 9.0.2 export of the same ids, which was not available.

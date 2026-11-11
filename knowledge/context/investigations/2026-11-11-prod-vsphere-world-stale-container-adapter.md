@@ -90,7 +90,7 @@ The repo shows no prod pak work on 10-16 or 10-17 (the build 94 install was
   check NTP (the cluster raised "NTP Servers are not reachable" on 10-23 and
   11-09).
 
-## Least invasive fix (not performed)
+## Least invasive fix (performed 2026-11-11, worked)
 
 Stop and start monitoring on the Container adapter instance only:
 `PUT /api/adapters/434146c8-2aaa-4810-b7dc-de7e8ee39175/monitoringstate/stop`,
@@ -99,3 +99,15 @@ This resets the controller's state for that instance without touching the
 nodes. If the API refuses because Container is a system adapter, the next step
 is taking operations02 offline and bringing it back online in the Admin UI.
 A collector-only restart on operations02 is already disproven by 10-25.
+
+Outcome: all five PUTs returned HTTP 200 with an empty body, so the Container
+adapter is not refused as a system adapter. Container was stopped at 22:35:00
+UTC and started about 40 seconds later; it reached `STARTED` /
+`DATA_RECEIVING`, the vSphere World wrote a sample at 22:35:43 UTC and has
+written on the five-minute cycle since, and World-scoped super metrics
+computed within two cycles. `40817391...` and `34979f7e...` showed `STARTED` /
+`NO_DATA_RECEIVING` rather than `STARTING`, with a newest stat from that
+morning, so they may be a different or intermittent failure; both got the same
+stop and start and wrote fresh stats within a minute. Their steady state after
+several cycles was not re-checked. Why the Container instance stuck on 10-17 is
+still unknown.
