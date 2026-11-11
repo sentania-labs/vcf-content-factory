@@ -224,7 +224,7 @@ jobs:
   sdk-compat:
     # Compile matrix (issues #211, #252, RULE-019: every Tier 2 pak works on
     # 8.18, 9.0 and 9.1). The framework ships compiled against the 9.0.2 jar
-    # (vrops-adapters-sdk-2.2.jar) with --release 11; this job compiles the
+    # (vrops-adapters-sdk-9.0.2.0.25137845.jar) with --release 11; this job compiles the
     # same framework main source once per supported line, against that
     # line's SDK jar and at that line's collector Java (--release 11 for
     # 8.18.7, 17 for 9.0, 25 for 9.1.1.0100, read from the jar's class
@@ -265,13 +265,13 @@ jobs:
         include:
           - sdk: "8.18.7"
             jdk: "17"
-            jar: vrops-adapters-sdk-8.18.7.jar
+            jar: vrops-adapters-sdk-8.18.7.25423534.jar
           - sdk: "9.0"
             jdk: "17"
-            jar: vrops-adapters-sdk-2.2.jar
+            jar: vrops-adapters-sdk-9.0.2.0.25137845.jar
           - sdk: "9.1.1.0100"
             jdk: "25"
-            jar: vrops-adapters-sdk-9.1.1.0100.jar
+            jar: vrops-adapters-sdk-9.1.1.0100.25795063.jar
     name: sdk-compat (${{ matrix.sdk }})
     steps:
       - name: Check for the sdk-runtime deploy key
@@ -322,7 +322,9 @@ jobs:
           # Pinned to one runtime commit, never default-branch HEAD (runtime#1):
           # the same pin the pak repos' build-pak-on-tag.yml use. Bump it here
           # and in PROVENANCE.md together when a jar changes.
-          SDK_RUNTIME_COMMIT=b92956cc7c9ede5d9cfb5bc499c10b2e8e85cb9e
+          # cff8dbd is the runtime repo's rename to <version>.<build> file names
+          # (its PR 10, 2026-11-11): same jars, same hashes.
+          SDK_RUNTIME_COMMIT=cff8dbd6eab2621428ad46e25a38dc0e23187b60
           export GIT_SSH_COMMAND="ssh -i $KEY_FILE -o IdentitiesOnly=yes -o UserKnownHostsFile=$KNOWN_HOSTS -o StrictHostKeyChecking=yes"
           git init -q "$RUNNER_TEMP/sdk_runtime"
           git -C "$RUNNER_TEMP/sdk_runtime" remote add origin git@github.com:sentania-labs/vcf-content-factory-sdk-runtime.git

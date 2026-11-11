@@ -3,7 +3,7 @@
 **Purpose:** mechanical guide for `sdk-adapter-author` to migrate
 compliance, synology, and unifi adapters from framework v1 to v2.
 After migration each adapter must compile cleanly against
-`vcfcf-adapter-base.jar + vrops-adapters-sdk-2.2.jar`. Note on
+`vcfcf-adapter-base.jar + vrops-adapters-sdk-9.0.2.0.25137845.jar`. Note on
 `aria-ops-core`: it remains on the **compile** classpath because
 `sdk_builder.py` globs the entire `adapter_runtime/` directory; it is
 harmless for v2 adapters and is correctly omitted from the v2 pak at
@@ -30,7 +30,7 @@ Every `import com.vmware.tvs.*` line is deleted.
 | `import com.vmware.tvs.vrealize.adapter.core.test.TestException;` | *(gone — throw any Exception from VcfCfTester.test())* |
 | `import com.vmware.tvs.vrealize.adapter.core.collection.CollectionException;` | *(gone — throw any Exception from VcfCfCollector.collect())* |
 
-### Keep these (unchanged, from vrops-adapters-sdk-2.2.jar)
+### Keep these (unchanged, from vrops-adapters-sdk-9.0.2.0.25137845.jar)
 
 ```java
 import com.integrien.alive.common.adapter3.*;
@@ -681,19 +681,19 @@ See also the Logging authoring contract note in `knowledge/context/tier2_archite
 
 The adapter must compile cleanly. `sdk_builder.py` automatically builds
 the classpath from `adapter_runtime/` (which includes
-`vcfcf-adapter-base.jar`, `vrops-adapters-sdk-2.2.jar`, and
+`vcfcf-adapter-base.jar`, `vrops-adapters-sdk-9.0.2.0.25137845.jar`, and
 `aria-ops-core-*.jar` for v1 compatibility) plus the project's `lib/*.jar`.
 `aria-ops-core` is on the **compile** classpath but is correctly excluded
 from the v2 pak at packaging time — its presence at compile time is harmless.
 
 Effective compile classpath (managed by the builder):
 ```
-vcfcf-adapter-base.jar : vrops-adapters-sdk-2.2.jar [: aria-ops-core-*.jar] [: <vendor jars>]
+vcfcf-adapter-base.jar : vrops-adapters-sdk-9.0.2.0.25137845.jar [: aria-ops-core-*.jar] [: <vendor jars>]
 ```
 
 If `javac` reports a missing symbol:
 - `com.vmware.tvs.*` → clean-room wall violation; report as TOOLSET GAP.
-- `com.integrien.*` → symbol is in vrops-adapters-sdk-2.2.jar; add jar to CP.
+- `com.integrien.*` → symbol is in vrops-adapters-sdk-9.0.2.0.25137845.jar; add jar to CP.
 - `com.vcfcf.*` → symbol is in vcfcf-adapter-base.jar; rebuild framework if needed.
 
 ---

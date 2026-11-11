@@ -25,7 +25,43 @@ Portable Tier 2 SDK adapter build toolchain (jar-free).
   lone surrogate passed validation, then failed the build.
 - Write `name` and `description` as plain text: `&amp;` now shows
   literally as `&amp;`.
-- Adoption: no adapter.yaml change for a name and description that already
+- The Broadcom SDK jars are named for the platform version and build their
+  bytes come from: `vrops-adapters-sdk-9.0.2.0.25137845.jar` (formerly
+  `vrops-adapters-sdk-2.2.jar`), `vrops-adapters-sdk-8.18.7.25423534.jar`
+  (formerly `-8.18.7.jar`) and `vrops-adapters-sdk-9.1.1.0100.25795063.jar`
+  (formerly `-9.1.1.0100.jar`). Same bytes, same sha256. `2.2` was never a
+  platform version. The former names still work wherever the kit looks a
+  jar up by name, with one INFO line; a jar passed with `--sdk-jar`,
+  `VCFCF_SDK_JAR` or `--sdk-compat-jar` may have any name and is identified
+  by its sha256.
+- The 9.0 line accepts a second jar: VCF Operations 9.0.2.0200 build
+  25431135, the jar on a patched 9.0.2 appliance (sha256
+  `a8e9ebbdc8c622fb89551d51870220e784f0097ed0800a6f490dfdc74a11119b`). Its
+  480 classes are identical to 9.0.2.0's; only Maven metadata differs. It
+  satisfies the 9.0 leg, so copying the jar from a current 9.0.2 appliance
+  no longer fails a `--require-sdk-compat` run with "sha256 matches no
+  known line".
+- `conf/version.txt` `Adapter-Version-Ref` records the SDK jar the pak was
+  compiled against as `<version>.<build>`, from its sha256
+  (`9.0.2.0.25137845` or `9.0.2.0200.25431135`), whatever the file is
+  called. It read `2.2` in factory builds and `N/A` in kit builds that pass
+  `--sdk-jar`. An unknown jar gets the version from a
+  `vrops-adapters-sdk-<version>.<build>.jar` name, else `unknown`. Every
+  rebuilt pak's `conf/version.txt` changes; nothing else in the pak does.
+- A javac older than the SDK jar's class files stops the build with a
+  message naming the jar, its platform line, the Java it needs and the Java
+  found, instead of "Framework compilation failed". The 9.0.2 jar needs JDK
+  17 or newer; JDK 11 is not enough.
+- When `VCFCF_SDK_JAR` is another line's jar, or a jar matching no known
+  hash, the 9.0 leg's SKIPPED notice says so instead of telling you to set
+  `VCFCF_SDK_JAR`.
+- The instructions for obtaining the jar give the real appliance path,
+  `/usr/lib/vmware-vcops/common/lib/vrops-adapters-sdk.jar`. The
+  `/usr/lib/vmware-vcops/common-lib/` and `/usr/lib/vmware-vcops/suite-api/`
+  paths named before exist on no appliance, and "any 9.x instance" was
+  wrong: the jar differs per platform version. See Consumer contract below.
+- Adoption: no change is required, and former jar names keep working. No
+  adapter.yaml change is needed for a name and description that already
   validate. A pak on the floating major gets this on its next build; a
   pinned pak bumps `BUILDKIT_TAG` to `sdk-buildkit-v1.0.27` and its
   committed SHA256SUMS.
@@ -337,16 +373,74 @@ that is the intended gate.
 
 ## Consumer contract
 
-The kit compiles adapters against `vrops-adapters-sdk-2.2.jar` which
-**you must supply**. It is a Broadcom internal build artifact with no
-public redistribution channel and must not ship in a public toolchain
-tarball (see redistribution survey 2026-06-09).
+The kit ships no Broadcom jars. It compiles its framework source and your
+adapter against a Broadcom SDK jar that **you must supply**. That jar is a
+Broadcom build artifact with no public redistribution channel and must not
+ship in a public toolchain tarball (see redistribution survey 2026-06-09).
 
-**How to obtain the SDK JAR (pick one):**
-1. Extract from your VCF Ops appliance:
-   `scp root@<appliance>:/usr/lib/vmware-vcops/common-lib/vrops-adapters-sdk-2.2.jar .`
-   (also present at `/usr/lib/vmware-vcops/suite-api/WEB-INF/lib/vrops-adapters-sdk.jar`)
-2. Pull from the Broadcom TAP / partner SDK portal (if you have access).
+**Which jar.** The SDK jar is different on every platform version. What
+ships is compiled against the VCF Operations 9.0.2 jar, either build below.
+The other two lines' jars are optional compatibility checks. The kit
+identifies a jar by its sha256, so the file name does not matter; these are
+the names the kit itself uses, `vrops-adapters-sdk-<version>.<build>.jar`.
+
+| Platform, build | File name in the kit | sha256 | Class files | JDK to read it | Role |
+|---|---|---|---|---|---|
+| VCF Operations 9.0.2.0, 25137845 | `vrops-adapters-sdk-9.0.2.0.25137845.jar` | `2d53a91fc2b9a99d9b685ed10c1e37a471c2f71f04e7ae0fb2c53fdaa14b4f54` | Java 17 | 17+ | **Required.** Compile target, and the 9.0 compatibility leg |
+| VCF Operations 9.0.2.0200, 25431135 | `vrops-adapters-sdk-9.0.2.0200.25431135.jar` | `a8e9ebbdc8c622fb89551d51870220e784f0097ed0800a6f490dfdc74a11119b` | Java 17 | 17+ | Accepted in place of the 9.0.2.0 jar |
+| Aria Operations 8.18.7, 25423534 | `vrops-adapters-sdk-8.18.7.25423534.jar` | `45d54c6403acf535c982a85d658b422f534c36c90ceab78a224dde67b2a640ea` | Java 11 | 11+ | Optional compatibility leg |
+| VCF Operations 9.1.1.0100, 25795063 | `vrops-adapters-sdk-9.1.1.0100.25795063.jar` | `79f7b12340906359e04f3619dd87c7e67a9493b3fa5d86bdffe9242da67f46f7` | Java 25 | 25+ | Optional compatibility leg |
+
+Everything that ships is compiled with `javac --release 11`, because the
+8.18 collector runs Java 11, but the javac must be new enough to read the
+jar's class files: JDK 17 or newer for a 9.0.2 jar. A javac that is too old
+stops the build and says so.
+
+Former names, still accepted: `vrops-adapters-sdk-2.2.jar` (the 9.0.2.0
+jar), `vrops-adapters-sdk-8.18.7.jar`, `vrops-adapters-sdk-9.1.1.0100.jar`.
+
+**Where it is on an appliance.** On every line the collector's jar is
+
+    /usr/lib/vmware-vcops/common/lib/vrops-adapters-sdk.jar
+
+with no version in the file name. It is world-readable. Copy it from an
+appliance of the right version, name it for the version and build it came
+from, and check the hash against the table:
+
+    scp root@<appliance>:/usr/lib/vmware-vcops/common/lib/vrops-adapters-sdk.jar ./vrops-adapters-sdk-9.0.2.0.25137845.jar
+    sha256sum vrops-adapters-sdk-9.0.2.0.25137845.jar
+
+A jar from an appliance at a build not in the table has a hash the kit
+does not know. It still compiles, but the 9.0 leg reports it as an unknown
+jar. Partners with access can pull the jar from the Broadcom TAP / partner
+SDK portal instead.
+
+**Providing it to the build.**
+
+    python3 -m sdk_buildkit build-sdk <adapter_dir> --sdk-jar /path/to/vrops-adapters-sdk-9.0.2.0.25137845.jar
+
+or set `VCFCF_SDK_JAR` to the same path. `conf/version.txt`
+`Adapter-Version-Ref` in the built pak records which jar it was compiled
+against.
+
+**The optional compatibility jars.** Pass the 8.18.7 and 9.1.1.0100 jars
+to also compile the framework and adapter main source once per line, at
+that line's collector Java, keeping nothing:
+
+    python3 -m sdk_buildkit build-sdk <adapter_dir> \
+        --sdk-jar /path/to/vrops-adapters-sdk-9.0.2.0.25137845.jar \
+        --sdk-compat-jar /path/to/vrops-adapters-sdk-8.18.7.25423534.jar \
+        --sdk-compat-jar /path/to/vrops-adapters-sdk-9.1.1.0100.25795063.jar \
+        --require-sdk-compat
+
+`VCFCF_SDK_COMPAT_JARS` (colon-separated) and the older one-jar
+`VCFCF_SDK_COMPAT_JAR` do the same. Each leg needs a JDK at least as new as
+its jar's class files (JDK 25+ for 9.1.1.0100), found on PATH, `JAVA_HOME`,
+`JAVA_HOME_<N>_X64` or `VCFCF_SDK_COMPAT_JAVAC`. A line with no matching
+jar or no new enough JDK is skipped with a warning; `--require-sdk-compat`
+(`VCFCF_SDK_COMPAT_REQUIRED=1`) makes that a failure, and
+`VCFCF_SDK_COMPAT_LEGS` (comma list of `8.18.7`, `9.0`, `9.1.1.0100`)
+narrows the lines a run must cover.
 
 **CI usage (adapter repo's build workflow):**
 
@@ -363,7 +457,7 @@ tarball (see redistribution survey 2026-06-09).
 
 - name: Build adapter pak
   env:
-    VCFCF_SDK_JAR: ${{ secrets.VCFCF_SDK_JAR_PATH }}   # path to vrops-adapters-sdk-2.2.jar
+    VCFCF_SDK_JAR: ${{ secrets.VCFCF_SDK_JAR_PATH }}   # path to the 9.0.2 SDK jar
   run: python3 -m sdk_buildkit build-sdk .
 ```
 
