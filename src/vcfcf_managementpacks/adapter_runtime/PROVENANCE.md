@@ -178,7 +178,11 @@ a box and builds. Rule and details: `knowledge/context/tier2_architecture.md`,
   the 9.0.2 jar only (either 9.0 row), with `javac --release 11` (Java 11
   bytecode and Java 11 library API: the 8.18 collector runs Java 11). The
   javac must be JDK 17 or newer to read the jar's Java 17 class files; an
-  older one stops the build with a message saying so.
+  older one stops the build with a message saying so. The framework jar's
+  manifest records the sha256 of the jar it was compiled against
+  (`X-Vcfcf-Sdk-Sha256`); build-sdk rebuilds it whenever that is not the
+  current primary jar, so a framework jar built against another jar is
+  never reused.
 - `conf/version.txt` `Adapter-Version-Ref` is the compile jar's
   `<version>.<build>` from its sha256 (`9.0.2.0.25137845` or
   `9.0.2.0200.25431135`), whatever the file is called.

@@ -130,6 +130,12 @@ def _find_stale_framework_sources(output_jar: Path, sources: List[Path]) -> List
 # back by VcfCfAdapter at configure and printed by build-sdk.
 _FRAMEWORK_TITLE = "vcfcf-adapter-base"
 _FRAMEWORK_COMMIT_ATTR = "X-Vcfcf-Source-Commit"
+# sha256 of the SDK jar the framework was compiled against (#343 review W2):
+# _ensure_framework_jar rebuilds a jar whose value is not the current primary
+# jar's, so a jar compiled against a jar a release build refuses is never
+# reused. "unknown" when the jar could not be hashed (build-framework.sh with
+# no hash tool), which never matches.
+_FRAMEWORK_SDK_SHA_ATTR = "X-Vcfcf-Sdk-Sha256"
 
 
 def _framework_version() -> str:
@@ -199,14 +205,33 @@ def _git_source_commit(repo_root: Path, source_dir: Path) -> str:
         return "unknown"
 
 
-def _framework_manifest_text() -> str:
-    """Manifest lines for ``jar cfm`` (the tool adds Manifest-Version)."""
+def _framework_manifest_text(sdk_sha: str) -> str:
+    """Manifest lines for ``jar cfm`` (the tool adds Manifest-Version).
+    ``sdk_sha`` is the sha256 of the SDK jar the classes were compiled
+    against."""
     return (
         f"Implementation-Title: {_FRAMEWORK_TITLE}\n"
         f"Implementation-Version: {_framework_version()}\n"
         "Implementation-Vendor: VCF Content Factory\n"
         f"{_FRAMEWORK_COMMIT_ATTR}: {_framework_source_commit()}\n"
+        f"{_FRAMEWORK_SDK_SHA_ATTR}: {sdk_sha}\n"
     )
+
+
+def _framework_manifest_attrs(jar: Path) -> Optional[Dict[str, str]]:
+    """The main attributes of a built framework jar's manifest, or None when
+    it has no readable manifest."""
+    try:
+        with zipfile.ZipFile(jar) as zf:
+            raw = zf.read("META-INF/MANIFEST.MF").decode("utf-8", "replace")
+    except (OSError, KeyError, zipfile.BadZipFile):
+        return None
+    attrs = {}
+    for line in raw.replace("\r\n", "\n").replace("\n ", "").splitlines():
+        if ": " in line:
+            k, v = line.split(": ", 1)
+            attrs[k.strip()] = v.strip()
+    return attrs
 
 
 def _framework_jar_label(jar: Path) -> str:
@@ -215,22 +240,41 @@ def _framework_jar_label(jar: Path) -> str:
     Reads the jar's manifest; a jar built before issue #214 carries none of
     the attributes and is reported as such.
     """
-    try:
-        with zipfile.ZipFile(jar) as zf:
-            raw = zf.read("META-INF/MANIFEST.MF").decode("utf-8", "replace")
-    except (OSError, KeyError, zipfile.BadZipFile):
+    attrs = _framework_manifest_attrs(jar)
+    if attrs is None:
         return f"{jar.name} (no readable manifest)"
-    attrs = {}
-    for line in raw.replace("\r\n", "\n").replace("\n ", "").splitlines():
-        if ": " in line:
-            k, v = line.split(": ", 1)
-            attrs[k.strip()] = v.strip()
     version = attrs.get("Implementation-Version")
     if version is None:
         return f"{jar.name} (unversioned: built before the framework manifest stamp)"
     title = attrs.get("Implementation-Title", _FRAMEWORK_TITLE)
     commit = attrs.get(_FRAMEWORK_COMMIT_ATTR, "unknown")
     return f"{title} {version} (source {commit})"
+
+
+def _framework_jar_sdk_mismatch(output_jar: Path) -> Optional[str]:
+    """Why an existing framework jar was not compiled against the current
+    primary SDK jar (#343 review W2), or None when it was, or when there is no
+    primary jar to compare with (the build then fails on the missing jar).
+
+    A jar with no X-Vcfcf-Sdk-Sha256 (built before 1.0.28) does not match:
+    which jar compiled it is unknown.
+    """
+    compile_jar = _primary_compile_jar()
+    if compile_jar is None:
+        return None
+    try:
+        current = _sha256_of(compile_jar)
+    except OSError:
+        current = None
+    attrs = _framework_manifest_attrs(output_jar) or {}
+    built_for = attrs.get(_FRAMEWORK_SDK_SHA_ATTR, "").strip().lower()
+    if current is not None and built_for == current:
+        return None
+    was = (f"sha256 {built_for[:12]}" if built_for and built_for != "unknown"
+           else "an unrecorded SDK jar")
+    now = f"sha256 {current[:12]}" if current else "an unreadable file"
+    return (f"it was compiled against {was}, and the primary SDK jar "
+            f"{compile_jar.name} is {now}")
 
 
 def _ensure_framework_jar() -> None:
@@ -242,9 +286,13 @@ def _ensure_framework_jar() -> None:
     first use against the consumer-supplied SDK jar (VCFCF_SDK_JAR / --sdk-jar).
 
     This is a no-op ONLY when adapter_runtime/vcfcf-adapter-base.jar already
-    exists AND no file under adapter_framework/src/ is newer than it (fresh
-    jar — factory mode with a jar built from the current source, or a
-    previous build in the same consumer session).
+    exists AND no file under adapter_framework/src/ is newer than it AND its
+    manifest's X-Vcfcf-Sdk-Sha256 is the sha256 of the primary SDK jar this
+    run compiles against (fresh jar — factory mode with a jar built from the
+    current source, or a previous build in the same consumer session). The
+    sha check (#343 review W2) stops a release build reusing a framework jar
+    a hand build compiled against another (perhaps refused) SDK jar; it
+    applies in every mode.
 
     If the jar exists but is STALE (any .java file under
     adapter_framework/src/ has a newer mtime), it is rebuilt from the
@@ -253,7 +301,9 @@ def _ensure_framework_jar() -> None:
     (the silent-downgrade failure mode; see synology build 23 containment
     proof). If the source tree is not present in this context (e.g. a
     runtime-only distribution that ships the jar but not adapter_framework/
-    src/), staleness cannot be checked and the existing jar is used as-is.
+    src/), the jar cannot be rebuilt and is used as-is; a jar compiled
+    against another SDK jar is then a warning, or an error in a release
+    build.
 
     Raises SdkBuildError if the source tree is present but compilation fails,
     or if neither the jar nor the source tree can be found, or if the jar is
@@ -263,22 +313,36 @@ def _ensure_framework_jar() -> None:
     src_dir = _ADAPTER_FRAMEWORK_SRC_DIR
 
     if output_jar.is_file():
-        if not src_dir.is_dir():
-            # No source tree to check staleness against (e.g. a runtime-only
-            # distribution). Use the jar as shipped.
-            return
-        sources = sorted(src_dir.rglob("*.java"))
+        sources = sorted(src_dir.rglob("*.java")) if src_dir.is_dir() else []
+        mismatch = _framework_jar_sdk_mismatch(output_jar)
         if not sources:
+            # No source tree to rebuild from (e.g. a runtime-only
+            # distribution). Use the jar as shipped.
+            if mismatch is not None:
+                msg = (f"{output_jar.name} cannot be rebuilt (no framework "
+                       f"source at {src_dir}), and {mismatch}.")
+                if _sdk_jar_release_mode():
+                    raise SdkBuildError(
+                        f"{msg} A release build ships only a framework jar "
+                        "compiled against a known SDK jar (#343).")
+                print(f"  WARNING: framework: {msg}", file=sys.stderr)
             return
         stale = _find_stale_framework_sources(output_jar, sources)
-        if not stale:
+        if not stale and mismatch is None:
             return  # jar is fresh — nothing to do
-        print(
-            f"  framework: {output_jar.name} is STALE — "
-            f"{len(stale)} source file(s) newer than the jar "
-            f"(e.g. {stale[0].relative_to(src_dir)}); rebuilding...",
-            file=sys.stderr,
-        )
+        if stale:
+            print(
+                f"  framework: {output_jar.name} is STALE — "
+                f"{len(stale)} source file(s) newer than the jar "
+                f"(e.g. {stale[0].relative_to(src_dir)}); rebuilding...",
+                file=sys.stderr,
+            )
+        else:
+            print(
+                f"  framework: {output_jar.name} is STALE — {mismatch}; "
+                "rebuilding...",
+                file=sys.stderr,
+            )
     else:
         if not src_dir.is_dir():
             raise SdkBuildError(
@@ -363,7 +427,8 @@ def _ensure_framework_jar() -> None:
         # framework version and source commit in the manifest (issue #214).
         _ADAPTER_RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
         manifest = Path(tmpdir) / "MANIFEST.txt"
-        manifest.write_text(_framework_manifest_text(), encoding="utf-8")
+        manifest.write_text(_framework_manifest_text(_sha256_of(Path(fw_classpath))),
+                            encoding="utf-8")
         cmd_jar = [jar_tool, "cfm", str(output_jar), str(manifest),
                    "-C", str(build_dir), "."]
         result_jar = subprocess.run(cmd_jar, capture_output=True, text=True)

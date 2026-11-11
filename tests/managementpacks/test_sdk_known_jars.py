@@ -503,3 +503,99 @@ def test_run_stitch_tests_release_run_accepts_any_known_line(tmp_path):
     env.update({"VCFCF_SDK_JAR": str(jar), "VCFCF_SDK_COMPAT_REQUIRED": "1"})
     r = _bash(script, env)
     assert "no override" not in r.stderr and "WOULD REFUSE" not in r.stdout
+
+
+# ---------------------------------------------------------------------------
+# The framework jar records the SDK jar it was compiled against (review W2)
+# ---------------------------------------------------------------------------
+
+
+def _marker_source(runtime: Path) -> None:
+    src = runtime.parent / "fwsrc" / "com" / "vcfcf" / "testfw"
+    src.mkdir(parents=True, exist_ok=True)
+    (src / "Marker.java").write_text(
+        "package com.vcfcf.testfw;\npublic final class Marker {}\n", encoding="utf-8")
+
+
+def _framework_sdk_sha(runtime: Path) -> str:
+    attrs = sdk_builder._framework_manifest_attrs(runtime / "vcfcf-adapter-base.jar")
+    return attrs[sdk_builder._FRAMEWORK_SDK_SHA_ATTR]
+
+
+_needs_jar_tool = pytest.mark.skipif(shutil.which("javac") is None or shutil.which("jar") is None,
+                                     reason="needs javac and jar on PATH")
+
+
+@_needs_jar_tool
+def test_a_release_build_after_a_hand_build_with_another_jar_recompiles_the_framework(
+        runtime, tmp_path, monkeypatch, capsys):
+    _marker_source(runtime)
+    known = _jar(runtime / _N_9_0_2_0, "9.0")
+    other = _jar(tmp_path / "patched" / "vrops-adapters-sdk.jar", "patched-appliance")
+    _known_as(monkeypatch, **{_N_9_0_2_0: known})
+
+    # Hand build with --sdk-jar <unknown>: warns, compiles the framework against it.
+    monkeypatch.setenv("VCFCF_SDK_JAR", str(other))
+    sdk_builder._check_run_sdk_jars("build-sdk")
+    sdk_builder._ensure_framework_jar()
+    assert _framework_sdk_sha(runtime) == sdk_builder._sha256_of(other)
+    capsys.readouterr()
+
+    # Release build with the known jar: passes the check, and the framework
+    # jar (mtime-fresh) is recompiled, not reused.
+    monkeypatch.delenv("VCFCF_SDK_JAR")
+    monkeypatch.setenv("VCFCF_RELEASE_BUILD", "1")
+    assert sdk_builder._check_run_sdk_jars("build-sdk") == []
+    sdk_builder._ensure_framework_jar()
+    err = capsys.readouterr().err
+    assert "is STALE" in err and "compiling" in err
+    assert f"compiled against sha256 {sdk_builder._sha256_of(other)[:12]}" in err
+    assert _framework_sdk_sha(runtime) == sdk_builder._sha256_of(known)
+
+    # Same jar again: a true no-op.
+    def _forbidden_run(*args, **kwargs):
+        raise AssertionError("framework jar rebuilt although it matches the primary jar")
+    monkeypatch.setattr(subprocess, "run", _forbidden_run)
+    sdk_builder._ensure_framework_jar()
+
+
+@_needs_jar_tool
+def test_a_framework_jar_with_no_recorded_sdk_jar_is_rebuilt(runtime, tmp_path, capsys):
+    """A jar built before 1.0.28 has no X-Vcfcf-Sdk-Sha256: which jar compiled
+    it is unknown, so it is rebuilt."""
+    _marker_source(runtime)
+    _jar(runtime / _N_9_0_2_0, "9.0")
+    fw = runtime / "vcfcf-adapter-base.jar"
+    with zipfile.ZipFile(fw, "w") as zf:
+        zf.writestr("META-INF/MANIFEST.MF", "Manifest-Version: 1.0\nImplementation-Version: 1.0.27\n")
+    later = fw.stat().st_mtime + 60
+    os.utime(fw, (later, later))  # newer than the source: fresh by mtime
+    sdk_builder._ensure_framework_jar()
+    assert "compiled against an unrecorded SDK jar" in capsys.readouterr().err
+    assert _framework_sdk_sha(runtime) == sdk_builder._sha256_of(runtime / _N_9_0_2_0)
+
+
+@pytest.mark.parametrize("release", [False, True])
+def test_a_framework_jar_for_another_sdk_jar_with_no_source_to_rebuild(
+        runtime, tmp_path, monkeypatch, capsys, release):
+    """No framework source (runtime-only): the jar cannot be rebuilt, so a
+    mismatch warns in a hand build and stops a release build."""
+    _jar(runtime / _N_9_0_2_0, "9.0")
+    fw = runtime / "vcfcf-adapter-base.jar"
+    with zipfile.ZipFile(fw, "w") as zf:
+        zf.writestr("META-INF/MANIFEST.MF", f"Manifest-Version: 1.0\n"
+                    f"{sdk_builder._FRAMEWORK_SDK_SHA_ATTR}: {'0' * 64}\n")
+    if release:
+        monkeypatch.setenv("VCFCF_RELEASE_BUILD", "1")
+        with pytest.raises(SdkBuildError, match="cannot be rebuilt"):
+            sdk_builder._ensure_framework_jar()
+    else:
+        sdk_builder._ensure_framework_jar()
+        assert "WARNING: framework: vcfcf-adapter-base.jar cannot be rebuilt" in capsys.readouterr().err
+
+
+def test_build_framework_stamps_the_sdk_jar_sha256():
+    """build-framework.sh writes the same attribute build-sdk checks."""
+    text = (_FW / "build-framework.sh").read_text(encoding="utf-8")
+    assert f"\\n{sdk_builder._FRAMEWORK_SDK_SHA_ATTR}: %s\\n" in text
+    assert '"${SDK_SHA:-unknown}" > "$MANIFEST_FILE"' in text
