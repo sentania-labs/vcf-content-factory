@@ -538,9 +538,16 @@ def pak_adapter_kinds(manifest: Dict[str, str]) -> List[str]:
     return [k.strip() for k in raw.split(",") if k.strip()]
 
 
-def default_suite_factory(host: str, user: str, password: str, verify_ssl: bool):
-    """Suite API client for the installer's local account."""
+def default_suite_factory(host: str, user: str, password: str, verify_ssl: bool,
+                          auth_source: str = "Local"):
+    """Suite API client for the installer's account.
+
+    ``auth_source`` is the profile's ``VCFOPS_<P>_AUTH_SOURCE`` (issue
+    #318); the installer passes it through, and it defaults to ``Local``
+    for callers that do not.
+    """
     from vcfcf_common.client import VCFOpsClient
     return VCFOpsClient(host=host, username=user, password=password,
-                        auth_source="Local", verify_ssl=verify_ssl,
+                        auth_source=auth_source or "Local",
+                        verify_ssl=verify_ssl,
                         auth_timeout=REQUEST_TIMEOUT_S)

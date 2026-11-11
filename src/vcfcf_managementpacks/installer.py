@@ -267,6 +267,56 @@ def _resolve_credentials(
     return host, user, password, profile_verify_ssl
 
 
+def _profile_auth_source(profile: Optional[str] = None) -> Tuple[str, str]:
+    """``(auth_source, profile_name)`` for the profile ``_resolve_credentials``
+    resolves (issue #318).
+
+    ``VCFOPS_<P>_AUTH_SOURCE`` unset means ``Local``. A profile that does not
+    resolve also gives ``Local``: ``_resolve_credentials`` has already warned
+    about it, and the CLI flags it falls back to carry no auth source.
+    Returns no credential.
+    """
+    from vcfcf_common._env import load_dotenv, resolve_profile_credentials
+    load_dotenv()
+    try:
+        creds = resolve_profile_credentials(profile, default="devel")
+    except ValueError:
+        return "Local", (profile or "").strip().lower()
+    return (creds.auth_source or "").strip() or "Local", creds.profile_name
+
+
+def _is_local_auth_source(auth_source: str) -> bool:
+    return (auth_source or "").strip().lower() in ("", "local")
+
+
+def _warn_ui_login_is_local(auth_source: str, profile_name: str, user: str,
+                            account_watch: bool) -> None:
+    """Say, before the /ui/ login, that a non-Local profile still gets a
+    local login (issue #318).
+
+    The /ui/ login form's payload for a non-local source is not known, so
+    the login stays local; this replaces a bare login failure later with
+    the reason up front. ``account_watch``: whether this run will open a
+    Suite API session for the account watch. Names no credential.
+    """
+    var = f"VCFOPS_{profile_name.upper()}_AUTH_SOURCE" if profile_name else "the profile's AUTH_SOURCE"
+    msg = (
+        f"Profile {profile_name!r} sets auth source {auth_source!r} ({var}), "
+        f"but the /ui/ login this installer uses supports only a local "
+        f"account: it will attempt a LOCAL login as {user!r}. If that is not "
+        f"a local account the login fails and nothing is installed or "
+        f"changed (issue #318)."
+    )
+    if account_watch:
+        msg += (
+            f" If the login succeeds, the account watch opens its Suite API "
+            f"session with auth source {auth_source!r}; if that session cannot "
+            f"authenticate, the accounts are not read before the install, none "
+            f"is started after it, and the watch reports ACCOUNTS UNCHECKED."
+        )
+    _warn(msg)
+
+
 # ---------------------------------------------------------------------------
 # Manifest parsing (offline — no network)
 # ---------------------------------------------------------------------------
@@ -1150,8 +1200,14 @@ def install_pak(
     installed = False
     still_running = False
     accounts_before = None
+    # Issue #318: the account watch's Suite API session honours the
+    # profile's auth source; the /ui/ login cannot yet (warned below).
+    auth_source, auth_profile = _profile_auth_source(profile)
+    non_local_auth = not _is_local_auth_source(auth_source)
+    auth_note = f" (auth source {auth_source!r})" if non_local_auth else ""
     if suite_factory is None:
-        suite_factory = default_suite_factory
+        def suite_factory(h, u, pw, v):
+            return default_suite_factory(h, u, pw, v, auth_source=auth_source)
     if not p.exists():
         _abort(f"Pak file not found: {pak_path}")
     if not p.is_file():
@@ -1180,6 +1236,10 @@ def install_pak(
     adapter_kinds = pak_adapter_kinds(manifest)
 
     # UI session login
+    if non_local_auth:
+        _warn_ui_login_is_local(auth_source, auth_profile, user,
+                                account_watch=bool(wait and restart_failed
+                                                   and adapter_kinds))
     _info(f"[2/6] Authenticating to /ui/ on {host} as {user!r} ...")
     ui = _UISession(
         host=host,
@@ -1210,8 +1270,9 @@ def install_pak(
                                           for a in accounts_before.values())
                          if accounts_before else ""))
             except Exception as e:  # noqa: BLE001  the install goes ahead
-                _warn(f"Could not read the pak's accounts before the install "
-                      f"({e}); after it, only FAILED accounts will be started.")
+                _warn(f"Could not read the pak's accounts before the install"
+                      f"{auth_note} ({e}); after it, only FAILED accounts will "
+                      f"be started.")
                 accounts_before = None
 
         # prepare upload
@@ -1365,11 +1426,17 @@ def install_pak(
               "collector or Cloud Proxy, check each account's state and start "
               "any the install left FAILED.")
     elif adapter_kinds:
+        if non_local_auth:
+            _warn(f"Account watch: Suite API session as {user!r} with auth "
+                  f"source {auth_source!r} from profile {auth_profile!r}; the "
+                  f"/ui/ install login above was local (issue #318). If this "
+                  f"session cannot authenticate, the accounts are reported ACCOUNTS "
+                  f"UNCHECKED and none is started.")
         try:
             suite = suite_factory(host, user, password, effective_verify_ssl)
         except Exception as e:  # noqa: BLE001  reported, install not in doubt
             print(f"WARNING: ACCOUNTS UNCHECKED: could not open a Suite API "
-                  f"session ({e}).", file=sys.stderr)
+                  f"session{auth_note} ({e}).", file=sys.stderr)
         else:
             accounts_rc = restart_failed_accounts(suite, adapter_kinds,
                                                   accounts_before)
