@@ -71,9 +71,14 @@ All three are optional; absent, the pak is byte-identical to before
 `<adapter_kind>/lib/vcfcf-adapter-base-LICENSE.txt`. The buildkit and the
 bundled `vcfcf-adapter-base.jar` stay MIT whatever the pak's own licence
 is, and that file is their notice. `validate-sdk` rejects a blank or
-non-string `vendor`/`vendor_contact` (one line, no control characters) and an
-`eula_file` that is missing, not a regular file, empty, not UTF-8, or outside
-the project. `build-sdk` prints the vendor and EULA source it stamped.
+non-string `vendor`/`vendor_contact`, or one holding a control character
+(C0, DEL, C1), U+2028/U+2029, a bidi control (U+061C, U+200E/F,
+U+202A-E, U+2066-9) or an unpaired surrogate (a YAML `"\ud83d"` escape:
+write emoji raw). It rejects an `eula_file` that is missing, not a regular
+file, outside the project, not UTF-8, contains NUL, or is empty or has no
+printable text after a leading BOM. The EULA is read once at load and ships
+as read, minus a leading BOM. `build-sdk` prints the vendor and EULA source
+it stamped.
 
 ## Classloader isolation — the first-principles constraint
 

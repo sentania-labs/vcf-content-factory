@@ -2160,9 +2160,9 @@ def _assemble_adapters_zip(
         # #336: a pak with its own EULA still carries the MIT notice of the
         # bundled vcfcf-adapter-base.jar, beside the jar.  Written only when
         # eula_file is set, so a default pak's member list is unchanged.
-        if project.eula_path is not None:
+        if project.eula_bytes is not None:
             zf.writestr(f"{adapter_dir}/lib/{FRAMEWORK_NOTICE_NAME}",
-                        _read_license())
+                        _framework_notice())
 
         # conf/images/ — icons per ResourceKind and AdapterKind
         _pack_icons(zf, project, project_dir, describe_src)
@@ -2177,11 +2177,29 @@ FRAMEWORK_NOTICE_NAME = "vcfcf-adapter-base-LICENSE.txt"
 def _pak_eula(project: SdkProjectDef):
     """eula.txt content: adapter.yaml eula_file bytes, else the factory LICENSE.
 
-    The default path returns ``_read_license()`` unchanged, so a pak with no
+    The override is the bytes load_sdk_project validated, never a re-read of
+    the file, so both eula.txt copies are what validation checked.  The
+    default path returns ``_read_license()`` unchanged, so a pak with no
     eula_file is byte-identical to before #336.
     """
-    if project.eula_path is not None:
-        return project.eula_path.read_bytes()
+    if project.eula_bytes is not None:
+        return project.eula_bytes
+    return _read_license()
+
+
+def _framework_notice() -> str:
+    """The factory LICENSE, shipped as the base jar's MIT notice (#336).
+
+    Unlike eula.txt, an empty notice is never acceptable: fail the build
+    rather than ship one when LICENSE is missing.
+    """
+    if not _LICENSE_PATH.is_file():
+        raise SdkBuildError(
+            f"LICENSE not found at {_LICENSE_PATH}: adapter.yaml eula_file is "
+            f"set, so the pak must carry the factory MIT LICENSE as "
+            f"lib/{FRAMEWORK_NOTICE_NAME}, the notice for the bundled "
+            f"vcfcf-adapter-base.jar."
+        )
     return _read_license()
 
 
@@ -2196,7 +2214,7 @@ def _attribution_report(project: SdkProjectDef) -> List[str]:
     lines = [vendor]
     if project.vendor_contact:
         lines.append(f"  vendor contact: {project.vendor_contact}")
-    if project.eula_path is not None:
+    if project.eula_bytes is not None:
         lines.append(f"  eula: {project.eula_file} (adapter.yaml eula_file); "
                      f"factory MIT LICENSE ships as lib/{FRAMEWORK_NOTICE_NAME}")
     else:
@@ -2216,19 +2234,18 @@ def _html_text(s: str) -> str:
 def _prop_value_escape(s: str) -> str:
     r"""Escape a java.util.Properties value so it is ASCII and reads back as s.
 
-    Backslash and line terminators are escaped, a leading space is escaped so
-    it survives the loader's leading-whitespace trim, and every character
-    outside printable ASCII becomes ``\uXXXX`` (UTF-16 code units), which
+    Backslash and line terminators are escaped, and every character outside
+    printable ASCII becomes ``\uXXXX`` (UTF-16 code units), which
     Properties.load (ISO-8859-1) and PropertyResourceBundle (UTF-8) both read
-    back.  Printable ASCII without a backslash comes out unchanged.
+    back.  Printable ASCII without a backslash comes out unchanged.  A
+    leading space is not escaped (Properties.load would trim it): the only
+    caller passes adapter.yaml's ``vendor``, which the loader strips.
     """
     named = {"\\": "\\\\", "\n": "\\n", "\r": "\\r", "\t": "\\t", "\f": "\\f"}
     out = []
-    for i, ch in enumerate(s):
+    for ch in s:
         if ch in named:
             out.append(named[ch])
-        elif ch == " " and i == 0:
-            out.append("\\ ")
         elif not (0x20 <= ord(ch) <= 0x7E):
             units = ch.encode("utf-16-be")
             for j in range(0, len(units), 2):

@@ -303,8 +303,37 @@ def test_prop_value_escape_specifics():
     assert _prop_value_escape("a\\b") == "a\\\\b"
     assert _prop_value_escape("é") == "\\u00e9"
     assert _prop_value_escape("\U0001F680") == "\\ud83d\\ude80"
-    assert _prop_value_escape(" lead") == "\\ lead"
     assert _prop_value_escape("a\nb\tc") == "a\\nb\\tc"
+
+
+def _accepted_code_points():
+    """Every code point _parse_one_line accepts (the regex is the rule)."""
+    from vcfcf_managementpacks.sdk_project import _ONE_LINE_BAD_CHARS
+    return [chr(c) for c in range(0x110000)
+            if not _ONE_LINE_BAD_CHARS.match(chr(c))]
+
+
+def test_every_accepted_character_encodes_in_all_three_sinks(tmp_path):
+    # #336 review W1: nothing validation accepts may raise in a sink.
+    from types import SimpleNamespace
+    from vcfcf_managementpacks.sdk_builder import _html_text
+    chars = _accepted_code_points()
+    assert "\ud83d" not in chars and "‮" not in chars and "é" in chars
+    for i in range(0, len(chars), 4096):
+        s = "x" + "".join(chars[i:i + 4096]) + "x"
+        manifest = json.dumps({"vendor": s}, indent=4)
+        assert json.loads(manifest)["vendor"] == s
+        props = _prop_value_escape(s)
+        assert props.isascii()
+        assert _props_value("VENDOR=" + props, "VENDOR") == s
+        assert _html_text(s).isascii()
+    # And the real generators, on one value mixing the hard cases.
+    p = _load(tmp_path, f"vendor: {_yaml_str('A' + ''.join(chars[0x80:0x200]) + '😀')}\n")
+    p.vendor_contact = p.vendor
+    _generate_outer_manifest(p)
+    _generate_outer_resources_properties(p)
+    _build_overview_packed(p)
+    _attribution_report(p)
 
 
 # ---------------------------------------------------------------------------
@@ -320,13 +349,49 @@ def test_prop_value_escape_specifics():
     ("true", "must be a string; got bool"),
     ("[a, b]", "must be a string; got list"),
     ("{name: x}", "must be a string; got dict"),
-    ('"two\\nlines"', "must be one line of text"),
-    ('"tab\\there"', "must be one line of text"),
+    ('"two\\nlines"', "U+000A at position 3"),
+    ('"tab\\there"', "U+0009 at position 3"),
+    ('"del\\x7f"', "U+007F"),
+    # #336 review W1: an unpaired surrogate crashed the .properties sink.
+    ('"Acme \\ud83d Labs"', "U+D83D at position 5"),
+    ('"Acme \\ude80 Labs"', "U+DE80"),
+    # #336 review N1: C1 controls, line/paragraph separators, bidi controls.
+    ('"next\\x85line"', "U+0085"),
+    ('"c1\\x9f"', "U+009F"),
+    ('"line\\u2028sep"', "U+2028"),
+    ('"para\\u2029sep"', "U+2029"),
+    ('"Acme \\u202eLabs"', "U+202E"),
+    ('"Acme \\u202aLabs"', "U+202A"),
+    ('"rlm\\u200f"', "U+200F"),
+    ('"lrm\\u200e"', "U+200E"),
+    ('"alm\\u061c"', "U+061C"),
+    ('"isolate\\u2066x\\u2069"', "U+2066"),
+    ('"pdi\\u2069"', "U+2069"),
 ])
 def test_one_line_keys_reject(tmp_path, key, value, message):
     with pytest.raises(SdkProjectError, match=re.escape(f"'{key}'")) as exc:
         _load(tmp_path, f"{key}: {value}\n")
     assert message in str(exc.value)
+    if message.startswith("U+"):
+        assert "must be one line of plain text" in str(exc.value)
+
+
+def test_surrogate_vendor_fails_validate_sdk_not_build(tmp_path):
+    # Before the fix validate-sdk passed and build-sdk raised UnicodeEncodeError.
+    project_dir = _project_dir(tmp_path, 'vendor: "Acme \\ud83d Labs"\n')
+    errors = validate_sdk_project(project_dir)
+    assert any("'vendor' must be one line of plain text" in e and "U+D83D" in e
+               for e in errors), errors
+
+
+@pytest.mark.parametrize("ok", [
+    "Acme Labs",        # no-break space: not a control
+    "Ünïcödé Labs",
+    "Rocket \U0001F680",     # astral character, written raw
+    "שלום Ltd",  # right-to-left letters, no bidi control
+])
+def test_one_line_keys_accept_plain_unicode(tmp_path, ok):
+    assert _load(tmp_path, f"vendor: {_yaml_str(ok)}\n").vendor == ok
 
 
 def _eula_case(tmp_path: Path, case: str) -> str:
@@ -343,6 +408,22 @@ def _eula_case(tmp_path: Path, case: str) -> str:
         return "eula_file: EULA.txt\n"
     if case == "whitespace":
         (proj / "EULA.txt").write_bytes(b"  \n\t\n")
+        return "eula_file: EULA.txt\n"
+    # #336 review W2: visually empty files.
+    if case == "bom_only":
+        (proj / "EULA.txt").write_bytes(b"\xef\xbb\xbf")
+        return "eula_file: EULA.txt\n"
+    if case == "bom_whitespace":
+        (proj / "EULA.txt").write_bytes(b"\xef\xbb\xbf \r\n\t\n")
+        return "eula_file: EULA.txt\n"
+    if case == "nul_only":
+        (proj / "EULA.txt").write_bytes(b"\x00\x00\x00")
+        return "eula_file: EULA.txt\n"
+    if case == "nul_in_text":
+        (proj / "EULA.txt").write_bytes(b"Terms\x00 of use\n")
+        return "eula_file: EULA.txt\n"
+    if case == "no_printable":
+        (proj / "EULA.txt").write_bytes(b"\x01\x02\n\x1b\xef\xbb\xbf\xe2\x80\x8b\n")
         return "eula_file: EULA.txt\n"
     if case == "not_utf8":
         (proj / "EULA.txt").write_bytes(b"Licen\xe7a \xff\xfe\n")
@@ -371,6 +452,11 @@ def _eula_case(tmp_path: Path, case: str) -> str:
     ("directory", "is not a regular file"),
     ("empty", "is empty"),
     ("whitespace", "is empty"),
+    ("bom_only", "is empty"),
+    ("bom_whitespace", "is empty"),
+    ("nul_only", "contains NUL bytes"),
+    ("nul_in_text", "contains NUL bytes"),
+    ("no_printable", "has no printable text"),
     ("not_utf8", "is not UTF-8 text"),
     ("dotdot", "outside the adapter project"),
     ("absolute", "outside the adapter project"),
@@ -454,6 +540,60 @@ def test_eula_override_adds_only_the_notice(tmp_path):
             assert default.read(name) == override.read(name), name
 
 
+def test_eula_leading_bom_is_dropped_from_shipped_bytes(tmp_path):
+    proj = _project_dir(tmp_path, "eula_file: EULA.txt\n")
+    (proj / "EULA.txt").write_bytes(b"\xef\xbb\xbf" + _EULA)
+    p = load_sdk_project(proj / "adapter.yaml")
+    assert p.eula_bytes == _EULA
+    inner = _adapters_zip(p, tmp_path)
+    outer = _outer_pak(p, tmp_path)
+    assert inner.read("eula.txt") == outer.read("eula.txt") == _EULA
+
+
+@pytest.mark.parametrize("change", ["rewrite", "truncate", "symlink_out", "delete"])
+def test_eula_change_after_load_does_not_change_what_ships(tmp_path, change):
+    # #336 review W3: the bytes validated at load are the bytes that ship.
+    p = _eula_project(tmp_path)
+    f = p.source_path.parent / "legal" / "EULA.txt"
+    if change == "rewrite":
+        f.write_bytes(b"something else entirely\n")
+    elif change == "truncate":
+        f.write_bytes(b"")
+    elif change == "symlink_out":
+        (tmp_path / "OUTSIDE.txt").write_bytes(b"outside bytes\n")
+        f.unlink()
+        f.symlink_to(tmp_path / "OUTSIDE.txt")
+    else:
+        f.unlink()
+    inner = _adapters_zip(p, tmp_path)
+    outer = _outer_pak(p, tmp_path)
+    assert inner.read("eula.txt") == _EULA
+    assert outer.read("eula.txt") == _EULA
+    assert inner.read("eula.txt") == outer.read("eula.txt")
+
+
+def test_notice_fails_build_when_license_missing(tmp_path, monkeypatch):
+    # An empty MIT notice is never shipped (#336 review N3, factory side).
+    p = _eula_project(tmp_path)
+    monkeypatch.setattr(sdk_builder, "_LICENSE_PATH", tmp_path / "no-LICENSE")
+    with pytest.raises(sdk_builder.SdkBuildError, match="LICENSE not found"):
+        _adapters_zip(p, tmp_path)
+
+
+def test_buildkit_assembly_fails_without_license(tmp_path, monkeypatch):
+    # #336 review N3: no placeholder LICENSE in a kit.
+    from vcfcf_managementpacks import buildkit
+    fake_root = tmp_path / "repo"
+    fake_root.mkdir()
+    monkeypatch.setattr(buildkit, "_REPO_ROOT", fake_root)
+    ref = tmp_path / "ref.pak"
+    ref.write_bytes(b"PK\x05\x06" + b"\x00" * 18)
+    with pytest.raises(FileNotFoundError, match="factory LICENSE not found"):
+        buildkit.assemble_buildkit(tmp_path / "dist", version="9.9.9",
+                                   reference_pak=ref, verbose=False)
+    assert not list((tmp_path / "dist").glob("*.tgz"))
+
+
 def test_eula_file_inside_via_symlink_is_accepted(tmp_path):
     proj = _project_dir(tmp_path, "eula_file: EULA.txt\n")
     (proj / "legal").mkdir()
@@ -470,7 +610,8 @@ def test_eula_file_inside_via_symlink_is_accepted(tmp_path):
 def test_report_default_says_how_to_set():
     from types import SimpleNamespace
     p = SimpleNamespace(vendor=DEFAULT_VENDOR, vendor_declared=False,
-                        vendor_contact="", eula_file="", eula_path=None)
+                        vendor_contact="", eula_file="", eula_path=None,
+                        eula_bytes=None)
     lines = _attribution_report(p)
     assert lines == [
         "  vendor: VCF Content Factory (default; set adapter.yaml vendor: and "
