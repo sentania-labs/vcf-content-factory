@@ -165,6 +165,39 @@ adapter-framework designs round; this is 1.0.18.
 
 Version note: this is 1.0.19, after 1.0.18.
 
+## Behavior since 1.0.26
+
+- A pak can name its own vendor, contact and licence (factory issue #336).
+  Until now every kit-built pak presented `VCF Content Factory` as its
+  vendor and shipped the factory MIT `LICENSE` as its `eula.txt`. New
+  optional adapter.yaml keys:
+  - `vendor`: stamped into both `manifest.txt` copies, the solution
+    `resources/resources.properties` `VENDOR=` and both overview pages.
+  - `vendor_contact`: a free-text line (email or URL) shown under the
+    vendor on the overview pages only.
+  - `eula_file`: a path, relative to the adapter project, to the text
+    shipped as `eula.txt` in the outer pak and inside `adapters.zip`. It
+    is read once at validation and shipped as read, minus a leading BOM.
+- With none of the keys, a pak is byte-identical to one built with 1.0.25.
+- With `eula_file` set, the factory MIT `LICENSE` also ships as
+  `<adapter_kind>/lib/vcfcf-adapter-base-LICENSE.txt`, the notice for the
+  bundled jar. The buildkit and `vcfcf-adapter-base.jar` stay MIT whatever
+  licence the pak itself carries; the jar and its manifest are unchanged.
+- `validate-sdk` and `build-sdk` reject a present but blank `vendor` or
+  `vendor_contact`, a non-string, or one holding a control character,
+  U+2028/U+2029, a bidi control or an unpaired surrogate. A YAML
+  `"\ud83d\ude80"` escape is not paired, so write emoji raw. They reject an
+  `eula_file` that is missing, not a regular file, outside the project, not
+  UTF-8, contains NUL, or is empty or has no printable text.
+- `build-sdk` prints the vendor and EULA source it stamped; on the default
+  vendor it says how to set one. These lines are informational, not
+  warnings.
+- Kit assembly now fails if the factory `LICENSE` is missing, instead of
+  writing a placeholder.
+- Adoption: a pak repo bumps `BUILDKIT_TAG` to `sdk-buildkit-v1.0.26` and
+  its committed SHA256SUMS, then adds the keys it wants. Paks that set none
+  need no change.
+
 ## Behavior since 1.0.25
 
 - Every Tier 2 pak build ships `<adapter_kind>/conf/logging.properties`
