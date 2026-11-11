@@ -33,6 +33,7 @@ from vcfcf_supermetrics.client import VCFOpsClient, VCFOpsError
 from .client import (
     all_skipped_content_types,
     check_dashboard_materialization,
+    current_user_name,
     discover_marker_filename,
     get_current_user,
     import_content_zip,
@@ -177,7 +178,7 @@ class ViewsHandler(ContentHandler):
             blob = build_import_zip(
                 views, [],
                 owner_user_id=user["id"],
-                owner_username=user.get("userName", "admin"),
+                owner_username=current_user_name(user),
                 marker_filename=marker,
                 sm_resolver=sm_resolver,
             )
@@ -355,7 +356,7 @@ class DashboardsHandler(ContentHandler):
                 list(views_by_name.values()),
                 dashboards,
                 owner_user_id=user["id"],
-                owner_username=user.get("userName", "admin"),
+                owner_username=current_user_name(user),
                 marker_filename=marker,
                 sm_resolver=sm_resolver,
             )

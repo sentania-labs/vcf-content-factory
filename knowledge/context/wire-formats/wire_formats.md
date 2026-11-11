@@ -192,6 +192,10 @@ imported dashboards to be owned by admin even when the import is
 performed by a different user. Fix: pass the actual importing
 user's `userName` (available from `GET /api/auth/currentuser`) into
 `build_import_zip` and use it in `usermappings.json`.
+Note (2026-11-11): `currentuser` returns the name under `username`
+(lower-case n, per the `user` schema in the 8.18, 9.0 and 9.1 specs);
+`userName` is the `usermappings.json` spelling. Read it with
+`vcfcf_dashboards.client.current_user_name`.
 
 **`entries.resource` is required for self-provider pinned widgets.**
 When a View widget has `self_provider: true` with a `pin`, the

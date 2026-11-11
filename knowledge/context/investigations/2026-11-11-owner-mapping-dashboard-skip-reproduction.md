@@ -310,6 +310,10 @@ Inferred from bytecode, not run:
     passes `user.get("userName", "admin")`. `/api/auth/currentuser` returns the key
     `username`, not `userName` (devel 9.0.2), so today the default `admin` is what gets
     written.
+    2026-11-11: fixed. The handler now reads the name through
+    `vcfcf_dashboards.client.current_user_name`, which takes `username` (the key the `user`
+    schema names in the 8.18, 9.0 and 9.1 specs), then `userName`, and writes `admin` only
+    when the body carries neither.
   - The installer template (`src/vcfcf_packaging/templates/install.py` and `install.ps1`)
     writes the login user's name.
   - A non-admin session writing its own name would still map through path 1.

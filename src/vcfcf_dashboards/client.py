@@ -58,6 +58,25 @@ def get_current_user(client: VCFOpsClient) -> dict:
     return r.json()
 
 
+def current_user_name(user: dict, default: str = "admin") -> str:
+    """Return the account name from a ``/api/auth/currentuser`` body.
+
+    The key is ``username`` (lower-case n): the ``user`` schema in the
+    8.18, 9.0 and 9.1 Suite API specs under ``reference/docs/`` names
+    it so, and a 9.0.2 response was observed with it on 2026-11-11.
+    ``userName`` is the spelling the content-zip ``usermappings.json``
+    and the ``/ui/`` login form use, not this endpoint; it is accepted
+    second only so a body that ever carries it is not misread.
+    ``default`` is the last resort, for a body with neither key.
+    """
+    if isinstance(user, dict):
+        for key in ("username", "userName"):
+            name = user.get(key)
+            if isinstance(name, str) and name.strip():
+                return name
+    return default
+
+
 def discover_marker_filename(client: VCFOpsClient, timeout_s: int = 120) -> str:
     """Return the ``<digits>L.v1`` marker filename this VCF Ops
     instance stamps onto every content export.
