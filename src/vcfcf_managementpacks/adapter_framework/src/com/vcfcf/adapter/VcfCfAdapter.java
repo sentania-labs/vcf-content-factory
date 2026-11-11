@@ -3270,83 +3270,141 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
 
     /**
      * True when a raise of {@code l} would shadow an entry from the pak's
-     * {@code conf/logging.properties} (issue #322): either
+     * {@code conf/logging.properties} (issue #322): the log4j
+     * {@code LoggerConfig} governing {@code l} is the root or an SDK
+     * {@code AdapterLoggerConfig} (an entry loaded from some pak's file),
+     * and this pak's own file has a key {@code K} equal to {@code l}'s name
+     * or a dotted parent of it, with a level log4j knows, that is either
      * <ul>
-     *   <li>the log4j {@code LoggerConfig} governing {@code l} is such an
-     *       entry (an SDK {@code AdapterLoggerConfig}), or</li>
-     *   <li>the root governs {@code l}, and the pak's file has a key equal
-     *       to its name or a dotted parent of it, with a level log4j knows,
-     *       that the root governs too. That is the key the SDK turns into an
-     *       {@code AdapterLoggerConfig} when the pak's first instance is
-     *       created ({@code loadAdapterLogConfigs}), so a Test Connection
-     *       before it (the first account on a collector) would otherwise
-     *       leave the shadowing entry for it.</li>
+     *   <li>loaded: {@code getLoggerConfig(K)} is an
+     *       {@code AdapterLoggerConfig} named exactly {@code K}, or</li>
+     *   <li>still to load: {@code getLoggerConfig(K)} is the root. The SDK
+     *       turns {@code K} into an {@code AdapterLoggerConfig} when the
+     *       pak's first instance is created ({@code loadAdapterLogConfigs}),
+     *       so a Test Connection before it (the first account on a
+     *       collector) would otherwise leave the shadowing entry for it.</li>
      * </ul>
-     * False when an entry of exactly {@code l}'s name exists (an instance
-     * logger {@code "(id) name"} always has one, so its handling is
-     * unchanged), when a plain entry of the collector's governs it, and on
-     * an SDK with no {@code AdapterLoggerConfig} class (8.18.7, whose
-     * factory never reads the file).
+     * {@code loadAdapterLogConfigs} adds a key only while
+     * {@code getLoggerConfig(K)} is the root (9.0.2 bytecode), so a key
+     * under an entry from <em>another</em> pak's file (a parent-package key
+     * such as {@code com.vcfcf}) never loads. Such an entry does not stop
+     * the raise: a pak whose own file has no loaded or loadable key covering
+     * the name, or that ships no file, is raised as before #322.
+     * False when an entry of exactly {@code l}'s name that is not an
+     * {@code AdapterLoggerConfig} exists (an instance logger
+     * {@code "(id) name"} always has one, so its handling is unchanged),
+     * when a plain entry of the collector's governs it, and on an SDK with no
+     * {@code AdapterLoggerConfig} class (8.18.7, whose factory never reads
+     * the file).
      *
      * <p>Asked of the logger itself: the SDK {@code Logger} wraps a log4j
      * logger (private field {@code logger} on all three supported SDKs), and
      * a log4j-core {@code Logger}'s {@code get()} and {@code getContext()}
      * are the config and context the SDK factory and
      * {@code Configurator.setLevel} work on. Reflection only: the framework
-     * compiles against the SDK jar alone, which carries no log4j types. Any
-     * exception or linkage error (no log4j-core, another log4j
-     * implementation, a changed SDK field) answers false, which keeps the
-     * pre-#322 raise. Visible to tests.
+     * compiles against the SDK jar alone, which carries no log4j types. The
+     * reflective handles are looked up once per log4j class loader and the
+     * file's keys parsed once per adapter class and file version
+     * ({@link #pakLoggingKeys}). Any exception or linkage error (no
+     * log4j-core, another log4j implementation, a changed SDK field) answers
+     * false, which keeps the pre-#322 raise. Visible to tests.
      */
     static boolean governedByPakLoggingEntry(com.integrien.alive.common.adapter3.Logger l,
             Class<?> adapterClass) {
         if (l == null) return false;
         try {
-            java.lang.reflect.Field f =
-                    com.integrien.alive.common.adapter3.Logger.class.getDeclaredField("logger");
-            f.setAccessible(true);
+            java.lang.reflect.Field f = sdkLoggerField;
+            if (f == null) {
+                f = com.integrien.alive.common.adapter3.Logger.class.getDeclaredField("logger");
+                f.setAccessible(true);
+                sdkLoggerField = f;
+            }
             Object apiLogger = f.get(l);
             if (apiLogger == null) return false;
-            ClassLoader logLoader = apiLogger.getClass().getClassLoader();
-            Class<?> coreLogger = Class.forName("org.apache.logging.log4j.core.Logger", false, logLoader);
-            if (!coreLogger.isInstance(apiLogger)) return false;
-            Object governing = coreLogger.getMethod("get").invoke(apiLogger);
-            if (isAdapterLoggerConfig(governing)) return true;
+            Log4jHandles h = Log4jHandles.of(apiLogger.getClass().getClassLoader());
+            if (!h.coreLogger.isInstance(apiLogger)) return false;
+            if (!h.sdkReadsPakFile) return false;  // 8.18.7: the factory never reads the file
             String name = l.getName();
-            Class<?> loggerConfig = Class.forName(
-                    "org.apache.logging.log4j.core.config.LoggerConfig", false, logLoader);
-            if (name == null || governing == null
-                    || name.equals(loggerConfig.getMethod("getName").invoke(governing))) {
-                return false;
-            }
-            try {
-                Class.forName(ADAPTER_LOGGER_CONFIG_CLASS, false,
-                        com.integrien.alive.common.adapter3.Logger.class.getClassLoader());
-            } catch (ClassNotFoundException noReader) {
-                return false;  // 8.18.7: the factory never reads the file
-            }
-            Object context = coreLogger.getMethod("getContext").invoke(apiLogger);
-            Object config = Class.forName("org.apache.logging.log4j.core.LoggerContext", false, logLoader)
-                    .getMethod("getConfiguration").invoke(context);
-            Class<?> configuration = Class.forName(
-                    "org.apache.logging.log4j.core.config.Configuration", false, logLoader);
-            Object root = configuration.getMethod("getRootLogger").invoke(config);
-            if (governing != root) return false;
-            java.lang.reflect.Method lookup = configuration.getMethod("getLoggerConfig", String.class);
-            Class<?> level = Class.forName("org.apache.logging.log4j.Level", false, logLoader);
-            java.lang.reflect.Method toLevel = level.getMethod("toLevel", String.class, level);
-            java.util.Properties keys = pakLoggingProperties(
-                    pakLoggingPropertiesFile(Thread.currentThread().getContextClassLoader(),
-                            adapterClass, System.getProperty("ADAPTER_HOME")));
+            Object governing = h.get.invoke(apiLogger);
+            if (name == null || governing == null) return false;
+            boolean pakEntry = isAdapterLoggerConfig(governing);
+            if (!pakEntry && name.equals(h.configName.invoke(governing))) return false;
+            Object config = h.getConfiguration.invoke(h.getContext.invoke(apiLogger));
+            Object root = h.getRootLogger.invoke(config);
+            if (!pakEntry && governing != root) return false;
+            java.util.Properties keys = pakLoggingKeys(adapterClass);
             for (String key : keys.stringPropertyNames()) {
                 if (!(name.equals(key) || name.startsWith(key + "."))) continue;
-                if (toLevel.invoke(null, keys.getProperty(key), null) == null) continue;
-                Object keyConfig = lookup.invoke(config, key);
-                if (keyConfig == root || isAdapterLoggerConfig(keyConfig)) return true;
+                if (h.toLevel.invoke(null, keys.getProperty(key), null) == null) continue;
+                Object keyConfig = h.getLoggerConfig.invoke(config, key);
+                // Loaded (an entry of exactly the key) or still to load (the
+                // SDK adds a key only while the root governs it).
+                if (keyConfig == root || (isAdapterLoggerConfig(keyConfig)
+                        && key.equals(h.configName.invoke(keyConfig)))) {
+                    return true;
+                }
             }
             return false;
         } catch (Exception | LinkageError e) {
             return false;
+        }
+    }
+
+    /** The SDK Logger's private {@code logger} field, once found. */
+    private static volatile java.lang.reflect.Field sdkLoggerField;
+
+    /**
+     * The log4j-core reflection {@link #governedByPakLoggingEntry} uses, for
+     * one class loader (a collector JVM has one log4j; the last one seen is
+     * kept, so a second loader only costs a lookup).
+     */
+    private static final class Log4jHandles {
+        private static volatile Log4jHandles last;
+
+        final ClassLoader loader;
+        final Class<?> coreLogger;
+        final boolean sdkReadsPakFile;
+        final java.lang.reflect.Method get;
+        final java.lang.reflect.Method getContext;
+        final java.lang.reflect.Method configName;
+        final java.lang.reflect.Method getConfiguration;
+        final java.lang.reflect.Method getRootLogger;
+        final java.lang.reflect.Method getLoggerConfig;
+        final java.lang.reflect.Method toLevel;
+
+        private Log4jHandles(ClassLoader loader) throws ReflectiveOperationException {
+            this.loader = loader;
+            coreLogger = Class.forName("org.apache.logging.log4j.core.Logger", false, loader);
+            boolean reads;
+            try {
+                Class.forName(ADAPTER_LOGGER_CONFIG_CLASS, false,
+                        com.integrien.alive.common.adapter3.Logger.class.getClassLoader());
+                reads = true;
+            } catch (ClassNotFoundException noReader) {
+                reads = false;
+            }
+            sdkReadsPakFile = reads;
+            get = coreLogger.getMethod("get");
+            getContext = coreLogger.getMethod("getContext");
+            configName = Class.forName("org.apache.logging.log4j.core.config.LoggerConfig", false, loader)
+                    .getMethod("getName");
+            getConfiguration = Class.forName("org.apache.logging.log4j.core.LoggerContext", false, loader)
+                    .getMethod("getConfiguration");
+            Class<?> configuration = Class.forName(
+                    "org.apache.logging.log4j.core.config.Configuration", false, loader);
+            getRootLogger = configuration.getMethod("getRootLogger");
+            getLoggerConfig = configuration.getMethod("getLoggerConfig", String.class);
+            Class<?> level = Class.forName("org.apache.logging.log4j.Level", false, loader);
+            toLevel = level.getMethod("toLevel", String.class, level);
+        }
+
+        static Log4jHandles of(ClassLoader loader) throws ReflectiveOperationException {
+            Log4jHandles h = last;
+            if (h == null || h.loader != loader) {
+                h = new Log4jHandles(loader);
+                last = h;
+            }
+            return h;
         }
     }
 
@@ -3357,6 +3415,58 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
         }
         return false;
     }
+
+    /** One parsed {@code logging.properties}: the file, its version, its keys. */
+    private static final class PakKeys {
+        final java.io.File file;
+        final long modified;
+        final long length;
+        final java.util.Properties keys;
+
+        PakKeys(java.io.File file, long modified, long length, java.util.Properties keys) {
+            this.file = file;
+            this.modified = modified;
+            this.length = length;
+            this.keys = keys;
+        }
+    }
+
+    /**
+     * Parsed keys per adapter class. Weak keys: a reinstalled pak's classes
+     * (a new class loader) drop their entry. The values never reference the
+     * class.
+     */
+    private static final Map<Class<?>, PakKeys> PAK_KEYS =
+            Collections.synchronizedMap(new java.util.WeakHashMap<>());
+
+    /**
+     * The logger keys of {@code adapterClass}'s pak file
+     * ({@link #pakLoggingPropertiesFile}, located on every call because the
+     * context class loader and {@code ADAPTER_HOME} decide which file it is;
+     * that is string work and one stat). The file is read only when it is
+     * not the one last read for the class, or its modification time or
+     * length changed (an operator edit, which the SDK also picks up on
+     * reload). Empty when there is no file. Visible to tests.
+     */
+    static java.util.Properties pakLoggingKeys(Class<?> adapterClass) {
+        java.io.File file = pakLoggingPropertiesFile(Thread.currentThread().getContextClassLoader(),
+                adapterClass, System.getProperty("ADAPTER_HOME"));
+        if (file == null) return new java.util.Properties();
+        long modified = file.lastModified();
+        long length = file.length();
+        PakKeys cached = PAK_KEYS.get(adapterClass);
+        if (cached != null && cached.file.equals(file) && cached.modified == modified
+                && cached.length == length) {
+            return cached.keys;
+        }
+        java.util.Properties keys = pakLoggingProperties(file);
+        PAK_KEYS.put(adapterClass, new PakKeys(file, modified, length, keys));
+        return keys;
+    }
+
+    /** Times {@link #pakLoggingKeys} read a file. Visible to tests. */
+    static final java.util.concurrent.atomic.AtomicInteger PAK_FILE_READS =
+            new java.util.concurrent.atomic.AtomicInteger();
 
     /**
      * The pak's {@code conf/logging.properties}, found the way the 9.x SDK
@@ -3414,6 +3524,7 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
     static java.util.Properties pakLoggingProperties(java.io.File file) {
         java.util.Properties p = new java.util.Properties();
         if (file == null) return p;
+        PAK_FILE_READS.incrementAndGet();
         try (java.io.InputStream in = new java.io.FileInputStream(file)) {
             p.load(in);
         } catch (java.io.IOException | IllegalArgumentException e) {

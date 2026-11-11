@@ -115,7 +115,9 @@ def _run_suite(tmp_path: Path, jar: Path, suite: str, test_sources) -> str:
 @pytest.mark.parametrize("jar", _JARS, ids=lambda j: j.name)
 def test_test_connection_does_not_shadow_the_pak_logging_entry(tmp_path, jar):
     """#322 on this SDK jar: on 9.x the control reproduces both symptoms and
-    every fixed scenario passes; on 8.18 the raise is unchanged."""
+    every fixed scenario passes, and another pak's parent-package entry does
+    not stop a raise; on 8.18 the raise is unchanged. On both, the pak
+    file's keys are parsed once per class and re-read on a change."""
     sources = [_TEST / "com/vcfcf/adapter/TestConnectionLoggingTest.java"] + sorted(
         (_TEST / "com/vcfcf/testpak/tc").rglob("*.java"))
     out = _run_suite(tmp_path, jar, "TestConnectionLoggingTest", sources)
@@ -123,10 +125,13 @@ def test_test_connection_does_not_shadow_the_pak_logging_entry(tmp_path, jar):
         assert "PASS: control: instance INFO copied into collector.log (#322 symptom b)" in out
         assert "PASS: second account: helper DEBUG kept (#322 a fixed)" in out
         assert "PASS: first account: helper DEBUG kept" in out
-        assert "OK: 30/30 tests passed." in out
+        assert ("PASS: no pak file, another pak's parent entry (WARN) governs: "
+                "raised to INFO, as before") in out
+        assert "OK: 39/39 tests passed." in out
     else:
         assert "PASS: 8.18: the Test Connection helper logger is raised to INFO, as before" in out
-        assert "OK: 10/10 tests passed." in out
+        assert "OK: 14/14 tests passed." in out
+    assert "PASS: three lookups read the file once" in out
 
 
 @pytest.mark.parametrize("jar", [j for j in _JARS if _has_adapter_logger_config(j)],

@@ -5,7 +5,10 @@ import com.vcfcf.testpak.tc.TcPakAdapter;
 import com.vcfcf.testpak.tc.first.TcFirstAdapter;
 import com.vcfcf.testpak.tc.noconf.TcNoConfAdapter;
 import com.vcfcf.testpak.tc.old.TcOldAdapter;
+import com.vcfcf.testpak.tc.orphan.TcOrphanAdapter;
+import com.vcfcf.testpak.tc.parent.TcParentAdapter;
 import com.vcfcf.testpak.tc.second.TcSecondAdapter;
+import com.vcfcf.testpak.tc.under.TcUnderAdapter;
 
 import java.io.File;
 import java.io.IOException;
@@ -77,11 +80,14 @@ public class TestConnectionLoggingTest {
                 testRaisedBareInfoNeverReachedCollectorLogUnderPakEntry();
                 testNoPakFileRaisesAsBefore();
                 testInstanceLoggerStillRaised();
+                // Last: it loads a parent-package entry over every stand-in pak.
+                testAnotherPaksParentEntry();
             } else {
                 testNoPakFileRaisesAsBefore();
                 testPakFileIsIgnoredOn818();
             }
             testPropertiesFileLookup();
+            testPakKeysAreReadOnceAndReread();
         } finally {
             deleteTree(tmp);
         }
@@ -224,6 +230,61 @@ public class TestConnectionLoggingTest {
                 VcfCfAdapter.governedByPakLoggingEntry(l, TcNoConfAdapter.class));
     }
 
+    /**
+     * Another pak's file has a parent-package key (com.vcfcf.testpak.tc), so
+     * an AdapterLoggerConfig of another pak governs this pak's names. It
+     * does not stop the raise (review N1): only this pak's own entry,
+     * loaded or still to load, does. A pak without the file is raised as
+     * before #322; so is a pak whose own key sits under the other pak's
+     * entry, because the SDK never loads that key (it adds a key only while
+     * the root governs it).
+     */
+    private static void testAnotherPaksParentEntry() throws Exception {
+        instance(TcParentAdapter.class, "TcParentPak", 101).warn("PARENT-warn");
+        assertTrue("another pak's parent-package key is loaded as an entry",
+                exactEntry("com.vcfcf.testpak.tc"));
+
+        TcOrphanAdapter orphan = testConnection(TcOrphanAdapter.class, "TcOrphanPak", true);
+        Logger helper = orphan.component(orphan.helper());
+        assertTrue("no pak file, another pak's parent entry (WARN) governs: raised to INFO, as before",
+                helper.isInfoEnabled());
+        assertTrue("no pak file, another pak's parent entry: the raise added the bare-name entry",
+                exactEntry(orphan.helper().getName()));
+
+        TcUnderAdapter tc = testConnection(TcUnderAdapter.class, "TcUnderPak", true);
+        Logger underHelper = tc.component(tc.helper());
+        assertTrue("own key under another pak's parent entry: not governed, raised as before",
+                underHelper.isInfoEnabled() && exactEntry(tc.helper().getName()));
+        instance(TcUnderAdapter.class, "TcUnderPak", 102);
+        assertFalse("the SDK never loads a key another pak's entry already governs",
+                exactEntry("com.vcfcf.testpak.tc.under"));
+    }
+
+    /** The pak file's keys are parsed once per class and re-read on a change (review N2). */
+    private static void testPakKeysAreReadOnceAndReread() throws Exception {
+        writeLoggingProperties("TcCachePak", "com.vcfcf.testpak.tc.noconf = DEBUG");
+        URL jar = adapters.resolve("TcCachePak").resolve("TcCachePak.jar").toUri().toURL();
+        ClassLoader old = Thread.currentThread().getContextClassLoader();
+        try (URLClassLoader cl = new URLClassLoader(new URL[] {jar})) {
+            Thread.currentThread().setContextClassLoader(cl);
+            int before = VcfCfAdapter.PAK_FILE_READS.get();
+            String first = VcfCfAdapter.pakLoggingKeys(TcNoConfAdapter.class).stringPropertyNames().toString();
+            VcfCfAdapter.pakLoggingKeys(TcNoConfAdapter.class);
+            VcfCfAdapter.pakLoggingKeys(TcNoConfAdapter.class);
+            assertEquals("keys of the file", "[com.vcfcf.testpak.tc.noconf]", first);
+            assertTrue("three lookups read the file once",
+                    VcfCfAdapter.PAK_FILE_READS.get() - before == 1);
+            writeLoggingProperties("TcCachePak", "com.vcfcf.testpak.tc.noconf.extra = DEBUG");
+            assertEquals("an edited file is read again", "[com.vcfcf.testpak.tc.noconf.extra]",
+                    VcfCfAdapter.pakLoggingKeys(TcNoConfAdapter.class).stringPropertyNames().toString());
+            Files.delete(adapters.resolve("TcCachePak").resolve("conf").resolve("logging.properties"));
+            assertEquals("a removed file has no keys", "[]",
+                    VcfCfAdapter.pakLoggingKeys(TcNoConfAdapter.class).stringPropertyNames().toString());
+        } finally {
+            Thread.currentThread().setContextClassLoader(old);
+        }
+    }
+
     private static void testPropertiesFileLookup() throws Exception {
         URL jar = adapters.resolve("TcSecondPak").resolve("TcSecondPak.jar").toUri().toURL();
         URL lib = adapters.resolve("TcSecondPak").resolve("lib").resolve("vcfcf-adapter-base.jar")
@@ -281,7 +342,10 @@ public class TestConnectionLoggingTest {
         writeLoggingProperties("TcOldPak", "com.vcfcf.testpak.tc.old = DEBUG");
         writeLoggingProperties("TcSecondPak", "com.vcfcf.testpak.tc.second = DEBUG");
         writeLoggingProperties("TcFirstPak", "com.vcfcf.testpak.tc.first = DEBUG");
+        writeLoggingProperties("TcParentPak", "com.vcfcf.testpak.tc = WARN");
+        writeLoggingProperties("TcUnderPak", "com.vcfcf.testpak.tc.under = DEBUG");
         Files.createDirectories(adapters.resolve("TcNoConfPak"));
+        Files.createDirectories(adapters.resolve("TcOrphanPak"));
     }
 
     private static void writeLoggingProperties(String pak, String line) throws IOException {
