@@ -348,16 +348,24 @@ jobs:
             echo "::error::${JAR_NAME} is not in sentania-labs/vcf-content-factory-sdk-runtime. Add it there (provenance: src/vcfcf_managementpacks/adapter_runtime/PROVENANCE.md)."
             exit 1
           fi
-          # The provenance TABLE ROW naming this jar (a line starting with "|"
-          # that carries the name in backticks) holds its full sha256. Exactly
-          # one distinct hash must match, so a later prose line or a second
-          # row cannot change which hash gates the jar.
+          # The row naming this jar in the "## The compile targets" table of
+          # PROVENANCE.md holds its full sha256. Only that table is read (it
+          # ends at the next heading), so the "Former names" table, which also
+          # carries every current name and hash, cannot stand in for a missing
+          # row. Exactly one row and exactly one hash in it, so a later prose
+          # line or a second row cannot change which hash gates the jar.
           PROV=src/vcfcf_managementpacks/adapter_runtime/PROVENANCE.md
-          HASHES="$(grep -E '^\|' "$PROV" | grep -F "\`${JAR_NAME}\`" \
-            | grep -oE '\b[0-9a-f]{64}\b' | sort -u || true)"
+          ROWS="$(awk '/^## The compile targets$/{f=1;next} /^#/{f=0} f' "$PROV" \
+            | grep -E '^\|' | grep -F "\`${JAR_NAME}\`" || true)"
+          ROW_COUNT="$(printf '%s' "$ROWS" | grep -c . || true)"
+          if [ "$ROW_COUNT" -ne 1 ]; then
+            echo "::error::Expected exactly one row for ${JAR_NAME} in the compile targets table of ${PROV}, found ${ROW_COUNT}."
+            exit 1
+          fi
+          HASHES="$(printf '%s' "$ROWS" | grep -oE '\b[0-9a-f]{64}\b' | sort -u || true)"
           COUNT="$(printf '%s' "$HASHES" | grep -c . || true)"
           if [ "$COUNT" -ne 1 ]; then
-            echo "::error::Expected exactly one sha256 for ${JAR_NAME} in the ${PROV} table, found ${COUNT}."
+            echo "::error::Expected exactly one sha256 for ${JAR_NAME} in its compile targets row of ${PROV}, found ${COUNT}."
             exit 1
           fi
           echo "${HASHES}  ${JAR}" | sha256sum -c -

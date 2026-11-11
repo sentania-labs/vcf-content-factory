@@ -69,7 +69,7 @@ any SDK constant.
 ## Minimum reproducer
 
 ```bash
-$ javap -c -classpath vrops-adapters-sdk-2.2.jar \
+$ javap -c -classpath vrops-adapters-sdk-9.0.2.0.25137845.jar \
     com.integrien.alive.common.util.CommonConstants 2>/dev/null \
   | grep -A5 "static {}"
 # Shows: ldc "VCF" → productNamePrefix → VCOPS via makeConcatWithConstants

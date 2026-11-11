@@ -60,9 +60,11 @@ Portable Tier 2 SDK adapter build toolchain (jar-free).
   `/usr/lib/vmware-vcops/common-lib/` and `/usr/lib/vmware-vcops/suite-api/`
   paths named before exist on no appliance, and "any 9.x instance" was
   wrong: the jar differs per platform version. See Consumer contract below.
-- Adoption: no change is required, and former jar names keep working. No
-  adapter.yaml change is needed for a name and description that already
-  validate. A pak on the floating major gets this on its next build; a
+- Adoption: no change is required, and former jar names keep working. A
+  pak repo that fetches the jar from a pinned commit of a jar repository
+  must change the jar file name it asks for in the same commit that moves
+  the pin to one holding the new names. No adapter.yaml change is needed
+  for a name and description that already validate. A pak on the floating major gets this on its next build; a
   pinned pak bumps `BUILDKIT_TAG` to `sdk-buildkit-v1.0.27` and its
   committed SHA256SUMS.
 
