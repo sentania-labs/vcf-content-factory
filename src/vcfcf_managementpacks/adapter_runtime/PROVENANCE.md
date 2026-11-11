@@ -144,6 +144,34 @@ bytes larger, different hash); its entry list matches the one recorded for
 | 9.1.1.0 build 25679751 | 9e905f1a5164 (only 12 characters recorded) | 1,001,089 | prod nodes, read 2026-10-13, not stored |
 | 9.0.2.0 build 25137845 | 2d53a91fc2b9 (full hash in the table above) | 1,002,682 | devel before its 9.0.2.0200 patch; the 9.0.2.0 jar here |
 
+## Only these jars in a release build (issue #343)
+
+A release build (`build-sdk --release`, or any run with
+`--require-sdk-compat` / `VCFCF_SDK_COMPAT_REQUIRED=1`; the shell scripts
+also take `VCFCF_RELEASE_BUILD=1`) compiles only against the jars in the
+compile targets table: the primary jar must be one of the two 9.0 jars and
+every compat jar one of the four, with no override. A hand build warns in
+a box and builds. Rule and details: `knowledge/context/tier2_architecture.md`,
+"Known jars only in a release build".
+
+### Adding a jar is a release
+
+1. The jar's platform version and build (release name from the image or
+   patch, build from Suite API `versions/current`), sha256, size and
+   class-file Java.
+2. The jar into `sdk_builder._SDK_COMPAT_LINES`, `KNOWN_SDK_JARS` in
+   `adapter_framework/build-framework.sh` and
+   `adapter_framework/run_stitch_tests.sh`, and a row in the compile
+   targets table above with a provenance section below (tests keep the
+   four equal).
+3. The jar into the private `sentania-labs/vcf-content-factory-sdk-runtime`
+   repo when CI needs it, with the pinned runtime commit bumped in factory
+   CI (and pak CI) and here.
+4. The Consumer contract table in `.github/release-notes-buildkit.md` and
+   the kit README's "Which jar" table (`buildkit.py`).
+5. A `BUILDKIT_VERSION` bump and a tagged `sdk-buildkit-v<version>`
+   release.
+
 ## How the build uses them
 
 - Everything that ships (framework jar, adapter jar) is compiled against

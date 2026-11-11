@@ -529,9 +529,11 @@ _PROVENANCE_REF = (
 _SDK_JAR_HOWTO = (
     "The SDK jar differs per platform version. The shipped compile target is "
     "the VCF Operations 9.0.2 jar (9.0.2.0 build 25137845 or 9.0.2.0200 build "
-    "25431135, under any file name). Any jar compiles; its sha256 decides "
-    "which line's compatibility leg it satisfies and what conf/version.txt "
-    "Adapter-Version-Ref records. Copy it "
+    "25431135, under any file name). Its sha256 decides which line's "
+    "compatibility leg it satisfies and what conf/version.txt "
+    "Adapter-Version-Ref records. A hand build compiles against any jar and "
+    "warns about one that is not a known 9.0 jar; a release build "
+    "(--release, --require-sdk-compat) accepts only the known jars. Copy it "
     "from a 9.0.2 appliance over SSH (the file is mode 644):\n"
     "  scp root@<appliance>:/usr/lib/vmware-vcops/common/lib/vrops-adapters-sdk.jar .\n"
     "Its class files are Java 17, so it needs JDK 17 or newer. The 8.18.7 "
@@ -1282,6 +1284,141 @@ def _compat_skip(what: str, reason: str, target: str = _ANY_COMPAT_TARGET) -> bo
     return False
 
 
+# ---------------------------------------------------------------------------
+# Known SDK jars only, in a release build (#343)
+# ---------------------------------------------------------------------------
+# A release build compiles only against SDK jars the kit knows: the primary
+# jar (the shipped compile target) must be a known jar of the 9.0 line, and
+# every compat jar a known jar, with no override. "Release build" is
+# build-sdk --release (VCFCF_RELEASE_BUILD=1, which only the pak repos' tag
+# workflow passes) and any run with --require-sdk-compat /
+# VCFCF_SDK_COMPAT_REQUIRED=1. A hand build makes the same check, prints a
+# boxed warning and goes on; validate-sdk warns and still passes.
+# build-framework.sh and run_stitch_tests.sh apply the same rule.
+#
+# "Known" means a sha256 in _SDK_COMPAT_LINES, a module constant kept equal
+# to PROVENANCE.md by a test. No flag, environment variable or file changes
+# it. Tests that need stub bytes to count as a known jar replace the table
+# inside their own test process (monkeypatch), which a real build, a
+# separate process started from the CLI, cannot do. Adding a jar is a
+# buildkit release (tier2_architecture.md, "Adding an SDK jar").
+
+
+class SdkJarRejected(SdkBuildError):
+    """A release build refused an SDK jar the kit does not know (#343)."""
+
+
+def _sdk_jar_release_mode() -> bool:
+    """True when unknown SDK jars are refused rather than warned about."""
+    return _is_release_build() or _compat_required()
+
+
+def _known_jar_list() -> str:
+    return "; ".join(
+        f"{k.file_name} ({k.platform}, {line.key} line)"
+        for line in _SDK_COMPAT_LINES for k in line.jars)
+
+
+def _sdk_jar_problem(jar: Path, primary: bool) -> Optional[str]:
+    """Why jar is not acceptable to a release build, or None when it is.
+
+    primary: jar is the shipped compile target, which must be a known jar of
+    the 9.0 line; otherwise it is a compat jar, which must be a known jar.
+    """
+    role = "primary SDK jar" if primary else "compatibility SDK jar"
+    try:
+        sha = _sha256_of(jar)
+    except OSError as exc:
+        return f"the {role} {jar} cannot be read to check its sha256 ({exc})"
+    found = _known_jar_for_sha(sha)
+    if found is None:
+        what = (f"the {role} {jar} has sha256 {sha}, which matches no known "
+                f"SDK jar ({_PROVENANCE_REF})")
+        if primary:
+            return (what + ". A pak compiled against it may use something a "
+                    "supported platform line lacks and fail on that line's "
+                    "collectors.")
+        return what + ", so its leg checks no supported line."
+    line, known = found
+    if primary and line.key != _PRIMARY_LINE_KEY:
+        nine = next(l for l in _SDK_COMPAT_LINES if l.key == _PRIMARY_LINE_KEY)
+        names = " or ".join(f"{k.file_name} ({k.platform})" for k in nine.jars)
+        return (f"the {role} {jar} is {known.platform}, the {line.key} line's "
+                f"jar, not a 9.0 line jar. A pak compiled against it can use "
+                f"something only the {line.key} line has and fail on the other "
+                f"lines' collectors. Pass it with --sdk-compat-jar instead, and "
+                f"compile against {names} (--sdk-jar / VCFCF_SDK_JAR).")
+    return None
+
+
+def _check_sdk_jars(what: str, primary: Optional[Path], compat: List[Path],
+                    check_primary: bool = True) -> List[str]:
+    """Apply the known-jar rule (#343) to the jars of one run.
+
+    primary is the shipped compile target (None when absent or when the
+    caller checked it already: check_primary=False), compat the
+    compatibility jars; a compat jar that is the primary file is not checked
+    twice. Returns the problems found. In a release build any problem raises
+    SdkJarRejected, with no override; otherwise each is printed in one boxed
+    warning and the run goes on.
+    """
+    problems: List[str] = []
+    seen = set()
+    if check_primary and primary is not None and primary.is_file():
+        seen.add(os.path.realpath(primary))
+        problem = _sdk_jar_problem(primary, primary=True)
+        if problem:
+            problems.append(problem)
+    for jar in compat:
+        key = os.path.realpath(jar)
+        if key in seen or not jar.is_file():
+            continue
+        seen.add(key)
+        problem = _sdk_jar_problem(jar, primary=False)
+        if problem:
+            problems.append(problem)
+    if not problems:
+        return problems
+    if _sdk_jar_release_mode():
+        raise SdkJarRejected(
+            f"{what}: a release build (--release, --require-sdk-compat or "
+            f"VCFCF_SDK_COMPAT_REQUIRED=1) compiles only against SDK jars the "
+            f"kit knows, and there is no override (#343):\n"
+            + "".join(f"  - {p}\n" for p in problems)
+            + f"Known jars: {_known_jar_list()}. Adding a jar is a buildkit "
+            f"release (VCF Content Factory repo, "
+            f"knowledge/context/tier2_architecture.md, \"Adding an SDK jar\")."
+        )
+    bar = "  " + "=" * 72
+    print(
+        f"{bar}\n"
+        f"  WARNING: SDK JAR A RELEASE BUILD WOULD REFUSE: {what}\n"
+        + "".join(f"    - {p}\n" for p in problems)
+        + f"    This run continues, but a pak built this way may not run on "
+        f"every supported platform line.\n"
+        f"    A release build (--release, --require-sdk-compat or "
+        f"{_SDK_COMPAT_REQUIRED_ENV}=1) refuses it (#343).\n"
+        f"    Known jars: {_known_jar_list()}.\n"
+        f"{bar}",
+        file=sys.stderr,
+    )
+    return problems
+
+
+def _check_run_sdk_jars(what: str, check_primary: bool = True) -> List[str]:
+    """_check_sdk_jars on this run's primary compile jar and compat jars.
+
+    A compat jar path that does not exist is left to the compat pass, which
+    reports it as it always has.
+    """
+    try:
+        compat = _resolve_compat_sdk_jars()
+    except SdkCompatUnavailable:
+        compat = []
+    return _check_sdk_jars(what, _primary_compile_jar(), compat,
+                           check_primary=check_primary)
+
+
 def _primary_line_missing_hint(supplied: Dict[str, Path]) -> str:
     """What is actually missing when no supplied jar covers the 9.0 line.
 
@@ -1559,14 +1696,17 @@ def _adapter_compat_inputs(project_dir: Path, sources: List[Path]):
     return fw_sources + list(sources), other
 
 
-def check_framework_sdk_compat() -> int:
+def check_framework_sdk_compat(check_primary: bool = True) -> int:
     """build-framework.sh second pass: framework source vs every compat SDK jar.
 
     The framework's compile classpath is the SDK jar only, so nothing else
     joins it. Exit codes for build-framework.sh: 0 passed or skipped (notice
     printed), 1 the source does not compile against the jar,
-    COMPAT_COULD_NOT_RUN when the pass could not run although required, or
-    is misconfigured.
+    COMPAT_COULD_NOT_RUN when the pass could not run although required, is
+    misconfigured, or a release run refused an SDK jar the kit does not know
+    (#343). check_primary=False: the shell already applied the known-jar
+    rule to the primary jar (a full build), so only the compat jars are
+    checked here; --compat-only passes True.
     """
     sources = sorted(_ADAPTER_FRAMEWORK_SRC_DIR.rglob("*.java"))
     if not sources:
@@ -1574,6 +1714,11 @@ def check_framework_sdk_compat() -> int:
             f"ERROR: no framework source under {_ADAPTER_FRAMEWORK_SRC_DIR}",
             file=sys.stderr,
         )
+        return COMPAT_COULD_NOT_RUN
+    try:
+        _check_run_sdk_jars("build-framework.sh", check_primary=check_primary)
+    except SdkJarRejected as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
         return COMPAT_COULD_NOT_RUN
     try:
         _sdk_compat_check(sources, [], "framework source", fail_on_removal=True)
@@ -4672,6 +4817,10 @@ def build_sdk_pak(project_dir: Path, output_dir: Optional[Path] = None,
     javac = _detect_jdk()
     jar_tool = _detect_jar_tool()
 
+    # Step 2a: known SDK jars only on a release build; a hand build warns
+    # (#343). Before the framework compile, which uses the primary jar too.
+    _check_run_sdk_jars("build-sdk")
+
     # Step 2b: ensure vcfcf-adapter-base.jar exists (compile from source if
     # running from the sdk-buildkit tarball where no pre-built jar ships)
     _ensure_framework_jar()
@@ -5436,6 +5585,13 @@ def validate_sdk_project(project_dir: Path) -> List[str]:
     _sdk_jar_present = bool(os.environ.get("VCFCF_SDK_JAR", "").strip()) or bool(
         _runtime_sdk_jar_candidates()
     )
+    if _sdk_jar_present:
+        # Known SDK jars (#343): a warning here, an error only when the run
+        # is a release one (--require-sdk-compat / VCFCF_SDK_COMPAT_REQUIRED=1).
+        try:
+            _check_run_sdk_jars("validate-sdk")
+        except SdkJarRejected as exc:
+            errors.append(str(exc))
     if javac and _sdk_jar_present and not errors:
         try:
             _ensure_framework_jar()

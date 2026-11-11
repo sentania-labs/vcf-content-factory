@@ -1457,6 +1457,7 @@ Empirical basis: `knowledge/context/investigations/suiteapi_ambient_auth_devel_2
 
 | Date | Change |
 |---|---|
+| 2026-11-11 | **Buildkit 1.0.28: release builds accept only known SDK jars; hand builds warn (factory #343).** A release build (`build-sdk --release`, or any run with `--require-sdk-compat` / `VCFCF_SDK_COMPAT_REQUIRED=1`) requires the primary jar to be a known 9.0 line jar and every compat jar a known jar, no override (`SdkJarRejected`, a validate-sdk error, exit 3 from `build-framework.sh` and `run_stitch_tests.sh`); a hand build prints one boxed warning and builds, validate-sdk warns and exits 0. Before, any file passed as the primary jar was compiled against and shipped, with only a SKIPPED notice on the 9.0 leg. Rule, shell scripts, test seam and the "Adding an SDK jar" checklist: "Known jars only in a release build" under "SDK jar by platform version". No pak bytes change (verified on every reachable adapter). **Versioning:** `BUILDKIT_VERSION` 1.0.28. **Adapter adoption:** none for a pak built from the known jars; a pak repo whose release workflow passes another jar now fails its tag build. |
 | 2026-11-11 | **Buildkit 1.0.27: SDK jars named `vrops-adapters-sdk-<version>.<build>.jar`; the 9.0 line knows the 9.0.2.0200 jar; `version.txt` says what the pak was compiled against; javac-too-old stops plainly.** Owner decision 2026-11-11 ("no need to maintain byte-identical. I'd rather it be clear"): `-2.2` became `-9.0.2.0.25137845`, `-8.18.7` became `-8.18.7.25423534`, `-9.1.1.0100` became `-9.1.1.0100.25795063` (same bytes; private sdk-runtime repo PR 10). `_SDK_COMPAT_LINES` now lists known jars per line (`_KnownSdkJar`: name, `<version>.<build>`, platform, sha256, former names); the 9.0 line has two, 9.0.2.0 GA and the 9.0.2.0200 rebuild (`a8e9ebbdc8c6`, the jar on today's patched devel), so either covers the 9.0 leg. Former names are recognised wherever a jar is looked up by name (`adapter_runtime/`, `build-framework.sh`, `run_stitch_tests.sh`) with one INFO line, and a former-name compat jar is never a primary candidate; a jar given by path keeps any name. `conf/version.txt` `Adapter-Version-Ref` was parsed from the `adapter_runtime/` jar's file name (`2.2` in factory builds, `N/A` in kit/CI builds, which pass `VCFCF_SDK_JAR`); it is now the compile jar's `<version>.<build>` by sha256 (`9.0.2.0.25137845`), else a `<version>.<build>` file name, else `unknown`. `Core-Version-Ref` is unchanged (aria-ops-core's file name, default `8.0.0`). Only `conf/version.txt` changes in a built pak (vsanperf on main vs this branch, every leaf compared; five SDK jar placements on the branch, old name, new name, appliance name, `VCFCF_SDK_JAR` old and new, give identical leaves). The primary compile, the framework compile and `build-framework.sh` compare javac's major with the jar's class-file major first, and the compat-leg skip names the jar's platform and Java; the 9.0 SKIPPED hint says what is wrong when `VCFCF_SDK_JAR` is another line's or an unknown jar. Messages give the real path (`/usr/lib/vmware-vcops/common/lib/vrops-adapters-sdk.jar`), drop the nonexistent `common-lib` and `suite-api` paths and "any 9.x instance", and say JDK 17+ (not 11+) for the 9.0.2 jar. Java comment edits only; framework class bytes unchanged. Review (`knowledge/context/reviews/framework/managementpacks-sdk-jar-names-2026-11-11.md`) follow-ups: a known non-9.0 jar as the primary jar on a javac too old for it is named the wrong jar, with the 9.0.2 jars to use, not told to upgrade the JDK (Python, and `build-framework.sh`, which now decides the line by sha256 from its own `KNOWN_SDK_JARS` table, test-tied to `_SDK_COMPAT_LINES`); the former-name INFO line appears only when the bytes are that jar's; the PROVENANCE tie test reads the compile-targets table and the former-name table separately. **Versioning:** `BUILDKIT_VERSION` stays `1.0.27` (unreleased). **Adapter adoption:** no source change; a rebuild stamps the new `Adapter-Version-Ref`. Pinned CI and adapter repos with old-named jars keep working. |
 | 2026-11-11 | **Buildkit 1.0.27: overview pages HTML-escape `name` and `description` (factory #338).** They were interpolated raw into both `overview.packed` pages, so `&`, `<` and `>` broke the markup and a description could inject tags. Now `_html_text`, as for vendor (#336): quotes become `&quot;`/`&#x27;`, non-ASCII `&#N;`. With plain ASCII and none of `&<>"'`, the two HTML pages inside `overview.packed` are byte-identical to 1.0.26, while the `overview.packed` zip itself differs on every build, before and after, because each entry carries the build time (guard `tests/managementpacks/test_sdk_overview_escape.py`). Factory paks whose page members change, same text: compliance (`"`, `'`), vsanperf (`"`, `'`), unifi (`>` in `vmnic->port`), synology (`§`); template unchanged. Review W1 (`reviews/framework/managementpacks-sdk-overview-escape-338-2026-11-11.md`): `name` and `description` now carry the `vendor` rejected-character rule (C0 but LF/CRLF/tab in a description, C1, U+2028/9, bidi controls, lone surrogates), and `name` is stripped; no factory pak is newly rejected. **Versioning:** `BUILDKIT_VERSION` 1.0.27; push `sdk-buildkit-v1.0.27` after merge to release. |
 | 2026-11-11 | **Buildkit 1.0.26: a pak sets its own vendor, contact and EULA (factory #336).** build-sdk stamped `VCF Content Factory` as every pak's vendor and the factory MIT `LICENSE` as its `eula.txt`, so a third-party pak built with the kit (seen: kit 1.0.24) presented as ours. Optional adapter.yaml `vendor`, `vendor_contact`, `eula_file`; sinks, escaping, validation and the `lib/vcfcf-adapter-base-LICENSE.txt` notice in "Pak vendor, contact and EULA" above. Flat keys, like `content_naming`, because the issue names `vendor` as the name itself. No keys: byte-identical paks (unifi built before and after, every member equal; five factory paks' manifest, properties, overview and eula members equal). `vcfcf-adapter-base.jar` and its manifest unchanged. Framework review (`reviews/framework/managementpacks-sdk-pak-attribution-336-2026-11-11.md`) fixes: lone surrogates, C1, U+2028/9 and bidi controls rejected in `vendor`/`vendor_contact`; BOM-only, NUL and no-printable EULAs rejected; the EULA is read once at load and a leading BOM dropped; a missing `LICENSE` fails the notice and kit assembly (no placeholder). **Versioning:** `BUILDKIT_VERSION` 1.0.26; after merge push `sdk-buildkit-v1.0.26` (`publish-buildkit.yml` is tag-driven; merge alone releases nothing). **Adapter adoption:** none needed for factory paks; a third-party pak adds the keys and pins the new kit. The `vcf-content-factory-sdk-template` repo should show the keys. |
@@ -1511,8 +1512,10 @@ The SDK jar differs per platform version. Every appliance keeps the
 collector's copy at `/usr/lib/vmware-vcops/common/lib/vrops-adapters-sdk.jar`
 (read on all three lab lines 2026-11-11, below); the kit names its copies
 `vrops-adapters-sdk-<version>.<build>.jar` for the platform version and
-build the bytes come from. Any jar compiles; its sha256, not its name,
-decides which line's leg it covers and what `Adapter-Version-Ref` records.
+build the bytes come from. A jar's sha256, not its name, decides which
+line's leg it covers and what `Adapter-Version-Ref` records. A hand build
+compiles against any jar; a release build only against the jars in the
+table below (next section).
 
 | Line | Platform | Name in the kit | sha256 | Class files | JDK to read it | Role |
 |---|---|---|---|---|---|---|
@@ -1543,6 +1546,71 @@ sha256; an unknown jar: from a `<version>.<build>` file name, else
 `UnlicensedAdapter.logAdapterInformation` reads it, as a string in a log
 line; `AdapterLoader` reads `Major-Version`, `Minor-Version` and
 `Implementation-Version` only (javap, 2026-11-11).
+
+### Known jars only in a release build (issue #343, buildkit 1.0.28)
+
+Owner decision 2026-11-11: "I think we lock it to the known fingerprints
+and when we introduce a new base pak or version to target - that's a
+release pipeline update", and "if we are handbuilding - we should build
+and warn, but CI should hardpin".
+
+| Run | Primary jar (the one that ships) | Each compat jar | On a jar outside the rule |
+|---|---|---|---|
+| Release: `build-sdk --release` (`VCFCF_RELEASE_BUILD=1`, only the pak repos' tag workflow passes it), or any `build-sdk` / `validate-sdk` with `--require-sdk-compat` (`VCFCF_SDK_COMPAT_REQUIRED=1`) | a known jar of the 9.0 line | a known jar of any line | error, no override: another line's jar is named by line with "pass it with `--sdk-compat-jar`"; an unknown jar by its full sha256 |
+| Hand build (neither switch) | same check | same check | one boxed warning (the SKIPPED box's style), then the build goes on; `validate-sdk` warns and exits 0 |
+
+"Known" is a sha256 in `sdk_builder._SDK_COMPAT_LINES`. The check
+(`sdk_builder._check_sdk_jars`) runs in build-sdk before the framework
+compile, in validate-sdk whenever an SDK jar is present (a refusal is a
+validate error), and in the framework pass `build-framework.sh` calls.
+`Adapter-Version-Ref` still records what it can for an unknown jar.
+
+The shell scripts apply the same rule. Their "release run" is
+`VCFCF_SDK_COMPAT_REQUIRED=1` or `VCFCF_RELEASE_BUILD=1` (the switches
+`sdk_builder._sdk_jar_release_mode` reads; neither script has a `--release`
+flag). `build-framework.sh`: a full build checks its primary jar in shell
+(it compiles before python runs) against its own `KNOWN_SDK_JARS` copy and
+exits 3 on a refusal; the compat jars, and the primary under
+`--compat-only`, are checked by `check_framework_sdk_compat` (exit 3).
+`run_stitch_tests.sh` ships nothing and runs against any one line's jar,
+so its jar plays a compat jar's part: any known jar passes, an unknown one
+exits 3 in a release run and warns otherwise. Factory CI's `sdk-compat`
+job runs `build-framework.sh --compat-only` with
+`VCFCF_SDK_COMPAT_REQUIRED=1` and one of the three runtime-repo jars as
+`VCFCF_SDK_COMPAT_JAR`, so every row passes the check (the 9.0 row's 9.0
+jar is a valid compat jar).
+
+The test seam for stub jars: in-process tests replace
+`_SDK_COMPAT_LINES` with monkeypatch, and shell tests rewrite the table in
+a copy of the script. A real build is a separate process started from the
+CLI or the workflow and reads the shipped constant; no flag, environment
+variable or file reaches it, and tests pin the three tables to each other
+and to PROVENANCE.md (`tests/managementpacks/test_sdk_known_jars.py`,
+`test_sdk_jar_names.py`).
+
+### Adding an SDK jar (a new platform build or line) is a buildkit release
+
+1. Identify the jar: the platform version and build it comes from (the
+   release name from the image or patch, the build from Suite API
+   `GET /suite-api/api/versions/current`), its sha256, size, and its
+   class-file Java (highest class major minus 44).
+2. Add it to `sdk_builder._SDK_COMPAT_LINES` (a `_KnownSdkJar` on its
+   line, or a new `_CompatLine` with that line's collector Java), to
+   `KNOWN_SDK_JARS` in `adapter_framework/build-framework.sh` and
+   `adapter_framework/run_stitch_tests.sh`, and a row to the compile
+   targets table of `adapter_runtime/PROVENANCE.md` with its provenance
+   section. The tests that tie these tables together fail until all four
+   agree.
+3. When factory CI or pak CI compiles against it, commit it to the private
+   `sentania-labs/vcf-content-factory-sdk-runtime` repo and bump the pinned
+   `SDK_RUNTIME_COMMIT` in `.github/workflows/ci.yml` (and the pak repos'
+   workflow) and in PROVENANCE.md together; a new line also gets a
+   `sdk-compat` matrix row.
+4. Add it to the Consumer contract table in
+   `.github/release-notes-buildkit.md` and the kit README's "Which jar"
+   table (`buildkit.py`), and update the table above.
+5. Bump `BUILDKIT_VERSION`, merge, tag `sdk-buildkit-v<version>`; pak repos
+   pick it up by bumping their `BUILDKIT_TAG` and checksum file.
 
 ### Readings (2026-10-13)
 

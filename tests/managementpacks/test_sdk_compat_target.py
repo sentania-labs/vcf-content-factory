@@ -576,6 +576,10 @@ def test_build_framework_compat_only_fails_on_a_missing_class(tmp_path):
 
 @needs_javac
 def test_build_framework_required_pass_that_cannot_run_exits_3(tmp_path):
+    """Since #343 a required run refuses the stub (its sha256 is unknown to
+    the real python3 process) before its JDK need is read; same exit 3. The
+    JDK-too-old skip itself is covered in-process by
+    test_too_old_jdk_is_a_loud_skip_and_a_failure_when_required."""
     jar = _stub_sdk_jar(tmp_path, tmp_path / "compat.jar", ["Present"], major=200)
     r = _run_build_framework(
         _BUILD_FRAMEWORK,
@@ -583,6 +587,7 @@ def test_build_framework_required_pass_that_cannot_run_exits_3(tmp_path):
     )
     assert r.returncode == sdk_builder.COMPAT_COULD_NOT_RUN == 3, r.stdout + r.stderr
     assert "COMPAT PASS COULD NOT RUN" in r.stderr
+    assert "compiles only against SDK jars the kit knows" in r.stderr
 
 
 def test_build_framework_skips_in_shell_without_a_jar(tmp_path):
