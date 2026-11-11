@@ -296,8 +296,11 @@ Inferred from bytecode, not run:
   local user whose name does not exist on the target and whose id differs from the
   exporter's, will skip those dashboards on import. Re-importing does not help. The fix is
   to rewrite `usermappings.json` to `sources: []` with the owner as a source-less user named
-  `admin`, or to make the owner id equal the marker content. Renaming the owner files is
-  not required: E kept `...a1` everywhere.
+  `admin` (run E). Matching the owner id to the marker content is not a fix on its own: it
+  only helps an owner that is already source-less (D versus D2). A directory-backed owner
+  with that equality still skips (B and C), because `userSourceId` selects the sourced
+  branch, which never uses the marker shortcut; the `userSourceId` has to go. Renaming the
+  owner files is not required: E kept `...a1` everywhere.
 - Factory-built zips do not hit this. Every zip builder writes `sources: []`, one
   source-less owner whose `userId` is the importing session's user id, and that same id as
   the marker content. So they map through path 1, whatever name they carry. The name does
