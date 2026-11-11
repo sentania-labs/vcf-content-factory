@@ -184,7 +184,7 @@ its authority.
    asserting it.
 
 10. **Gap honesty** (skill § *Gaps — name them, never hide them*;
-    `knowledge/rules/no-fabricated-metrics.md`). Any TOOLSET / CLASSPATH / DESIGN gap
+    `knowledge/rules/no-fabricated-metrics.md`). Any TOOLSET / CLASSPATH / DESIGN / MAP gap
     is named, and the affected controls kept informational —
     never faked. A hidden gap (a control silently mapped onto a
     non-existent field/command to inflate coverage) is BLOCKING.
