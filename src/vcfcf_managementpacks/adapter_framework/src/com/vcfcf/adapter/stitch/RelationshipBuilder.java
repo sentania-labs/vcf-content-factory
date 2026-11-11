@@ -74,7 +74,7 @@ import java.util.Map;
  * Relationships beyond the cap are silently dropped and a count is returned
  * from {@link BuildResult#droppedEdges()}.
  *
- * <p>Dependencies: {@code vrops-adapters-sdk-2.2.jar} only.
+ * <p>Dependencies: {@code vrops-adapters-sdk-9.0.2.0.25137845.jar} only.
  */
 public final class RelationshipBuilder {
 

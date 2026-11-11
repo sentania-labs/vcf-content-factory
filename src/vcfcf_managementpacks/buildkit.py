@@ -364,39 +364,62 @@ factory's own implementation (exit 0 clean, 1 unusable registry, 2 refused):
 This kit is fully JAR-FREE.  No pre-built jars ship at all — not even
 vcfcf-adapter-base.jar.  Instead the VCF Content Factory framework source
 is bundled in adapter_framework/src/ and compiled automatically on first
-use (during build-sdk or validate-sdk) against the consumer-supplied
-vrops-adapters-sdk-2.2.jar.  This means the framework jar is always fresh
-and in sync with the source — there is no stale-binary failure class.
+use (during build-sdk or validate-sdk) against the consumer-supplied SDK
+jar.  This means the framework jar is always fresh and in sync with the
+source — there is no stale-binary failure class.
 
-Adapters are compiled against vrops-adapters-sdk-2.2.jar which YOU must
-supply — it is a Broadcom internal build artifact with no public
-redistribution channel and cannot ship in a public toolchain tarball.
+Adapters are compiled against the Broadcom SDK jar (vrops-adapters-sdk),
+which YOU must supply — it has no public redistribution channel and cannot
+ship in a public toolchain tarball.
 
-### How to obtain vrops-adapters-sdk-2.2.jar
+### Which jar
 
-Option 1 — copy from your VCF Ops appliance (any 9.x instance):
-    scp root@<appliance>:/usr/lib/vmware-vcops/common-lib/vrops-adapters-sdk-2.2.jar .
-    # also available at:
-    # /usr/lib/vmware-vcops/suite-api/WEB-INF/lib/vrops-adapters-sdk.jar
+The SDK jar differs per platform version. The shipped compile target is
+the VCF Operations 9.0.2 jar; either 9.0.2 build below is accepted. A
+supplied jar is identified by its sha256, so its file name does not matter
+(the appliance calls every one vrops-adapters-sdk.jar):
 
-Option 2 — Broadcom TAP / partner SDK portal (if enrolled).
+    line        platform                                    name in the kit                               class files  JDK   role
+    9.0         VCF Operations 9.0.2.0 build 25137845       vrops-adapters-sdk-9.0.2.0.25137845.jar       Java 17      17+   compile target (either 9.0 jar)
+    9.0         VCF Operations 9.0.2.0200 build 25431135    vrops-adapters-sdk-9.0.2.0200.25431135.jar    Java 17      17+   compile target (either 9.0 jar)
+    8.18.7      Aria Operations 8.18.7 build 25423534       vrops-adapters-sdk-8.18.7.25423534.jar        Java 11      11+   optional compat check
+    9.1.1.0100  VCF Operations 9.1.1.0100 build 25795063    vrops-adapters-sdk-9.1.1.0100.25795063.jar    Java 25      25+   optional compat check
+
+sha256 of each: PROVENANCE.md in the factory's
+src/vcfcf_managementpacks/adapter_runtime/. A javac older than a jar's
+class files cannot read it; the build says so and stops.
+
+### How to obtain it
+
+Copy it from an appliance of that line over SSH (mode 644, any SSH user
+can read it):
+    scp root@<appliance>:/usr/lib/vmware-vcops/common/lib/vrops-adapters-sdk.jar .
 
 ### Providing the JAR to the build
 
 Set the VCFCF_SDK_JAR environment variable:
-    export VCFCF_SDK_JAR=/path/to/vrops-adapters-sdk-2.2.jar
+    export VCFCF_SDK_JAR=/path/to/vrops-adapters-sdk.jar
     python3 -m sdk_buildkit build-sdk <adapter_dir>
 
 Or use the --sdk-jar flag:
-    python3 -m sdk_buildkit build-sdk <adapter_dir> --sdk-jar /path/to/vrops-adapters-sdk-2.2.jar
+    python3 -m sdk_buildkit build-sdk <adapter_dir> --sdk-jar /path/to/vrops-adapters-sdk.jar
 
 In CI, store the JAR as a secret-gated artifact and expose its path via
 VCFCF_SDK_JAR.  The build fails with a clear actionable message when the
 JAR is absent from both adapter_runtime/ and the env var.
 
+conf/version.txt Adapter-Version-Ref records the jar the pak was compiled
+against as <version>.<build> (9.0.2.0.25137845 or 9.0.2.0200.25431135),
+from its sha256; an unknown jar gets the version from a
+vrops-adapters-sdk-<version>.<build>.jar file name, else "unknown".
+
+Former kit names (vrops-adapters-sdk-2.2.jar for the 9.0.2.0 jar,
+-8.18.7.jar, -9.1.1.0100.jar) still work wherever the kit looks a jar up
+by name, with one INFO line.
+
 ### Compile matrix: one leg per supported line (kit 1.0.15+, per line 1.0.18+)
 
-The pak ships compiled against the 2.2 jar with javac --release 11. Each
+The pak ships compiled against the 9.0.2 jar with javac --release 11. Each
 supported VCF Ops line ships its own SDK jar and runs its own collector
 Java, so build-sdk and validate-sdk also compile the framework and adapter
 main source (never tests) once per line, keep nothing, and fail on a class
@@ -405,16 +428,16 @@ leg compiles with --release <that line's collector Java>, read from its
 jar's class files, on a JDK at least that new (PATH, JAVA_HOME,
 JAVA_HOME_<N>_X64, or VCFCF_SDK_COMPAT_JAVAC):
 
-    8.18.7       vrops-adapters-sdk-8.18.7.jar       --release 11, any JDK 11+
-    9.0          vrops-adapters-sdk-2.2.jar          --release 17, JDK 17+
-    9.1.1.0100   vrops-adapters-sdk-9.1.1.0100.jar   --release 25, JDK 25+
+    8.18.7       --release 11, any JDK 11+
+    9.0          --release 17, JDK 17+   (the primary jar you already supply)
+    9.1.1.0100   --release 25, JDK 25+
 
-The 9.0 leg uses the primary jar you already supply. A supplied jar is
-matched to its line by sha256, so take each from an appliance of that line
-(/usr/lib/vmware-vcops/common/lib/vrops-adapters-sdk.jar), unchanged.
+A supplied jar is matched to its line by sha256, so take each from an
+appliance of that line (/usr/lib/vmware-vcops/common/lib/vrops-adapters-sdk.jar),
+unchanged.
 
-    export VCFCF_SDK_JAR=/path/to/vrops-adapters-sdk-2.2.jar
-    export VCFCF_SDK_COMPAT_JARS=/path/to/vrops-adapters-sdk-8.18.7.jar:/path/to/vrops-adapters-sdk-9.1.1.0100.jar
+    export VCFCF_SDK_JAR=/path/to/vrops-adapters-sdk-9.0.2.0.25137845.jar
+    export VCFCF_SDK_COMPAT_JARS=/path/to/vrops-adapters-sdk-8.18.7.25423534.jar:/path/to/vrops-adapters-sdk-9.1.1.0100.25795063.jar
     python3 -m sdk_buildkit build-sdk <adapter_dir> --require-sdk-compat
 
 --sdk-compat-jar repeats; VCFCF_SDK_COMPAT_JARS (colon-separated) and the
@@ -432,10 +455,11 @@ framework + adapter pass still only prints them.
 ## Other requirements
 
 - Python 3.9+ with PyYAML
-- JDK 11+ on PATH (javac, jar), used to compile both the framework and the
-  adapter with javac --release 11: Java 11 bytecode and the Java 11 library
-  API only, because the 8.18 collector runs Java 11 (a Java 12+ call fails
-  the build)
+- JDK 17+ on PATH (javac, jar): the 9.0.2 SDK jar's class files are Java
+  17, so an older javac cannot read it. It compiles both the framework and
+  the adapter with javac --release 11: Java 11 bytecode and the Java 11
+  library API only, because the 8.18 collector runs Java 11 (a Java 12+
+  call fails the build). The optional 9.1.1.0100 check needs JDK 25+.
 - No factory checkout, no LLM, no other network access required.
 """
 '''
@@ -455,7 +479,9 @@ from pathlib import Path
 
 
 _SDK_JAR_HELP = (
-    "Path to vrops-adapters-sdk-2.2.jar (Broadcom; not shipped in this kit — "
+    "Path to the VCF Operations 9.0.2 SDK jar, copied from a 9.0.2 appliance's "
+    "/usr/lib/vmware-vcops/common/lib/vrops-adapters-sdk.jar (Broadcom; not "
+    "shipped in this kit; any file name, identified by sha256; needs JDK 17+ — "
     "see the consumer contract in __init__.py). "
     "Alternatively set the VCFCF_SDK_JAR environment variable. "
     "Required when running outside the VCF Content Factory repo."
@@ -464,7 +490,7 @@ _SDK_JAR_HELP = (
 
 _SDK_COMPAT_JAR_HELP = (
     "A compatibility SDK jar (Broadcom; not shipped in this kit). Repeatable, "
-    "one per platform, e.g. vrops-adapters-sdk-9.1.1.0100.jar: the framework "
+    "one per platform, e.g. vrops-adapters-sdk-9.1.1.0100.25795063.jar: the framework "
     "and adapter main source must also compile against each, at that line's "
     "collector Java, on a JDK at least that new (9.1.1.0100 needs JDK 25+; found on "
     "PATH, JAVA_HOME, JAVA_HOME_<N>_X64 or VCFCF_SDK_COMPAT_JAVAC). "

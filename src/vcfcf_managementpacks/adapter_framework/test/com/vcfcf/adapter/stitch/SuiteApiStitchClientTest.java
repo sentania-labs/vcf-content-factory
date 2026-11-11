@@ -26,10 +26,10 @@ import java.util.concurrent.atomic.AtomicInteger;
  *
  * <p>Run:
  * <pre>
- *   javac -cp adapter_runtime/vrops-adapters-sdk-2.2.jar:build/vcfcf-adapter-base.jar \
+ *   javac -cp adapter_runtime/vrops-adapters-sdk-9.0.2.0.25137845.jar:build/vcfcf-adapter-base.jar \
  *         adapter_framework/test/com/vcfcf/adapter/stitch/SuiteApiStitchClientTest.java \
  *         -d build/test-classes
- *   java -cp build/test-classes:adapter_runtime/vrops-adapters-sdk-2.2.jar:build/vcfcf-adapter-base.jar \
+ *   java -cp build/test-classes:adapter_runtime/vrops-adapters-sdk-9.0.2.0.25137845.jar:build/vcfcf-adapter-base.jar \
  *         com.vcfcf.adapter.stitch.SuiteApiStitchClientTest
  * </pre>
  */

@@ -212,16 +212,22 @@ on 2026-05-15 by Navani):
 
 | JAR | Layer | On appliance classpath? |
 |---|---|---|
-| `vrops-adapters-sdk-2.2.jar` | Layer 1 — SDK contract | Yes (do NOT bundle in pak) |
+| `vrops-adapters-sdk-9.0.2.0.25137845.jar` (formerly `-2.2.jar`) | Layer 1 — SDK contract | Yes (do NOT bundle in pak) |
 | `alive_common.jar` | Layer 1 — SDK types | Yes (do NOT bundle in pak) |
 | `alive_platform.jar` | Layer 1 — platform API types | Yes (do NOT bundle in pak) |
 | `aria-ops-core-8.0.0.jar` | Layer 2 — UnlicensedAdapter | No (MUST bundle in pak) |
 
+The SDK jar differs per platform version. The shipped compile target is the
+VCF Operations 9.0.2 jar: `/usr/lib/vmware-vcops/common/lib/vrops-adapters-sdk.jar`
+on a 9.0.2 appliance (mode 644, readable over SSH). Both 9.0.2.0 build 25137845
+and 9.0.2.0200 build 25431135 are accepted, by sha256; name it
+`vrops-adapters-sdk-<version>.<build>.jar` after the build it came from.
+
 Two more jars are compile checks only, never on the shipped classpath,
-one leg per supported line (issues #211, #252): `vrops-adapters-sdk-8.18.7.jar`
+one leg per supported line (issues #211, #252): `vrops-adapters-sdk-8.18.7.25423534.jar`
 (Aria Operations 8.18.7; Java 11, any JDK 11+) and
-`vrops-adapters-sdk-9.1.1.0100.jar` (VCF Ops 9.1.1.0100; Java 25, JDK 25+).
-The 2.2 jar is the third leg (9.0, compiled again at `--release 17`). Neither
+`vrops-adapters-sdk-9.1.1.0100.25795063.jar` (VCF Ops 9.1.1.0100; Java 25, JDK 25+).
+The 9.0.2 jar is the third leg (9.0, compiled again at `--release 17`). Neither
 compat jar is in this public repo. Both are in the private
 `sentania-labs/vcf-content-factory-sdk-runtime` repo (factory CI fetches
 them there) and on the lab holding share under
@@ -229,7 +235,8 @@ them there) and on the lab holding share under
 `/mnt/holding/vendor/vcf-ops-9.1.1.0100/extracted-jars/` (local-only), or
 take one from an appliance of that line (`common/lib/vrops-adapters-sdk.jar`).
 Put each in `adapter_runtime/` **under the name above** (under any other
-name it is a second primary SDK jar and the build stops), check its sha256,
+name it is a second primary SDK jar and the build stops; the former names
+`-8.18.7.jar` and `-9.1.1.0100.jar` still work), check its sha256,
 and put JDK 25+ where the build can find it for the 9.1.1 leg; build-sdk,
 validate-sdk and `build-framework.sh` then compile once per line and fail
 on anything a line lacks. Every SDK jar's hashes and builds:
@@ -245,13 +252,14 @@ appliance installation.
 1. Obtain the four JARs (from a Navani-style devel extraction or equivalent):
 
    ```
-   vcfcf_managementpacks/adapter_runtime/vrops-adapters-sdk-2.2.jar
+   vcfcf_managementpacks/adapter_runtime/vrops-adapters-sdk-9.0.2.0.25137845.jar
    vcfcf_managementpacks/adapter_runtime/alive_common.jar
    vcfcf_managementpacks/adapter_runtime/alive_platform.jar
    vcfcf_managementpacks/adapter_runtime/aria-ops-core-8.0.0.jar
    ```
 
-2. Build the framework JAR (requires JDK 11+):
+2. Build the framework JAR (requires JDK 17+: the 9.0.2 jar's class files
+   are Java 17, and an older javac cannot read them):
 
    ```bash
    cd vcfcf_managementpacks/

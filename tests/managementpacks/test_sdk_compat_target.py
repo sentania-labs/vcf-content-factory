@@ -1,8 +1,11 @@
 """Second SDK compile target (issue #211): the 9.1.1.0100 jar.
 
-The shipped compile target stays vrops-adapters-sdk-2.2.jar. build-sdk,
-validate-sdk and build-framework.sh also compile the source against
-vrops-adapters-sdk-9.1.1.0100.jar and fail on anything unresolved there.
+The shipped compile target stays the 9.0.2 jar
+(vrops-adapters-sdk-9.0.2.0.25137845.jar, formerly -2.2.jar; many tests here
+still use the former name, which keeps working). build-sdk, validate-sdk
+and build-framework.sh also compile the source against
+vrops-adapters-sdk-9.1.1.0100.25795063.jar and fail on anything unresolved
+there.
 
 Covered here, hermetically (tmp_path stand-ins for adapter_runtime/ and the
 framework source tree; stub jars compiled by the javac on PATH):
@@ -130,11 +133,17 @@ def _stub_sdk_jar(tmp_path: Path, jar_path: Path, class_names, major: int = 0) -
     return _jar_of(out, jar_path, major)
 
 
+def _line(key: str, name: str, sha: str, java: int = 17):
+    """A one-jar supported line, for tests that register their own lines."""
+    return sdk_builder._CompatLine(
+        key, (sdk_builder._KnownSdkJar(name, f"{key}.0", f"stub platform {key}", sha),), java)
+
+
 def _register_lines(monkeypatch, jars) -> None:
     """Make the stub jars the supported lines (key -> jar), so a run that
     supplies them covers every expected line (issue #252 review B2)."""
     monkeypatch.setattr(sdk_builder, "_SDK_COMPAT_LINES", tuple(
-        sdk_builder._CompatLine(key, Path(jar).name, sdk_builder._sha256_of(Path(jar)))
+        _line(key, Path(jar).name, sdk_builder._sha256_of(Path(jar)))
         for key, jar in jars.items()
     ))
 
@@ -238,11 +247,13 @@ def test_adapter_version_ref_ignores_the_compat_jar(runtime):
         source_path=Path("/dev/null"),
     )
     assert "Adapter-Version-Ref=N/A" in sdk_builder._generate_version_txt(project)
+    # An unknown jar (these stub bytes are no known jar) under the former
+    # name: "2.2" was never a version, so it is not stamped.
     _touch_jar(runtime / "vrops-adapters-sdk-2.2.jar")
-    assert "Adapter-Version-Ref=2.2" in sdk_builder._generate_version_txt(project)
+    assert "Adapter-Version-Ref=unknown" in sdk_builder._generate_version_txt(project)
     (runtime / "vrops-adapters-sdk-2.2.jar").unlink()
     _touch_jar(runtime / "vrops-adapters-sdk.jar")  # no version in the name
-    assert "Adapter-Version-Ref=N/A" in sdk_builder._generate_version_txt(project)
+    assert "Adapter-Version-Ref=unknown" in sdk_builder._generate_version_txt(project)
 
 
 # ---------------------------------------------------------------------------
@@ -293,7 +304,8 @@ def test_missing_jar_is_a_loud_skip(runtime, capsys):
     assert sdk_builder._sdk_compat_check([], [], "test source") is False
     err = capsys.readouterr().err
     assert "SDK COMPAT CHECK SKIPPED" in err
-    assert "is not in adapter_runtime/" in err
+    assert "no supplied jar is a known 9.0 jar" in err
+    assert "put it in adapter_runtime/ as vrops-adapters-sdk-9.0.2.0.25137845.jar" in err
 
 
 def test_missing_jar_fails_when_required(runtime, monkeypatch):
@@ -862,9 +874,16 @@ def test_the_8_18_jar_in_adapter_runtime_is_a_leg_not_a_primary_jar(runtime, tmp
 
 def test_build_framework_knows_the_same_compat_names_as_sdk_builder():
     text = _BUILD_FRAMEWORK.read_text(encoding="utf-8")
-    line = next(l for l in text.splitlines() if l.startswith("COMPAT_JAR_NAMES="))
-    names = tuple(line.split("=", 1)[1].strip('"').split())
-    assert names == sdk_builder._SDK_COMPAT_JAR_NAMES
+    def shell_list(var):
+        line = next(l for l in text.splitlines() if l.startswith(f"{var}="))
+        return tuple(line.split("=", 1)[1].strip('"').split())
+
+    assert shell_list("COMPAT_JAR_NAMES") == sdk_builder._SDK_COMPAT_JAR_NAMES
+    assert shell_list("COMPAT_JAR_FORMER_NAMES") == sdk_builder._SDK_COMPAT_JAR_FORMER_NAMES
+    primary = next(l for l in sdk_builder._SDK_COMPAT_LINES if l.key == "9.0")
+    assert shell_list("PRIMARY_JAR_NAMES") == tuple(k.file_name for k in primary.jars)
+    assert shell_list("PRIMARY_JAR_FORMER_NAMES") == tuple(
+        n for k in primary.jars for n in k.former_names)
 
 
 def test_ci_sdk_compat_matrix_has_the_8_18_and_9_1_legs():
@@ -874,12 +893,16 @@ def test_ci_sdk_compat_matrix_has_the_8_18_and_9_1_legs():
     legs = yaml.safe_load(ci.read_text(encoding="utf-8"))["jobs"]["sdk-compat"][
         "strategy"]["matrix"]["include"]
     by_sdk = {leg["sdk"]: leg for leg in legs}
-    assert by_sdk["8.18.7"] == {"sdk": "8.18.7", "jdk": "17", "jar": "vrops-adapters-sdk-8.18.7.jar"}
+    assert by_sdk["8.18.7"]["jdk"] == "17"
     assert by_sdk["9.1.1.0100"]["jdk"] == "25"
-    assert by_sdk["9.0"] == {"sdk": "9.0", "jdk": "17", "jar": "vrops-adapters-sdk-2.2.jar"}
-    # One row per supported line; the row's sdk is the VCFCF_SDK_COMPAT_LEGS key.
-    assert {(leg["sdk"], leg["jar"]) for leg in legs} == {
-        (line.key, line.jar_name) for line in sdk_builder._SDK_COMPAT_LINES}
+    assert by_sdk["9.0"]["jdk"] == "17"
+    # One row per supported line; the row's sdk is the VCFCF_SDK_COMPAT_LEGS
+    # key and its jar a name the kit knows for that line (the row names the
+    # file in the pinned runtime repo commit, current or former name).
+    lines = {line.key: line for line in sdk_builder._SDK_COMPAT_LINES}
+    assert sorted(by_sdk) == sorted(lines) and len(legs) == len(lines)
+    for leg in legs:
+        assert leg["jar"] in lines[leg["sdk"]].names, leg
     job = yaml.safe_load(ci.read_text(encoding="utf-8"))["jobs"]["sdk-compat"]
     env = next(s["env"] for s in job["steps"] if s.get("name", "").startswith("Compile"))
     assert env["VCFCF_SDK_COMPAT_LEGS"] == "${{ matrix.sdk }}"
@@ -905,11 +928,22 @@ def test_line_hashes_match_provenance():
         encoding="utf-8")
     import re
 
+    # Every name of every known jar (CI looks a jar up by the name in its
+    # matrix row, current or former) finds table rows carrying exactly that
+    # jar's hash.
     for line in sdk_builder._SDK_COMPAT_LINES:
-        rows = [r for r in prov.splitlines() if r.startswith("|") and f"`{line.jar_name}`" in r]
-        hashes = set(re.findall(r"\b[0-9a-f]{64}\b", "\n".join(rows)))
-        assert hashes == {line.sha256}, line.key
+        for known in line.jars:
+            for name in (known.file_name,) + known.former_names:
+                rows = [r for r in prov.splitlines() if r.startswith("|") and f"`{name}`" in r]
+                assert rows, name
+                hashes = set(re.findall(r"\b[0-9a-f]{64}\b", "\n".join(rows)))
+                assert hashes == {known.sha256}, name
+    # And the table names no other jar hash: four known jars, four hashes.
+    table = [r for r in prov.splitlines() if r.startswith("|") and "`vrops-adapters-sdk-" in r]
+    all_hashes = set(re.findall(r"\b[0-9a-f]{64}\b", "\n".join(table)))
+    assert all_hashes == {k.sha256 for l in sdk_builder._SDK_COMPAT_LINES for k in l.jars}
     assert [l.key for l in sdk_builder._SDK_COMPAT_LINES] == ["8.18.7", "9.0", "9.1.1.0100"]
+    assert [len(l.jars) for l in sdk_builder._SDK_COMPAT_LINES] == [1, 2, 1]
 
 
 def test_leg_release_follows_the_jar_class_files():
@@ -1082,8 +1116,8 @@ def test_identical_jar_bytes_cover_one_line_only(runtime, tmp_path, monkeypatch,
     b = _touch_jar(tmp_path / "y" / "vrops-adapters-sdk-9.1.1.0100.jar")
     assert sdk_builder._sha256_of(a) == sdk_builder._sha256_of(b)
     monkeypatch.setattr(sdk_builder, "_SDK_COMPAT_LINES", (
-        sdk_builder._CompatLine("8.18.7", a.name, sdk_builder._sha256_of(a)),
-        sdk_builder._CompatLine("9.1.1.0100", b.name, "0" * 64),
+        _line("8.18.7", a.name, sdk_builder._sha256_of(a)),
+        _line("9.1.1.0100", b.name, "0" * 64),
     ))
     monkeypatch.setenv("VCFCF_SDK_COMPAT_JARS", os.pathsep.join([str(a), str(b)]))
     monkeypatch.setattr(sdk_builder, "_sdk_compat_leg", lambda *a_, **k: True)

@@ -12,15 +12,20 @@
 #   src/vcfcf_managementpacks/adapter_framework/run_stitch_tests.sh
 #
 # Environment:
-#   VCFCF_SDK_JAR          SDK jar to compile and run against
-#                          (default: src/vcfcf_managementpacks/adapter_runtime/vrops-adapters-sdk-2.2.jar)
+#   VCFCF_SDK_JAR          SDK jar to compile and run against (default: the
+#                          first of vrops-adapters-sdk-9.0.2.0.25137845.jar,
+#                          vrops-adapters-sdk-9.0.2.0200.25431135.jar and the
+#                          former name vrops-adapters-sdk-2.2.jar found in
+#                          src/vcfcf_managementpacks/adapter_runtime/)
 #   VCFCF_LOG4J_CLASSPATH  colon-separated jars carrying log4j-api and
 #                          log4j-core 2.x (for example the two public
 #                          org.apache.logging.log4j jars from Maven Central)
 #                          (default: every jar in adapter_runtime/lib/, if any)
 #   VCFCF_STITCH_RELEASE   javac --release (default 11, the release that ships)
 #   VCFCF_STITCH_ALLOW_SKIP=1  let a suite that skips for want of log4j pass
-#   JAVA_HOME              JDK to use (default: javac and java on PATH); JDK 11+
+#   JAVA_HOME              JDK to use (default: javac and java on PATH); it must
+#                          read the SDK jar's class files: JDK 17+ for the 9.0.2
+#                          jar, 11+ for 8.18.7, 25+ for 9.1.1.0100
 #
 # Exit codes: 0 every suite passed, 1 a suite failed or skipped,
 # 3 setup missing (SDK jar, JDK, or a framework compile error).
@@ -29,7 +34,22 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RUNTIME_DIR="$SCRIPT_DIR/../adapter_runtime"
-SDK_JAR="${VCFCF_SDK_JAR:-$RUNTIME_DIR/vrops-adapters-sdk-2.2.jar}"
+SDK_JAR="${VCFCF_SDK_JAR:-}"
+if [ -z "$SDK_JAR" ]; then
+    for name in vrops-adapters-sdk-9.0.2.0.25137845.jar \
+                vrops-adapters-sdk-9.0.2.0200.25431135.jar \
+                vrops-adapters-sdk-2.2.jar; do
+        if [ -f "$RUNTIME_DIR/$name" ]; then
+            SDK_JAR="$RUNTIME_DIR/$name"
+            if [ "$name" = vrops-adapters-sdk-2.2.jar ]; then
+                echo "run_stitch_tests: INFO: $name is the former name of" \
+                     "vrops-adapters-sdk-9.0.2.0.25137845.jar; it still works"
+            fi
+            break
+        fi
+    done
+    SDK_JAR="${SDK_JAR:-$RUNTIME_DIR/vrops-adapters-sdk-9.0.2.0.25137845.jar}"
+fi
 RELEASE="${VCFCF_STITCH_RELEASE:-11}"
 
 if [ -n "${JAVA_HOME:-}" ]; then
@@ -45,6 +65,29 @@ if [ -z "$JAVAC" ] || [ ! -x "$JAVAC" ] || [ -z "$JAVA" ] || [ ! -x "$JAVA" ]; t
 fi
 if [ ! -f "$SDK_JAR" ]; then
     echo "run_stitch_tests: SDK jar not found: $SDK_JAR (set VCFCF_SDK_JAR)" >&2
+    exit 3
+fi
+
+# A javac older than the jar's class files cannot read it: say so plainly.
+JAR_JAVA=$(python3 -I -c '
+import sys, zipfile
+best = 0
+with zipfile.ZipFile(sys.argv[1]) as zf:
+    for info in zf.infolist():
+        if info.filename.endswith(".class"):
+            head = zf.open(info).read(8)
+            if head[:4] == b"\xca\xfe\xba\xbe":
+                best = max(best, int.from_bytes(head[6:8], "big"))
+print(best - 44 if best else "")
+' "$SDK_JAR" 2>/dev/null || true)
+JAVAC_MAJOR=$("$JAVAC" -version 2>&1 | awk '{print $2}' | cut -d. -f1)
+if [ "$JAVAC_MAJOR" = "1" ]; then   # javac 1.8.0_x
+    JAVAC_MAJOR=$("$JAVAC" -version 2>&1 | awk '{print $2}' | cut -d. -f2)
+fi
+if [ -n "$JAR_JAVA" ] && [ -n "$JAVAC_MAJOR" ] && [ "$JAVAC_MAJOR" -lt "$JAR_JAVA" ] 2>/dev/null; then
+    echo "run_stitch_tests: javac $JAVAC_MAJOR ($JAVAC) cannot read $(basename "$SDK_JAR"):" \
+         "its class files are Java $JAR_JAVA, so it needs JDK $JAR_JAVA or newer" \
+         "(set JAVA_HOME)" >&2
     exit 3
 fi
 

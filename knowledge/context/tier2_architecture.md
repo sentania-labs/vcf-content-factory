@@ -280,7 +280,7 @@ kind are not checked; that adapter's describe is not in the pak.
 - Python tooling owns build orchestration: detect JDK, build
   classpath, invoke `javac`, package adapter JAR, assemble pak.
 - No `pom.xml`, no Gradle wrapper. Compile classpath is
-  `vcfcf-adapter-base.jar` + `vrops-adapters-sdk-2.2.jar` + `aria-ops-core-*.jar`
+  `vcfcf-adapter-base.jar` + the 9.0.2 SDK jar (`vrops-adapters-sdk-9.0.2.0.25137845.jar`; see "SDK jar by platform version") + `aria-ops-core-*.jar`
   (kept for v1 adapter compilation until all v1 adapters migrate) + any
   per-project `lib/*.jar`. Only `vcfcf-adapter-base.jar` and conditionally
   `aria-ops-core` (v1 only) are bundled into the pak's `lib/`;
@@ -293,7 +293,8 @@ kind are not checked; that adapter's describe is not in the pak.
 
 ## Framework scope (v2)
 
-All components compile against `vrops-adapters-sdk-2.2.jar` only.
+All components compile against the 9.0.2 SDK jar
+(`vrops-adapters-sdk-9.0.2.0.25137845.jar`, or the 9.0.2.0200 rebuild) only.
 
 | Component | Package | What it does |
 |---|---|---|
@@ -1456,6 +1457,7 @@ Empirical basis: `knowledge/context/investigations/suiteapi_ambient_auth_devel_2
 
 | Date | Change |
 |---|---|
+| 2026-11-11 | **Buildkit 1.0.27: SDK jars named `vrops-adapters-sdk-<version>.<build>.jar`; the 9.0 line knows the 9.0.2.0200 jar; `version.txt` says what the pak was compiled against; javac-too-old stops plainly.** Owner decision 2026-11-11 ("no need to maintain byte-identical. I'd rather it be clear"): `-2.2` became `-9.0.2.0.25137845`, `-8.18.7` became `-8.18.7.25423534`, `-9.1.1.0100` became `-9.1.1.0100.25795063` (same bytes; private sdk-runtime repo PR 10). `_SDK_COMPAT_LINES` now lists known jars per line (`_KnownSdkJar`: name, `<version>.<build>`, platform, sha256, former names); the 9.0 line has two, 9.0.2.0 GA and the 9.0.2.0200 rebuild (`a8e9ebbdc8c6`, the jar on today's patched devel), so either covers the 9.0 leg. Former names are recognised wherever a jar is looked up by name (`adapter_runtime/`, `build-framework.sh`, `run_stitch_tests.sh`) with one INFO line, and a former-name compat jar is never a primary candidate; a jar given by path keeps any name. `conf/version.txt` `Adapter-Version-Ref` was parsed from the `adapter_runtime/` jar's file name (`2.2` in factory builds, `N/A` in kit/CI builds, which pass `VCFCF_SDK_JAR`); it is now the compile jar's `<version>.<build>` by sha256 (`9.0.2.0.25137845`), else a `<version>.<build>` file name, else `unknown`. `Core-Version-Ref` is unchanged (aria-ops-core's file name, default `8.0.0`). Only `conf/version.txt` changes in a built pak (vsanperf on main vs this branch, every leaf compared; five SDK jar placements on the branch, old name, new name, appliance name, `VCFCF_SDK_JAR` old and new, give identical leaves). The primary compile, the framework compile and `build-framework.sh` compare javac's major with the jar's class-file major first, and the compat-leg skip names the jar's platform and Java; the 9.0 SKIPPED hint says what is wrong when `VCFCF_SDK_JAR` is another line's or an unknown jar. Messages give the real path (`/usr/lib/vmware-vcops/common/lib/vrops-adapters-sdk.jar`), drop the nonexistent `common-lib` and `suite-api` paths and "any 9.x instance", and say JDK 17+ (not 11+) for the 9.0.2 jar. Java comment edits only; framework class bytes unchanged. **Versioning:** `BUILDKIT_VERSION` stays `1.0.27` (unreleased). **Adapter adoption:** no source change; a rebuild stamps the new `Adapter-Version-Ref`. Pinned CI and adapter repos with old-named jars keep working. |
 | 2026-11-11 | **Buildkit 1.0.27: overview pages HTML-escape `name` and `description` (factory #338).** They were interpolated raw into both `overview.packed` pages, so `&`, `<` and `>` broke the markup and a description could inject tags. Now `_html_text`, as for vendor (#336): quotes become `&quot;`/`&#x27;`, non-ASCII `&#N;`. With plain ASCII and none of `&<>"'`, the two HTML pages inside `overview.packed` are byte-identical to 1.0.26, while the `overview.packed` zip itself differs on every build, before and after, because each entry carries the build time (guard `tests/managementpacks/test_sdk_overview_escape.py`). Factory paks whose page members change, same text: compliance (`"`, `'`), vsanperf (`"`, `'`), unifi (`>` in `vmnic->port`), synology (`§`); template unchanged. Review W1 (`reviews/framework/managementpacks-sdk-overview-escape-338-2026-11-11.md`): `name` and `description` now carry the `vendor` rejected-character rule (C0 but LF/CRLF/tab in a description, C1, U+2028/9, bidi controls, lone surrogates), and `name` is stripped; no factory pak is newly rejected. **Versioning:** `BUILDKIT_VERSION` 1.0.27; push `sdk-buildkit-v1.0.27` after merge to release. |
 | 2026-11-11 | **Buildkit 1.0.26: a pak sets its own vendor, contact and EULA (factory #336).** build-sdk stamped `VCF Content Factory` as every pak's vendor and the factory MIT `LICENSE` as its `eula.txt`, so a third-party pak built with the kit (seen: kit 1.0.24) presented as ours. Optional adapter.yaml `vendor`, `vendor_contact`, `eula_file`; sinks, escaping, validation and the `lib/vcfcf-adapter-base-LICENSE.txt` notice in "Pak vendor, contact and EULA" above. Flat keys, like `content_naming`, because the issue names `vendor` as the name itself. No keys: byte-identical paks (unifi built before and after, every member equal; five factory paks' manifest, properties, overview and eula members equal). `vcfcf-adapter-base.jar` and its manifest unchanged. Framework review (`reviews/framework/managementpacks-sdk-pak-attribution-336-2026-11-11.md`) fixes: lone surrogates, C1, U+2028/9 and bidi controls rejected in `vendor`/`vendor_contact`; BOM-only, NUL and no-printable EULAs rejected; the EULA is read once at load and a leading BOM dropped; a missing `LICENSE` fails the notice and kit assembly (no placeholder). **Versioning:** `BUILDKIT_VERSION` 1.0.26; after merge push `sdk-buildkit-v1.0.26` (`publish-buildkit.yml` is tag-driven; merge alone releases nothing). **Adapter adoption:** none needed for factory paks; a third-party pak adds the keys and pins the new kit. The `vcf-content-factory-sdk-template` repo should show the keys. |
 | 2026-11-07 | **Pak install: the account watch was never cross-profile; the `[2/6]` line now names the host (issues #315, #311).** Both reports came from parallel installs on devel, devel_8_18 and devel_9_1 whose output was redirected to one shared `install.log`, so each run's reader saw another instance's lines; `install_pak` hands the watch the host/user from its own `_resolve_credentials(profile=...)`, pinned by tests on the real resolver with two profiles. Give each parallel install its own log file. Factory-only, no `BUILDKIT_VERSION` change. **Adapter adoption:** none. |
@@ -1501,14 +1503,55 @@ Empirical basis: `knowledge/context/investigations/suiteapi_ambient_auth_devel_2
 | 2026-05-19 | Pak format hard-won lessons documented after 42 install attempts. |
 | 2026-05-16 | Pass 23 field evidence added to spec/01. Per-instance single-thread collect confirmed. |
 
-## SDK jar by platform version (read 2026-10-13)
+## SDK jar by platform version
+
+### Names, and the jar each line needs (2026-11-11)
+
+The SDK jar differs per platform version. Every appliance keeps the
+collector's copy at `/usr/lib/vmware-vcops/common/lib/vrops-adapters-sdk.jar`
+(read on all three lab lines 2026-11-11, below); the kit names its copies
+`vrops-adapters-sdk-<version>.<build>.jar` for the platform version and
+build the bytes come from. A jar is identified by sha256, so a supplied
+file may have any name.
+
+| Line | Platform | Name in the kit | sha256 | Class files | JDK to read it | Role |
+|---|---|---|---|---|---|---|
+| 9.0 | VCF Operations 9.0.2.0 build 25137845 | `vrops-adapters-sdk-9.0.2.0.25137845.jar` | `2d53a91fc2b9a99d9b685ed10c1e37a471c2f71f04e7ae0fb2c53fdaa14b4f54` | Java 17 (61) | 17+ | shipped compile target (`--release 11`) and the 9.0 leg (`--release 17`) |
+| 9.0 | VCF Operations 9.0.2.0200 build 25431135 | `vrops-adapters-sdk-9.0.2.0200.25431135.jar` | `a8e9ebbdc8c622fb89551d51870220e784f0097ed0800a6f490dfdc74a11119b` | Java 17 (61) | 17+ | accepted in place of the 9.0.2.0 jar (same 480 classes, Maven metadata differs); not in the runtime repo |
+| 8.18.7 | Aria Operations 8.18.7 build 25423534 | `vrops-adapters-sdk-8.18.7.25423534.jar` | `45d54c6403acf535c982a85d658b422f534c36c90ceab78a224dde67b2a640ea` | Java 11 (55) | 11+ | optional compat leg (`--release 11`) |
+| 9.1.1.0100 | VCF Operations 9.1.1.0100 build 25795063 | `vrops-adapters-sdk-9.1.1.0100.25795063.jar` | `79f7b12340906359e04f3619dd87c7e67a9493b3fa5d86bdffe9242da67f46f7` | Java 25 (69) | 25+ | optional compat leg (`--release 25`) |
+
+Former names (renamed 2026-11-11, same bytes; the private sdk-runtime repo
+has the new names from its PR 10, merge `cff8dbd6eab2621428ad46e25a38dc0e23187b60`).
+They still work wherever the kit looks a jar up by name, with one INFO
+line. Rows and notes elsewhere in this file dated before 2026-11-11 use
+the former names.
+
+| Former name | Name now |
+|---|---|
+| `vrops-adapters-sdk-2.2.jar` | `vrops-adapters-sdk-9.0.2.0.25137845.jar` |
+| `vrops-adapters-sdk-8.18.7.jar` | `vrops-adapters-sdk-8.18.7.25423534.jar` |
+| `vrops-adapters-sdk-9.1.1.0100.jar` | `vrops-adapters-sdk-9.1.1.0100.25795063.jar` |
+
+A javac older than the jar's class files cannot read it; build-sdk,
+validate-sdk and `build-framework.sh` check the javac major against the
+jar's class-file major before compiling and stop with a message naming the
+jar, its line, the Java it needs and the Java found. `conf/version.txt`
+`Adapter-Version-Ref` is the compile jar's `<version>.<build>` (from its
+sha256; an unknown jar: from a `<version>.<build>` file name, else
+`unknown`). Appliance side only aria-ops-core's
+`UnlicensedAdapter.logAdapterInformation` reads it, as a string in a log
+line; `AdapterLoader` reads `Major-Version`, `Minor-Version` and
+`Implementation-Version` only (javap, 2026-11-11).
+
+### Readings (2026-10-13)
 
 | Source | Jar | sha256 (12) | Notes |
 |---|---|---|---|
 | devel 9.0.2.0 build 25137845 | `common/lib/vrops-adapters-sdk.jar` and 20+ copies under packs, controller and tomcat | 2d53a91fc2b9 | 1,002,682 bytes; manifest carries no version; Apache Maven 3.3.9, JDK 17.0.16 |
-| factory `adapter_runtime/vrops-adapters-sdk-2.2.jar` | the buildkit's compile target | 2d53a91fc2b9 | byte-identical to devel's |
+| factory `adapter_runtime/vrops-adapters-sdk-9.0.2.0.25137845.jar` (then named `-2.2.jar`) | the buildkit's compile target | 2d53a91fc2b9 | byte-identical to devel's |
 | prod 9.1.1 (both nodes) | `common/lib/vrops-adapters-sdk.jar` and 31 copies, one named `vrops-adapters-sdk-9.1.1.0.jar` | 9e905f1a5164 | 1,001,089 bytes; Maven JAR Plugin 3.5.0, Java-Version 25; 512 entries vs 518 |
-| Aria Operations 8.18.7 build 25423534 (devel_8_18 node, same bytes on its Cloud Proxy), read 2026-10-24 | `/usr/lib/vmware-vcops/common/lib/vrops-adapters-sdk.jar` (and the identical `-1.0.jar`); factory name `vrops-adapters-sdk-8.18.7.jar`, the 8.18 compat leg at `--release 11` (issue #252); binary not committed (never commit it to this public repo); in the private `vcf-content-factory-sdk-runtime` repo (its PRs 7 and 8, merged 2026-10-24), where factory CI's `sdk-compat (8.18.7)` row fetches it; lab copy on the holding share at `/mnt/holding/vendor/vcf-ops-8.18.7/extracted-jars/` (local-only); provenance in `src/vcfcf_managementpacks/adapter_runtime/PROVENANCE.md` | 45d54c6403ac | 965,383 bytes; 471 classes, class major 55 (Java 11), any JDK 11+ reads it; the collector and Cloud Proxy run OpenJDK 11.0.30; lacks 11 members 2.2 has (AdapterBase 2, CustomTrustManager 7, AdapterDescribe 2), adds none |
+| Aria Operations 8.18.7 build 25423534 (devel_8_18 node, same bytes on its Cloud Proxy), read 2026-10-24 | `/usr/lib/vmware-vcops/common/lib/vrops-adapters-sdk.jar` (and the identical `-1.0.jar`); factory name `vrops-adapters-sdk-8.18.7.25423534.jar` (then `-8.18.7.jar`), the 8.18 compat leg at `--release 11` (issue #252); binary not committed (never commit it to this public repo); in the private `vcf-content-factory-sdk-runtime` repo (its PRs 7 and 8, merged 2026-10-24), where factory CI's `sdk-compat (8.18.7)` row fetches it; lab copy on the holding share at `/mnt/holding/vendor/vcf-ops-8.18.7/extracted-jars/` (local-only); provenance in `src/vcfcf_managementpacks/adapter_runtime/PROVENANCE.md` | 45d54c6403ac | 965,383 bytes; 471 classes, class major 55 (Java 11), any JDK 11+ reads it; the collector and Cloud Proxy run OpenJDK 11.0.30; lacks 11 members 2.2 has (AdapterBase 2, CustomTrustManager 7, AdapterDescribe 2), adds none |
 | 9.1.1.0100 build 25795063 (devel_9_1's build), from the appliance OVA, read 2026-10-23 | `common/lib/vrops-adapters-sdk.jar` (and the identical `-1.0.jar`) in `vmware-vcops-9.0.0.0-25794169` RPM; extraction chain in `src/vcfcf_managementpacks/adapter_runtime/PROVENANCE.md`; binary not committed (the public repo keeps Broadcom jars out); in the private `vcf-content-factory-sdk-runtime` repo (its PR 7, merged 2026-10-24; issue #250 closed), where factory CI's `sdk-compat (9.1.1.0100)` row fetches it with the `SDK_RUNTIME_SSH_KEY` deploy key; lab copy on the holding share at `/mnt/holding/vendor/vcf-ops-9.1.1.0100/extracted-jars/` (local-only); the 9.1 compat leg at `--release 25` | 79f7b1234090 | 1,001,091 bytes; not the prod 9.1.1.0 bytes (the 0100 patch rebuilt it); Maven JAR Plugin 3.5.0, Java-Version 25, class major 69; 512 entries, same 6 added / 12 removed vs 2.2 as prod |
 | all three | `aria-ops-core-8.0.0.jar` | 8743cc28a010 | only inside the Synology MPB adapter's own lib; absent from `common/lib` |
 
@@ -1521,7 +1564,7 @@ source references a class that 9.1.1 dropped. Since buildkit 1.0.15 (issue
 #211) that is checked, not assumed: everything that ships is still compiled
 against the 9.0.2 jar, and build-sdk, validate-sdk and `build-framework.sh`
 compile the same source a second time against the 9.1.1.0100 jar
-(`adapter_runtime/vrops-adapters-sdk-9.1.1.0100.jar` or
+(`adapter_runtime/vrops-adapters-sdk-9.1.1.0100.25795063.jar` or
 `VCFCF_SDK_COMPAT_JAR`), keep nothing, and fail on anything unresolved.
 Scope: only the SDK jar is swapped. The compat classpath keeps the
 9.0.2-era `alive_common.jar` and `alive_platform.jar` (and the pak's own
@@ -1541,19 +1584,20 @@ flags `ThreadDeath` (used in `VcfCfAdapter`'s catch of fatal errors) as
 deprecated for removal; it still exists in Java 25, the 9.1.1 collector's
 runtime. Jar provenance: `src/vcfcf_managementpacks/adapter_runtime/PROVENANCE.md`.
 Since issue #252 the 9.1.1.0100 jar is one of three per-line legs: 8.18.7
-(`--release 11`), 9.0 (the 2.2 jar again, `--release 17`) and 9.1.1.0100
+(`--release 11`), 9.0 (the 9.0.2 jar again, `--release 17`) and 9.1.1.0100
 (`--release 25`), each at its line's collector Java so each line's own
 class library is checked, each on its own JDK. The shipped compile uses
 `javac --release 11` rather than `-source 11 -target 11`, so the Java 11
 library API is enforced for what ships (the 8.18 collector runs Java 11).
 `--release` does not change which class-file versions javac reads on the
-classpath, measured 2026-10-24: JDK 17 with `--release 11` reads the 2.2
+classpath, measured 2026-10-24: JDK 17 with `--release 11` reads the 9.0.2
 jar (Java 17), and Temurin 25.0.5 reads the 9.1.1.0100 jar (Java 25) at
 both `--release 11` and `--release 25`. With `-source 11 -target 11` the
 old 9.1.1 pass checked Java 25's library; `--release 11` on every leg would
 have checked only Java 11's, which is why the legs use their own release.
 Devel's one outlier is the `VrAdapter` pack's bundled copy (0f2f3a8c5722, a
-smaller build). The `2.2` and `1.0` in file names are names, not versions.
+smaller build). The `2.2` and `1.0` in appliance file names are names, not
+versions; the kit's own names carry the version and build (2026-11-11).
 
 ### Re-read over SSH, all three devel appliances (2026-11-11)
 

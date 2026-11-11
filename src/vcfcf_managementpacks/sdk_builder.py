@@ -315,7 +315,8 @@ def _ensure_framework_jar() -> None:
             raise SdkBuildError(
                 "Cannot compile framework source: vrops-adapters-sdk-*.jar not found "
                 "in adapter_runtime/ and VCFCF_SDK_JAR is not set.\n"
-                "Supply the SDK jar via --sdk-jar or VCFCF_SDK_JAR before building."
+                "Supply the SDK jar via --sdk-jar or VCFCF_SDK_JAR before building.\n"
+                + _SDK_JAR_HOWTO
             )
         fw_classpath = str(sdk_jar)
 
@@ -323,10 +324,9 @@ def _ensure_framework_jar() -> None:
     if javac is None:
         raise SdkBuildError(
             "javac not found on PATH — cannot compile framework source.\n"
-            "Install JDK 11+:\n"
-            "  Ubuntu/Debian: sudo apt-get install -y openjdk-17-jdk\n"
-            "  RHEL/CentOS:   sudo dnf install -y java-17-openjdk-devel"
+            + _JDK_HOWTO
         )
+    _require_javac_reads_jar(javac, Path(fw_classpath))
 
     jar_tool = shutil.which("jar")
     if jar_tool is None:
@@ -403,7 +403,8 @@ def _read_license() -> str:
 _FRAMEWORK_JAR_PATTERN = "vcfcf-adapter-base.jar"
 _ARIA_OPS_CORE_PATTERN = "aria-ops-core-*.jar"
 # Second compile target (issue #211). The shipped compile target stays the
-# 9.0.2 jar (vrops-adapters-sdk-2.2.jar). Every build-sdk, validate-sdk and
+# 9.0.2 jar (vrops-adapters-sdk-9.0.2.0.25137845.jar, or the 9.0.2.0200
+# rebuild of it; formerly vrops-adapters-sdk-2.2.jar). Every build-sdk, validate-sdk and
 # build-framework.sh run also compiles the source against this jar and fails
 # on anything that does not resolve there (a class 9.1.1 dropped, a changed
 # signature). It sits beside the primary jar in adapter_runtime/ but must
@@ -424,44 +425,125 @@ _ARIA_OPS_CORE_PATTERN = "aria-ops-core-*.jar"
 # A jar is matched to its line by sha256 (_SDK_COMPAT_LINES, the
 # PROVENANCE.md values). Each leg compiles with --release <its line's
 # collector Java>, read from the jar's class-file version (8.18.7: 55 -> 11,
-# 2.2: 61 -> 17, 9.1.1.0100: 69 -> 25), on a JDK at least that new, so each
+# 9.0.2: 61 -> 17, 9.1.1.0100: 69 -> 25), on a JDK at least that new, so each
 # line's own class library is checked. Every known line is expected: a line
 # no supplied jar covers prints the SKIPPED box, and fails a required run,
 # unless VCFCF_SDK_COMPAT_LEGS narrows the expected set (factory CI's
 # one-jar matrix rows).
+#
+# File names (2026-11-11): vrops-adapters-sdk-<version>.<build>.jar, the
+# platform version and build the bytes come from. The former names
+# (vrops-adapters-sdk-2.2.jar, -8.18.7.jar, -9.1.1.0100.jar) are still
+# recognised wherever a jar is looked up by name, with one INFO line; a jar
+# given by path (--sdk-jar, VCFCF_SDK_JAR, --sdk-compat-jar) may have any name
+# and is identified by its sha256.
 # Provenance: adapter_runtime/PROVENANCE.md and
 # knowledge/context/tier2_architecture.md "SDK jar by platform version".
-_SDK_COMPAT_JAR_NAME = "vrops-adapters-sdk-9.1.1.0100.jar"
-# 8.18.7 (Aria Operations 8.18.7 build 25423534): Java 11 class files (major
-# 55), so any JDK 11+ reads it; it lacks members the 2.2 jar has, which is
-# what its leg catches (issue #252).
-_SDK_COMPAT_JAR_NAME_8_18 = "vrops-adapters-sdk-8.18.7.jar"
-# Compat jar names recognised in adapter_runtime/: never primary candidates.
-# Keep in step with COMPAT_JAR_NAMES in adapter_framework/build-framework.sh.
-_SDK_COMPAT_JAR_NAMES = (_SDK_COMPAT_JAR_NAME_8_18, _SDK_COMPAT_JAR_NAME)
 _SDK_COMPAT_JAR_ENV = "VCFCF_SDK_COMPAT_JAR"        # one explicit jar (pre-#252 form)
 _SDK_COMPAT_JARS_ENV = "VCFCF_SDK_COMPAT_JARS"      # explicit jars, os.pathsep-separated
 _SDK_COMPAT_JAVAC_ENV = "VCFCF_SDK_COMPAT_JAVAC"    # explicit javac for every leg
 _SDK_COMPAT_LEGS_ENV = "VCFCF_SDK_COMPAT_LEGS"      # comma list of line keys expected
 
 
+class _KnownSdkJar(NamedTuple):
+    """One SDK jar whose bytes we have identified, as in PROVENANCE.md."""
+    file_name: str            # its name in the kit: vrops-adapters-sdk-<version>.<build>.jar
+    version_build: str        # <version>.<build>, stamped as Adapter-Version-Ref
+    platform: str             # the platform release the bytes come from
+    sha256: str               # identifies a supplied jar
+    former_names: Tuple[str, ...] = ()   # older kit names, still recognised
+
+
 class _CompatLine(NamedTuple):
-    """One supported platform line's SDK jar, as recorded in PROVENANCE.md."""
-    key: str        # what VCFCF_SDK_COMPAT_LEGS and report lines call it
-    jar_name: str   # its factory file name in adapter_runtime/
-    sha256: str     # identifies a supplied jar as this line's
+    """One supported platform line and the SDK jars known for it."""
+    key: str                        # what VCFCF_SDK_COMPAT_LEGS and report lines call it
+    jars: Tuple[_KnownSdkJar, ...]  # first is the line's reference jar
+    java: int                       # Java of the jar's class files (and of the line's collector)
+
+    @property
+    def jar_name(self) -> str:
+        """The reference jar's file name in adapter_runtime/."""
+        return self.jars[0].file_name
+
+    @property
+    def names(self) -> Tuple[str, ...]:
+        """Every file name the kit knows for this line's jars, current first."""
+        return (tuple(j.file_name for j in self.jars)
+                + tuple(n for j in self.jars for n in j.former_names))
 
 
 # Keep the hashes equal to the adapter_runtime/PROVENANCE.md table (a test
-# checks). 9.0 is the primary jar; its leg is the non-shipping --release 17
-# pass.
+# checks). 9.0 is the primary line; its leg is the non-shipping --release 17
+# pass. The 9.0 line knows two jars: 9.0.2.0 GA and the 9.0.2.0200 patch's
+# rebuild (all 480 classes identical, only Maven metadata differs), so a jar
+# copied from a patched appliance covers the leg.
+_SDK_JAR_9_0_2_0 = _KnownSdkJar(
+    "vrops-adapters-sdk-9.0.2.0.25137845.jar", "9.0.2.0.25137845",
+    "VCF Operations 9.0.2.0 build 25137845",
+    "2d53a91fc2b9a99d9b685ed10c1e37a471c2f71f04e7ae0fb2c53fdaa14b4f54",
+    ("vrops-adapters-sdk-2.2.jar",))
+_SDK_JAR_9_0_2_0200 = _KnownSdkJar(
+    "vrops-adapters-sdk-9.0.2.0200.25431135.jar", "9.0.2.0200.25431135",
+    "VCF Operations 9.0.2.0200 build 25431135",
+    "a8e9ebbdc8c622fb89551d51870220e784f0097ed0800a6f490dfdc74a11119b")
+_SDK_JAR_8_18_7 = _KnownSdkJar(
+    "vrops-adapters-sdk-8.18.7.25423534.jar", "8.18.7.25423534",
+    "Aria Operations 8.18.7 build 25423534",
+    "45d54c6403acf535c982a85d658b422f534c36c90ceab78a224dde67b2a640ea",
+    ("vrops-adapters-sdk-8.18.7.jar",))
+_SDK_JAR_9_1_1_0100 = _KnownSdkJar(
+    "vrops-adapters-sdk-9.1.1.0100.25795063.jar", "9.1.1.0100.25795063",
+    "VCF Operations 9.1.1.0100 build 25795063",
+    "79f7b12340906359e04f3619dd87c7e67a9493b3fa5d86bdffe9242da67f46f7",
+    ("vrops-adapters-sdk-9.1.1.0100.jar",))
 _SDK_COMPAT_LINES: Tuple[_CompatLine, ...] = (
-    _CompatLine("8.18.7", "vrops-adapters-sdk-8.18.7.jar",
-                "45d54c6403acf535c982a85d658b422f534c36c90ceab78a224dde67b2a640ea"),
-    _CompatLine("9.0", "vrops-adapters-sdk-2.2.jar",
-                "2d53a91fc2b9a99d9b685ed10c1e37a471c2f71f04e7ae0fb2c53fdaa14b4f54"),
-    _CompatLine("9.1.1.0100", "vrops-adapters-sdk-9.1.1.0100.jar",
-                "79f7b12340906359e04f3619dd87c7e67a9493b3fa5d86bdffe9242da67f46f7"),
+    _CompatLine("8.18.7", (_SDK_JAR_8_18_7,), 11),
+    _CompatLine("9.0", (_SDK_JAR_9_0_2_0, _SDK_JAR_9_0_2_0200), 17),
+    _CompatLine("9.1.1.0100", (_SDK_JAR_9_1_1_0100,), 25),
+)
+_PRIMARY_LINE_KEY = "9.0"
+# The primary (shipped compile target) jar's name in adapter_runtime/.
+_SDK_PRIMARY_JAR_NAME = _SDK_JAR_9_0_2_0.file_name
+# 9.1.1.0100: Java 25 class files, JDK 25+ to read.
+_SDK_COMPAT_JAR_NAME = _SDK_JAR_9_1_1_0100.file_name
+# 8.18.7 (Aria Operations 8.18.7 build 25423534): Java 11 class files (major
+# 55), so any JDK 11+ reads it; it lacks members the 9.0.2 jar has, which is
+# what its leg catches (issue #252).
+_SDK_COMPAT_JAR_NAME_8_18 = _SDK_JAR_8_18_7.file_name
+# Compat jar names recognised in adapter_runtime/: never primary candidates.
+# Keep in step with COMPAT_JAR_NAMES and COMPAT_JAR_FORMER_NAMES in
+# adapter_framework/build-framework.sh.
+_SDK_COMPAT_JAR_NAMES = (_SDK_COMPAT_JAR_NAME_8_18, _SDK_COMPAT_JAR_NAME)
+_SDK_COMPAT_JAR_FORMER_NAMES = (
+    _SDK_JAR_8_18_7.former_names + _SDK_JAR_9_1_1_0100.former_names)
+# Adapter-Version-Ref when the compile jar's bytes and name both say nothing.
+_ADAPTER_VERSION_REF_UNKNOWN = "unknown"
+# Where the jar hashes are recorded, for messages: the kit ships no
+# PROVENANCE.md, so name it in the factory repo.
+_PROVENANCE_REF = (
+    "PROVENANCE.md (VCF Content Factory repo, src/vcfcf_managementpacks/adapter_runtime/)")
+
+# How to get the primary SDK jar, for every "not found" message. The path is
+# the one every line's collector loads (wrapper-classpath.conf); read on all
+# three lab lines 2026-11-11 (knowledge/context/tier2_architecture.md).
+_SDK_JAR_HOWTO = (
+    "The SDK jar differs per platform version. The shipped compile target is "
+    "the VCF Operations 9.0.2 jar (9.0.2.0 build 25137845 or 9.0.2.0200 build "
+    "25431135; either is accepted, by sha256, under any file name). Copy it "
+    "from a 9.0.2 appliance over SSH (the file is mode 644):\n"
+    "  scp root@<appliance>:/usr/lib/vmware-vcops/common/lib/vrops-adapters-sdk.jar .\n"
+    "Its class files are Java 17, so it needs JDK 17 or newer. The 8.18.7 "
+    "(Java 11, JDK 11+) and 9.1.1.0100 (Java 25, JDK 25+) jars, from the same "
+    "path on an appliance of that line, are optional compatibility checks "
+    "(--sdk-compat-jar). Hashes: " + _PROVENANCE_REF + ".\n"
+)
+_JDK_HOWTO = (
+    "Install JDK 17 or newer (the 9.0.2 SDK jar's class files are Java 17; "
+    "the optional 9.1.1.0100 compatibility check needs JDK 25+):\n"
+    "  Ubuntu/Debian: sudo apt-get install -y openjdk-17-jdk\n"
+    "  RHEL/CentOS:   sudo dnf install -y java-17-openjdk-devel\n"
+    "  macOS (brew):  brew install openjdk@17\n"
+    "Then ensure javac is on PATH."
 )
 _SDK_COMPAT_REQUIRED_ENV = "VCFCF_SDK_COMPAT_REQUIRED"  # 1: a skipped pass fails
 # Where to look for a new-enough JDK when javac on PATH is too old. Globs,
@@ -476,18 +558,138 @@ _COMPAT_JDK_GLOBS = [
 
 
 def _is_compat_sdk_jar(jar: Path) -> bool:
-    """True for a compatibility-leg SDK jar, which never joins the primary classpath."""
-    return jar.name in _SDK_COMPAT_JAR_NAMES
+    """True for a compatibility-leg SDK jar name (current or former), which
+    never joins the primary classpath."""
+    return jar.name in _SDK_COMPAT_JAR_NAMES or jar.name in _SDK_COMPAT_JAR_FORMER_NAMES
+
+
+def _known_jar_for_sha(sha: str) -> Optional[Tuple[_CompatLine, _KnownSdkJar]]:
+    for line in _SDK_COMPAT_LINES:
+        for known in line.jars:
+            if known.sha256 == sha:
+                return line, known
+    return None
+
+
+def _known_jar_for_former_name(name: str) -> Optional[_KnownSdkJar]:
+    for line in _SDK_COMPAT_LINES:
+        for known in line.jars:
+            if name in known.former_names:
+                return known
+    return None
+
+
+# Former names already reported this process: one INFO line per name.
+_FORMER_NAMES_NOTED: set = set()
+
+
+def _note_former_name(jar: Path) -> None:
+    """One INFO line the first time a jar under a former kit name is used."""
+    known = _known_jar_for_former_name(jar.name)
+    if known is None or jar.name in _FORMER_NAMES_NOTED:
+        return
+    _FORMER_NAMES_NOTED.add(jar.name)
+    print(
+        f"  INFO: {jar.name} is the former name of {known.file_name} "
+        f"({known.platform}); it still works. Jars are now named "
+        f"vrops-adapters-sdk-<version>.<build>.jar (hashes: {_PROVENANCE_REF}).",
+        file=sys.stderr,
+    )
+
+
+def _jar_identity(jar: Path) -> str:
+    """'<platform> (<line> line)' for a known jar, else what we can say."""
+    try:
+        found = _known_jar_for_sha(_sha256_of(jar))
+    except OSError:
+        found = None
+    if found is None:
+        return "an SDK jar whose sha256 matches no known platform"
+    line, known = found
+    return f"{known.platform} ({line.key} line)"
 
 
 _SDK_JAR_VERSION_RE = re.compile(r"^vrops-adapters-sdk-(\d+(?:\.\d+)*)\.jar$")
+# vrops-adapters-sdk-<version>.<build>.jar: at least three version parts and
+# a build number of five or more digits (9.0.2.0.25137845). Names such as
+# -2.2, -1.0 or -9.1.1.0 carry no build and do not count.
+_SDK_JAR_VERSION_BUILD_RE = re.compile(
+    r"^vrops-adapters-sdk-(\d+\.\d+\.\d+(?:\.\d+)*\.\d{5,})\.jar$")
 
 
 def _sdk_jar_label(jar: Path) -> str:
-    """The SDK version from the jar's file name (vrops-adapters-sdk-8.18.7.jar
-    -> 8.18.7), or the file name when it carries none."""
+    """The SDK version from the jar's file name (vrops-adapters-sdk-8.18.7.25423534.jar
+    -> 8.18.7.25423534), or the file name when it carries none."""
     match = _SDK_JAR_VERSION_RE.match(jar.name)
     return match.group(1) if match else f"{jar.name} (no version in the file name)"
+
+
+def _primary_compile_jar() -> Optional[Path]:
+    """The one SDK jar the shipped compile uses: the VCFCF_SDK_JAR file when
+    set and present, else the one in adapter_runtime/ (reporting only, never
+    raises). None when there is none."""
+    env = os.environ.get("VCFCF_SDK_JAR", "").strip()
+    if env:
+        return Path(env) if Path(env).is_file() else None
+    return _primary_sdk_jar(strict=False)
+
+
+def _adapter_version_ref() -> str:
+    """conf/version.txt Adapter-Version-Ref: the SDK jar the pak was compiled
+    against, as <version>.<build>.
+
+    A jar whose sha256 is in _SDK_COMPAT_LINES stamps that jar's
+    version_build whatever the file is called (an appliance's plain
+    vrops-adapters-sdk.jar included). An unknown jar stamps the version
+    from a vrops-adapters-sdk-<version>.<build>.jar name, else "unknown".
+    "N/A" when no SDK jar is present at all.
+    """
+    jar = _primary_compile_jar()
+    if jar is None:
+        return "N/A"
+    _note_former_name(jar)
+    try:
+        found = _known_jar_for_sha(_sha256_of(jar))
+    except OSError:
+        found = None
+    if found is not None:
+        return found[1].version_build
+    match = _SDK_JAR_VERSION_BUILD_RE.match(jar.name)
+    value = match.group(1) if match else _ADAPTER_VERSION_REF_UNKNOWN
+    print(
+        f"  INFO: {jar.name}'s sha256 matches no known SDK jar "
+        f"({_PROVENANCE_REF}); conf/version.txt "
+        f"Adapter-Version-Ref={value} "
+        f"({'from the file name' if match else 'the file name carries no <version>.<build>'}).",
+        file=sys.stderr,
+    )
+    return value
+
+
+def _require_javac_reads_jar(javac: str, jar: Optional[Path]) -> None:
+    """Fail plainly when javac is older than jar's class files.
+
+    A javac cannot read class files newer than itself; left alone it fails
+    with "class file has wrong version" deep in a compile error. No-op when
+    either version cannot be read (javac reports its own error then).
+    """
+    if jar is None or not jar.is_file():
+        return
+    try:
+        need = _jar_required_java_major(jar)
+    except SdkBuildError:
+        return
+    have = _javac_major(javac)
+    if not need or have is None or have >= need:
+        return
+    raise SdkBuildError(
+        f"javac {have} cannot read the SDK jar {jar} ({_jar_identity(jar)}): "
+        f"its class files are Java {need} (class-file major {need + 44}), so "
+        f"the compile needs JDK {need} or newer; found JDK {have} ({javac}).\n"
+        f"Install JDK {need} or newer and put its javac first on PATH (the "
+        f"primary compile uses the javac on PATH). The 9.0.2 jar needs JDK "
+        f"17+, the 8.18.7 jar JDK 11+, the 9.1.1.0100 jar JDK 25+."
+    )
 
 
 # Any SDK jar name: the appliance ships it as plain vrops-adapters-sdk.jar
@@ -527,13 +729,16 @@ def _primary_sdk_jar(strict: bool = True) -> Optional[Path]:
             names = ", ".join(str(j.relative_to(_ADAPTER_RUNTIME_DIR)) for j in found)
             raise SdkBuildError(
                 f"adapter_runtime/ must hold exactly one primary SDK jar "
-                f"(vrops-adapters-sdk-2.2.jar) directly in it; found: {names}. "
-                f"A second SDK jar there would join the primary classpath. A "
-                f"compatibility jar must be named one of "
-                f"{', '.join(_SDK_COMPAT_JAR_NAMES)} "
-                f"(the appliance calls it vrops-adapters-sdk.jar) or passed with "
+                f"(the 9.0.2 jar, {_SDK_PRIMARY_JAR_NAME}) directly in it; "
+                f"found: {names}. A second SDK jar there would join the "
+                f"primary classpath. A compatibility jar must be named one of "
+                f"{', '.join(_SDK_COMPAT_JAR_NAMES)} (former names "
+                f"{', '.join(_SDK_COMPAT_JAR_FORMER_NAMES)} still work; the "
+                f"appliance calls every one vrops-adapters-sdk.jar) or passed with "
                 f"--sdk-compat-jar / {_SDK_COMPAT_JARS_ENV}; remove or rename the others."
             )
+    if found:
+        _note_former_name(found[0])
     return found[0] if found else None
 
 # JARs that are on the appliance shared classpath — compile against, NEVER bundle.
@@ -626,7 +831,7 @@ def _stamp_build_version(project: SdkProjectDef, release_build: bool) -> str:
 # leg uses its own line's release instead (_compat_leg_release), so an API
 # that Java 17 or 25 removed fails the 9.0 or 9.1 leg. --release does not
 # change which class-file versions javac can read on the classpath (that is
-# the javac's own limit), so a JDK 17 javac reads the 2.2 jar (Java 17).
+# the javac's own limit), so a JDK 17 javac reads the 9.0.2 jar (Java 17).
 _JAVA_RELEASE = 11
 
 
@@ -642,13 +847,7 @@ def _detect_jdk() -> str:
     """
     javac = shutil.which("javac")
     if javac is None:
-        raise SdkBuildError(
-            "javac not found on PATH. Install JDK 11 or newer:\n"
-            "  Ubuntu/Debian: sudo apt-get install -y openjdk-17-jdk\n"
-            "  RHEL/CentOS:   sudo dnf install -y java-17-openjdk-devel\n"
-            "  macOS (brew):  brew install openjdk@17\n"
-            "Then ensure javac is on PATH."
-        )
+        raise SdkBuildError("javac not found on PATH.\n" + _JDK_HOWTO)
     # Quick version check
     try:
         result = subprocess.run([javac, "-version"], capture_output=True, text=True, timeout=10)
@@ -710,10 +909,8 @@ def _build_classpath_jars(project_dir: Path) -> List[Path]:
         if not sdk_jar_path.is_file():
             raise SdkBuildError(
                 f"VCFCF_SDK_JAR is set to {sdk_jar_env!r} but the file does not exist.\n"
-                "Obtain vrops-adapters-sdk-2.2.jar from your VCF Ops appliance:\n"
-                "  scp root@<appliance>:/usr/lib/vmware-vcops/common-lib/vrops-adapters-sdk-2.2.jar .\n"
-                "  (also at: /usr/lib/vmware-vcops/suite-api/WEB-INF/lib/vrops-adapters-sdk.jar)\n"
-                "Then set VCFCF_SDK_JAR to the local path."
+                + _SDK_JAR_HOWTO
+                + "Then set VCFCF_SDK_JAR to the local path."
             )
         # The env jar is the one SDK jar; adapter_runtime/ SDK jars stay off.
         jars.insert(0, sdk_jar_path)
@@ -727,13 +924,8 @@ def _build_classpath_jars(project_dir: Path) -> List[Path]:
                 "VCFCF_SDK_JAR is not set.\n"
                 "This JAR is a Broadcom internal build artifact that cannot ship "
                 "in a public toolchain tarball.\n"
-                "Obtain it from your VCF Ops appliance and set VCFCF_SDK_JAR:\n"
-                "  export VCFCF_SDK_JAR=/path/to/vrops-adapters-sdk-2.2.jar\n"
-                "Or copy the file from the appliance:\n"
-                "  scp root@<appliance>:/usr/lib/vmware-vcops/common-lib/vrops-adapters-sdk-2.2.jar .\n"
-                "  export VCFCF_SDK_JAR=$(pwd)/vrops-adapters-sdk-2.2.jar\n"
-                "The jar is also available at:\n"
-                "  /usr/lib/vmware-vcops/suite-api/WEB-INF/lib/vrops-adapters-sdk.jar"
+                + _SDK_JAR_HOWTO
+                + "  export VCFCF_SDK_JAR=$(pwd)/vrops-adapters-sdk.jar"
             )
 
     # Project-local lib/ (optional vendor JARs)
@@ -812,10 +1004,11 @@ def _resolve_compat_sdk_jars() -> List[Path]:
 
     Explicit jars (VCFCF_SDK_COMPAT_JARS, os.pathsep-separated, plus the
     one-jar VCFCF_SDK_COMPAT_JAR; --sdk-compat-jar feeds the first) add up,
-    and when there is any, they are the legs. Otherwise every jar named in
-    _SDK_COMPAT_JAR_NAMES present in adapter_runtime/. Empty when there is
-    none. An explicitly set path that does not exist is a user error and
-    raises.
+    and when there is any, they are the legs. Otherwise each compat jar
+    present in adapter_runtime/ under its name in _SDK_COMPAT_JAR_NAMES, or,
+    when that is absent, under its former name (one INFO line). Empty when
+    there is none. An explicitly set path that does not exist is a user
+    error and raises.
     """
     explicit: List[Tuple[str, str]] = []
     for part in os.environ.get(_SDK_COMPAT_JARS_ENV, "").split(os.pathsep):
@@ -840,10 +1033,18 @@ def _resolve_compat_sdk_jars() -> List[Path]:
                 seen.add(key)
                 jars.append(jar)
         return jars
-    return [
-        _ADAPTER_RUNTIME_DIR / name for name in _SDK_COMPAT_JAR_NAMES
-        if (_ADAPTER_RUNTIME_DIR / name).is_file()
-    ]
+    found: List[Path] = []
+    for line in _SDK_COMPAT_LINES:
+        if line.key == _PRIMARY_LINE_KEY:
+            continue  # the primary jar is its own leg (_primary_leg_jar)
+        for known in line.jars:
+            for name in (known.file_name,) + known.former_names:
+                candidate = _ADAPTER_RUNTIME_DIR / name
+                if candidate.is_file():
+                    _note_former_name(candidate)
+                    found.append(candidate)
+                    break
+    return found
 
 
 def _primary_leg_jar() -> Optional[Path]:
@@ -873,10 +1074,9 @@ def _sha256_of(jar: Path) -> str:
 
 
 def _line_for_sha(sha: str) -> Optional[_CompatLine]:
-    for line in _SDK_COMPAT_LINES:
-        if line.sha256 == sha:
-            return line
-    return None
+    """The line one of whose known jars has this sha256, or None."""
+    found = _known_jar_for_sha(sha)
+    return found[0] if found is not None else None
 
 
 def _expected_compat_lines() -> List[_CompatLine]:
@@ -984,7 +1184,8 @@ def _find_compat_javac(need: int, label: str = "compatibility"):
             raise SdkCompatUnavailable(
                 f"{_SDK_COMPAT_JAVAC_ENV}={explicit!r} is "
                 f"{'not a working javac' if major is None else f'JDK {major}'}; "
-                f"the {label} SDK jar needs JDK {need} or newer."
+                f"the {label} SDK jar needs JDK {need} or newer "
+                f"(Java {need} class files or --release)."
             )
         return explicit, major, [f"{explicit} ({major})"]
     tried = []
@@ -1030,8 +1231,9 @@ def _compat_skip(what: str, reason: str, target: str = _ANY_COMPAT_TARGET) -> bo
         f"    reason: {reason}\n"
         f"    This run did NOT check for classes or members missing from "
         f"{target}.\n"
-        f"    To run it: put the jar in adapter_runtime/ as one of "
-        f"{', '.join(_SDK_COMPAT_JAR_NAMES)} (or pass --sdk-compat-jar / set "
+        f"    To run it: put the jar in adapter_runtime/ under its name in "
+        f"{_PROVENANCE_REF} (compat jars: "
+        f"{', '.join(_SDK_COMPAT_JAR_NAMES)}) (or pass --sdk-compat-jar / set "
         f"{_SDK_COMPAT_JARS_ENV}) and a new enough JDK on PATH (or set "
         f"{_SDK_COMPAT_JAVAC_ENV}).\n"
         f"    Set {_SDK_COMPAT_REQUIRED_ENV}=1 to make a skipped check fail.\n"
@@ -1039,6 +1241,39 @@ def _compat_skip(what: str, reason: str, target: str = _ANY_COMPAT_TARGET) -> bo
         file=sys.stderr,
     )
     return False
+
+
+def _primary_line_missing_hint(supplied: Dict[str, Path]) -> str:
+    """What is actually missing when no supplied jar covers the 9.0 line.
+
+    The 9.0 line's jar is the primary SDK jar, so the hint depends on what
+    the primary jar is: absent, or present but another line's or unknown.
+    """
+    fix = (f"point VCFCF_SDK_JAR (--sdk-jar) at a 9.0.2 jar, or pass one with "
+           f"--sdk-compat-jar; reading it needs JDK 17+")
+    env = os.environ.get("VCFCF_SDK_JAR", "").strip()
+    if env:
+        where = f"VCFCF_SDK_JAR is {env}"
+        jar: Optional[Path] = Path(env)
+        if not jar.is_file():
+            return f"VCFCF_SDK_JAR names {env}, which does not exist; {fix}"
+    else:
+        jar = _primary_sdk_jar(strict=False)
+        if jar is None:
+            return ("it is the primary SDK jar: put it in adapter_runtime/ as "
+                    f"{_SDK_PRIMARY_JAR_NAME} or set VCFCF_SDK_JAR (--sdk-jar); "
+                    "reading it needs JDK 17+")
+        where = f"the primary SDK jar is adapter_runtime/{jar.name}"
+        fix = (f"replace it with a 9.0.2 jar ({_SDK_PRIMARY_JAR_NAME}), or pass "
+               f"one with --sdk-compat-jar; reading it needs JDK 17+")
+    other = next((key for key, j in supplied.items()
+                  if os.path.realpath(j) == os.path.realpath(jar)), None)
+    if other is not None:
+        what = f"the {other} line's jar ({_jar_identity(jar)})"
+    else:
+        what = "a jar whose sha256 matches no known jar"
+    return (f"{where}, {what}, so the shipped compile and this leg used it "
+            f"instead of a 9.0.2 jar; {fix}")
 
 
 def _sdk_compat_check(
@@ -1085,13 +1320,17 @@ def _sdk_compat_check(
         if line.key in supplied:
             continue
         near = [f"{j.name} was supplied but its sha256 {sha[:12]} is not this "
-                f"line's" for j, sha in unmatched if j.name == line.jar_name]
-        how = ("it is the primary SDK jar: put it in adapter_runtime/ or set "
-               "VCFCF_SDK_JAR" if line.key == "9.0" else
-               "put it in adapter_runtime/ or pass --sdk-compat-jar")
+                f"line's" for j, sha in unmatched if j.name in line.names]
+        known = " or ".join(
+            f"{k.file_name} ({k.platform}, sha256 {k.sha256[:12]})" for k in line.jars)
+        if line.key == _PRIMARY_LINE_KEY:
+            how = _primary_line_missing_hint(supplied)
+        else:
+            how = (f"put it in adapter_runtime/ as {line.jar_name} or pass "
+                   f"--sdk-compat-jar; reading it needs JDK {line.java}+")
         reason = (
-            f"{line.jar_name} is not in adapter_runtime/ and no supplied jar "
-            f"has its sha256 ({line.sha256[:12]}, adapter_runtime/PROVENANCE.md); "
+            f"no supplied jar is a known {line.key} jar ({known}; "
+            f"{_PROVENANCE_REF}); "
             f"{how}" + "".join(f"; {n}" for n in near)
         )
         try:
@@ -1164,8 +1403,10 @@ def _sdk_compat_leg(jar: Path, line: Optional[_CompatLine], sources: List[Path],
     if javac is None:
         return _compat_skip(
             what,
-            f"{jar.name} has Java {jar_java} class files and needs JDK {release} "
-            f"or newer to read; found {', '.join(tried) or 'no javac'}",
+            f"no javac can read {jar.name} ({_jar_identity(jar)}): its class "
+            f"files are Java {jar_java} (class-file major {jar_java + 44}) and "
+            f"the leg compiles at --release {release}, so it needs JDK "
+            f"{release} or newer; found {', '.join(tried) or 'no javac'}",
             target,
         )
 
@@ -1599,8 +1840,15 @@ def _generate_version_txt(project: SdkProjectDef) -> str:
       Minor-Version          <- MINOR
       Implementation-Version <- PATCH.N   (patch + build_number joined by ".")
       Build-Tools-Version-Ref <- N/A      (MPB build toolchain ref; not applicable)
-      Adapter-Version-Ref    <- vrops-adapters-sdk version detected from adapter_runtime/
-      Core-Version-Ref       <- aria-ops-core version detected from adapter_runtime/
+      Adapter-Version-Ref    <- <version>.<build> of the SDK jar the pak is compiled
+                                against (_adapter_version_ref: by sha256, else the
+                                file name, else "unknown")
+      Core-Version-Ref       <- aria-ops-core version from its jar's file name in
+                                adapter_runtime/ (default 8.0.0)
+
+    Appliance side only aria-ops-core's UnlicensedAdapter.logAdapterInformation
+    reads the two *-Version-Ref values, as plain strings in a log line;
+    AdapterLoader reads Major-Version, Minor-Version and Implementation-Version.
     """
     parts = project.version.split(".")
     major = parts[0] if len(parts) > 0 else "1"
@@ -1617,15 +1865,9 @@ def _generate_version_txt(project: SdkProjectDef) -> str:
         if "-" in stem:
             core_ver = stem.rsplit("-", 1)[-1]
 
-    # Detect Adapter-Version-Ref from vrops-adapters-sdk jar present in adapter_runtime/
-    adapter_ver_ref = "N/A"
-    sdk_jar = _primary_sdk_jar(strict=False)
-    if sdk_jar is not None:
-        # vrops-adapters-sdk-2.2.jar -> "2.2"; a bare vrops-adapters-sdk.jar
-        # carries no version in its name.
-        match = re.fullmatch(r"vrops-adapters-sdk-(.+)", sdk_jar.stem)
-        if match:
-            adapter_ver_ref = match.group(1)
+    # Adapter-Version-Ref: the SDK jar the pak was compiled against
+    # (VCFCF_SDK_JAR, else adapter_runtime/), by its bytes, not its name.
+    adapter_ver_ref = _adapter_version_ref()
 
     lines = [
         f"Major-Version={major}",
@@ -4402,6 +4644,7 @@ def build_sdk_pak(project_dir: Path, output_dir: Optional[Path] = None,
 
     # Step 3: build classpath
     classpath = _build_classpath(project_dir)
+    _require_javac_reads_jar(javac, _primary_compile_jar())
 
     # Step 4: find sources
     sources = _find_sources(project_dir)
@@ -5158,6 +5401,7 @@ def validate_sdk_project(project_dir: Path) -> List[str]:
         try:
             _ensure_framework_jar()
             classpath = _build_classpath(project_dir)
+            _require_javac_reads_jar(javac, _primary_compile_jar())
             sources = _find_sources(project_dir)
             with tempfile.TemporaryDirectory(prefix="vcfcf-validate-") as tmpdir:
                 _compile(javac, classpath, sources, Path(tmpdir) / "classes")

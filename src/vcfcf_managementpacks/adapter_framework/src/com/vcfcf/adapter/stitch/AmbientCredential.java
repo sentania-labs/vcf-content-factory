@@ -86,7 +86,7 @@ import java.util.Properties;
  * derivation:</strong> {@code CommonConstants.VCOPS} is a <em>product
  * display-name</em> constant (value {@code "VCF Ops"}, built by concatenating
  * {@code productNamePrefix} + {@code " Ops"} in the static initializer —
- * confirmed by {@code javap -c} on {@code vrops-adapters-sdk-2.2.jar}).
+ * confirmed by {@code javap -c} on {@code vrops-adapters-sdk-9.0.2.0.25137845.jar}).
  * Appending {@code "/conf/maintenanceuser.properties"} to it produces the
  * nonsense relative path {@code "VCF Ops/conf/maintenanceuser.properties"},
  * which is the live bug that blocked compliance build 43 on devel 9.0.2.
@@ -511,7 +511,7 @@ public final class AmbientCredential {
      * its bytecode calls {@code
      * com.vmware.vcops.security.Crypt.getDefaultCrypt().decrypt(...)} on the
      * stored password before returning it — a class that ships in
-     * <em>neither</em> {@code vrops-adapters-sdk-2.2.jar} nor any other jar
+     * <em>neither</em> {@code vrops-adapters-sdk-9.0.2.0.25137845.jar} nor any other jar
      * this framework compiles or ships against (contrast with {@code
      * com.integrien.alive.common.security.Crypt}, the SDK-shipped decrypt
      * path {@link AmbientCredential} already uses for the file-based
