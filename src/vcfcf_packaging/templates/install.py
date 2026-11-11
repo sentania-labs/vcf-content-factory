@@ -1960,9 +1960,9 @@ def _install_dashboards(ctx: Dict) -> None:
     )
     result = ctx["client"].import_content_zip(dash_zip, "dashboard + view") or {}
 
-    # A FINISHED import that imported nothing and skipped everything left
-    # the instance untouched: the dashboard on screen is still the old
-    # one. Previously only the top-level state was consulted, so this was
+    # A FINISHED import that imported nothing and skipped everything did
+    # not put this run's content on the instance (the dashboard may be the
+    # old one, or absent). Previously only the top-level state was consulted, so this was
     # reported as a clean install.
     #
     # Attribution is PER CONTENT TYPE. This zip always carries two of
@@ -1974,9 +1974,27 @@ def _install_dashboards(ctx: Dict) -> None:
     dash_names = _extract_dashboard_names(
         dash_json.replace("PLACEHOLDER_USER_ID", owner_id)
     )
-    unchanged_tail = (
-        " Verify on the instance; deleting the existing object and "
-        "re-installing is the reliable way to force an update."
+    # Not "the existing dashboard was NOT updated": under the owner-mapping
+    # cause the dashboard was never created, and this import sends
+    # force=true, so the create-only cause does not apply. Same text as the
+    # factory's vcfcf_dashboards.client.skipped_import_advice and install.ps1.
+    dash_skip_tail = " " + (
+        "This import sent force=true, so the create-only cause "
+        "(force=false, which leaves an existing dashboard as it was) does "
+        "not apply. The one demonstrated cause under force=true is an owner"
+        " in usermappings.json that maps to no user on the target; the "
+        "dashboard was then never created. Look in view-bridge.log for "
+        "'restoreData failed to map Dashboard. File: <ownerId>' and check "
+        "whether the dashboard exists on the instance. Without that log "
+        "line the skip is unexplained: report it with the import envelope."
+    )
+    view_skip_tail = " " + (
+        "This import sent force=true, so the create-only cause "
+        "(force=false, which leaves an existing view as it was) does not "
+        "apply, and an unmapped owner skips dashboards, not views. A view "
+        "skip under force=true is unexplained: check whether the view "
+        "exists on the instance and holds this version, and report the skip"
+        " with the import envelope."
     )
 
     if "DASHBOARDS" not in flagged:
@@ -1991,9 +2009,9 @@ def _install_dashboards(ctx: Dict) -> None:
         imp, skp = flagged["DASHBOARDS"]
         advisory = (
             f"Import changed no dashboards (DASHBOARDS imported={imp} "
-            f"skipped={skp}); the existing dashboard was NOT updated: "
+            f"skipped={skp}): "
             f"{', '.join(dash_names) if dash_names else 'dashboard'}."
-            + unchanged_tail
+            + dash_skip_tail
         )
         _warn(advisory)
         ctx.setdefault("advisories", []).append(advisory)
@@ -2007,8 +2025,8 @@ def _install_dashboards(ctx: Dict) -> None:
             named = ", ".join(view_names) if view_names else "view(s)"
             advisory = (
                 f"Import changed no views (VIEW_DEFINITIONS imported={imp} "
-                f"skipped={skp}); the existing views were NOT updated: "
-                f"{named}." + unchanged_tail
+                f"skipped={skp}): "
+                f"{named}." + view_skip_tail
             )
             _warn(advisory)
             ctx.setdefault("advisories", []).append(advisory)

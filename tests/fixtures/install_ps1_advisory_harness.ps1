@@ -210,8 +210,16 @@ $ctx = New-Ctx
 Install-Dashboard $ctx
 Assert ($ctx.Advisories.Count -eq 2) "no-op import produces one advisory per content type"
 Assert ($ctx.Warnings.Count -eq 0) "advisories stay out of the exit-code warnings list"
-Assert ($ctx.Advisories[0].Contains("NOT updated: [VCF Content Factory] My Dash.")) "dashboard named in its advisory"
+Assert ($ctx.Advisories[0].Contains("skipped=1): [VCF Content Factory] My Dash.")) "dashboard named in its advisory"
 Assert ($ctx.Advisories[1].Contains("CPU & Memory")) "views named in their advisory"
+# True for the force=true request this installer sends; no claim the
+# dashboard still exists (under the owner cause it was never created).
+Assert ($ctx.Advisories[0].Contains("sent force=true") -and $ctx.Advisories[0].Contains("does not apply")) "dashboard advisory rules out the create-only cause"
+Assert ($ctx.Advisories[0].Contains("usermappings.json") -and $ctx.Advisories[0].Contains("never created")) "dashboard advisory names the owner-mapping cause"
+Assert ($ctx.Advisories[0].Contains("restoreData failed to map Dashboard. File: <ownerId>")) "dashboard advisory names the log line"
+Assert ($ctx.Advisories[0].Contains("unexplained") -and $ctx.Advisories[0].Contains("import envelope")) "dashboard advisory says an unmatched skip is unexplained"
+Assert (-not $ctx.Advisories[0].Contains("NOT updated")) "dashboard advisory does not assert the object exists"
+Assert ($ctx.Advisories[1].Contains("view skip under force=true is unexplained") -and -not $ctx.Advisories[1].Contains("NOT updated")) "view advisory says the skip is unexplained"
 
 $script:StubImportResult = @'
 {"state":"FINISHED","operationSummaries":[

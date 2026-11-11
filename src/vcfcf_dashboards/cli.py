@@ -16,9 +16,11 @@ from .client import (
     DASHBOARD_CONTENT_TYPES,
     all_skipped_content_types,
     check_dashboard_materialization,
+    current_user_name,
     discover_marker_filename,
     get_current_user,
     import_content_zip,
+    skipped_import_advice,
 )
 from .id_guard import check_dashboard_id_stability
 from .loader import (
@@ -523,7 +525,8 @@ def cmd_sync(args) -> int:
         user = get_current_user(client)
         marker = discover_marker_filename(client)
         blob = build_import_zip(
-            views, dashboards, owner_user_id=user["id"], marker_filename=marker,
+            views, dashboards, owner_user_id=user["id"],
+            owner_username=current_user_name(user), marker_filename=marker,
             sm_resolver=resolver.uuid_for, known_dashboards=known,
         )
         result = import_content_zip(client, blob)
@@ -545,7 +548,8 @@ def cmd_sync(args) -> int:
         return 1
 
     # A FINISHED import that imported nothing and skipped everything is
-    # not a successful sync: the instance still holds the old content.
+    # not a successful sync: this run's content is not on the instance
+    # (the object may be the old version, or absent).
     # State alone used to gate this, so an all-skipped import reported ok.
     #
     # This zip carries BOTH content types, so each flag is attributed to
@@ -571,13 +575,12 @@ def cmd_sync(args) -> int:
                     f"WARNING: affected {ct} content: " + ", ".join(affected),
                     file=sys.stderr,
                 )
-        print(
-            "WARNING: existing objects with the same ids/names were left as "
-            "they were. Verify on the instance before treating this sync as "
-            "applied; deleting the existing object and re-syncing is the "
-            "reliable way to force an update.",
-            file=sys.stderr,
-        )
+            # Not "left as they were": under the owner-mapping cause a
+            # skipped dashboard was never created.
+            print(
+                f"WARNING: {ct}: " + skipped_import_advice(ct),
+                file=sys.stderr,
+            )
         # Same units as the affected line above: item names, not type
         # names, so the operator does not have to translate between two
         # vocabularies to work out what actually landed.

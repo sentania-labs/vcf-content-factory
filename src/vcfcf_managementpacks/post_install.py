@@ -699,6 +699,9 @@ def report_pak_dashboards(
         from vcfcf_common.client import VCFOpsClient
 
         def suite_factory(h, u, pw, v):
+            # Local, the source that authenticated: these are the credentials
+            # the installer's local-only /ui/ login just proved, the same rule
+            # as the account watch (issue #318).
             return VCFOpsClient(host=h, username=u, password=pw,
                                 auth_source="Local", verify_ssl=v)
 

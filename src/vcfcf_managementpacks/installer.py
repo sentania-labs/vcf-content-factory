@@ -47,7 +47,7 @@ import sys
 import time
 import zipfile
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, NamedTuple, Optional, Tuple
 
 try:
     import requests
@@ -212,7 +212,7 @@ def _resolve_credentials(
     user: Optional[str],
     password: Optional[str],
     profile: Optional[str] = None,
-) -> Tuple[str, str, str, bool]:
+) -> Tuple[str, str, str, bool, "ProfileAuth"]:
     """Resolve host/user/password/verify_ssl from args then the active credential profile.
 
     Resolution order:
@@ -220,8 +220,13 @@ def _resolve_credentials(
       2. Active credential profile (VCFOPS_<PROFILE>_* env vars, resolved via
          --profile flag > VCFOPS_PROFILE env var > "devel" default).
 
-    Returns (host, user, password, verify_ssl).  Calls _abort() if any
+    Returns (host, user, password, verify_ssl, auth).  Calls _abort() if any
     required value is missing after all sources are tried.
+
+    ``auth`` is the profile's VCFOPS_<PROFILE>_AUTH_SOURCE and the profile
+    name (:class:`ProfileAuth`), for the issue #318 warning only: the /ui/
+    login is local-only, so nothing this module sends uses it. Unset, or a
+    profile that does not resolve, gives ``Local``.
 
     verify_ssl reflects the profile's VCFOPS_<PROFILE>_VERIFY_SSL setting
     (parsed by resolve_profile_credentials — falsey values "false" / "0" /
@@ -235,12 +240,15 @@ def _resolve_credentials(
 
     # Resolve profile credentials as the fallback layer.
     profile_verify_ssl = True  # safe default: verify unless told otherwise
+    auth = ProfileAuth("Local", (profile or "").strip().lower())
     try:
         creds = resolve_profile_credentials(profile, default="devel")
         profile_host = creds.host
         profile_user = creds.user
         profile_password = creds.password
         profile_verify_ssl = creds.verify_ssl
+        auth = ProfileAuth((creds.auth_source or "").strip() or "Local",
+                           creds.profile_name)
     except ValueError as e:
         _warn(f"Could not resolve profile credentials: {e}")
         profile_host = profile_user = profile_password = ""
@@ -264,7 +272,53 @@ def _resolve_credentials(
             f"  Use --profile to select a different credential profile."
         )
 
-    return host, user, password, profile_verify_ssl
+    return host, user, password, profile_verify_ssl, auth
+
+
+class ProfileAuth(NamedTuple):
+    """The profile's auth source and the profile it came from (issue #318).
+    Carries no credential."""
+    source: str
+    profile: str
+
+    @property
+    def is_local(self) -> bool:
+        return (self.source or "").strip().lower() in ("", "local")
+
+
+# Every session this module opens authenticates as a LOCAL account: the /ui/
+# login form sends authSourceId=localItem, and the account watch reuses the
+# credentials that login just proved, so it sends authSource "Local" too. The
+# two move to the profile's source together, once the /ui/ login payload for a
+# non-local source is known (issue #318;
+# knowledge/context/wire-formats/auth_source_wire_formats.md).
+WATCH_NOTE = (" (Suite API auth source 'Local', the local account the /ui/ "
+              "login used)")
+
+
+def _warn_ui_login_is_local(auth: ProfileAuth, user: str, *,
+                            account_watch: bool, outcome: str) -> None:
+    """Say, before the /ui/ login, that a non-Local profile's auth source is
+    not used by this command (issue #318).
+
+    ``account_watch``: whether this run will open the post-install account
+    watch. ``outcome``: what a failed login means ("nothing is installed or
+    changed"). Names no credential.
+    """
+    var = (f"VCFOPS_{auth.profile.upper()}_AUTH_SOURCE" if auth.profile
+           else "the profile's AUTH_SOURCE")
+    msg = (
+        f"Profile {auth.profile!r} sets auth source {auth.source!r} ({var}), "
+        f"and this command does not use it: its /ui/ login supports only a "
+        f"local account, so it will attempt a LOCAL login as {user!r}. If that "
+        f"is not a local account the login fails and {outcome} (issue #318)."
+    )
+    if account_watch:
+        msg += (
+            " After the install the account watch runs as that same local "
+            "account (Suite API auth source 'Local')."
+        )
+    _warn(msg)
 
 
 # ---------------------------------------------------------------------------
@@ -1157,9 +1211,13 @@ def install_pak(
     if not p.is_file():
         _abort(f"Not a file: {pak_path}")
 
-    host, user, password, profile_verify_ssl = _resolve_credentials(
+    host, user, password, profile_verify_ssl, auth = _resolve_credentials(
         host, user, password, profile=profile
     )
+    # Issue #318: the profile's auth source is not used (see WATCH_NOTE); a
+    # non-Local one is warned before the /ui/ login and named on the watch's
+    # failure lines. A Local profile prints nothing new.
+    watch_note = "" if auth.is_local else WATCH_NOTE
     # CLI --skip-ssl-verify forces skip; profile VERIFY_SSL=false also forces skip.
     # An explicit CLI flag takes precedence but the profile fills in when no flag
     # was passed.  Default (no flag, no profile setting) is to verify SSL.
@@ -1180,6 +1238,11 @@ def install_pak(
     adapter_kinds = pak_adapter_kinds(manifest)
 
     # UI session login
+    if not auth.is_local:
+        _warn_ui_login_is_local(
+            auth, user,
+            account_watch=bool(wait and restart_failed and adapter_kinds),
+            outcome="nothing is installed or changed")
     _info(f"[2/6] Authenticating to /ui/ on {host} as {user!r} ...")
     ui = _UISession(
         host=host,
@@ -1210,8 +1273,9 @@ def install_pak(
                                           for a in accounts_before.values())
                          if accounts_before else ""))
             except Exception as e:  # noqa: BLE001  the install goes ahead
-                _warn(f"Could not read the pak's accounts before the install "
-                      f"({e}); after it, only FAILED accounts will be started.")
+                _warn(f"Could not read the pak's accounts before the install"
+                      f"{watch_note} ({e}); after it, only FAILED accounts will "
+                      f"be started.")
                 accounts_before = None
 
         # prepare upload
@@ -1365,14 +1429,20 @@ def install_pak(
               "collector or Cloud Proxy, check each account's state and start "
               "any the install left FAILED.")
     elif adapter_kinds:
+        if not auth.is_local:
+            _warn(f"Account watch: runs as {user!r}, the local account the /ui/ "
+                  f"login used (Suite API auth source 'Local'); profile "
+                  f"{auth.profile!r}'s auth source {auth.source!r} is not used "
+                  f"(issue #318).")
         try:
             suite = suite_factory(host, user, password, effective_verify_ssl)
         except Exception as e:  # noqa: BLE001  reported, install not in doubt
             print(f"WARNING: ACCOUNTS UNCHECKED: could not open a Suite API "
-                  f"session ({e}).", file=sys.stderr)
+                  f"session{watch_note} ({e}).", file=sys.stderr)
         else:
             accounts_rc = restart_failed_accounts(suite, adapter_kinds,
-                                                  accounts_before)
+                                                  accounts_before,
+                                                  session_note=watch_note)
     if not materialization_check:
         return accounts_rc
     # Post-install (issues #244, #200): the install finishing says nothing
@@ -1427,7 +1497,7 @@ def uninstall_pak(
 
     Credentials resolve order: CLI flags > active credential profile env vars.
     """
-    host, user, password, profile_verify_ssl = _resolve_credentials(
+    host, user, password, profile_verify_ssl, auth = _resolve_credentials(
         host, user, password, profile=profile
     )
     # CLI --skip-ssl-verify forces skip; profile VERIFY_SSL=false also forces skip.
@@ -1435,7 +1505,10 @@ def uninstall_pak(
     # was passed.  Default (no flag, no profile setting) is to verify SSL.
     effective_verify_ssl = not (skip_ssl_verify or not profile_verify_ssl)
 
-    # Step 1: UI session login
+    # Step 1: UI session login (local-only; issue #318)
+    if not auth.is_local:
+        _warn_ui_login_is_local(auth, user, account_watch=False,
+                                outcome="nothing is removed")
     _info(f"[1/5] Authenticating to /ui/ on {host} as {user!r} ...")
     ui = _UISession(
         host=host,

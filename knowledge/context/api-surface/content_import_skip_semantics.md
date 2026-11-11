@@ -384,6 +384,14 @@ Full record: `../investigations/2026-11-11-owner-mapping-dashboard-skip-reproduc
   created. (If one had existed it would presumably be left alone;
   that is inferred, not run.) Any wording change should point the
   operator at the owner mapping when the skip is dashboards-only.
+  2026-11-11: reworded. The factory (`vcfcf_dashboards.client.skipped_import_advice`,
+  used by `sync` and the bundle handler) and both installer templates
+  carry one identical text, true for the `force=true` they all send. It
+  names cause 1 only to rule it out. A dashboard skip is cause 2 (look
+  for the `restoreData failed to map Dashboard. File: <ownerId>` line,
+  check whether the dashboard exists) or unexplained. A view skip is
+  unexplained. Both say to report an unexplained skip with the import
+  envelope, and neither asserts the object exists.
 - **Do not add the SM-style auto-retry to the dashboard or view
   paths.** The skip is idempotent; retrying cannot help and costs a
   round trip plus the import-busy backoff. This is now evidence, not

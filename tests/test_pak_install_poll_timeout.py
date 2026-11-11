@@ -73,7 +73,8 @@ def _wire(monkeypatch, tmp_path, installing_polls, script=None):
     monkeypatch.setattr(installer, "_UISession", _Session)
     monkeypatch.setattr(installer, "time", clock)
     monkeypatch.setattr(installer, "_resolve_credentials",
-                        lambda *a, **k: ("ops.example", "u", "p", True))
+                        lambda *a, **k: ("ops.example", "u", "p", True,
+                                       installer.ProfileAuth("Local", "devel")))
     monkeypatch.setattr(installer, "_parse_manifest_txt",
                         lambda p: {"name": "X", "version": "0.0.0.100"})
     monkeypatch.setattr(installer, "_verify_adapter_registered",

@@ -360,7 +360,7 @@ def _xml_buckets_control(view: ViewDef) -> str:
         return (
             '<Control id="buckets-control_id_1" type="buckets-control" visible="false">'
             '<Property name="isDynamic" value="true"/>'
-            f'<Property name="dynamicCalcFunction" value="{escape(b.calc_function)}"/>'
+            f'<Property name="dynamicCalcFunction" value="{escape(b.calc_function, {chr(34): "&quot;"})}"/>'
             "</Control>"
         )
     else:
@@ -403,7 +403,7 @@ def _xml_time_interval_selector(view: ViewDef, control_id: str = "time-interval-
     if view.time_window is not None:
         tw = view.time_window
         adv = "true" if tw.advanced_time_mode else "false"
-        unit = escape(tw.unit)
+        unit = escape(tw.unit, {chr(34): "&quot;"})
         count = str(tw.count)
         start_period = tw.start_period
         end_period = tw.end_period
@@ -419,8 +419,8 @@ def _xml_time_interval_selector(view: ViewDef, control_id: str = "time-interval-
     period_props = ""
     if adv == "true":
         period_props = (
-            f'<Property name="startPeriod" value="{escape(start_period)}"/>'
-            f'<Property name="endPeriod" value="{escape(end_period)}"/>'
+            f'<Property name="startPeriod" value="{escape(start_period, {chr(34): "&quot;"})}"/>'
+            f'<Property name="endPeriod" value="{escape(end_period, {chr(34): "&quot;"})}"/>'
         )
     return (
         f'<Control id="{control_id}" type="time-interval-selector" visible="false">'
@@ -440,7 +440,10 @@ def _xml_transformations_block(view: ViewDef) -> str:
     transformations list via the YAML.
     """
     if view.transformations:
-        items = "".join(f'<Item value="{t}"/>' for t in view.transformations)
+        items = "".join(
+            f'<Item value="{escape(t, {chr(34): "&quot;"})}"/>'
+            for t in view.transformations
+        )
         return f'<Property name="transformations"><List>{items}</List></Property>'
     if view.data_type == "trend":
         # NONE = raw data points; TREND = trend line; FORECAST = projection
@@ -576,7 +579,7 @@ def _xml_instanced_group_item(view: ViewDef, col) -> str:
     if transform == "TRANSFORM_EXPRESSION" and col.transform_expression:
         props.append(_xml_property("transformExpression", col.transform_expression))
     props.append(
-        f'<Property name="transformations"><List><Item value="{escape(transform)}"/></List></Property>'
+        f'<Property name="transformations"><List><Item value="{escape(transform, {chr(34): "&quot;"})}"/></List></Property>'
     )
     props.append(_xml_property("isProperty", "true" if col.is_property else "false"))
 
@@ -825,7 +828,7 @@ def _xml_attribute_item(
                 props.append(_xml_property("operatorToRelateWith", col.operator_to_relate_with))
         props.append(
             f'<Property name="transformations">'
-            f'<List><Item value="{escape(transform)}"/></List>'
+            f'<List><Item value="{escape(transform, {chr(34): "&quot;"})}"/></List>'
             f'</Property>'
         )
     # Default sort (issue #175): after transformations, before isProperty,
@@ -975,8 +978,8 @@ def _render_view_def_fragment(
     # view-multi-subject/. A single-subject view emits the same two
     # elements it always has.
     subject_types = "".join(
-        f'<SubjectType adapterKind="{escape(ak)}"{filter_attr} resourceKind="{escape(rk)}" type="descendant"/>'
-        f'<SubjectType adapterKind="{escape(ak)}"{filter_attr} resourceKind="{escape(rk)}" type="self"/>'
+        f'<SubjectType adapterKind="{escape(ak, {chr(34): "&quot;"})}"{filter_attr} resourceKind="{escape(rk, {chr(34): "&quot;"})}" type="descendant"/>'
+        f'<SubjectType adapterKind="{escape(ak, {chr(34): "&quot;"})}"{filter_attr} resourceKind="{escape(rk, {chr(34): "&quot;"})}" type="self"/>'
         for ak, rk in view.subject_kinds
     )
     header = (
@@ -1018,7 +1021,7 @@ def _render_view_def_fragment(
             + "</Controls>"
         )
         data_provider = '<DataProviders><DataProvider dataType="distribution-view" id="distribution-view_id_1"/></DataProviders>'
-        presentation = f'<Presentation type="{escape(view.presentation)}"/>'
+        presentation = f'<Presentation type="{escape(view.presentation, {chr(34): "&quot;"})}"/>'
 
     elif view.data_type == "trend":
         # Trend view: pagination-control (same as list), no summary
@@ -1045,7 +1048,7 @@ def _render_view_def_fragment(
             + "</Controls>"
         )
         data_provider = '<DataProviders><DataProvider dataType="trend-view" id="trend-view_id_1"/></DataProviders>'
-        presentation = f'<Presentation type="{escape(view.presentation)}"/>'
+        presentation = f'<Presentation type="{escape(view.presentation, {chr(34): "&quot;"})}"/>'
 
     else:
         # List view (default): pagination-control + optional summary row
@@ -1081,7 +1084,7 @@ def _render_view_def_fragment(
             + "</Controls>"
         )
         data_provider = '<DataProviders><DataProvider dataType="list-view" id="list-view_id_1"/></DataProviders>'
-        presentation = f'<Presentation type="{escape(view.presentation)}"/>'
+        presentation = f'<Presentation type="{escape(view.presentation, {chr(34): "&quot;"})}"/>'
 
     return header + controls + data_provider + presentation + "</ViewDef>"
 
@@ -1168,8 +1171,8 @@ def render_view_def_fragments(
         # Spec A2: every ViewDef must include a <SubjectType> whose adapterKind
         # matches the owning adapter so the importer can file it correctly.
         owning_st = (
-            f'<SubjectType adapterKind="{escape(owning_adapter_kind)}"'
-            f' resourceKind="{escape(owning_resource_kind)}"'
+            f'<SubjectType adapterKind="{escape(owning_adapter_kind, {chr(34): "&quot;"})}"'
+            f' resourceKind="{escape(owning_resource_kind, {chr(34): "&quot;"})}"'
             f' type="descendant"/>'
         )
         # Insert just before the first <Usage> element.

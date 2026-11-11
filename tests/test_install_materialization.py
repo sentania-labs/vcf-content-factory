@@ -568,7 +568,7 @@ def test_install_pak_runs_the_check_after_logout(monkeypatch, tmp_path):
             return {"isPakInstalling": False}
 
     monkeypatch.setattr(installer, "_UISession", _Session)
-    monkeypatch.setattr(installer, "_resolve_credentials", lambda *a, **k: ("h", "u", "p", True))
+    monkeypatch.setattr(installer, "_resolve_credentials", lambda *a, **k: ("h", "u", "p", True, installer.ProfileAuth("Local", "devel")))
     monkeypatch.setattr(installer, "_parse_manifest_txt",
                         lambda p: {"name": "X", "version": "0.0.0.1"})
     monkeypatch.setattr(installer, "_verify_adapter_registered", lambda *a, **k: events.append("verify"))

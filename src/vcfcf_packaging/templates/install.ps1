@@ -3155,9 +3155,9 @@ function Install-Dashboard($Ctx) {
         -OwnerId $Ctx.OwnerId -NViews $nViews -NDashboards 1 -DashboardIds $dashIds
     $importResult = Import-ContentZip -ZipBytes $dashZip -Label "dashboard + view"
 
-    # A FINISHED import that imported nothing and skipped everything left the
-    # instance untouched: the dashboard on screen is still the old one.
-    # Previously only the top-level state was consulted, so this was reported
+    # A FINISHED import that imported nothing and skipped everything did not
+    # put this run's content on the instance (the dashboard may be the old
+    # one, or absent).  Previously only the top-level state was consulted, so this was reported
     # as a clean install.
     #
     # Attribution is PER CONTENT TYPE.  This zip always carries two of them,
@@ -3166,16 +3166,34 @@ function Install-Dashboard($Ctx) {
     # envelope.  Each type gets its own line, and the type that imported
     # normally still gets its success line.
     $flagged = Get-AllSkippedSummaries -Result $importResult -ContentTypes @("DASHBOARDS", "VIEW_DEFINITIONS")
-    $unchangedTail = (" Verify on the instance; deleting the existing object and " +
-        "re-installing is the reliable way to force an update.")
+    # Not "the existing dashboard was NOT updated": under the owner-mapping
+    # cause the dashboard was never created, and this import sends
+    # force=true, so the create-only cause does not apply.  Same text as
+    # install.py and the factory's skipped_import_advice.
+    $dashSkipTail = (" " +
+        "This import sent force=true, so the create-only cause " +
+        "(force=false, which leaves an existing dashboard as it was) does " +
+        "not apply. The one demonstrated cause under force=true is an owner" +
+        " in usermappings.json that maps to no user on the target; the " +
+        "dashboard was then never created. Look in view-bridge.log for " +
+        "'restoreData failed to map Dashboard. File: <ownerId>' and check " +
+        "whether the dashboard exists on the instance. Without that log " +
+        "line the skip is unexplained: report it with the import envelope.")
+    $viewSkipTail = (" " +
+        "This import sent force=true, so the create-only cause " +
+        "(force=false, which leaves an existing view as it was) does not " +
+        "apply, and an unmapped owner skips dashboards, not views. A view " +
+        "skip under force=true is unexplained: check whether the view " +
+        "exists on the instance and holds this version, and report the skip" +
+        " with the import envelope.")
 
     if ($flagged.ContainsKey("DASHBOARDS")) {
         $counts = $flagged["DASHBOARDS"]
         $dashNames = Get-DashboardAdvisoryNames -DashJson $dashJson -OwnerId $Ctx.OwnerId
         $named = if ($dashNames.Count -gt 0) { $dashNames -join ", " } else { "dashboard" }
         $advisory = ("Import changed no dashboards (DASHBOARDS imported=$($counts.Imported) " +
-            "skipped=$($counts.Skipped)); the existing dashboard was NOT updated: " +
-            "$named." + $unchangedTail)
+            "skipped=$($counts.Skipped)): " +
+            "$named." + $dashSkipTail)
         Write-Warn $advisory
         $Ctx.Advisories.Add($advisory)
     } else {
@@ -3196,8 +3214,8 @@ function Install-Dashboard($Ctx) {
             $viewNames = Get-ViewAdvisoryNames -ViewsXml $viewsXml
             $named = if ($viewNames.Count -gt 0) { $viewNames -join ", " } else { "view(s)" }
             $advisory = ("Import changed no views (VIEW_DEFINITIONS imported=$($counts.Imported) " +
-                "skipped=$($counts.Skipped)); the existing views were NOT updated: " +
-                "$named." + $unchangedTail)
+                "skipped=$($counts.Skipped)): " +
+                "$named." + $viewSkipTail)
             Write-Warn $advisory
             $Ctx.Advisories.Add($advisory)
         } else {

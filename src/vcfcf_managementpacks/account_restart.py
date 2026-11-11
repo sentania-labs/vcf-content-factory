@@ -318,6 +318,7 @@ def restart_failed_accounts(
     clock: Callable[[], float] = time.time,
     out: Callable[[str], None] = print,
     err: Optional[Callable[[str], None]] = None,
+    session_note: str = "",
 ) -> int:
     """Watch the pak's accounts after the install, start the FAILED ones.
 
@@ -327,6 +328,11 @@ def restart_failed_accounts(
     when the check ends. When the final read failed (or a 401/403 stopped
     the watch) it prints ``ACCOUNTS UNCHECKED`` and returns 0: the install
     itself is not in doubt and stale data proves nothing.
+
+    ``session_note`` is appended to those ``ACCOUNTS UNCHECKED`` lines, the
+    place a session that fails to authenticate actually surfaces (the
+    client authenticates on its first request); the installer uses it to
+    name the auth source the session used (issue #318).
     """
     if err is None:
         def err(msg: str) -> None:
@@ -462,11 +468,12 @@ def restart_failed_accounts(
         why = "a 401/403 stopped the watch" if auth_refused else "the last read failed"
         if accounts is None:
             err(f"WARNING: ACCOUNTS UNCHECKED: could not read the adapter instances of "
-                f"{kinds_text} ({failed_reads} failed read(s); last: {last_error}). Check "
+                f"{kinds_text}{session_note} ({failed_reads} failed read(s); last: "
+                f"{last_error}). Check "
                 f"each account's collection state by hand; a remote-collector account "
                 f"may need Start monitoring (lesson remote-collector-upgrade-start-race).")
         else:
-            err(f"WARNING: ACCOUNTS UNCHECKED: {why} ({failed_reads} failed read(s); "
+            err(f"WARNING: ACCOUNTS UNCHECKED: {why}{session_note} ({failed_reads} failed read(s); "
                 f"last: {last_error}). State as of {int(last_good_at)} s after the "
                 f"install, not a verdict:")
             for acct in sorted(accounts.values(), key=lambda a: a.name.lower()):
@@ -539,7 +546,13 @@ def pak_adapter_kinds(manifest: Dict[str, str]) -> List[str]:
 
 
 def default_suite_factory(host: str, user: str, password: str, verify_ssl: bool):
-    """Suite API client for the installer's local account."""
+    """Suite API client for the installer's local account.
+
+    Always ``Local``: the watch runs only after the installer's local-only
+    /ui/ login has proved these credentials as a local account, so the
+    profile's VCFOPS_<P>_AUTH_SOURCE could only make it fail (issue #318).
+    Both move to the profile's source together once the /ui/ login can.
+    """
     from vcfcf_common.client import VCFOpsClient
     return VCFOpsClient(host=host, username=user, password=password,
                         auth_source="Local", verify_ssl=verify_ssl,

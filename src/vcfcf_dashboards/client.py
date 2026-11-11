@@ -47,6 +47,45 @@ def all_skipped_content_types(result: dict, content_types=None) -> dict:
     return flagged
 
 
+def skipped_import_advice(content_type: str) -> str:
+    """What an ``imported=0 / skipped=N`` result for ``content_type`` means
+    for the request every factory import sends, ``force=true``
+    (``import_content_zip``; the installer templates send the same).
+
+    ``force=false`` (create-only) is named only to rule it out. It never
+    asserts the skipped object exists: under the owner-mapping cause a
+    dashboard was never created. Evidence and the "unexplained" rule:
+    ``knowledge/context/api-surface/content_import_skip_semantics.md``.
+    The installer templates carry the same two texts verbatim (pinned by
+    a test).
+    """
+    if content_type == "DASHBOARDS":
+        return (
+            "This import sent force=true, so the create-only cause "
+            "(force=false, which leaves an existing dashboard as it was) does "
+            "not apply. The one demonstrated cause under force=true is an owner"
+            " in usermappings.json that maps to no user on the target; the "
+            "dashboard was then never created. Look in view-bridge.log for "
+            "'restoreData failed to map Dashboard. File: <ownerId>' and check "
+            "whether the dashboard exists on the instance. Without that log "
+            "line the skip is unexplained: report it with the import envelope."
+        )
+    if content_type == "VIEW_DEFINITIONS":
+        return (
+            "This import sent force=true, so the create-only cause "
+            "(force=false, which leaves an existing view as it was) does not "
+            "apply, and an unmapped owner skips dashboards, not views. A view "
+            "skip under force=true is unexplained: check whether the view "
+            "exists on the instance and holds this version, and report the skip"
+            " with the import envelope."
+        )
+    return (
+        "The cause is not known for this content type. Check on the instance "
+        "whether the object exists and holds this version, and report the "
+        "skip with the import envelope."
+    )
+
+
 def get_current_user(client: VCFOpsClient) -> dict:
     """Return ``{id, username, firstName, lastName}`` for the
     authenticated user. Used by the sync path so generated content
@@ -56,6 +95,25 @@ def get_current_user(client: VCFOpsClient) -> dict:
     if r.status_code != 200:
         raise VCFOpsError(f"currentuser failed ({r.status_code}): {r.text}")
     return r.json()
+
+
+def current_user_name(user: dict, default: str = "admin") -> str:
+    """Return the account name from a ``/api/auth/currentuser`` body.
+
+    The key is ``username`` (lower-case n): the ``user`` schema in the
+    8.18, 9.0 and 9.1 Suite API specs under ``reference/docs/`` names
+    it so, and a 9.0.2 response was observed with it on 2026-11-11.
+    ``userName`` is the spelling the content-zip ``usermappings.json``
+    and the ``/ui/`` login form use, not this endpoint; it is accepted
+    second only so a body that ever carries it is not misread.
+    ``default`` is the last resort, for a body with neither key.
+    """
+    if isinstance(user, dict):
+        for key in ("username", "userName"):
+            name = user.get(key)
+            if isinstance(name, str) and name.strip():
+                return name
+    return default
 
 
 def discover_marker_filename(client: VCFOpsClient, timeout_s: int = 120) -> str:

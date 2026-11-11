@@ -968,3 +968,108 @@ class TestExtractDashboardNames:
         out = capsys.readouterr().out
         assert "Import changed no dashboards" in out
         assert "123" in out
+
+
+# ---------------------------------------------------------------------------
+# The advice is true for the request these paths send (force=true) and never
+# asserts the object exists (knowledge/context/api-surface/
+# content_import_skip_semantics.md: under the owner-mapping cause a skipped
+# dashboard was never created; a force=true view skip is unexplained).
+# ---------------------------------------------------------------------------
+
+import re as _re
+
+from vcfcf_dashboards.client import skipped_import_advice
+
+_LOG_LINE = "restoreData failed to map Dashboard. File: <ownerId>"
+_SRC = Path(__file__).resolve().parents[1] / "src"
+
+
+def _assert_dashboard_advice(text: str) -> None:
+    assert "sent force=true" in text
+    assert "create-only cause (force=false" in text and "does not apply" in text
+    assert "usermappings.json" in text and "never created" in text
+    assert _LOG_LINE in text
+    assert "whether the dashboard exists" in text
+    assert "unexplained" in text and "import envelope" in text
+    assert "left as they were" not in text
+    assert "NOT updated" not in text
+    assert "forces an update" not in text
+
+
+def _assert_view_advice(text: str) -> None:
+    assert "sent force=true" in text
+    assert "create-only cause (force=false" in text and "does not apply" in text
+    assert "dashboards, not views" in text
+    assert "view skip under force=true is unexplained" in text
+    assert "import envelope" in text
+    assert "NOT updated" not in text
+    assert "forces an update" not in text
+
+
+def test_every_factory_import_sends_force_true():
+    """The advice says "this import sent force=true"; pin that on all three
+    senders so a change to the request cannot leave the text behind."""
+    client_src = (_SRC / "vcfcf_dashboards" / "client.py").read_text()
+    py_src = (_SRC / "vcfcf_packaging" / "templates" / "install.py").read_text()
+    ps_src = (_SRC / "vcfcf_packaging" / "templates" / "install.ps1").read_text()
+    assert 'params={"force": "true"}' in client_src
+    assert 'params={"force": "true"}' in py_src
+    assert "/api/content/operations/import?force=true" in ps_src
+
+
+def _ps_concat(src: str, var: str) -> str:
+    """The string a ``$var = ("..." + "..." ...)`` assignment builds."""
+    m = _re.search(r"\$" + var + r" = \((.*?)\)\n", src, _re.S)
+    assert m, var
+    return "".join(_re.findall(r'"((?:[^"`]|`.)*)"', m.group(1)))
+
+
+def test_powershell_texts_match_the_factory_helper():
+    ps_src = (_SRC / "vcfcf_packaging" / "templates" / "install.ps1").read_text()
+    assert _ps_concat(ps_src, "dashSkipTail") == " " + skipped_import_advice("DASHBOARDS")
+    assert _ps_concat(ps_src, "viewSkipTail") == " " + skipped_import_advice("VIEW_DEFINITIONS")
+
+
+class TestSkippedImportAdvice:
+    def test_handler_dashboard_warning(self, monkeypatch, tmp_path):
+        _stub_handler_io(monkeypatch, _result(0, 1), _StubDashboard())
+        result = dash_handler.DashboardsHandler().sync(
+            [str(tmp_path / "dashboards" / "d.yaml")], session=object()
+        )
+        _assert_dashboard_advice(result.items[0].message)
+
+    def test_handler_view_warning(self, monkeypatch, tmp_path):
+        _stub_handler_io(
+            monkeypatch, _result(0, 1, content_type="VIEW_DEFINITIONS"),
+            _StubDashboard(name="[VCF Content Factory] Stub View"),
+        )
+        result = dash_handler.ViewsHandler().sync(
+            [str(tmp_path / "views" / "v.yaml")], session=object()
+        )
+        _assert_view_advice(result.items[0].message)
+
+    def test_cli_names_the_causes_per_flagged_type(
+        self, monkeypatch, tmp_path, capsys
+    ):
+        _stub_cli_io(monkeypatch, _result(0, 3), [_StubDashboard()])
+        dash_cli.cmd_sync(_sync_args(tmp_path))
+        err = capsys.readouterr().err
+        _assert_dashboard_advice(err)
+        # Only the flagged type gets advice.
+        assert "dashboards, not views" not in err
+
+    def test_installer_dashboard_and_view_advisories(
+        self, install_mod, tmp_path, capsys
+    ):
+        ctx = TestInstallTemplateDashboards._make_ctx(
+            install_mod, tmp_path, _mixed_result(dash=(0, 1), views=(0, 2)),
+            with_views=True,
+        )
+        install_mod._install_dashboards(ctx)
+        dash_adv, view_adv = ctx["advisories"]
+        _assert_dashboard_advice(dash_adv)
+        _assert_view_advice(view_adv)
+        # Character-identical to the factory helper.
+        assert dash_adv.endswith(" " + skipped_import_advice("DASHBOARDS"))
+        assert view_adv.endswith(" " + skipped_import_advice("VIEW_DEFINITIONS"))
