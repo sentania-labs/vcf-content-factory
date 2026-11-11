@@ -440,7 +440,10 @@ def _xml_transformations_block(view: ViewDef) -> str:
     transformations list via the YAML.
     """
     if view.transformations:
-        items = "".join(f'<Item value="{t}"/>' for t in view.transformations)
+        items = "".join(
+            f'<Item value="{escape(t, {chr(34): "&quot;"})}"/>'
+            for t in view.transformations
+        )
         return f'<Property name="transformations"><List>{items}</List></Property>'
     if view.data_type == "trend":
         # NONE = raw data points; TREND = trend line; FORECAST = projection
