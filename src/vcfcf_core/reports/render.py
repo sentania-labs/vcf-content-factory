@@ -66,9 +66,9 @@ def render_report_xml(reports: list[ReportDef]) -> str:
         sections_xml = "".join(_render_section(s) for s in rd.sections)
 
         subject_types_xml = "".join(
-            f'<SubjectType adapterKind="{escape(st.adapter_kind)}" '
-            f'resourceKind="{escape(st.resource_kind)}" '
-            f'type="{escape(st.type)}"'
+            f'<SubjectType adapterKind="{escape(st.adapter_kind, {chr(34): "&quot;"})}" '
+            f'resourceKind="{escape(st.resource_kind, {chr(34): "&quot;"})}" '
+            f'type="{escape(st.type, {chr(34): "&quot;"})}"'
             + (
                 f' filter="{escape(st.filter, {chr(34): "&quot;"})}"'
                 if st.filter
@@ -85,7 +85,7 @@ def render_report_xml(reports: list[ReportDef]) -> str:
         show_footer = "true" if rd.settings.show_page_footer else "false"
 
         fragments.append(
-            f'<ReportDef id="{escape(rd.id)}">'
+            f'<ReportDef id="{escape(rd.id, {chr(34): "&quot;"})}">'
             "<isTenant>false</isTenant>"
             f"<Title>{escape(rd.name)}</Title>"
             f"<Description>{escape(rd.description)}</Description>"
