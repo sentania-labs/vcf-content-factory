@@ -38,8 +38,10 @@ template's workflow byte for byte; compliance adds one pak-specific step
   section for pak repos: interactive builds from a bare pak clone (buildkit
   tarball + self-sourced Broadcom SDK jar) and fork-CI rewiring. Copy the
   marked block into each pak README under `## Building from source`.
-- `repo-README.md` (below, as the template repo's own README): what a pak
-  author reads after `Use this template`.
+- The rest of this file: the pak repo anatomy, release loop, runner
+  requirements and buildkit pinning a pak author needs after `Use this
+  template`. There is no separate `repo-README.md` here; the template
+  repo's own README is the live copy.
 
 ## Anatomy of a pak repo (instantiated from the template)
 
@@ -96,7 +98,8 @@ then `pyyaml` via pip); `gh`, `tar`, `ssh`, and `curl` come with the image.
 
 ## Buildkit pinning
 
-`BUILDKIT_TAG` in the template's workflow selects the toolchain. Pin a full `vX.Y.Z` for
-explicit, reproducible opt-in, or follow the floating `v1` major tag to pick up
-compatible buildkit updates automatically. The buildkit is published only by
+`BUILDKIT_TAG` in the template's workflow selects the toolchain. Pin a full `vX.Y.Z`
+together with `BUILDKIT_SHA256`, and move both in one reviewed commit. Do not follow
+the floating `v1` major tag in a release workflow: it moves under you, and the
+template workflow verifies the tarball against the committed hash. The buildkit is published only by
 `tooling` from the factory on an `sdk-buildkit-v*` tag.

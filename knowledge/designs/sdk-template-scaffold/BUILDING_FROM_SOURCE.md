@@ -23,7 +23,7 @@ portable buildkit below, no factory checkout needed.)
 You don't need this repo's CI or the VCF Content Factory checkout to
 build the `.pak` — the toolchain is a portable tarball. You need:
 
-- **JDK 11+** (`javac` + `jar` on PATH)
+- **JDK 17+** (`javac` + `jar` on PATH; the 9.0.2 SDK jar's class files are Java 17)
 - **python3** with `pyyaml` (`python3 -m pip install pyyaml`)
 - **The GitHub CLI** (`gh`) — used to download the build toolchain
   below. The factory repo is public, so no `gh auth login` is needed
@@ -35,34 +35,64 @@ build the `.pak` — the toolchain is a portable tarball. You need:
   the toolchain or this repo. The jar is different on every platform
   version; the build compiles against the 9.0.2 one. Get it from a VCF
   Operations 9.0.2 appliance, where it is
-  `/usr/lib/vmware-vcops/common/lib/vrops-adapters-sdk.jar`, and name
-  it for the version and build it came from:
+  `/usr/lib/vmware-vcops/common/lib/vrops-adapters-sdk.jar`. Keep it
+  **outside this repo's working tree**, so it can never be committed
+  by accident:
 
   ```
-  scp root@<appliance>:/usr/lib/vmware-vcops/common/lib/vrops-adapters-sdk.jar ./vrops-adapters-sdk-9.0.2.0.25137845.jar
+  mkdir -p ~/vcf-ops-sdk
+  scp root@<appliance>:/usr/lib/vmware-vcops/common/lib/vrops-adapters-sdk.jar ~/vcf-ops-sdk/
+  sha256sum ~/vcf-ops-sdk/vrops-adapters-sdk.jar
   ```
 
-  The buildkit release notes ("Consumer contract") list the builds the
-  kit recognises with their sha256, and the optional 8.18.7 and 9.1.1
-  jars for the compatibility checks. Partners can pull the jar from the
-  Broadcom TAP / partner SDK portal instead.
+  Look the hash up in the table under "Consumer contract" in the
+  buildkit release notes. It lists the builds the kit recognises and the
+  file name it uses for each, `vrops-adapters-sdk-<version>.<build>.jar`
+  (for example `vrops-adapters-sdk-9.0.2.0.25137845.jar`); rename your
+  copy to match. The kit identifies the jar by its hash, so a jar from a
+  patched appliance is a different build with a different name. If the
+  hash is not in the table, the appliance is at a build the kit does not
+  know yet: the jar still compiles, the build reports it as an unknown
+  jar, and you can name it `vrops-adapters-sdk-<version>.<build>.jar`
+  from the appliance's own version and build. The same
+  section covers the optional 8.18.7 and 9.1.1 jars for the
+  compatibility checks. Partners can pull the jar from the Broadcom TAP
+  / partner SDK portal instead.
 
 Then, from the root of this repo:
 
 ```bash
-# 1. Fetch the build toolchain (pin a full sdk-buildkit-vX.Y.Z tag for
-#    reproducibility, or use the floating major sdk-buildkit-v1)
-gh release download sdk-buildkit-v1 \
+# Run as one block. The subshell stops at the first failure, so a checksum
+# mismatch never reaches the unpack or the build, and your own shell stays open.
+(
+set -e
+# 1. Fetch the build toolchain. Pin a full sdk-buildkit-vX.Y.Z tag (the
+#    floating sdk-buildkit-v1 tag moves under you) and verify the published
+#    checksum before unpacking. Use the version this repo's release
+#    workflow pins (BUILDKIT_TAG in .github/workflows/build-pak-on-tag.yml);
+#    1.0.27 at the time of writing.
+BUILDKIT_VERSION=1.0.27
+gh release download "sdk-buildkit-v$BUILDKIT_VERSION" \
   --repo sentania-labs/vcf-content-factory \
-  --pattern 'sdk-buildkit-*.tgz'
-# No gh? The asset is public — fetch it with curl instead:
-#   curl -sL https://github.com/sentania-labs/vcf-content-factory/releases/download/sdk-buildkit-v1/sdk-buildkit-v1.tgz -o sdk-buildkit-v1.tgz
-tar xzf sdk-buildkit-*.tgz
+  --pattern "sdk-buildkit-$BUILDKIT_VERSION.tgz*"
+# No gh? The assets are public; fetch both with curl instead:
+#   base=https://github.com/sentania-labs/vcf-content-factory/releases/download/sdk-buildkit-v$BUILDKIT_VERSION
+#   curl -fsSLO "$base/sdk-buildkit-$BUILDKIT_VERSION.tgz"
+#   curl -fsSLO "$base/sdk-buildkit-$BUILDKIT_VERSION.tgz.sha256"
+# Verify before unpacking. The strong check is against the hash this repo
+# commits for its release builds (BUILDKIT_SHA256 in the same workflow),
+# which a replaced release asset cannot match:
+echo "$(awk '/^  BUILDKIT_SHA256:/{print $2; exit}' .github/workflows/build-pak-on-tag.yml)  sdk-buildkit-$BUILDKIT_VERSION.tgz" | sha256sum -c -   # macOS: shasum -a 256 -c -
+# For a version other than the pinned one, the release's own sidecar only
+# proves the download is intact:
+#   sha256sum -c "sdk-buildkit-$BUILDKIT_VERSION.tgz.sha256"
+tar xzf "sdk-buildkit-$BUILDKIT_VERSION.tgz"
 
 # 2. Point the kit at your SDK jar and build
-export VCFCF_SDK_JAR=/path/to/vrops-adapters-sdk-9.0.2.0.25137845.jar
+export VCFCF_SDK_JAR=~/vcf-ops-sdk/vrops-adapters-sdk-9.0.2.0.25137845.jar
 python3 -m sdk_buildkit validate-sdk .   # cheap loop: compile-check
 python3 -m sdk_buildkit build-sdk .      # emits the .pak
+)
 ```
 
 The kit carries everything else it needs (including the
@@ -82,9 +112,11 @@ before your own `v*` tags will build (it already runs on GitHub-hosted
 
 **SDK jar sourcing**: the upstream workflow fetches the Broadcom
    jar from a private repo via an `SDK_RUNTIME_SSH_KEY` deploy-key
-   secret you won't have. Replace that step with your own source —
-   e.g. store the appliance-extracted jar in your own private repo or
-   an Actions secret/artifact store. Then **also update the
+   secret you won't have. Replace that step with your own source:
+   store the appliance-extracted jar in **a private repo only**, and
+   fetch it from there. Never upload the jar as a workflow artifact:
+   on a public repo anyone can download workflow artifacts, which
+   would amount to redistributing it. Then **also update the
    `--sdk-jar` argument** on the `build-sdk` line of the workflow to
    point at wherever your replacement step puts the jar. The explicit
    `--sdk-jar` flag overrides `VCFCF_SDK_JAR`, so setting the env var
