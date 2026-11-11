@@ -47,6 +47,40 @@ def all_skipped_content_types(result: dict, content_types=None) -> dict:
     return flagged
 
 
+def skipped_import_advice(content_type: str, redo: str = "re-syncing") -> str:
+    """What an ``imported=0 / skipped=N`` result for ``content_type`` can mean.
+
+    States the demonstrated causes and how to tell them apart, and
+    never asserts that the skipped object exists: under the owner-mapping
+    cause a dashboard was never created. Evidence:
+    ``knowledge/context/api-surface/content_import_skip_semantics.md``.
+    ``redo`` names the caller's own re-run verb ("re-syncing").
+    """
+    if content_type == "DASHBOARDS":
+        return (
+            "Two causes are known. A create-only import (force=false) leaves "
+            "an existing dashboard as it was. An owner in usermappings.json "
+            "that maps to no user on the target means the dashboard was never "
+            "created. To tell them apart, check whether the dashboard exists "
+            "on the instance, and look in view-bridge.log for 'restoreData "
+            "failed to map Dashboard. File: <ownerId>' (the owner cause). If "
+            f"it exists but is stale, deleting it and {redo} forces an update."
+        )
+    if content_type == "VIEW_DEFINITIONS":
+        return (
+            "The one known cause for views is a create-only import "
+            "(force=false), which leaves an existing view as it was; an "
+            "unmapped owner skips dashboards, not views. Check whether the "
+            "view exists on the instance and holds this version; if it is "
+            f"stale, deleting it and {redo} forces an update."
+        )
+    return (
+        "The cause is not known for this content type. Check on the instance "
+        "whether the object exists and holds this version before treating "
+        "the import as applied."
+    )
+
+
 def get_current_user(client: VCFOpsClient) -> dict:
     """Return ``{id, username, firstName, lastName}`` for the
     authenticated user. Used by the sync path so generated content

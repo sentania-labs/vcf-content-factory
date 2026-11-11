@@ -968,3 +968,69 @@ class TestExtractDashboardNames:
         out = capsys.readouterr().out
         assert "Import changed no dashboards" in out
         assert "123" in out
+
+
+# ---------------------------------------------------------------------------
+# The advice names both demonstrated causes and never asserts the object
+# exists (knowledge/context/api-surface/content_import_skip_semantics.md:
+# under the owner-mapping cause a skipped dashboard was never created).
+# ---------------------------------------------------------------------------
+
+_LOG_LINE = "restoreData failed to map Dashboard. File: <ownerId>"
+
+
+def _assert_dashboard_advice(text: str) -> None:
+    assert "force=false" in text
+    assert "usermappings.json" in text and "never created" in text
+    assert _LOG_LINE in text
+    assert "whether the dashboard exists" in text
+    assert "left as they were" not in text
+    assert "NOT updated" not in text
+
+
+def _assert_view_advice(text: str) -> None:
+    assert "force=false" in text
+    assert "dashboards, not views" in text
+    assert "NOT updated" not in text
+
+
+class TestSkippedImportAdvice:
+    def test_handler_dashboard_warning(self, monkeypatch, tmp_path):
+        _stub_handler_io(monkeypatch, _result(0, 1), _StubDashboard())
+        result = dash_handler.DashboardsHandler().sync(
+            [str(tmp_path / "dashboards" / "d.yaml")], session=object()
+        )
+        _assert_dashboard_advice(result.items[0].message)
+
+    def test_handler_view_warning(self, monkeypatch, tmp_path):
+        _stub_handler_io(
+            monkeypatch, _result(0, 1, content_type="VIEW_DEFINITIONS"),
+            _StubDashboard(name="[VCF Content Factory] Stub View"),
+        )
+        result = dash_handler.ViewsHandler().sync(
+            [str(tmp_path / "views" / "v.yaml")], session=object()
+        )
+        _assert_view_advice(result.items[0].message)
+
+    def test_cli_names_the_causes_per_flagged_type(
+        self, monkeypatch, tmp_path, capsys
+    ):
+        _stub_cli_io(monkeypatch, _result(0, 3), [_StubDashboard()])
+        dash_cli.cmd_sync(_sync_args(tmp_path))
+        err = capsys.readouterr().err
+        _assert_dashboard_advice(err)
+        # Only the flagged type gets advice.
+        assert "dashboards, not views" not in err
+
+    def test_installer_dashboard_and_view_advisories(
+        self, install_mod, tmp_path, capsys
+    ):
+        ctx = TestInstallTemplateDashboards._make_ctx(
+            install_mod, tmp_path, _mixed_result(dash=(0, 1), views=(0, 2)),
+            with_views=True,
+        )
+        install_mod._install_dashboards(ctx)
+        dash_adv, view_adv = ctx["advisories"]
+        _assert_dashboard_advice(dash_adv)
+        assert "re-installing" in dash_adv
+        _assert_view_advice(view_adv)

@@ -19,6 +19,7 @@ from .client import (
     discover_marker_filename,
     get_current_user,
     import_content_zip,
+    skipped_import_advice,
 )
 from .id_guard import check_dashboard_id_stability
 from .loader import (
@@ -571,13 +572,12 @@ def cmd_sync(args) -> int:
                     f"WARNING: affected {ct} content: " + ", ".join(affected),
                     file=sys.stderr,
                 )
-        print(
-            "WARNING: existing objects with the same ids/names were left as "
-            "they were. Verify on the instance before treating this sync as "
-            "applied; deleting the existing object and re-syncing is the "
-            "reliable way to force an update.",
-            file=sys.stderr,
-        )
+            # Not "left as they were": under the owner-mapping cause a
+            # skipped dashboard was never created.
+            print(
+                f"WARNING: {ct}: " + skipped_import_advice(ct),
+                file=sys.stderr,
+            )
         # Same units as the affected line above: item names, not type
         # names, so the operator does not have to translate between two
         # vocabularies to work out what actually landed.

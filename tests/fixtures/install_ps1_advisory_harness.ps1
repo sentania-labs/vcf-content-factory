@@ -210,8 +210,15 @@ $ctx = New-Ctx
 Install-Dashboard $ctx
 Assert ($ctx.Advisories.Count -eq 2) "no-op import produces one advisory per content type"
 Assert ($ctx.Warnings.Count -eq 0) "advisories stay out of the exit-code warnings list"
-Assert ($ctx.Advisories[0].Contains("NOT updated: [VCF Content Factory] My Dash.")) "dashboard named in its advisory"
+Assert ($ctx.Advisories[0].Contains("skipped=1): [VCF Content Factory] My Dash.")) "dashboard named in its advisory"
 Assert ($ctx.Advisories[1].Contains("CPU & Memory")) "views named in their advisory"
+# Both demonstrated causes and the way to tell them apart; no claim the
+# dashboard still exists (under the owner cause it was never created).
+Assert ($ctx.Advisories[0].Contains("force=false")) "dashboard advisory names the create-only cause"
+Assert ($ctx.Advisories[0].Contains("usermappings.json") -and $ctx.Advisories[0].Contains("never created")) "dashboard advisory names the owner-mapping cause"
+Assert ($ctx.Advisories[0].Contains("restoreData failed to map Dashboard. File: <ownerId>")) "dashboard advisory names the log line"
+Assert (-not $ctx.Advisories[0].Contains("NOT updated")) "dashboard advisory does not assert the object exists"
+Assert ($ctx.Advisories[1].Contains("force=false") -and -not $ctx.Advisories[1].Contains("NOT updated")) "view advisory names its one cause"
 
 $script:StubImportResult = @'
 {"state":"FINISHED","operationSummaries":[

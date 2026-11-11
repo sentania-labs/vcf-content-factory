@@ -37,6 +37,7 @@ from .client import (
     discover_marker_filename,
     get_current_user,
     import_content_zip,
+    skipped_import_advice,
 )
 from .loader import DashboardValidationError, load_view, load_dashboard
 from .packager import build_import_zip
@@ -70,8 +71,7 @@ def _all_skipped_message(api_result: dict, content_type: str) -> str:
     """WARN text when THIS content type imported nothing, else "".
 
     ``state == FINISHED`` on its own used to be reported as ok, so an
-    import that skipped every object (existing content left untouched)
-    looked like a successful sync.
+    import that skipped every object looked like a successful sync.
 
     The content-type filter is not optional. Every zip these handlers
     send carries two content types (the dashboards handler deliberately
@@ -86,9 +86,8 @@ def _all_skipped_message(api_result: dict, content_type: str) -> str:
     imported, skipped = flagged[content_type]
     return (
         f"import finished but changed nothing for {content_type} "
-        f"(imported={imported} skipped={skipped}); the existing object on "
-        f"the instance was NOT updated. Verify on the instance, or delete "
-        f"and re-sync to force an update."
+        f"(imported={imported} skipped={skipped}). "
+        + skipped_import_advice(content_type)
     )
 
 

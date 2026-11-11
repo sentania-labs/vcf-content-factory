@@ -1960,9 +1960,9 @@ def _install_dashboards(ctx: Dict) -> None:
     )
     result = ctx["client"].import_content_zip(dash_zip, "dashboard + view") or {}
 
-    # A FINISHED import that imported nothing and skipped everything left
-    # the instance untouched: the dashboard on screen is still the old
-    # one. Previously only the top-level state was consulted, so this was
+    # A FINISHED import that imported nothing and skipped everything did
+    # not put this run's content on the instance (the dashboard may be the
+    # old one, or absent). Previously only the top-level state was consulted, so this was
     # reported as a clean install.
     #
     # Attribution is PER CONTENT TYPE. This zip always carries two of
@@ -1974,9 +1974,25 @@ def _install_dashboards(ctx: Dict) -> None:
     dash_names = _extract_dashboard_names(
         dash_json.replace("PLACEHOLDER_USER_ID", owner_id)
     )
-    unchanged_tail = (
-        " Verify on the instance; deleting the existing object and "
-        "re-installing is the reliable way to force an update."
+    # Not "the existing dashboard was NOT updated": under the owner-mapping
+    # cause the dashboard was never created. Same facts as the factory's
+    # vcfcf_dashboards.client.skipped_import_advice.
+    dash_skip_tail = (
+        " Two causes are known. A create-only import (force=false) leaves "
+        "an existing dashboard as it was. An owner in usermappings.json "
+        "that maps to no user on the target means the dashboard was never "
+        "created. To tell them apart, check whether the dashboard exists "
+        "on the instance, and look in view-bridge.log for 'restoreData "
+        "failed to map Dashboard. File: <ownerId>' (the owner cause). If "
+        "it exists but is stale, deleting it and re-installing forces an "
+        "update."
+    )
+    view_skip_tail = (
+        " The one known cause for views is a create-only import "
+        "(force=false), which leaves an existing view as it was; an "
+        "unmapped owner skips dashboards, not views. Check whether the "
+        "view exists on the instance and holds this version; if it is "
+        "stale, deleting it and re-installing forces an update."
     )
 
     if "DASHBOARDS" not in flagged:
@@ -1991,9 +2007,9 @@ def _install_dashboards(ctx: Dict) -> None:
         imp, skp = flagged["DASHBOARDS"]
         advisory = (
             f"Import changed no dashboards (DASHBOARDS imported={imp} "
-            f"skipped={skp}); the existing dashboard was NOT updated: "
+            f"skipped={skp}): "
             f"{', '.join(dash_names) if dash_names else 'dashboard'}."
-            + unchanged_tail
+            + dash_skip_tail
         )
         _warn(advisory)
         ctx.setdefault("advisories", []).append(advisory)
@@ -2007,8 +2023,8 @@ def _install_dashboards(ctx: Dict) -> None:
             named = ", ".join(view_names) if view_names else "view(s)"
             advisory = (
                 f"Import changed no views (VIEW_DEFINITIONS imported={imp} "
-                f"skipped={skp}); the existing views were NOT updated: "
-                f"{named}." + unchanged_tail
+                f"skipped={skp}): "
+                f"{named}." + view_skip_tail
             )
             _warn(advisory)
             ctx.setdefault("advisories", []).append(advisory)
