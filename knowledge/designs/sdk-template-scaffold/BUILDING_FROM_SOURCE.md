@@ -40,9 +40,9 @@ build the `.pak` — the toolchain is a portable tarball. You need:
   by accident:
 
   ```
-  mkdir -p ~/vcf-ops-sdk && cd ~/vcf-ops-sdk
-  scp root@<appliance>:/usr/lib/vmware-vcops/common/lib/vrops-adapters-sdk.jar .
-  sha256sum vrops-adapters-sdk.jar
+  mkdir -p ~/vcf-ops-sdk
+  scp root@<appliance>:/usr/lib/vmware-vcops/common/lib/vrops-adapters-sdk.jar ~/vcf-ops-sdk/
+  sha256sum ~/vcf-ops-sdk/vrops-adapters-sdk.jar
   ```
 
   Look the hash up in the table under "Consumer contract" in the
@@ -82,7 +82,7 @@ gh release download "sdk-buildkit-v$BUILDKIT_VERSION" \
 # Verify before unpacking. The strong check is against the hash this repo
 # commits for its release builds (BUILDKIT_SHA256 in the same workflow),
 # which a replaced release asset cannot match:
-echo "$(awk '/^  BUILDKIT_SHA256:/{print $2}' .github/workflows/build-pak-on-tag.yml)  sdk-buildkit-$BUILDKIT_VERSION.tgz" | sha256sum -c -   # macOS: shasum -a 256 -c -
+echo "$(awk '/^  BUILDKIT_SHA256:/{print $2; exit}' .github/workflows/build-pak-on-tag.yml)  sdk-buildkit-$BUILDKIT_VERSION.tgz" | sha256sum -c -   # macOS: shasum -a 256 -c -
 # For a version other than the pinned one, the release's own sidecar only
 # proves the download is intact:
 #   sha256sum -c "sdk-buildkit-$BUILDKIT_VERSION.tgz.sha256"
