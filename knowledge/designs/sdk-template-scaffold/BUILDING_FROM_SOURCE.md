@@ -62,6 +62,10 @@ build the `.pak` — the toolchain is a portable tarball. You need:
 Then, from the root of this repo:
 
 ```bash
+# Run as one block. The subshell stops at the first failure, so a checksum
+# mismatch never reaches the unpack or the build, and your own shell stays open.
+(
+set -e
 # 1. Fetch the build toolchain. Pin a full sdk-buildkit-vX.Y.Z tag (the
 #    floating sdk-buildkit-v1 tag moves under you) and verify the published
 #    checksum before unpacking. Use the version this repo's release
@@ -88,6 +92,7 @@ tar xzf "sdk-buildkit-$BUILDKIT_VERSION.tgz"
 export VCFCF_SDK_JAR=~/vcf-ops-sdk/vrops-adapters-sdk-9.0.2.0.25137845.jar
 python3 -m sdk_buildkit validate-sdk .   # cheap loop: compile-check
 python3 -m sdk_buildkit build-sdk .      # emits the .pak
+)
 ```
 
 The kit carries everything else it needs (including the
