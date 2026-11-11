@@ -61,7 +61,7 @@ future `/ui/` Struts enumeration work.
 
 | Endpoint | Problem | Documented in |
 |---|---|---|
-| `/ui/dashboard.action?mainAction=uploadDashboard` | Dead stub — returns `{"success":false, "msg":"resultDto is null"}` for every input | `struts_import_endpoints.md` |
+| `/ui/dashboard.action?mainAction=uploadDashboard` | Dead stub on 9.0.2 as probed (`{"success":false, "msg":"resultDto is null"}`). Works on 9.1.1 (2026-11-11) when called like the Manage > Import dialog (`prepareFileUpload`, then file field `dashboardConfigFile`); not re-tested on 9.0.2, and which difference matters is not isolated | `struts_import_endpoints.md` |
 | `/ui/customGroup.action?mainAction=saveCustomGroup` | **Silent trap** — returns `{result: "ok"}` but does NOT persist anything. Use `POST /suite-api/api/resources/groups` instead. | `project_vcf_ops_902_ui_deadends.md` |
 | `uploadContentController.uploadFile` (Ext.Direct, only formHandler upload in catalog) | Wired but throws HTTP 500 on every invocation | `struts_import_endpoints.md` |
 | `/ui/alert.action`, no `alertDefinition.action`, `symptom.action`, `recommendation.action` | Not registered. Alert/symptom/recommendation import goes through content-zip envelope only. | `struts_import_endpoints.md` |
@@ -78,14 +78,20 @@ From the 2026-04-11 investigation track (two parallel api-explorer
 runs + the operator's browser HAR capture that gave us the winning
 ground truth):
 
-**There are no working per-object UI import dialog endpoints in
-VCF Ops 9.0.2.** The SPA UI's drag-drop dialogs wrap the uploaded
-file client-side into a bulk content-zip envelope and POST to
-`/api/content/operations/import` — the same REST endpoint
-`install.py` already uses. There is no distinct UI-layer API path
-for qa-tester to instrument for drag-drop realism, because the SPA
-itself isn't using one; it's calling the same REST path the
-framework calls.
+**As probed, there were no working per-object UI import dialog
+endpoints in VCF Ops 9.0.2.** The SPA UI's drag-drop dialogs were
+taken to wrap the uploaded file client-side into a bulk content-zip
+envelope and POST to `/api/content/operations/import`, the same REST
+endpoint `install.py` already uses. The HAR behind that is not in the
+repo and does not say which dialog it captured. So, on 9.0.2, there
+was no distinct UI-layer API path for qa-tester to instrument.
+
+Qualified 2026-11-11: on 9.1.1 the Manage > Dashboards > Import
+dialog does **not** wrap. It calls `utility.action`
+`prepareFileUpload`, then posts directly to
+`dashboard.action?mainAction=uploadDashboard` (file field
+`dashboardConfigFile`). See `../investigations/2026-11-11-devel-9-1-ui-import-dashboard-skip-and-gemfire-503.md` §Q3. Not re-tested on
+9.0.2. The other import dialogs were not traced.
 
 The `*.action` and Ext.Direct surface of 9.0.2 is for the **legacy
 Flash / Ext JS UI**, most of which has been gutted in the SPA

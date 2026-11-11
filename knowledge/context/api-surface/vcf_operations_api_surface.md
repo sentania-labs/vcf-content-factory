@@ -362,7 +362,7 @@ isn't).
 | `getDashboardList` | JSON, 104 KB | `{dashboards[]}` |
 | `getDashboardConfig` | JSON, 880 KB | `{interactionTypes, dashboardConfig}` |
 | `deleteTab`, `saveTab`, `cloneDashboard` | — | already documented in `context/dashboard_delete_api.md`. |
-| `uploadDashboard` | — | dead stub (see `struts_import_endpoints.md`). |
+| `uploadDashboard` | — | Dead stub on 9.0.2 as probed. Works on 9.1.1 (2026-11-11) called like the Manage > Import dialog (`prepareFileUpload`, then file field `dashboardConfigFile`); not re-tested on 9.0.2, and which difference matters is not isolated. See `struts_import_endpoints.md`. |
 
 #### /ui/stateManager.action
 

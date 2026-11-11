@@ -284,27 +284,46 @@ either generalizes to other content types.
 
 **Bisected 2026-08-21. Full evidence and verbatim envelopes:
 `knowledge/context/api-surface/content_import_skip_semantics.md`.**
-Summary: the one reproducible cause is the importer's create-only mode,
-produced by `force=false` on the import query string. In that case it
+Summary: two causes are reproduced.
+
+1. **Create-only mode** (bisected 2026-08-21), produced by `force=false`
+   on the import query string. Affects views and dashboards.
+2. **Unmappable dashboard owner** (2026-11-11). A dashboard whose
+   `usermappings.json` owner cannot be mapped on the target skips under
+   `force=true` too. It affects dashboards only, views import, and the
+   envelope carries no error. Log signature: `restoreData failed to map
+   Dashboard. File: <owner-id>` in `view-bridge.log`. See
+   `knowledge/context/investigations/2026-11-11-owner-mapping-dashboard-skip-reproduction.md`.
+
+For cause 1 it
 is **not** ghost state: the pre-existing dashboard stays listed,
 readable by UUID, structurally intact, and assignable to a resource
 kind (four API-level probes; no browser pass). Only the new revision
 failed to land. The skip is idempotent, so the SM re-import remedy does
 **not** work here; the fix is `force=true`.
 
-**All four factory call sites already send `force=true`, so a skip seen
-through factory code has no reproduced explanation.** Three contexts
-were never tested (UI-locked dashboards, non-admin import of another
-user's content, pak-supplied solution content). Treat a `force=true`
-skip as an open finding, not as this cause.
+**All four factory call sites already send `force=true`, and every
+factory zip builder writes an owner that maps (owner id equals the
+marker content), so neither cause is reachable through factory-built
+zips.** On a third-party or customer bundle carrying its own
+`usermappings.json`, a `force=true` dashboards-only skip is cause 2.
+Check `view-bridge.log` for the line above. Any other `force=true` skip,
+on views or on a factory zip, has no reproduced explanation. Three
+contexts were never tested (UI-locked dashboards, non-admin import of
+another user's content, pak-supplied solution content). Treat it as an
+open finding.
 
 Originally observed signature (reported by another team):
 `total:3 skipped:3 imported:0 errorCode:NONE` on a dashboard import,
-i.e. a FINISHED import that changed nothing on the instance. Almost
-certainly a client sending `force=false`.
+i.e. a FINISHED import that changed nothing on the instance. It is
+explained by a client sending `force=false`, or equally by cause 2 if
+the bundle's dashboards had a foreign owner. The report does not say
+which.
 
-The operator-visible fact is the same either way: the content on the
-instance is still the old version. The factory therefore treats
+The operator-visible fact in both causes is that the bundle's version
+did not land. Under cause 1 the instance still holds its old version.
+Under cause 2, for a dashboard that did not exist before, there is no
+dashboard at all. The factory therefore treats
 `imported == 0 and skipped > 0` on `DASHBOARDS` / `VIEW_DEFINITIONS`
 as a loud warning naming the affected content, in all four paths.
 
@@ -365,9 +384,12 @@ must not start. Measured: three consecutive `force=false` imports of
 the same zip each returned `imported=0 skipped=1` for both content
 types, with the instance still holding the prior revision. The skip is
 idempotent, so a retry is a guaranteed no-op that also risks the
-import-busy 403 backoff. The remedy is `force=true` (already sent by
-every factory path), which updates in place, same UUID; deleting first
-also works but is not required. Evidence:
+import-busy 403 backoff. The remedy for cause 1 is `force=true`
+(already sent by every factory path), which updates in place, same
+UUID. Deleting first also works but is not required. `force=true` does
+**not** fix cause 2. Its remedy is to rewrite the bundle's
+`usermappings.json` to `sources: []` with a source-less owner named
+`admin` (run E in the reproduction note). Evidence:
 `knowledge/context/api-surface/content_import_skip_semantics.md`.
 
 Related gotcha from the same bisection: dashboard import identity is

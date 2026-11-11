@@ -123,8 +123,10 @@ vcfcf_* Python modules. This is the user-facing install path.
 ### Manual install
 Install performed by an admin hand-dragging Drop-in artifacts
 from an unzipped Package into the Ops SPA UI. No scripts, no
-repo — the SPA wraps the dropped files into a content-zip
-envelope client-side. The fallback when Package install can't
+repo. How the UI submits each artifact varies by dialog and build.
+On 9.1.1 the dashboard import dialog posts the zip to
+`dashboard.action?mainAction=uploadDashboard`; the other dialogs are
+not traced (`known_limitations.md` §7). The fallback when Package install can't
 run (no Python, no PowerShell, air-gapped with no script
 execution).
 
