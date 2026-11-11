@@ -932,22 +932,53 @@ message or log them at WARN. The investigation's technique of timing a Test
 Connection by its bare-name INFO lines in `collector.log` no longer works on a
 rebuilt pak.
 
-**Limit: Test Connection still raises the names it touches (#322).** Its
-`raiseToInfo` is unchanged, so `Configurator.setLevel(<bare name>, INFO)`
-still adds an exact-name INFO entry for every name looked up during a Test
-Connection (the adapter class and the helpers it builds), more specific than
-the package entry. For an instance created after it (the add-account flow),
-those names get INFO in the instance log even when `logging.level` is DEBUG,
-and their lines are copied into `collector.log` again, until the next log4j
-reload or collector restart. Helpers never looked up in Test Connection keep
-the file's level; instances created before the Test Connection are
-unaffected. The framework does **not** pre-raise the bare name in
-`componentLogger` either: through the SDK API (`Logger.getDefaultLogger(name)`)
-a name covered by a properties entry still reads WARN, so a pre-raise would
-add that same shadowing entry for every name. The adapter-base follow-up
-(skip the raise on the no-appender factory, or raise only when no
-`AdapterLoggerConfig` covers the name) is #322, and it has to weigh the
-Test Connection INFO loss above.
+**Test Connection no longer shadows the pak's entry (#322, buildkit 1.0.28).**
+Through 1.0.27 Test Connection's `raiseToInfo` called
+`Configurator.setLevel(<bare name>, INFO)` on every name it looked up (the
+adapter class and the helpers it builds), adding an exact-name INFO entry
+more specific than the package entry. Every instance created after it (the
+add-account flow) then got INFO in its instance log for those names even
+with `logging.level` DEBUG, and copied their lines into `collector.log`,
+until the next log4j reload or collector restart. Since 1.0.28
+`raiseToInfo` skips the raise when `governedByPakLoggingEntry` says the
+pak's file governs the name:
+
+- the log4j `LoggerConfig` governing the logger is an `AdapterLoggerConfig`
+  (an instance of the pak already loaded the file: a second account, or a
+  Test Connection on an existing one), or
+- the root governs it and the pak's `conf/logging.properties` (found as the
+  SDK finds it, `<ADAPTER_HOME>/<jar base name>/conf/logging.properties`,
+  from the shortest URL of the thread context class loader, else the
+  adapter class's own jar) has a key equal to the name or a dotted parent,
+  with a level log4j knows, that the root also governs: the key the SDK
+  loads when the pak's first instance is created (the first account on a
+  collector).
+
+Otherwise the raise is the old one: an instance logger (`(id) name`
+always has its own exact entry, so `setLevel` only changes that entry's
+level), a pak built without the file or a name outside it (Test
+Connection INFO still reaches `collector.log` there), and every name on
+8.18.7, whose SDK has no `AdapterLoggerConfig` and never reads the file.
+The check is reflection on the logger the SDK hands back (its private
+`logger` field, a log4j-core `Logger`, its `get()` and `getContext()`), no
+compile-time log4j dependency; any exception or linkage error means "not
+governed", the old raise. Skipping costs no output: under the pak's entry
+a bare-name INFO line never reached `collector.log` even when raised
+(harness, below); WARN and ERROR still do. So Test Connection
+diagnostics that must be seen belong in the result message
+(`TestParam.setErrorMsg`; the framework's own failure path already does
+this and logs at WARN) or at WARN. Harness:
+`adapter_framework/test/com/vcfcf/adapter/TestConnectionLoggingTest.java`
+against the real SDK factory and log4j-core, run by
+`tests/managementpacks/test_framework_logging_harness.py` when an SDK jar
+and log4j-core are present: a control applying the old raise by hand
+reproduces both symptoms (DEBUG lost, instance INFO copied into
+`collector.log`), the second-account and first-account scenarios show
+neither, and 8.18.7 raises as before. Not shown in the harness, only on a
+collector: which thread context class loader a real Test Connection runs
+with (the first-account case relies on it being the pak's, as the SDK
+factory itself does, or on the adapter class's jar), and the log4j reload
+timing.
 
 **Per-adapter log file appender — classloader behavior on hot-reload
 (proven empirically, synology build 16, devel 9.0.2, 2026-06-10):**
@@ -1457,6 +1488,7 @@ Empirical basis: `knowledge/context/investigations/suiteapi_ambient_auth_devel_2
 
 | Date | Change |
 |---|---|
+| 2026-11-11 | **Buildkit 1.0.28: Test Connection no longer shadows a pak's `conf/logging.properties` (factory #322).** `VcfCfAdapter.raiseToInfo` skips `setLevel(INFO)` when the pak's file governs the name (an `AdapterLoggerConfig` governs it, or the root does and the file has a covering key the SDK will load), so a Test Connection no longer leaves an exact-name INFO entry that overrode an operator's DEBUG and copied instance lines into `collector.log` for later accounts. Unchanged: instance loggers, paks without the file, names outside it, and all of 8.18.7 (no `AdapterLoggerConfig`, file never read). Reflection only, no new compile-time dependency; compiles on the 9.0.2 and 8.18.7 jars and passes the compat legs. Framework jar classes that change: `com/vcfcf/adapter/VcfCfAdapter.class` (the change), and `VcfCfAdapter$CycleOutcome`, `$Enumerated` and `$VanishEntry` (declared below the new code, so only their line-number tables differ); every other pak member is byte-identical (verified on compliance, synology, template, unifi, vsanperf). Details and harness: §Logging, "Test Connection no longer shadows the pak's entry". **Versioning:** `BUILDKIT_VERSION` 1.0.28. **Adapter adoption:** rebuild on kit 1.0.28; no source change. Test Connection INFO under the pak's entry was already not logged since 1.0.25. |
 | 2026-11-11 | **Buildkit 1.0.28: release builds accept only known SDK jars; hand builds warn (factory #343).** A release build (`build-sdk --release`, or any run with `--require-sdk-compat` / `VCFCF_SDK_COMPAT_REQUIRED=1`) requires the primary jar to be a known 9.0 line jar and every compat jar a known jar, no override (`SdkJarRejected`, a validate-sdk error, exit 3 from `build-framework.sh` and `run_stitch_tests.sh`); a hand build prints one boxed warning and builds, validate-sdk warns and exits 0. Before, any file passed as the primary jar was compiled against and shipped, with only a SKIPPED notice on the 9.0 leg. Rule, shell scripts, test seam and the "Adding an SDK jar" checklist: "Known jars only in a release build" under "SDK jar by platform version". No pak bytes change (verified on every reachable adapter). **Versioning:** `BUILDKIT_VERSION` 1.0.28. **Adapter adoption:** none for a pak built from the known jars; a pak repo whose release workflow passes another jar now fails its tag build. |
 | 2026-11-11 | **Buildkit 1.0.27: SDK jars named `vrops-adapters-sdk-<version>.<build>.jar`; the 9.0 line knows the 9.0.2.0200 jar; `version.txt` says what the pak was compiled against; javac-too-old stops plainly.** Owner decision 2026-11-11 ("no need to maintain byte-identical. I'd rather it be clear"): `-2.2` became `-9.0.2.0.25137845`, `-8.18.7` became `-8.18.7.25423534`, `-9.1.1.0100` became `-9.1.1.0100.25795063` (same bytes; private sdk-runtime repo PR 10). `_SDK_COMPAT_LINES` now lists known jars per line (`_KnownSdkJar`: name, `<version>.<build>`, platform, sha256, former names); the 9.0 line has two, 9.0.2.0 GA and the 9.0.2.0200 rebuild (`a8e9ebbdc8c6`, the jar on today's patched devel), so either covers the 9.0 leg. Former names are recognised wherever a jar is looked up by name (`adapter_runtime/`, `build-framework.sh`, `run_stitch_tests.sh`) with one INFO line, and a former-name compat jar is never a primary candidate; a jar given by path keeps any name. `conf/version.txt` `Adapter-Version-Ref` was parsed from the `adapter_runtime/` jar's file name (`2.2` in factory builds, `N/A` in kit/CI builds, which pass `VCFCF_SDK_JAR`); it is now the compile jar's `<version>.<build>` by sha256 (`9.0.2.0.25137845`), else a `<version>.<build>` file name, else `unknown`. `Core-Version-Ref` is unchanged (aria-ops-core's file name, default `8.0.0`). Only `conf/version.txt` changes in a built pak (vsanperf on main vs this branch, every leaf compared; five SDK jar placements on the branch, old name, new name, appliance name, `VCFCF_SDK_JAR` old and new, give identical leaves). The primary compile, the framework compile and `build-framework.sh` compare javac's major with the jar's class-file major first, and the compat-leg skip names the jar's platform and Java; the 9.0 SKIPPED hint says what is wrong when `VCFCF_SDK_JAR` is another line's or an unknown jar. Messages give the real path (`/usr/lib/vmware-vcops/common/lib/vrops-adapters-sdk.jar`), drop the nonexistent `common-lib` and `suite-api` paths and "any 9.x instance", and say JDK 17+ (not 11+) for the 9.0.2 jar. Java comment edits only; framework class bytes unchanged. Review (`knowledge/context/reviews/framework/managementpacks-sdk-jar-names-2026-11-11.md`) follow-ups: a known non-9.0 jar as the primary jar on a javac too old for it is named the wrong jar, with the 9.0.2 jars to use, not told to upgrade the JDK (Python, and `build-framework.sh`, which now decides the line by sha256 from its own `KNOWN_SDK_JARS` table, test-tied to `_SDK_COMPAT_LINES`); the former-name INFO line appears only when the bytes are that jar's; the PROVENANCE tie test reads the compile-targets table and the former-name table separately. **Versioning:** `BUILDKIT_VERSION` stays `1.0.27` (unreleased). **Adapter adoption:** no source change; a rebuild stamps the new `Adapter-Version-Ref`. Pinned CI and adapter repos with old-named jars keep working. |
 | 2026-11-11 | **Buildkit 1.0.27: overview pages HTML-escape `name` and `description` (factory #338).** They were interpolated raw into both `overview.packed` pages, so `&`, `<` and `>` broke the markup and a description could inject tags. Now `_html_text`, as for vendor (#336): quotes become `&quot;`/`&#x27;`, non-ASCII `&#N;`. With plain ASCII and none of `&<>"'`, the two HTML pages inside `overview.packed` are byte-identical to 1.0.26, while the `overview.packed` zip itself differs on every build, before and after, because each entry carries the build time (guard `tests/managementpacks/test_sdk_overview_escape.py`). Factory paks whose page members change, same text: compliance (`"`, `'`), vsanperf (`"`, `'`), unifi (`>` in `vmnic->port`), synology (`§`); template unchanged. Review W1 (`reviews/framework/managementpacks-sdk-overview-escape-338-2026-11-11.md`): `name` and `description` now carry the `vendor` rejected-character rule (C0 but LF/CRLF/tab in a description, C1, U+2028/9, bidi controls, lone surrogates), and `name` is stripped; no factory pak is newly rejected. **Versioning:** `BUILDKIT_VERSION` 1.0.27; push `sdk-buildkit-v1.0.27` after merge to release. |
