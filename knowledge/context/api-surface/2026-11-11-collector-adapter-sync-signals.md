@@ -62,9 +62,9 @@ need `X-Ops-API-use-unsupported: true`. S2 and S3 use the supported
 
 | # | Signal | How to read it | Versions | Reliability | SSH? |
 |---|---|---|---|---|---|
-| S1 | Collector log line `'<kind>' adapter version: <v>` (also `Loaded adapter entry class ... of adapter '<kind>'`), printed on every adapter (re)load, at collector start, and daily at 06:00 UTC | UI session, `POST /ui/supportLogs.action` `mainAction=searchLogFileContents`, `instanceId=<collector.nodeIdentifier>`, `logType=COLLECTOR`, `fileName=` (empty = every file of the type) | 8.18.7, 9.0.2, 9.1.1 VERIFIED | **Ground truth.** It is the collector reporting what it loaded. Matched the jar on disk on all 10 collectors today | No |
+| S1 | Collector log line `'<kind>' adapter version: <v>` (also `Loaded adapter entry class ... of adapter '<kind>'`), printed on every adapter (re)load, at collector start, and daily at 06:00 UTC | UI session, `POST /ui/supportLogs.action` `mainAction=searchLogFileContents`, `instanceId=<collector.nodeIdentifier>`, `logType=COLLECTOR`, `fileName=` (empty = every file of the type) | 8.18.7, 9.0.2, 9.1.1 VERIFIED | **Ground truth.** It is the collector reporting what it loaded. Showed the expected version on all 10 collectors today, and matched the jar on disk on the 6 where the jar was read (the 5 proxies and the devel node) | No |
 | S1-neg | Failure lines: `Did not receive response from Controller for 'Sync Adapters'`, `Adapter jar synchronization failed`, `FileNotFoundException: .../plugins/inbound/<kind>.jar`, `Sync adapters 5 attempts failed, terminating process`, `Unknown adapter type ... (Type = <kind>)` | Same call, other search tokens | 8.18 VERIFIED (all five); 9.x VERIFIED for `Unknown adapter type` only (the others did not occur) | Definitive for "not loaded" when no later S1 line follows | No |
-| S2 | Collector self-metrics: `Tasks\|ControllerToCollector:Update Adapters\|TasksReceived` and `Tasks\|CollectorToController:Sync Adapters\|ElapsedTime\|Maximum` (ms, 5-minute buckets) | Suite API: the collector's resource (adapter kind `vCenter Operations Adapter`, resource kind `vC-Ops-Collector`, identifier `NODEID` = `collector.nodeIdentifier`), `GET /api/resources/{id}/stats?statKey=...&rollUpType=MAX&intervalType=MINUTES&intervalQuantifier=5&begin=&end=` | Keys present on 8.18.7, 9.0.2, 9.1.1 VERIFIED | **8.18 only:** a bucket with an Update Adapters task and Sync max > 30000 ms means the collector gave up (3 of 3 failures caught: 31,483 / 69,431 / 137,213 ms; 0 false alarms on 2 successes at 26,774 and 28,869 ms). **9.x:** no failure meaning (syncs of up to 426 s succeeded). `Sync Adapters\|Succeeded` reads 1 on failures: useless. Says nothing about the load itself. No data at all while a collector crash-loops (the process exits before it flushes) | No |
+| S2 | Collector self-metrics: `Tasks\|ControllerToCollector:Update Adapters\|TasksReceived` and `Tasks\|CollectorToController:Sync Adapters\|ElapsedTime\|Maximum` (ms, 5-minute buckets) | Suite API: the collector's resource (adapter kind `vCenter Operations Adapter`, resource kind `vC-Ops-Collector`, identifier `NODEID` = `collector.nodeIdentifier`), `GET /api/resources/{id}/stats?statKey=...&rollUpType=MAX&intervalType=MINUTES&intervalQuantifier=5&begin=&end=` | Keys present on 8.18.7, 9.0.2, 9.1.1 VERIFIED | **8.18 only:** a bucket with an Update Adapters task and Sync max > 30000 ms means the collector gave up (3 of 3 failures caught: 31,483 / 69,431 / 137,213 ms; 0 false alarms on 2 successes at 26,774 and 28,869 ms; the 11-08 install bucket in section 5 reads 26,847 ms and was not reconciled with the 26,774 figure). **9.x:** no failure meaning (syncs of up to 426 s succeeded). `Sync Adapters\|Succeeded` reads 1 on failures: useless. Says nothing about the load itself. No data at all while a collector crash-loops (the process exits before it flushes) | No |
 | S3 | Adapter instance state of an account of kind K placed on C | `GET /api/adapters?adapterKindKey=<kind>` (`collectorId`), then `GET /api/resources/{id}` `resourceStatusStates[].resourceState` | all VERIFIED | Only exists if an account is on C. FAILED with empty message is ambiguous: start race (jar loaded later) or kind missing. Already used by `account_restart.py` | No |
 | S4 | Test connection routed to C | `POST /api/adapters/testConnection` with `collectorId` | spec on all three | On the 8.18 proxy with the kind absent (11-07 03:44:18Z) the collector answered in under 1 ms with empty details and ran no adapter code; normal tests there take 15 to 19 s. **What the API returned to the caller is unknown** (no controller log of it), and the controller created the instance on that collector 1.5 s later. Needs real target identifiers. Not usable as a probe yet | No |
 | S5 | Jar on the proxy: `user/plugins/inbound/<kind>.jar` and `<kind>/conf/version.txt` | SSH | all | Truth for presence, not for load (a jar can land after the collector gave up, and an old jar stays put in mode 2). Identical sha256 on node and the three devel proxies today | **Yes** (out of scope for the installer) |
@@ -221,7 +221,7 @@ devel proxies.
 | prod / 4 collector02 | UNIFIED_CLOUD_PROXY | `1.0.0.0.0.94` 22:25:03Z | not read | 3 accounts STARTED / DATA_RECEIVING | 166,246, 10-14 | same push, loaded |
 
 Signal against truth: S1 agreed with the jar and the proxy log on every
-collector. S2 on 8.18 flagged exactly the three 11-07 failures and nothing
+collector where those were read (see the table). S2 on 8.18 flagged exactly the three 11-07 failures and nothing
 else. On the 9.x proxies 10 of 14 install-time syncs since 11-07 read over
 30,000 ms (up to 209,515 ms; startup syncs up to 426,352 ms) and the jar
 landed for every install, so it must not be read as failure there. S3 is green everywhere today and was FAILED for
@@ -350,8 +350,8 @@ polling a collector once decided.
    test-connection discrimination experiment.
 5. The lesson file `knowledge/lessons/remote-collector-upgrade-start-race.md`
    says the third mode's 30 s wait applies to "the Cloud Proxy" in general;
-   it should say 8.18 collectors (protocol 35). Lessons are outside this
-   agent's write scope.
+   it should say 8.18 collectors (protocol 35). Done in the same change as
+   this note.
 
 ## 8. Open questions
 

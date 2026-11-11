@@ -10,22 +10,22 @@ pak, stops the operation.
 **Why.** VCF Operations tracks pak content by id. Installing a pak whose
 content reuses a stock id overwrites the stock definition. Uninstalling the pak
 deletes every id the pak shipped, stock or not. The stock dashboards that use
-those views stay installed and `importComplete`, and each affected widget
+those views stay installed and report as fully imported, and each affected widget
 shows "The view does not exist.". Nothing warns at either step.
 
 **Reproducer (devel 9.0.2, 2026).** The factory's vCommunity vSphere port
 copied upstream vmbro/VCF-Operations-vCommunity content. That content carries
 64 VMware stock view ids.
-- Install, 2026-07-16: the audit log shows `VIEW_DEFINITION_CREATE_UPDATE` on
-  the stock ids under the pak's names. For example, `2788178d` "Configuration
+- Install, 2026-07-16: the audit log shows the stock ids written under the
+  pak's names. For example, `2788178d` "Configuration
   | Resource Pool" became "vSphere Resource Pool Configuration".
 - 9.0.2.0200 upgrade, 2026-10-14: the stock definitions were put back.
 - `SOLUTION_REMOVE`, 2026-10-15 18:33:49Z: two minutes later a single
   maintenanceAdmin `VIEW_DEFINITION_DELETE` of 109 ids removed all 64 stock
   views.
 
-Six stock Configuration, Performance and Capacity dashboards were left with
-dangling View widgets. Evidence:
+Stock Configuration, Performance and Capacity dashboards were left with
+dangling View widgets (29 dashboards on devel reference the 64 views). Evidence:
 `knowledge/context/investigations/2026-11-11-devel-stock-views-deleted-by-vcommunity-pak-uninstall.md`.
 
 **How to check.** Grep the pak's or port's content for ids found in a clean

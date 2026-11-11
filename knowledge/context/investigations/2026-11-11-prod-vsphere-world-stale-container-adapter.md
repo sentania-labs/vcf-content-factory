@@ -1,8 +1,9 @@
 # Prod vSphere World stale since 2026-10-17: the Container adapter instance is stuck (2026-11-11)
 
-Read-only diagnosis on `prod` (VCF Operations 9.1.1.0, two analytics nodes
+Read-only diagnosis, with one remediation performed afterwards (monitoring stop
+and start, PUT; see the last section), on `prod` (VCF Operations 9.1.1.0, two analytics nodes
 `vcf-lab-operations01` (.42, collector 5) and `vcf-lab-operations02` (.43,
-collector 6), two Cloud Proxies (collectors 3 and 4)). Suite API GETs only;
+collector 6), two Cloud Proxies (collectors 3 and 4)). The diagnosis used Suite API GETs only;
 `/internal/*` calls carry `X-Ops-API-use-unsupported: true` and are
 unsupported. No SSH (port 22 refused), no Admin UI. Times are America/Chicago
 unless marked UTC.
@@ -19,7 +20,7 @@ object on the cluster that is not stopped reads `STARTED`; the cluster's
 `numberOfResourcesCollected`; on devel_9_1 the same record carries all three and
 is current.
 
-Every object this adapter instance owns (93 on prod: vSphere World, Universe,
+Every object checked of those this adapter instance owns (39 checked of 93 on prod: vSphere World, Universe,
 VCF World, vSAN World, NSX World, Supervisor World, the MPB worlds, every
 `Environment` custom group including the factory `[VCF Content Factory]` groups,
 PhysicalDatacenter, Organization, licensing objects) has its newest stat at
@@ -97,10 +98,11 @@ Stop and start monitoring on the Container adapter instance only:
 then `.../start`. Repeat for `40817391...` and `34979f7e...` if they stay dead.
 This resets the controller's state for that instance without touching the
 nodes. If the API refuses because Container is a system adapter, the next step
-is taking operations02 offline and bringing it back online in the Admin UI.
+is taking operations02 offline and bringing it back online in the Admin UI
+(owner approval and a snapshot first; that is a node outage on the cluster).
 A collector-only restart on operations02 is already disproven by 10-25.
 
-Outcome: all five PUTs returned HTTP 200 with an empty body, so the Container
+Outcome: all six PUTs (a stop and a start on each of the three instances) returned HTTP 200 with an empty body, so the Container
 adapter is not refused as a system adapter. Container was stopped at 22:35:00
 UTC and started about 40 seconds later; it reached `STARTED` /
 `DATA_RECEIVING`, the vSphere World wrote a sample at 22:35:43 UTC and has

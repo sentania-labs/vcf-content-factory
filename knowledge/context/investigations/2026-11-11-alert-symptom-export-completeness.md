@@ -34,7 +34,7 @@ adapter kind is `ALL`, and every symptom whose condition is on a badge score
 `OnlineCapacityAnalytics|timeRemaining` and
 `OnlineCapacityAnalytics|capacityRemainingPercentage`. Nothing else is left
 out, and recommendations are exported complete (verified, zero exceptions in
-about 7,000 symptoms, 5,300 alerts and 4,300 recommendations). The rule is
+about 8,300 symptoms, 5,300 alerts and 4,300 recommendations). The rule is
 keyed on adapter kind and condition key, not on ownership: three
 uuid-id symptoms on the `timeRemaining` key on `prod` are left out too. All
 52 symptom ids behind the customer's 289 edges are of these families.

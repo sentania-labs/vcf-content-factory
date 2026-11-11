@@ -105,7 +105,8 @@ Correction (2026-11-11): the 30 s wait exists on 8.18 collectors only. The
 9.0.2 and 9.1.1 proxies waited 93 to 426 s for the same reply and then loaded
 the adapter, with no timeout line in any kept log; the earlier reading that
 the 9.0.2 proxy "got its file at ~30 s" was an inference. The start race
-(first and second modes) still happens on 9.x. The per-collector truth is the
+(first mode) still happens on 9.x; the second and third modes were seen only
+on 8.18. The per-collector truth is the
 collector log line `'<kind>' adapter version: <v>`, readable without SSH:
 `knowledge/context/api-surface/2026-11-11-collector-adapter-sync-signals.md`.
 

@@ -71,9 +71,9 @@ then "vSphere Cluster DRS Status", then "Configuration | Cluster DRS Enabled".
 The removal, verbatim (thread, userId and the long id and name lists trimmed):
 
 ```
-2026-10-15T18:33:49.101Z INFO  audit 7021 [ops@4413 ... username="admin" authSource="LOCAL" session="a4a1777e-a68f-3353-8b6a-7b11b0bad03d" clientIP="172.16.3.13" auditID="SOLUTION_REMOVE"] [AuditLog.log] - Triggering remove succeeded. "PakId: VCF Content Factory vCommunity vSphere, Version: 0.0.0.13".
-2026-10-15T18:35:53.389Z INFO  audit 7021 [ops@4413 ... username="maintenanceAdmin" authSource="LOCAL" session="e2647988-8f98-32c4-898f-08e2d7c9e918" clientIP="n/a" auditID="REPORT_TEMPLATE_DELETE"] [AuditLog.log] - Deleting report template(s) succeeded. ID(s): [771756d2-..., (11 ids)]
-2026-10-15T18:35:55.183Z INFO  audit 7021 [ops@4413 ... username="maintenanceAdmin" authSource="LOCAL" session="e2647988-8f98-32c4-898f-08e2d7c9e918" clientIP="n/a" auditID="VIEW_DEFINITION_DELETE"] [AuditLog.log] - Deleting view definition(s) succeeded. ID(s): [8f46e7de-d976-45c4-b7ad-b2477cc96da3, fc20d8a6-9f74-4b78-9022-7441c6d877e9, c92c7819-bd0c-4ba7-94ab-f6c0980da959, da229455-b8ec-440b-a890-48db49fcf57e, ccfc42fb-aaf3-439e-8111-3a0f1bf7713a, 49b13b68-dee2-483d-8df8-1b6d7957d01c, ... (109 ids)], Name(s): [VM Memory Allocation Trend, vSphere VM Network Top Talkers, VM Shares by RP, Report: Distributed Switch for CSV export, Configuration | VM vCPU, Configuration | Distributed Port Group, ... (109 names)].
+2026-10-15T18:33:49.101Z INFO  audit 7021 [ops@4413 ... username="admin" authSource="LOCAL" session=... clientIP="172.16.3.13" auditID="SOLUTION_REMOVE"] [AuditLog.log] - Triggering remove succeeded. "PakId: VCF Content Factory vCommunity vSphere, Version: 0.0.0.13".
+2026-10-15T18:35:53.389Z INFO  audit 7021 [ops@4413 ... username="maintenanceAdmin" authSource="LOCAL" session=... clientIP="n/a" auditID="REPORT_TEMPLATE_DELETE"] [AuditLog.log] - Deleting report template(s) succeeded. ID(s): [771756d2-..., (11 ids)]
+2026-10-15T18:35:55.183Z INFO  audit 7021 [ops@4413 ... username="maintenanceAdmin" authSource="LOCAL" session=... clientIP="n/a" auditID="VIEW_DEFINITION_DELETE"] [AuditLog.log] - Deleting view definition(s) succeeded. ID(s): [8f46e7de-d976-45c4-b7ad-b2477cc96da3, fc20d8a6-9f74-4b78-9022-7441c6d877e9, c92c7819-bd0c-4ba7-94ab-f6c0980da959, da229455-b8ec-440b-a890-48db49fcf57e, ccfc42fb-aaf3-439e-8111-3a0f1bf7713a, 49b13b68-dee2-483d-8df8-1b6d7957d01c, ... (109 ids)], Name(s): [VM Memory Allocation Trend, vSphere VM Network Top Talkers, VM Shares by RP, Report: Distributed Switch for CSV export, Configuration | VM vCPU, Configuration | Distributed Port Group, ... (109 names)].
 2026-10-15T18:35:55.210Z ... auditID="DASHBOARD_DELETE"] ... Deleting dashboard(s). ID(s): [c80749d8-..., (12 ids)]
 2026-10-15T18:35:56.531Z ... auditID="ALERT_DEFINITION_DELETE"] ... ID(s): [AlertDefinition-VMWARE-ESXi_Host_NIC_Disconnected, AlertDefinition-VMWARE-ESXi_Host_License_Expiring].
 2026-10-15T18:35:56.734Z ... auditID="SYMPTOM_DEFINITION_DELETE"] ... (5 ids)
@@ -92,6 +92,7 @@ committed, because they are working data, not knowledge.
 ### Pak content carried the stock ids
 
 - The local build `tmp/ref_vsphere_b1/vcfcf_sdk_vcommunity_vsphere.1.0.0.1.pak`
+  (a local build, not in the repo)
   (later than the 0.0.0.13 that was removed) has 95 ViewDefs in
   `adapters.zip:vcfcf_vcommunity_vsphere/conf/views/views.zip`. All 95 have
   ids found on the 9.1.1 or 8.18.7 labs, 63 of them among the 64. Its
@@ -133,14 +134,14 @@ The loss is limited to views, as far as cheap checks reach.
   `GET /api/symptomdefinitions?id=<id>` returns `totalCount: 0`. A stale
   by-id read after the delete. Not investigated.
 
-## Q2. Recovery options (none executed)
+## Q2. Recovery options (option (a) executed 2026-11-11, see "Restore performed")
 
 **Are the definitions identical across versions?** For the 64, the 8.18.7
 and 9.1.1 XML matches for 10 ids. The other 54 differ only in `Description`
 text (8.18.7 appends "Source: vSphere Adapter" and some dashboard lists), except
 for 2 that differ in content: `4d9b6ad6` and `524d0468` use `summary|version`
 on 8.18.7 and `summary|version_4d` on 9.1.1. The 9.0.2 vSphere `describe.xml`
-on devel defines `version_4d`, so the 9.1.1 key resolves on 9.0.2. **9.0.2.0200's
+on devel defines `version_4d`, so the 9.1.1 key resolves on 9.0.2 (defined, but not populated on devel's hosts; see "Restore performed"). **9.0.2.0200's
 own definitions differ from both:** the names in the delete line (the
 definitions put back by the 10-14 upgrade) differ from the 8.18.7/9.1.1 titles
 for 10 ids. Some of those are renames
@@ -160,10 +161,9 @@ dashboards reference, because widgets bind by id. Risks:
 - The next 9.0.2 patch overwrites them with exact stock, as on 10-14.
 - Reversible: delete those 64 ids again, or revert the snapshot taken first.
 
-A ready zip is in the session scratchpad:
-`/home/scott/.claude-tmp/claude-1004/-home-scott-claude-vcf-content-factory/18dc67eb-c208-4733-b70a-147f47509528/scratchpad/sv/recovery/devel-stock-views-64-from-9.1.1.zip`
-(sha256 `ed37b4fd...`, 64 ViewDefs). It is built by
-`sv/s/build_recovery.py` from the prod 9.1.1 export: the ViewDef elements are
+A recovery zip (sha256 `ed37b4fd...`, 64 ViewDefs; working data, not
+retained in the repo) was built by a session script, `build_recovery.py`,
+from the prod 9.1.1 export: the ViewDef elements are
 copied byte for byte, the en/es/fr/ja property bundles are filtered to
 `view.<id>.*`, the marker is devel's admin UUID, and `configuration.json` is
 `{"type":"CUSTOM","views":64}`. It references no super metrics. prod carries
@@ -203,13 +203,13 @@ of the same cluster identity. Both are far more risk than the views are worth.
 
 **Recommendation: (a).** devel exists to test function on 9.0.2. What is
 broken is widgets that bind views by id. (a) fixes that in one reversible
-import, and the next 9.0.2 patch writes exact stock over it. Steps, for
-`content-installer` on approval:
+import, and the next 9.0.2 patch writes exact stock over it. Steps as planned
+(already run once on devel, see "Restore performed"; do not repeat there):
 
 1. Snapshot the devel VM (lab rule).
 2. Build the import zip. Either export ALL from `devel_9_1` and rebuild with
    `build_recovery.py <export_dir> ids-64.json 6844548499441080431L.v1
-   <devel admin uuid> <out.zip>`, or use the zip above. Confirm the marker
+   <devel admin uuid> <out.zip>`, or build from a prod export as above. Confirm the marker
    name against a fresh devel export (issue #166).
 3. `POST /api/content/operations/import?force=true`, multipart field
    `contentFile`. Poll `GET /api/content/operations/import` to `FINISHED`.
@@ -275,12 +275,18 @@ Guards to add (tooling, then framework-reviewer):
 
 ## Restore performed (2026-11-11)
 
-The 64 view definitions were exported from a 9.1.1.0100 instance and imported
-on devel 9.0.2 with `force=true`: `imported=64, skipped=0, failed=0`, view
+The recovery zip described in Q2, built from the `prod` export (9.1.1.0, which
+runs upstream vCommunity; its copies of the 64 match 8.18.7 apart from
+descriptions, per Q2), was imported on devel 9.0.2 with `force=true`: `imported=64, skipped=0, failed=0`, view
 count 787 to 851, all 64 ids present, and every View widget on the 29 stock
 dashboards that use them resolves again. All 64 render server-side
-(`/internal/views/{id}/data/export`, HTTP 200). No browser pass was done. A
-pre-import export of all 787 views was taken first.
+(`/internal/views/{id}/data/export`, HTTP 200).
+
+What was not done, against the plan above: no VM snapshot was taken (the
+safeguard was a pre-import content export of all 787 views, kept off-repo);
+step 5, the browser pass over the named dashboards, was not done, so the
+dashboards are verified at the API only and not seen working; no separate
+baseline doc entry was written, this section is the record.
 
 The definitions are the 9.1.1 ones, not the 9.0.2 originals, so the restore is
 not exact:
