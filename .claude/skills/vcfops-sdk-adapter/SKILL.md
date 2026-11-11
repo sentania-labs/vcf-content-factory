@@ -242,7 +242,7 @@ entry for every name it looks up (the adapter class and the helpers it
 builds), which for instances created afterwards shadows DEBUG and copies
 those lines into `collector.log` until the next log4j reload or
 collector restart; helpers never looked up in Test Connection keep DEBUG
-(adapter-base follow-up #322). (3) **SDK 2.2 (9.0) and 9.1.1 only:** the
+(adapter-base follow-up #322). (3) **The 9.0.2 and 9.1.1 SDK jars only:** the
 8.18.7 SDK factory never reads `conf/logging.properties`, so the file is
 inert there and 8.18 routing is unchanged and unmeasured. Details:
 `knowledge/context/tier2_architecture.md` §Logging.

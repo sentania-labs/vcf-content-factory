@@ -41,9 +41,9 @@ import java.util.Map;
  *
  * <p>Run (from {@code src/vcfcf_managementpacks/}):
  * <pre>
- *   javac -cp adapter_runtime/vrops-adapters-sdk-2.2.jar:adapter_runtime/vcfcf-adapter-base.jar \
+ *   javac -cp adapter_runtime/vrops-adapters-sdk-9.0.2.0.25137845.jar:adapter_runtime/vcfcf-adapter-base.jar \
  *         $(find adapter_framework/test -name '*.java') -d build/test-classes
- *   java -cp build/test-classes:adapter_runtime/vrops-adapters-sdk-2.2.jar:adapter_runtime/vcfcf-adapter-base.jar:adapter_runtime/lib/* \
+ *   java -cp build/test-classes:adapter_runtime/vrops-adapters-sdk-9.0.2.0.25137845.jar:adapter_runtime/vcfcf-adapter-base.jar:adapter_runtime/lib/* \
  *         com.vcfcf.adapter.stitch.SuiteApiStitchClientTransportTest
  * </pre>
  */

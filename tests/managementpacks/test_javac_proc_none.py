@@ -145,7 +145,8 @@ def test_compat_leg_does_not_run_a_classpath_processor(tmp_path, monkeypatch, ca
     leg_jar = _processor_jar(tmp_path / "leg", tmp_path / "vrops-adapters-sdk-8.18.7.jar")
     other = _processor_jar(tmp_path / "other", tmp_path / "lib" / "third-party.jar")
     monkeypatch.setattr(sdk_builder, "_SDK_COMPAT_LINES", (
-        sdk_builder._CompatLine("8.18.7", leg_jar.name, sdk_builder._sha256_of(leg_jar)),
+        sdk_builder._CompatLine("8.18.7", (sdk_builder._KnownSdkJar(
+            leg_jar.name, "8.18.7.0", "stub 8.18.7", sdk_builder._sha256_of(leg_jar)),), 11),
     ))
     monkeypatch.setenv("VCFCF_SDK_COMPAT_JARS", str(leg_jar))
     assert sdk_builder._sdk_compat_check(

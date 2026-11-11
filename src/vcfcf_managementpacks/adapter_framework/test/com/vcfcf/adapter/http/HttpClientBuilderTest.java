@@ -26,10 +26,10 @@ import java.util.Optional;
  *
  * <p>Run:
  * <pre>
- *   javac -cp adapter_runtime/vrops-adapters-sdk-2.2.jar:adapter_runtime/vcfcf-adapter-base.jar \
+ *   javac -cp adapter_runtime/vrops-adapters-sdk-9.0.2.0.25137845.jar:adapter_runtime/vcfcf-adapter-base.jar \
  *         adapter_framework/test/com/vcfcf/adapter/http/HttpClientBuilderTest.java \
  *         -d build/test-classes
- *   java -cp build/test-classes:adapter_runtime/vrops-adapters-sdk-2.2.jar:adapter_runtime/vcfcf-adapter-base.jar \
+ *   java -cp build/test-classes:adapter_runtime/vrops-adapters-sdk-9.0.2.0.25137845.jar:adapter_runtime/vcfcf-adapter-base.jar \
  *         com.vcfcf.adapter.http.HttpClientBuilderTest
  * </pre>
  */

@@ -1047,8 +1047,11 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="JAR_PATH",
         help=(
-            "path to vrops-adapters-sdk-2.2.jar (Broadcom; not shipped in the "
-            "buildkit tarball). Alternatively set VCFCF_SDK_JAR env var. "
+            "path to the VCF Operations 9.0.2 SDK jar (Broadcom; not shipped "
+            "in the buildkit tarball), copied from a 9.0.2 appliance's "
+            "/usr/lib/vmware-vcops/common/lib/vrops-adapters-sdk.jar; any file "
+            "name (its sha256 says which line it is); needs JDK 17+. Alternatively set "
+            "VCFCF_SDK_JAR env var. "
             "In the factory, the jar is already in adapter_runtime/ and this "
             "flag is not needed."
         ),
@@ -1084,7 +1087,7 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="JAR_PATH",
         help=(
             "a compatibility SDK jar (repeatable, one per platform, e.g. "
-            "vrops-adapters-sdk-9.1.1.0100.jar): the framework and adapter "
+            "vrops-adapters-sdk-9.1.1.0100.25795063.jar): the framework and adapter "
             "main source must also compile against each, at that line's "
             "collector Java (--release from the jar's class files) on a JDK "
             "at least that new (9.1.1.0100 needs JDK 25+). "
@@ -1124,7 +1127,9 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="JAR_PATH",
         help=(
-            "path to vrops-adapters-sdk-2.2.jar. Alternatively set VCFCF_SDK_JAR. "
+            "path to the VCF Operations 9.0.2 SDK jar (a 9.0.2 appliance's "
+            "/usr/lib/vmware-vcops/common/lib/vrops-adapters-sdk.jar; any file "
+            "name; needs JDK 17+). Alternatively set VCFCF_SDK_JAR. "
             "Not needed in the factory (jar is in adapter_runtime/)."
         ),
     )
@@ -1136,7 +1141,7 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="JAR_PATH",
         help=(
             "a compatibility SDK jar (repeatable, one per platform, e.g. "
-            "vrops-adapters-sdk-9.1.1.0100.jar): the framework and adapter "
+            "vrops-adapters-sdk-9.1.1.0100.25795063.jar): the framework and adapter "
             "main source must also compile against each, at that line's "
             "collector Java (--release from the jar's class files) on a JDK "
             "at least that new (9.1.1.0100 needs JDK 25+). "

@@ -1401,7 +1401,7 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
      * for adapters that declare their endpoints through
      * {@link #certificateCheckUrls(ResourceConfig)}.
      *
-     * <p><strong>Hostname checking (bytecode, SDK 2.2 and 9.1.1).</strong>
+     * <p><strong>Hostname checking (bytecode, SDK 9.0.2 and 9.1.1).</strong>
      * {@code CustomTrustManager} extends {@link javax.net.ssl.X509ExtendedTrustManager},
      * so JSSE does not wrap it with its own endpoint-identity check, and its
      * {@code Socket}/{@code SSLEngine} overloads run PKIX chain validation only
@@ -3528,7 +3528,7 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
     // Vanished objects: NOT_EXISTING marking (unifi#20)
     //
     // SDK calls relied on (javap, identical in vrops-adapters-sdk-8.18.7,
-    // -2.2 and -9.1.1.0100; knowledge/context/sdk/vanished_object_lifecycle.md):
+    // -9.0.2.0 and -9.1.1.0100; knowledge/context/sdk/vanished_object_lifecycle.md):
     //   AdapterBase.changeResourceState(ResourceConfig, DiscoveryResult$StateChangeEnum)
     //   DiscoveryResult$StateChangeEnum: NOTEXIST, START, STOP, START_MAINTENANCE, STOP_MAINTENANCE
     //   protected final AdapterCache AdapterBase.adapterCache
@@ -3645,7 +3645,7 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
      *
      * <p>{@code START} is the one {@code DiscoveryResult$StateChangeEnum}
      * value (NOTEXIST, START, STOP, START_MAINTENANCE, STOP_MAINTENANCE; javap,
-     * the same in 8.18.7, 2.2 and 9.1.1.0100) that names a return to started,
+     * the same in 8.18.7, 9.0.2 and 9.1.1.0100) that names a return to started,
      * sent with {@code AdapterBase.changeResourceState(ResourceConfig,
      * DiscoveryResult$StateChangeEnum)}. Whether the platform takes a
      * NOT_EXISTING resource back to STARTED on it is UNKNOWN: no Broadcom
