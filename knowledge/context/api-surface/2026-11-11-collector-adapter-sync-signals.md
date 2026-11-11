@@ -284,8 +284,11 @@ within 60 s of the `Update Adapters` task). On deadline a PENDING collector is
 **UNVERIFIED (no load line within 600 s)**, not NOT LOADED.
 
 **Retry.** If any collector is NOT LOADED or STALE: re-run the install of the
-same pak file (the one trigger proven to re-sync), then verify only those
-collectors again. At most 2 re-runs (3 attempts), owner to confirm the
+same pak file (the one trigger proven to re-sync), then discard every earlier
+verdict and verify **every** in-scope collector again, counting only log
+lines stamped after that re-run started: a re-run sends Remove Adapters and
+Update Adapters to all collectors, so one that was LOADED can fail its new
+sync. At most 2 re-runs (3 attempts), owner to confirm the
 number. Never re-run for UNVERIFIED alone (no evidence of failure, and a
 re-run stops every account of the pak). Then run the existing account watch,
 but do not send Start monitoring to accounts on a collector whose final
