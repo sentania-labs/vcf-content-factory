@@ -2,6 +2,34 @@ Portable Tier 2 SDK adapter build toolchain (jar-free).
 
 <!-- Order: "Behavior since" sections newest first, so the latest release is at the top. Add a new release's section directly below this comment. The standing reference sections (Consumer contract, Version pinning, Checksum) stay at the end. -->
 
+## Behavior since 1.0.27
+
+- The overview pages (`overview.packed`, light and dark) HTML-escape the
+  adapter.yaml `name` (in `<title>` and `<h1>`) and `description` (in
+  `<p>`), as 1.0.26 does for `vendor` and `vendor_contact` (factory issue
+  #338). Until now they were written raw, so `&`, `<` or `>` broke the
+  page and markup in a description rendered as markup. `"` and `'` become
+  entities, and non-ASCII a numeric character reference. A multi-line
+  description keeps its line breaks.
+- With plain ASCII and none of `& < > " '`, the two pages are byte-identical
+  to 1.0.26; the `overview.packed` zip around them differs on every build,
+  as before. Otherwise the page bytes change and the text it shows does not.
+- `manifest.txt` and `resources/resources.properties` are unchanged.
+- `validate-sdk` and `build-sdk` now apply the `vendor` character rule to
+  `name` and `description`: they reject a control character (NUL and the
+  rest of C0, DEL, U+0080-U+009F), U+2028/U+2029, a bidi control or an
+  unpaired surrogate. A description may still span lines: line feed, CRLF
+  and tab are allowed, a lone CR is not. A name must be one line; it is
+  stripped of leading and trailing whitespace, and a blank name is rejected.
+  Before, a C1 control showed as a different character on the page and a
+  lone surrogate passed validation, then failed the build.
+- Write `name` and `description` as plain text: `&amp;` now shows
+  literally as `&amp;`.
+- Adoption: no adapter.yaml change for a name and description that already
+  validate. A pak on the floating major gets this on its next build; a
+  pinned pak bumps `BUILDKIT_TAG` to `sdk-buildkit-v1.0.27` and its
+  committed SHA256SUMS.
+
 ## Behavior since 1.0.26
 
 - A pak can name its own vendor, contact and licence (factory issue #336).
