@@ -69,6 +69,17 @@ wrong object model baked into a design). Bounded tier writes
 well-specified YAML with domain knowledge already in skills, validated
 mechanically afterward.
 
+> **Superseded in part, Scott, 2026-11-11.** `sdk-adapter-author` and
+> `python-mp-author` moved to `model: sonnet`. The line is now
+> discovery, design and review on the session model, delivery against
+> an approved map and design on `sonnet`. Reasoning: the intricacies
+> the top tier was protecting against now live in the API maps, the
+> designs, `adapter-base` and the playbook skill, so the author
+> implements a spec; discovery is cartography's job; and the reviewer,
+> which stays on the session model, is the check. Both authors got a
+> stop-and-report rule for when the target departs from the map.
+> Current state: the roster note in `CLAUDE.md`.
+
 Accepted trade-off: **no floor.** Dropping the session to Sonnet drops
 the review gates too. Reversible in one line per agent.
 

@@ -94,10 +94,15 @@ mandate lines, not reflexively.)
 
 Agent prompts under `.claude/agents/` are authoritative for each
 agent's behavior; if this table ever conflicts with a prompt, the
-prompt wins. Model tiers: the nine agents with no `model:` line
-(the three reviewers, `tooling`, `sdk-adapter-author`, `python-mp-author`,
-`mp-designer`, both API explorers) deliberately inherit the session model; the rest are
-pinned `sonnet`. Do not re-add pins without a decision.
+prompt wins. Model tiers: the seven agents with no `model:` line
+(the three reviewers, `tooling`, `mp-designer`, both API explorers)
+deliberately inherit the session model; the rest are pinned `sonnet`.
+The line is discovery, design, and review on the session model;
+delivery against an approved map and design on `sonnet`. That is why
+`sdk-adapter-author` and `python-mp-author` are pinned (decided
+2026-11-11) while their reviewers are not, and why both authors stop
+and report when the target departs from the map. Do not change pins
+without a decision.
 
 | Agent | Posture | Writes to | Spawn when |
 |---|---|---|---|

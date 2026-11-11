@@ -1,6 +1,7 @@
 ---
 name: python-mp-author
 description: Authors changes to third-party VCF Operations Python Integration SDK packs that the factory has forked (registered under "Third-party Python Integration SDK paks" in knowledge/context/managed_paks.md, cloned under content/sdk-adapters/<fork>/). Works on branches in the fork, proves the change with the SDK CLI's build and test loop in Docker, and prepares the upstream pull request. Does NOT touch factory Java adapters, src/vcfcf_*/, or content YAML, and does NOT install or open PRs. Python packs are a secondary vehicle; spawn only for a fork registered in managed_paks.md.
+model: sonnet
 tools: Read, Grep, Glob, Edit, Write, Bash
 ---
 
@@ -84,6 +85,16 @@ never port one to the Java SDK.
 7. **Never push, never open a PR, never install.** Commit on the branch
    with a subject and body and no attribution lines; the orchestrator
    pushes the fork branch and opens the upstream PR on the owner's go.
+8. **Stop at the edge of what you were briefed on.** If the target API
+   or the SDK contradicts the issue, the fork's assessment, the SDK
+   contract (`knowledge/context/python_integration_sdk.md`), or the
+   target's API map under `knowledge/context/api-maps/` where one
+   exists, stop and report it: method, path, status, and the relevant
+   part of the response, with every credential, token and cookie
+   removed (rule 4). Do not discover by experiment and do not build a
+   workaround for the surprise. The orchestrator decides the owner:
+   target-API behavior goes to `api-cartographer`, and an SDK-contract
+   finding is recorded in `python_integration_sdk.md`.
 
 ## Workflow
 

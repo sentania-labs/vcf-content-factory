@@ -420,3 +420,8 @@ metrics over adapter-emitted events.
   informational, documented.
 - **DESIGN GAP** — an unanswerable decision (stitching key, action
   model) → stop and ask; never guess when wrong guesses corrupt data.
+- **MAP GAP** — the target API contradicts the API map or design (a
+  type that faults, a different unit or shape) → stop and report it
+  with secrets removed; discovery goes back to `api-cartographer` /
+  `api-explorer`. Version drift handled by reflection-tolerant reads
+  (missing accessor → null → skip) is not a map gap.
