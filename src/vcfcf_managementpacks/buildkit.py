@@ -89,7 +89,7 @@ from typing import Optional
 # Version constant: bump when kit contents change in a meaningful way
 # ---------------------------------------------------------------------------
 
-BUILDKIT_VERSION = "1.0.25"
+BUILDKIT_VERSION = "1.0.26"
 
 # ---------------------------------------------------------------------------
 # Source paths (relative to this file's parent = vcfcf_managementpacks/)
@@ -857,7 +857,8 @@ def assemble_buildkit(
         (sha256sum format) is written next to it.
 
     Raises:
-        FileNotFoundError: if a required source file is missing.
+        FileNotFoundError: if a required source file or the factory LICENSE
+                           is missing.
         ValueError: if no reference pak can be found.
     """
     import sys
@@ -877,6 +878,13 @@ def assemble_buildkit(
             raise FileNotFoundError(
                 f"buildkit source file not found: {src_path} (for {dest_name})"
             )
+    license_src = _REPO_ROOT / "LICENSE"
+    if not license_src.is_file():
+        raise FileNotFoundError(
+            f"factory LICENSE not found at {license_src}. The kit must carry "
+            f"the real MIT text: paks ship it as eula.txt and as the notice "
+            f"for vcfcf-adapter-base.jar. Assemble from a complete checkout."
+        )
 
     # Select reference pak
     if reference_pak is None:
@@ -997,16 +1005,11 @@ def assemble_buildkit(
         # -----------------------------------------------------------------
         # 6. LICENSE
         # -----------------------------------------------------------------
-        license_src = _REPO_ROOT / "LICENSE"
-        if license_src.is_file():
-            shutil.copy2(str(license_src), str(kit_dir / "LICENSE"))
-            _log("  copied LICENSE")
-        else:
-            # Write a placeholder so the builder's _read_license() doesn't warn
-            (kit_dir / "LICENSE").write_text(
-                "MIT License — see factory repo for full text.\n", encoding="utf-8"
-            )
-            _log("  wrote LICENSE placeholder (source not found)")
+        # The kit's paks ship it as eula.txt by default and, when adapter.yaml
+        # sets eula_file, as the MIT notice for vcfcf-adapter-base.jar (#336),
+        # so it must be the real text: checked up front, no placeholder.
+        shutil.copy2(str(license_src), str(kit_dir / "LICENSE"))
+        _log("  copied LICENSE")
 
         # -----------------------------------------------------------------
         # 7. VERSION

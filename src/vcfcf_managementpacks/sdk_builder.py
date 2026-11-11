@@ -17,7 +17,7 @@ Implements steps 1-13 of the design plan (knowledge/designs/tier2-mp-architectur
 Pak structure produced (SDK format — differs from MPB Tier 1):
   dist/vcfcf_<adapter_kind>.<version>.<build>.pak   [outer ZIP]
     manifest.txt                                      [JSON metadata]
-    eula.txt                                          [MIT license text]
+    eula.txt                                          [MIT license text, or adapter.yaml eula_file]
     adapters.zip                                      [inner ZIP]
       manifest.txt                                    [JSON — same format as outer]
       eula.txt
@@ -32,6 +32,7 @@ Pak structure produced (SDK format — differs from MPB Tier 1):
           resources/resources.properties
         lib/
           vcfcf-adapter-base.jar                      [framework]
+          vcfcf-adapter-base-LICENSE.txt              [factory MIT LICENSE; only with eula_file, #336]
           aria-ops-core-<ver>.jar                     [v1 adapters only — see below]
           [project lib/*.jar if any]
 
@@ -55,6 +56,7 @@ from __future__ import annotations
 
 import glob
 import hashlib
+import html
 import io
 import json
 import os
@@ -81,6 +83,7 @@ from vcfcf_core.supermetrics import crossref as _crossref
 
 from .sdk_project import (
     CONTENT_NAMING_DEFAULT,
+    DEFAULT_VENDOR,
     CONTENT_NAMING_UNPREFIXED,
     LOG4J_LEVELS,
     SdkProjectDef,
@@ -2053,8 +2056,9 @@ def _assemble_adapters_zip(
         # Inner manifest.txt — JSON format, identical to outer pak manifest.txt.
         zf.writestr("manifest.txt", _generate_outer_manifest(project))
 
-        # eula.txt — MIT license text, duplicated from outer pak per wire format
-        zf.writestr("eula.txt", _read_license())
+        # eula.txt — duplicated from outer pak per wire format: the factory
+        # MIT LICENSE, or adapter.yaml eula_file (#336)
+        zf.writestr("eula.txt", _pak_eula(project))
 
         # default.svg — pak icon duplicated inside adapters.zip (validate phase
         # checks for it).  Use the AdapterKind icon so Repository/Accounts
@@ -2153,10 +2157,102 @@ def _assemble_adapters_zip(
         for jar in lib_jars:
             zf.write(jar, f"{adapter_dir}/lib/{jar.name}")
 
+        # #336: a pak with its own EULA still carries the MIT notice of the
+        # bundled vcfcf-adapter-base.jar, beside the jar.  Written only when
+        # eula_file is set, so a default pak's member list is unchanged.
+        if project.eula_bytes is not None:
+            zf.writestr(f"{adapter_dir}/lib/{FRAMEWORK_NOTICE_NAME}",
+                        _framework_notice())
+
         # conf/images/ — icons per ResourceKind and AdapterKind
         _pack_icons(zf, project, project_dir, describe_src)
 
     return buf.getvalue()
+
+
+# Notice for the bundled MIT framework jar when the pak sets its own EULA (#336).
+FRAMEWORK_NOTICE_NAME = "vcfcf-adapter-base-LICENSE.txt"
+
+
+def _pak_eula(project: SdkProjectDef):
+    """eula.txt content: adapter.yaml eula_file bytes, else the factory LICENSE.
+
+    The override is the bytes load_sdk_project validated, never a re-read of
+    the file, so both eula.txt copies are what validation checked.  The
+    default path returns ``_read_license()`` unchanged, so a pak with no
+    eula_file is byte-identical to before #336.
+    """
+    if project.eula_bytes is not None:
+        return project.eula_bytes
+    return _read_license()
+
+
+def _framework_notice() -> str:
+    """The factory LICENSE, shipped as the base jar's MIT notice (#336).
+
+    Unlike eula.txt, an empty notice is never acceptable: fail the build
+    rather than ship one when LICENSE is missing.
+    """
+    if not _LICENSE_PATH.is_file():
+        raise SdkBuildError(
+            f"LICENSE not found at {_LICENSE_PATH}: adapter.yaml eula_file is "
+            f"set, so the pak must carry the factory MIT LICENSE as "
+            f"lib/{FRAMEWORK_NOTICE_NAME}, the notice for the bundled "
+            f"vcfcf-adapter-base.jar."
+        )
+    return _read_license()
+
+
+def _attribution_report(project: SdkProjectDef) -> List[str]:
+    """build-sdk's informational vendor and EULA lines (#336).  Not warnings."""
+    # Both values are validated one-line strings, so they print as-is.
+    if project.vendor_declared:
+        vendor = f"  vendor: {project.vendor} (adapter.yaml vendor)"
+    else:
+        vendor = (f"  vendor: {DEFAULT_VENDOR} (default; set adapter.yaml "
+                  f"vendor: and vendor_contact: to name the pak's author)")
+    lines = [vendor]
+    if project.vendor_contact:
+        lines.append(f"  vendor contact: {project.vendor_contact}")
+    if project.eula_bytes is not None:
+        lines.append(f"  eula: {project.eula_file} (adapter.yaml eula_file); "
+                     f"factory MIT LICENSE ships as lib/{FRAMEWORK_NOTICE_NAME}")
+    else:
+        lines.append("  eula: factory MIT LICENSE (default)")
+    return lines
+
+
+def _html_text(s: str) -> str:
+    """Escape text for an HTML element body or attribute value.
+
+    Non-ASCII becomes a numeric character reference.
+    """
+    escaped = html.escape(s, quote=True)
+    return escaped.encode("ascii", "xmlcharrefreplace").decode("ascii")
+
+
+def _prop_value_escape(s: str) -> str:
+    r"""Escape a java.util.Properties value so it is ASCII and reads back as s.
+
+    Backslash and line terminators are escaped, and every character outside
+    printable ASCII becomes ``\uXXXX`` (UTF-16 code units), which
+    Properties.load (ISO-8859-1) and PropertyResourceBundle (UTF-8) both read
+    back.  Printable ASCII without a backslash comes out unchanged.  A
+    leading space is not escaped (Properties.load would trim it): the only
+    caller passes adapter.yaml's ``vendor``, which the loader strips.
+    """
+    named = {"\\": "\\\\", "\n": "\\n", "\r": "\\r", "\t": "\\t", "\f": "\\f"}
+    out = []
+    for ch in s:
+        if ch in named:
+            out.append(named[ch])
+        elif not (0x20 <= ord(ch) <= 0x7E):
+            units = ch.encode("utf-16-be")
+            for j in range(0, len(units), 2):
+                out.append("\\u%04x" % int.from_bytes(units[j:j + 2], "big"))
+        else:
+            out.append(ch)
+    return "".join(out)
 
 
 def _build_overview_packed(project: SdkProjectDef) -> bytes:
@@ -2184,7 +2280,14 @@ def _build_overview_packed(project: SdkProjectDef) -> bytes:
     checklist requirement), not install-pipeline gating.  See spec/18 §Pass 30.
 
     Reference size from VCFAutomation-902025137921.pak: 5,772 B.
+
+    The vendor line, and the contact line when adapter.yaml sets
+    vendor_contact, are HTML-escaped with non-ASCII as character references,
+    so they render the same whatever charset the UI decodes with (#336).
     """
+    attribution = f"  <p>Vendor: {_html_text(project.vendor)}</p>\n"
+    if project.vendor_contact:
+        attribution += f"  <p>Contact: {_html_text(project.vendor_contact)}</p>\n"
     light_html = (
         "<!DOCTYPE html>\n"
         "<html lang=\"en\" class=\"light\">\n"
@@ -2201,7 +2304,7 @@ def _build_overview_packed(project: SdkProjectDef) -> bytes:
         f"  <h1>{project.name}</h1>\n"
         f"  <p>Version {project.version}.{project.build_number}</p>\n"
         f"  <p>{project.description.strip()}</p>\n"
-        "  <p>Vendor: VCF Content Factory</p>\n"
+        f"{attribution}"
         "</body>\n"
         "</html>\n"
     )
@@ -2221,7 +2324,7 @@ def _build_overview_packed(project: SdkProjectDef) -> bytes:
         f"  <h1>{project.name}</h1>\n"
         f"  <p>Version {project.version}.{project.build_number}</p>\n"
         f"  <p>{project.description.strip()}</p>\n"
-        "  <p>Vendor: VCF Content Factory</p>\n"
+        f"{attribution}"
         "</body>\n"
         "</html>\n"
     )
@@ -2253,7 +2356,7 @@ def _generate_outer_manifest(project: SdkProjectDef) -> str:
         "disk_space_required": 500,
         "eula_file": "eula.txt",
         "platform": ["Linux VA"],
-        "vendor": "VCF Content Factory",
+        "vendor": project.vendor,
         "pak_icon": "default.svg",
         "license_type": "",
         "run_scripts_on_all_nodes": "false",
@@ -2300,7 +2403,7 @@ def _generate_outer_resources_properties(project: SdkProjectDef) -> str:
         "version=1",
         f"DISPLAY_NAME={_prop_escape(project.name)}",
         f"DESCRIPTION={_prop_escape(project.description.strip())}",
-        "VENDOR=VCF Content Factory",
+        f"VENDOR={_prop_value_escape(project.vendor)}",
         "",
     ]
     return "\n".join(lines)
@@ -2735,7 +2838,7 @@ def _write_outer_pak(
 
     with zipfile.ZipFile(pak_path, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
         zf.writestr("manifest.txt", _generate_outer_manifest(project))
-        zf.writestr("eula.txt", _read_license())
+        zf.writestr("eula.txt", _pak_eula(project))
         zf.writestr("default.svg", icon_bytes)
 
         # Outer-pak resources/resources.properties — solution localization bundle.
@@ -4340,6 +4443,9 @@ def build_sdk_pak(project_dir: Path, output_dir: Optional[Path] = None,
 
         # Step 9: assemble adapters.zip
         print("  assembling adapters.zip ...", file=sys.stderr)
+        # Vendor and EULA this pak is stamped with (#336), informational.
+        for _line in _attribution_report(project):
+            print(_line, file=sys.stderr)
         # Render views.zip for the conf/views/ slot inside adapters.zip.
         # NOTE: content/ is no longer written inside adapters.zip (spec A4).
         # Build sm_scope from bundled SM source paths so that view columns
