@@ -101,8 +101,18 @@ KNOWN_SDK_JARS="2d53a91fc2b9a99d9b685ed10c1e37a471c2f71f04e7ae0fb2c53fdaa14b4f54
 a8e9ebbdc8c622fb89551d51870220e784f0097ed0800a6f490dfdc74a11119b|9.0|VCF Operations 9.0.2.0200 build 25431135
 45d54c6403acf535c982a85d658b422f534c36c90ceab78a224dde67b2a640ea|8.18.7|Aria Operations 8.18.7 build 25423534
 79f7b12340906359e04f3619dd87c7e67a9493b3fa5d86bdffe9242da67f46f7|9.1.1.0100|VCF Operations 9.1.1.0100 build 25795063"
+# A switch value as sdk_builder reads it: str.strip().lower() (leading and
+# trailing whitespace, newlines included, dropped; inner whitespace kept), so
+# "1 " and " TRUE" are a release run on both sides (#343).
+switch_value() {
+    local v="${1:-}"
+    v="${v#"${v%%[![:space:]]*}"}"
+    v="${v%"${v##*[![:space:]]}"}"
+    printf '%s' "$v" | tr '[:upper:]' '[:lower:]'
+}
+
 is_true() {
-    case "$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')" in
+    case "$(switch_value "${1:-}")" in
         1|true|yes) return 0 ;;
         *) return 1 ;;
     esac

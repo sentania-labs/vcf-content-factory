@@ -385,11 +385,23 @@ def _shell_knows(script: Path, real_sha: str, stub: Path) -> None:
     script.write_text(text.replace(real_sha, sdk_builder._sha256_of(stub)), encoding="utf-8")
 
 
+# Values sdk_builder reads as true (str.strip().lower()); the shell must agree.
+_PADDED_TRUE = ["1", "1 ", " TRUE", "\tyes\n"]
+
+
+@pytest.mark.parametrize("value", _PADDED_TRUE)
+def test_padded_switch_values_are_a_release_run_in_python(monkeypatch, value):
+    monkeypatch.setenv("VCFCF_RELEASE_BUILD", value)
+    monkeypatch.setenv("VCFCF_SDK_COMPAT_REQUIRED", value)
+    assert sdk_builder._is_release_build() and sdk_builder._compat_required()
+
+
+@pytest.mark.parametrize("value", _PADDED_TRUE)
 @pytest.mark.parametrize("switch", ["VCFCF_SDK_COMPAT_REQUIRED", "VCFCF_RELEASE_BUILD"])
-def test_build_framework_release_run_refuses_an_unknown_primary(tmp_path, switch):
+def test_build_framework_release_run_refuses_an_unknown_primary(tmp_path, switch, value):
     rt, script, env = _framework_tree(tmp_path, "17.0.2")
     jar = _jar(rt / _N_9_0_2_0, "mystery")
-    env[switch] = "1"
+    env[switch] = value
     r = _bash(script, env)
     assert r.returncode == 3, r.stdout + r.stderr
     assert f"has sha256 {sdk_builder._sha256_of(jar)}, which matches no known SDK jar" in r.stderr
@@ -443,13 +455,25 @@ _needs_jdk = pytest.mark.skipif(shutil.which("javac") is None or shutil.which("j
                                 reason="needs javac and java on PATH")
 
 
+@pytest.mark.parametrize("value", ["0", "", " ", "no", "t rue", "11"])
+def test_build_framework_non_true_values_are_a_hand_run(tmp_path, value):
+    rt, script, env = _framework_tree(tmp_path, "11.0.24")
+    _jar(rt / _N_9_0_2_0, "mystery")
+    env["VCFCF_RELEASE_BUILD"] = value
+    env["VCFCF_SDK_COMPAT_REQUIRED"] = value
+    r = _bash(script, env)
+    assert "no override" not in r.stderr
+    assert "WARNING: SDK JAR A RELEASE BUILD WOULD REFUSE" in r.stdout
+
+
 @_needs_jdk
+@pytest.mark.parametrize("value", _PADDED_TRUE)
 @pytest.mark.parametrize("switch", ["VCFCF_SDK_COMPAT_REQUIRED", "VCFCF_RELEASE_BUILD"])
-def test_run_stitch_tests_release_run_refuses_an_unknown_jar(tmp_path, switch):
+def test_run_stitch_tests_release_run_refuses_an_unknown_jar(tmp_path, switch, value):
     script = _stitch_copy(tmp_path)
     jar = _jar(tmp_path / "sdk.jar", "mystery")
     env = {k: v for k, v in os.environ.items() if not k.startswith("VCFCF_")}
-    env.update({"VCFCF_SDK_JAR": str(jar), switch: "1"})
+    env.update({"VCFCF_SDK_JAR": str(jar), switch: value})
     r = _bash(script, env)
     assert r.returncode == 3, r.stdout + r.stderr
     assert "runs only against a known SDK jar, and there is no override" in r.stderr

@@ -118,8 +118,18 @@ COMPAT_JAR_NAMES="vrops-adapters-sdk-8.18.7.25423534.jar vrops-adapters-sdk-9.1.
 COMPAT_JAR_FORMER_NAMES="vrops-adapters-sdk-8.18.7.jar vrops-adapters-sdk-9.1.1.0100.jar"
 COMPAT_COULD_NOT_RUN=3   # sdk_builder.COMPAT_COULD_NOT_RUN
 
+# A switch value as sdk_builder reads it: str.strip().lower() (leading and
+# trailing whitespace, newlines included, dropped; inner whitespace kept), so
+# "1 " and " TRUE" are a release run on both sides (#343).
+switch_value() {
+    local v="${1:-}"
+    v="${v#"${v%%[![:space:]]*}"}"
+    v="${v%"${v##*[![:space:]]}"}"
+    printf '%s' "$v" | tr '[:upper:]' '[:lower:]'
+}
+
 compat_required() {
-    case "$(printf '%s' "${VCFCF_SDK_COMPAT_REQUIRED:-}" | tr '[:upper:]' '[:lower:]')" in
+    case "$(switch_value "${VCFCF_SDK_COMPAT_REQUIRED:-}")" in
         1|true|yes) return 0 ;;
         *) return 1 ;;
     esac
@@ -131,7 +141,7 @@ compat_required() {
 # any other run warns and goes on.
 release_mode() {
     compat_required && return 0
-    case "$(printf '%s' "${VCFCF_RELEASE_BUILD:-}" | tr '[:upper:]' '[:lower:]')" in
+    case "$(switch_value "${VCFCF_RELEASE_BUILD:-}")" in
         1|true|yes) return 0 ;;
         *) return 1 ;;
     esac
