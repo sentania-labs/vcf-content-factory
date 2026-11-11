@@ -2657,30 +2657,6 @@ def _html_text(s: str) -> str:
     return escaped.encode("ascii", "xmlcharrefreplace").decode("ascii")
 
 
-def _prop_value_escape(s: str) -> str:
-    r"""Escape a java.util.Properties value so it is ASCII and reads back as s.
-
-    Backslash and line terminators are escaped, and every character outside
-    printable ASCII becomes ``\uXXXX`` (UTF-16 code units), which
-    Properties.load (ISO-8859-1) and PropertyResourceBundle (UTF-8) both read
-    back.  Printable ASCII without a backslash comes out unchanged.  A
-    leading space is not escaped (Properties.load would trim it): the only
-    caller passes adapter.yaml's ``vendor``, which the loader strips.
-    """
-    named = {"\\": "\\\\", "\n": "\\n", "\r": "\\r", "\t": "\\t", "\f": "\\f"}
-    out = []
-    for ch in s:
-        if ch in named:
-            out.append(named[ch])
-        elif not (0x20 <= ord(ch) <= 0x7E):
-            units = ch.encode("utf-16-be")
-            for j in range(0, len(units), 2):
-                out.append("\\u%04x" % int.from_bytes(units[j:j + 2], "big"))
-        else:
-            out.append(ch)
-    return "".join(out)
-
-
 def _build_overview_packed(project: SdkProjectDef) -> bytes:
     """Build overview.packed — a ZIP archive with the required directory structure.
 
@@ -2823,9 +2799,19 @@ def _generate_outer_resources_properties(project: SdkProjectDef) -> str:
 
     This is the localization bundle for the solution itself (shown in the
     Solutions UI and pak installer dialogs).
+
+    Its reader is not Java: the platform's pak manager
+    (``vcopsPakManager.py`` with ``vc_ops_resource_bundle.py``, byte-identical
+    on the 8.18, 9.0.2 and 9.1.1 lab appliances) decodes the file as UTF-8 and parses
+    it with Python's ``configparser``, which knows no ``\\uXXXX`` escapes. So
+    every value is written as raw UTF-8 (the pak is a zip and ``writestr``
+    encodes str as UTF-8), the three keys alike; only backslash and line
+    breaks are escaped, as before (#336 had ``VENDOR`` written as ``\\uXXXX``,
+    which this reader would show literally). Evidence:
+    knowledge/context/tier2_architecture.md, "Who reads the pak-root
+    resources.properties".
     """
-    # Escape backslash sequences in Java properties — values with special chars
-    # should be escaped, but for our controlled strings this is minimal.
+    # Backslash and line breaks escaped, everything else as is (UTF-8).
     def _prop_escape(s: str) -> str:
         return s.replace("\\", "\\\\").replace("\n", "\\n").replace("\r", "\\r")
 
@@ -2834,7 +2820,7 @@ def _generate_outer_resources_properties(project: SdkProjectDef) -> str:
         "version=1",
         f"DISPLAY_NAME={_prop_escape(project.name)}",
         f"DESCRIPTION={_prop_escape(project.description.strip())}",
-        f"VENDOR={_prop_value_escape(project.vendor)}",
+        f"VENDOR={_prop_escape(project.vendor)}",
         "",
     ]
     return "\n".join(lines)

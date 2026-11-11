@@ -32,7 +32,6 @@ from vcfcf_managementpacks.sdk_builder import (
     _build_overview_packed,
     _generate_outer_manifest,
     _generate_outer_resources_properties,
-    _prop_value_escape,
     _read_license,
     _write_outer_pak,
     validate_sdk_project,
@@ -103,26 +102,17 @@ def _overview(project) -> dict:
             for t in ("light", "dark")}
 
 
-def _props_value(text: str, key: str) -> str:
-    """Decode one java.util.Properties value (the escapes Properties.load reads)."""
-    line = next(l for l in text.splitlines() if l.startswith(key + "="))
-    raw = line[len(key) + 1:]
-    out, i = [], 0
-    while i < len(raw):
-        ch = raw[i]
-        if ch != "\\":
-            out.append(ch)
-            i += 1
-            continue
-        nxt = raw[i + 1]
-        if nxt == "u":
-            out.append(chr(int(raw[i + 2:i + 6], 16)))
-            i += 6
-            continue
-        out.append({"n": "\n", "r": "\r", "t": "\t", "f": "\f"}.get(nxt, nxt))
-        i += 2
-    # Re-pair UTF-16 surrogates the way Java strings hold them.
-    return "".join(out).encode("utf-16-be", "surrogatepass").decode("utf-16-be")
+def _pak_manager_value(text: str, key: str) -> str:
+    """Read one value of the pak-root resources.properties the way the
+    platform does: vcopsPakManager's vc_ops_resource_bundle decodes the bytes
+    as UTF-8 (BOM optional, bad bytes dropped) and parses them with
+    configparser under a dummy section. raw=True: the pak manager's default
+    interpolation would raise on a '%', which no test value here is about."""
+    import configparser
+    data = text.encode("utf-8").decode("utf-8-sig", errors="ignore")
+    cp = configparser.ConfigParser()
+    cp.read_string("[no-section]\n" + data)
+    return cp.get("no-section", key, raw=True)
 
 
 # ---------------------------------------------------------------------------
@@ -283,9 +273,12 @@ def test_vendor_escaped_for_each_sink(tmp_path, vendor):
     assert manifest.isascii()
     assert json.loads(manifest)["vendor"] == want
 
+    # The pak-root resources.properties is read as UTF-8 by configparser
+    # (buildkit 1.0.28): raw UTF-8, backslash still doubled, as
+    # DISPLAY_NAME and DESCRIPTION have always been.
     props = _generate_outer_resources_properties(p)
-    assert props.isascii()
-    assert _props_value(props, "VENDOR") == want
+    assert _pak_manager_value(props, "VENDOR") == want.replace("\\", "\\\\")
+    assert "\\u" not in props
 
     for page in _overview(p).values():
         line = next(l for l in page.splitlines() if l.startswith("  <p>Vendor: "))
@@ -298,12 +291,25 @@ def test_vendor_escaped_for_each_sink(tmp_path, vendor):
                 == (vendor + " <x@y.z>").strip())
 
 
-def test_prop_value_escape_specifics():
-    assert _prop_value_escape("VCF Content Factory") == "VCF Content Factory"
-    assert _prop_value_escape("a\\b") == "a\\\\b"
-    assert _prop_value_escape("é") == "\\u00e9"
-    assert _prop_value_escape("\U0001F680") == "\\ud83d\\ude80"
-    assert _prop_value_escape("a\nb\tc") == "a\\nb\\tc"
+@pytest.mark.parametrize("key,field", [("VENDOR", "vendor"), ("DISPLAY_NAME", "name"),
+                                       ("DESCRIPTION", "description")])
+def test_resources_properties_keys_are_written_alike_as_utf8(tmp_path, key, field):
+    """1.0.28: VENDOR= is written like DISPLAY_NAME= and DESCRIPTION=, raw
+    UTF-8, not \\uXXXX (which the pak manager's reader would show
+    literally); only backslash and line breaks are escaped."""
+    p = _load(tmp_path)
+    setattr(p, field, "Acm\u00e9 \u00a7 \U0001F680 a\\b")
+    props = _generate_outer_resources_properties(p)
+    assert f"{key}=Acm\u00e9 \u00a7 \U0001F680 a\\\\b\n" in props
+    assert _pak_manager_value(props, key) == "Acm\u00e9 \u00a7 \U0001F680 a\\\\b"
+    outer = _outer_pak(p, tmp_path)
+    assert f"{key}=Acm\u00e9 \u00a7".encode("utf-8") in outer.read("resources/resources.properties")
+
+
+def test_description_line_breaks_stay_escaped(tmp_path):
+    p = _load(tmp_path)
+    p.description = "one\ntwo"
+    assert "DESCRIPTION=one\\ntwo\n" in _generate_outer_resources_properties(p)
 
 
 def _accepted_code_points():
@@ -323,9 +329,9 @@ def test_every_accepted_character_encodes_in_all_three_sinks(tmp_path):
         s = "x" + "".join(chars[i:i + 4096]) + "x"
         manifest = json.dumps({"vendor": s}, indent=4)
         assert json.loads(manifest)["vendor"] == s
-        props = _prop_value_escape(s)
-        assert props.isascii()
-        assert _props_value("VENDOR=" + props, "VENDOR") == s
+        p_line = _generate_outer_resources_properties(
+            SimpleNamespace(name="n", description="d", vendor=s))
+        assert _pak_manager_value(p_line, "VENDOR") == s.replace("\\", "\\\\")
         assert _html_text(s).isascii()
     # And the real generators, on one value mixing the hard cases.
     p = _load(tmp_path, f"vendor: {_yaml_str('A' + ''.join(chars[0x80:0x200]) + '😀')}\n")
