@@ -258,7 +258,7 @@ def test_install_pak_stops_before_upload_when_switch_off(tmp_path, monkeypatch):
 
     monkeypatch.setattr(installer, "_UISession", _FakeSession)
     monkeypatch.setattr(installer, "_resolve_credentials",
-                        lambda *a, **k: ("h", "u", "p", True))
+                        lambda *a, **k: ("h", "u", "p", True, installer.ProfileAuth("Local", "devel")))
     monkeypatch.setattr(installer, "_parse_manifest_txt",
                         lambda p: {"name": "X", "version": "0.0.0.1"})
     with pytest.raises(SystemExit):

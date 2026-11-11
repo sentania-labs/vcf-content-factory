@@ -226,6 +226,25 @@ mainAction=login
 &languageCode=us
 ```
 
+**The pak installer is local-only (issue #318, 2026-11-11).**
+`src/vcfcf_managementpacks/installer.py` sends the `Local Account`
+triplet (`authSourceId=localItem`) for both `install` and `uninstall`.
+The form fields for a non-local source are not established, so it
+cannot honour a profile's `VCFOPS_<P>_AUTH_SOURCE`. Every Suite API
+session the install opens afterwards (the account watch,
+`account_restart.default_suite_factory`, and the post-install
+dashboard check in `post_install.py`) sends `authSource: "Local"`.
+Those sessions reuse the credentials the local login just proved, so
+the profile's source could only make them fail. A non-Local profile
+gets a warning before the login: the source is not used, a LOCAL
+login is attempted, and the watch runs as that local account. The
+login and the watch move to the profile's source **together**, once
+the non-local `/ui/` login payload is confirmed. The page JS below
+form-posts the `getAuthSources` triplet for any source not typed
+SSO_SAML, VIDM or VIDB, but the AD NETBIOS case answered `?` on devel
+and no installer login has been proven against a non-local source.
+Moving one without the other reintroduces the failure.
+
 Field source: the page's own JS in
 `/ui/login.action` body. The `authSourceType` value comes from
 `/ui/login.action?mainAction=getAuthSources`'s `type` field; for

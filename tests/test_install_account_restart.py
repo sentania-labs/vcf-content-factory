@@ -758,9 +758,8 @@ def _wire_install(monkeypatch, tmp_path, kinds=KIND):
 
     monkeypatch.setattr(installer, "_UISession", _Session)
     monkeypatch.setattr(installer, "_resolve_credentials",
-                        lambda *a, **k: ("ops.example", "u", "p", True))
-    monkeypatch.setattr(installer, "_profile_auth_source",
-                        lambda *a, **k: ("Local", "devel"))
+                        lambda *a, **k: ("ops.example", "u", "p", True,
+                                       installer.ProfileAuth("Local", "devel")))
     monkeypatch.setattr(installer, "_parse_manifest_txt",
                         lambda p: {"name": "X", "version": "0.0.0.102",
                                    "adapter_kinds": kinds})
@@ -772,7 +771,7 @@ def _wire_install(monkeypatch, tmp_path, kinds=KIND):
         events.append(("read", tuple(k)))
         return _before({"a1": "STARTED"})
 
-    def fake_restart(client, k, before):
+    def fake_restart(client, k, before, **kw):
         events.append(("restart", tuple(k), sorted(before) if before else before))
         return ar.ACCOUNTS_NOT_STARTED_RC
 
@@ -882,7 +881,8 @@ def test_cli_flag_reaches_install_pak(monkeypatch):
 # never from a default, and that the output names its host.
 
 _REAL_RESOLVE = installer._resolve_credentials
-_REAL_AUTH_SOURCE = installer._profile_auth_source
+_REAL_READ = ar.read_accounts
+_REAL_RESTART = ar.restart_failed_accounts
 _HOST_91 = "devel-91.example"
 _HOST_902 = "devel-902.example"
 
@@ -894,7 +894,6 @@ def _two_profiles(monkeypatch, tmp_path):
     from vcfcf_common import _env
     _, pak = _wire_install(monkeypatch, tmp_path)
     monkeypatch.setattr(installer, "_resolve_credentials", _REAL_RESOLVE)
-    monkeypatch.setattr(installer, "_profile_auth_source", _REAL_AUTH_SOURCE)
     monkeypatch.setattr(_env, "_LOADED", True)  # never read the real .env
     for key in [k for k in os.environ if k.startswith("VCFOPS_")]:
         monkeypatch.delenv(key)
@@ -994,16 +993,20 @@ def test_default_suite_factory_uses_its_arguments_not_a_profile(monkeypatch):
 # ---------------------------------------------------------------------------
 # Issue #318: a profile's auth source
 # ---------------------------------------------------------------------------
-# The account watch's Suite API client honours VCFOPS_<P>_AUTH_SOURCE (the
-# client already sends it as authSource). The /ui/ login stays local (its
-# payload for a non-local source is not known), so a non-Local profile gets
-# a loud warning before that login and around the watch instead of a bare
-# failure later.
+# The /ui/ login is local-only (its payload for a non-local source is not
+# known), and the account watch runs only after that login has succeeded, so
+# its credentials are a proven LOCAL account: the watch authenticates with
+# Local whatever the profile says (honouring the profile's source could only
+# make it fail). A non-Local profile gets a loud warning before the login
+# that the source is not used, and the watch's failure lines name the source
+# the session really used. A Local profile prints nothing new.
+
+from vcfcf_common.client import VCFOpsError  # noqa: E402
 
 _SECRET_318 = "pw-318-must-never-print"
 
 
-def _auth_source_install(monkeypatch, tmp_path, auth_source):
+def _auth_source_install(monkeypatch, tmp_path, auth_source, **install_kw):
     """Install on the devel_9_1 profile through the DEFAULT suite factory;
     returns (events, built): ``built`` records each VCFOpsClient's kwargs."""
     from vcfcf_common import client as common_client
@@ -1028,11 +1031,11 @@ def _auth_source_install(monkeypatch, tmp_path, auth_source):
     monkeypatch.setattr(installer._UISession, "login",
                         lambda self: events.append("login"), raising=False)
     installer.install_pak(str(pak), profile="devel_9_1",
-                          materialization_check=False)
+                          materialization_check=False, **install_kw)
     return events, built
 
 
-@pytest.mark.parametrize("auth_source", ["Local", None])
+@pytest.mark.parametrize("auth_source", ["Local", None, " LOCAL ", "local"])
 def test_local_or_unset_auth_source_adds_no_output(monkeypatch, tmp_path, capsys,
                                                    auth_source):
     events, built = _auth_source_install(monkeypatch, tmp_path, auth_source)
@@ -1041,7 +1044,8 @@ def test_local_or_unset_auth_source_adds_no_output(monkeypatch, tmp_path, capsys
     assert "auth source" not in text
     assert "#318" not in text
     assert [e for e in events if isinstance(e, tuple)] == []
-    # Before the upload and after the verify, both Local.
+    # Before the upload and after the verify, both the literal "Local": no
+    # wire change, whatever case or spacing the profile used (review W2).
     assert [b["auth_source"] for b in built] == ["Local", "Local"]
 
 
@@ -1054,21 +1058,93 @@ def test_non_local_auth_source_warns_before_the_ui_login(monkeypatch, tmp_path, 
     w = before[0]
     assert "auth source 'corp-ldap'" in w
     assert "VCFOPS_DEVEL_9_1_AUTH_SOURCE" in w
+    assert "this command does not use it" in w
     assert "LOCAL login as 'u-devel_9_1'" in w
     assert "nothing is installed" in w
-    assert "ACCOUNTS UNCHECKED" in w
-    # The account watch names the source too.
+    assert "account watch runs as that same local account" in w
+    # The watch says what it runs as.
     after = [e[1] for e in events[login_at:] if isinstance(e, tuple)]
-    assert any("Account watch" in m and "'corp-ldap'" in m for m in after)
-    # The Suite API client is built with the profile's source, both times.
-    assert [b["auth_source"] for b in built] == ["corp-ldap", "corp-ldap"]
+    assert any("Account watch" in m and "auth source 'Local'" in m
+               and "'corp-ldap' is not used" in m for m in after)
+    # The watch's Suite API client is built Local, both times (review B1).
+    assert [b["auth_source"] for b in built] == ["Local", "Local"]
     assert {b["host"] for b in built} == {_HOST_91}
     assert _SECRET_318 not in captured.out + captured.err
 
 
-def test_non_local_unchecked_lines_name_the_auth_source(monkeypatch, tmp_path, capsys):
+def _auth_checking_suites(monkeypatch, clock, *, refuse_all=False):
+    """Default factory, real read_accounts and restart_failed_accounts, and a
+    client that authenticates lazily like VCFOpsClient: every request raises
+    the client's auth error unless the session's source is Local (or always,
+    with ``refuse_all``). The first session reads STARTED, the second FAILED
+    (the remote-collector race). Returns the list of sessions built."""
+    from vcfcf_common import client as common_client
+    sessions = []
+
+    class _Client(FakeSuite):
+        def __init__(self, **kw):
+            super().__init__({"a1": "FAILED" if sessions else "STARTED"},
+                             clock=clock)
+            self.auth_source = kw["auth_source"]
+            sessions.append(self)
+
+        def _request(self, method, path, **kw):
+            if refuse_all or self.auth_source != "Local":
+                raise VCFOpsError("auth failed (401): bad credentials")
+            return super()._request(method, path, **kw)
+
+    monkeypatch.setattr(common_client, "VCFOpsClient", _Client)
+    monkeypatch.setattr(ar, "read_accounts", _REAL_READ)
+    monkeypatch.setattr(
+        ar, "restart_failed_accounts",
+        lambda c, k, b, **kw: _REAL_RESTART(c, k, b, sleep=clock.sleep,
+                                            clock=clock.time, **kw))
+    return sessions
+
+
+def test_non_local_profile_with_local_user_watches_and_restarts(monkeypatch, tmp_path):
+    """Review B1 regression: the profile says corp-ad, the operator installs
+    with a local --user (the workaround the warning points at). The /ui/
+    login proves that user local, so the watch must authenticate Local, read
+    the accounts and start the one the install left FAILED."""
     pak, _hosts, _factory = _two_profiles(monkeypatch, tmp_path)
-    monkeypatch.setenv("VCFOPS_DEVEL_9_1_AUTH_SOURCE", "corp-ldap")
+    monkeypatch.setenv("VCFOPS_DEVEL_9_1_AUTH_SOURCE", "corp-ad")
+    sessions = _auth_checking_suites(monkeypatch, _Clock())
+    rc = installer.install_pak(str(pak), profile="devel_9_1", user="admin",
+                               password="local-pw", materialization_check=False)
+    assert [s.auth_source for s in sessions] == ["Local", "Local"]
+    assert [a for a, _ in sessions[1].starts] == ["a1"]
+    assert rc == 0
+
+
+def test_unchecked_lines_name_the_source_the_session_used(monkeypatch, tmp_path, capsys):
+    """Review W1: a session that cannot authenticate fails on its first
+    request (inside read_accounts / restart_failed_accounts), not when it is
+    built; the lines printed there name the source it used."""
+    pak, _hosts, _factory = _two_profiles(monkeypatch, tmp_path)
+    monkeypatch.setenv("VCFOPS_DEVEL_9_1_AUTH_SOURCE", "corp-ad")
+    _auth_checking_suites(monkeypatch, _Clock(), refuse_all=True)
+    rc = installer.install_pak(str(pak), profile="devel_9_1",
+                               materialization_check=False)
+    err = capsys.readouterr().err
+    assert rc == 0
+    assert ("before the install" + installer.WATCH_NOTE + " (auth failed (401)") in err
+    unchecked = [ln for ln in err.splitlines() if "ACCOUNTS UNCHECKED" in ln]
+    assert unchecked and all(installer.WATCH_NOTE in ln for ln in unchecked)
+
+
+def test_local_profile_unchecked_lines_unchanged(monkeypatch, tmp_path, capsys):
+    pak, _hosts, _factory = _two_profiles(monkeypatch, tmp_path)
+    _auth_checking_suites(monkeypatch, _Clock(), refuse_all=True)
+    installer.install_pak(str(pak), profile="devel_9_1", materialization_check=False)
+    err = capsys.readouterr().err
+    assert "ACCOUNTS UNCHECKED" in err
+    assert "auth source" not in err
+
+
+def test_construction_failure_line_names_the_source(monkeypatch, tmp_path, capsys):
+    pak, _hosts, _factory = _two_profiles(monkeypatch, tmp_path)
+    monkeypatch.setenv("VCFOPS_DEVEL_9_1_AUTH_SOURCE", "corp-ad")
 
     def broken(*a):
         raise RuntimeError("boom")
@@ -1076,9 +1152,8 @@ def test_non_local_unchecked_lines_name_the_auth_source(monkeypatch, tmp_path, c
     installer.install_pak(str(pak), profile="devel_9_1",
                           materialization_check=False, suite_factory=broken)
     err = capsys.readouterr().err
-    assert ("ACCOUNTS UNCHECKED: could not open a Suite API session "
-            "(auth source 'corp-ldap') (boom)") in err
-    assert "before the install (auth source 'corp-ldap')" in err
+    assert ("ACCOUNTS UNCHECKED: could not open a Suite API session"
+            + installer.WATCH_NOTE + " (boom)") in err
 
 
 def test_no_account_watch_means_no_watch_promise(monkeypatch, tmp_path, capsys):
@@ -1088,15 +1163,50 @@ def test_no_account_watch_means_no_watch_promise(monkeypatch, tmp_path, capsys):
                           materialization_check=False, suite_factory=factory)
     err = capsys.readouterr().err
     assert "LOCAL login as 'u-devel_9_1'" in err
+    assert "account watch" not in err.lower()
     assert "ACCOUNTS UNCHECKED" not in err
 
 
-@pytest.mark.parametrize("kwargs, sent", [
-    ({}, "Local"),
-    ({"auth_source": "corp-ldap"}, "corp-ldap"),
-    ({"auth_source": ""}, "Local"),
-])
-def test_default_suite_factory_sends_the_auth_source(monkeypatch, kwargs, sent):
+def test_uninstall_warns_before_its_ui_login(monkeypatch, capsys):
+    """Review W3: uninstall_pak has the same local-only /ui/ login."""
+    import os
+    from vcfcf_common import _env
+    monkeypatch.setattr(_env, "_LOADED", True)  # never read the real .env
+    for key in [k for k in os.environ if k.startswith("VCFOPS_")]:
+        monkeypatch.delenv(key)
+    monkeypatch.setenv("VCFOPS_DEVEL_HOST", _HOST_902)
+    monkeypatch.setenv("VCFOPS_DEVEL_USER", "u-devel")
+    monkeypatch.setenv("VCFOPS_DEVEL_PASSWORD", _SECRET_318)
+    monkeypatch.setenv("VCFOPS_DEVEL_AUTH_SOURCE", "corp-ad")
+    seen = []
+
+    class _Session:
+        def __init__(self, **kw):
+            pass
+
+        def login(self):
+            seen.append("login")
+            raise RuntimeError("UI login failed for user 'u-devel': 'invalid'")
+
+    real_warn = installer._warn
+
+    def warn(m):
+        seen.append(("warn", m))
+        real_warn(m)
+
+    monkeypatch.setattr(installer, "_warn", warn)
+    monkeypatch.setattr(installer, "_UISession", _Session)
+    with pytest.raises(SystemExit):
+        installer.uninstall_pak("x", profile="devel")
+    err = capsys.readouterr().err
+    assert isinstance(seen[0], tuple) and seen[1] == "login"
+    w = seen[0][1]
+    assert "auth source 'corp-ad'" in w and "LOCAL login as 'u-devel'" in w
+    assert "nothing is removed" in w and "account watch" not in w
+    assert _SECRET_318 not in err
+
+
+def test_default_suite_factory_is_always_local(monkeypatch):
     from vcfcf_common import client as common_client
     posts = []
 
@@ -1108,14 +1218,24 @@ def test_default_suite_factory_sends_the_auth_source(monkeypatch, kwargs, sent):
             return _Resp(200, {"token": "t"})
 
     monkeypatch.setattr(common_client, "new_session", lambda v: _Sess())
-    ar.default_suite_factory(_HOST_91, "u", "p", True, **kwargs).authenticate()
-    assert posts[0]["authSource"] == sent
+    ar.default_suite_factory(_HOST_91, "u", "p", True).authenticate()
+    assert posts[0]["authSource"] == "Local"
 
 
-def test_unresolvable_profile_auth_source_is_local(monkeypatch):
+def test_resolve_credentials_returns_the_profile_auth_source(monkeypatch):
     import os
     from vcfcf_common import _env
     monkeypatch.setattr(_env, "_LOADED", True)  # never read the real .env
     for key in [k for k in os.environ if k.startswith("VCFOPS_")]:
         monkeypatch.delenv(key)
-    assert installer._profile_auth_source("nope") == ("Local", "nope")
+    monkeypatch.setenv("VCFOPS_DEVEL_9_1_HOST", _HOST_91)
+    monkeypatch.setenv("VCFOPS_DEVEL_9_1_USER", "u")
+    monkeypatch.setenv("VCFOPS_DEVEL_9_1_PASSWORD", "p")
+    *_, auth = installer._resolve_credentials(None, None, None, profile="devel_9_1")
+    assert auth == installer.ProfileAuth("Local", "devel_9_1") and auth.is_local
+    monkeypatch.setenv("VCFOPS_DEVEL_9_1_AUTH_SOURCE", " corp-ad ")
+    *_, auth = installer._resolve_credentials(None, None, None, profile="devel_9_1")
+    assert auth == installer.ProfileAuth("corp-ad", "devel_9_1") and not auth.is_local
+    # A profile that does not resolve (CLI flags only) is Local.
+    *_, auth = installer._resolve_credentials("h", "u", "p", profile="nope")
+    assert auth.is_local and auth.source == "Local"
