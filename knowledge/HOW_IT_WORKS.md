@@ -286,10 +286,11 @@ python3 -m vcfcf_managementpacks validate-sdk content/sdk-adapters/<name>  # che
 python3 -m vcfcf_managementpacks build-sdk    content/sdk-adapters/<name>  # dev-preview .pak
 ```
 
-You'll need a JDK 11+ and the Broadcom adapter SDK jar, which has no
-public redistribution channel — extract it from your own VCF Ops
-appliance (see the consumer contract in
-[knowledge/designs/sdk-template-scaffold/BUILDING_FROM_SOURCE.md](knowledge/designs/sdk-template-scaffold/BUILDING_FROM_SOURCE.md)).
+You'll need JDK 17 or newer and the Broadcom adapter SDK jar for VCF
+Operations 9.0.2, which has no public redistribution channel — copy it
+from your own 9.0.2 appliance (how, and which builds the kit recognises:
+[knowledge/designs/sdk-template-scaffold/BUILDING_FROM_SOURCE.md](knowledge/designs/sdk-template-scaffold/BUILDING_FROM_SOURCE.md)
+and the "Consumer contract" section of the buildkit release notes).
 
 **From a bare pak repo clone or fork (no factory).** Each pak repo's
 README has a "Building from source" section: pull the portable

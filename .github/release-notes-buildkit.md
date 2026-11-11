@@ -406,15 +406,19 @@ jar), `vrops-adapters-sdk-8.18.7.jar`, `vrops-adapters-sdk-9.1.1.0100.jar`.
     /usr/lib/vmware-vcops/common/lib/vrops-adapters-sdk.jar
 
 with no version in the file name. It is world-readable. Copy it from an
-appliance of the right version, name it for the version and build it came
-from, and check the hash against the table:
+appliance of the right version, to somewhere outside any repository's
+working tree, and take its hash:
 
-    scp root@<appliance>:/usr/lib/vmware-vcops/common/lib/vrops-adapters-sdk.jar ./vrops-adapters-sdk-9.0.2.0.25137845.jar
-    sha256sum vrops-adapters-sdk-9.0.2.0.25137845.jar
+    scp root@<appliance>:/usr/lib/vmware-vcops/common/lib/vrops-adapters-sdk.jar .
+    sha256sum vrops-adapters-sdk.jar
 
-A jar from an appliance at a build not in the table has a hash the kit
-does not know. It still compiles, but the 9.0 leg reports it as an unknown
-jar. Partners with access can pull the jar from the Broadcom TAP / partner
+Find the hash in the table above and rename the copy to the file name on
+that row. Do not name it before checking: a patched appliance of the same
+version carries a different build of the jar. A jar from an appliance at a
+build not in the table has a hash the kit does not know. It still
+compiles, but the 9.0 leg reports it as an unknown jar; name it
+`vrops-adapters-sdk-<version>.<build>.jar` from the appliance's own
+version and build. Partners with access can pull the jar from the Broadcom TAP / partner
 SDK portal instead.
 
 **Providing it to the build.**
@@ -444,7 +448,9 @@ jar or no new enough JDK is skipped with a warning; `--require-sdk-compat`
 `VCFCF_SDK_COMPAT_LEGS` (comma list of `8.18.7`, `9.0`, `9.1.1.0100`)
 narrows the lines a run must cover.
 
-**CI usage (adapter repo's build workflow):**
+**CI usage (adapter repo's build workflow).** This shows the floating
+major for brevity. A release workflow should pin an exact version and
+verify the tarball against a committed hash; see Version pinning below.
 
 ```yaml
 - name: Download sdk-buildkit

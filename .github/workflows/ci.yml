@@ -41,7 +41,7 @@ jobs:
           # The lab runner image ships no JDK; ubuntu-latest provided one
           # implicitly. Without javac the SDK jar tests self-skip
           # (tests/test_sdk_builder_framework_jar.py pytestmark), silently
-          # dropping coverage. Framework contract is JDK 11+, 17 recommended
+          # dropping coverage. Framework contract is JDK 17 or newer
           # (src/vcfcf_managementpacks/adapter_framework/build-framework.sh).
           distribution: temurin
           java-version: "17"
