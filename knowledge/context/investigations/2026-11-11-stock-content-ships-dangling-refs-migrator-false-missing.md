@@ -393,12 +393,22 @@ Rule:
 - **Inert** (warn, never block): an orphan navigation source key; a
   destination widget id absent from an existing target (including a non-uuid
   id); a navigation target absent from the export (it is dropped from the drill
-  menu); any reference whose source dashboard is pak-supplied (`adapterName`
-  set), because the source instance already runs with it broken and the target
-  gets that dashboard from the pak, not from the bundle.
-- **Stock content, expected on the target**: the pak-supplied dashboard
-  itself. Default it out of bundles; the pak installs it on the target.
+  menu); any reference whose source dashboard is an original pak-supplied
+  dashboard, because the source instance already runs with it broken and the
+  target gets that dashboard from the pak, not from the bundle.
+- **Stock content, expected on the target**: an original pak-supplied
+  dashboard. Default it out of bundles; the pak installs it on the target.
   Carrying it would be a uuid-keyed replace of the target's own copy.
+  **`adapterName` alone does not establish this.** A user-owned copy of a
+  stock dashboard keeps the field (Q1: `1371103f` is such a copy with
+  `adapterName: VMware vSphere`), and a copy is customer content the pak
+  cannot restore, so it must stay selectable and be migrated. Nothing in
+  the export was shown to separate an original from a copy: a different id
+  from the stock dashboard of the same name, and an owner other than the
+  admin, each point to a copy, but neither was tested as a rule, and an
+  admin can own a copy. Treat `adapterName` as "stock or derived from
+  stock", label it, and leave the choice to the person; do not exclude on
+  it.
 - **Truly missing** (block, or warn loudly): a view named by a dashboard with
   `adapterName: null` and absent from the export. The widget will show "The
   view does not exist." on the target, as it already does on the source. The
@@ -409,8 +419,14 @@ Rule:
 Needs a live target: whether a stock dashboard id, view or navigation target
 named by customer content exists there (a pak version that has it, e.g.
 `f79ad44f`). That is the only case where "absent from source, present on
-target" happens. A read of `getDashboardList` and
-`getGroupedViewDefinitionThumbnails` on the target answers it.
+target" happens. For views, `getGroupedViewDefinitionThumbnails` on the
+target answers it (it matched the export exactly on all three versions).
+For dashboards, `getDashboardList` only confirms presence: it is per user
+and omits Self dashboards, Summary Pages, some pak content and other users'
+unshared dashboards (35 dashboards in the 9.1.1 export are not in it). An
+id found there exists; an id absent from it is **unknown**, not missing.
+A definite "absent" for a dashboard needs a target export or a per-id
+lookup, and no per-id dashboard endpoint was found on these builds.
 
 ## Method and artefacts
 
