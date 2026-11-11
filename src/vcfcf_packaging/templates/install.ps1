@@ -3167,20 +3167,25 @@ function Install-Dashboard($Ctx) {
     # normally still gets its success line.
     $flagged = Get-AllSkippedSummaries -Result $importResult -ContentTypes @("DASHBOARDS", "VIEW_DEFINITIONS")
     # Not "the existing dashboard was NOT updated": under the owner-mapping
-    # cause the dashboard was never created.  Same facts as install.py.
-    $dashSkipTail = (" Two causes are known. A create-only import (force=false) leaves " +
-        "an existing dashboard as it was. An owner in usermappings.json " +
-        "that maps to no user on the target means the dashboard was never " +
-        "created. To tell them apart, check whether the dashboard exists " +
-        "on the instance, and look in view-bridge.log for 'restoreData " +
-        "failed to map Dashboard. File: <ownerId>' (the owner cause). If " +
-        "it exists but is stale, deleting it and re-installing forces an " +
-        "update.")
-    $viewSkipTail = (" The one known cause for views is a create-only import " +
-        "(force=false), which leaves an existing view as it was; an " +
-        "unmapped owner skips dashboards, not views. Check whether the " +
-        "view exists on the instance and holds this version; if it is " +
-        "stale, deleting it and re-installing forces an update.")
+    # cause the dashboard was never created, and this import sends
+    # force=true, so the create-only cause does not apply.  Same text as
+    # install.py and the factory's skipped_import_advice.
+    $dashSkipTail = (" " +
+        "This import sent force=true, so the create-only cause " +
+        "(force=false, which leaves an existing dashboard as it was) does " +
+        "not apply. The one demonstrated cause under force=true is an owner" +
+        " in usermappings.json that maps to no user on the target; the " +
+        "dashboard was then never created. Look in view-bridge.log for " +
+        "'restoreData failed to map Dashboard. File: <ownerId>' and check " +
+        "whether the dashboard exists on the instance. Without that log " +
+        "line the skip is unexplained: report it with the import envelope.")
+    $viewSkipTail = (" " +
+        "This import sent force=true, so the create-only cause " +
+        "(force=false, which leaves an existing view as it was) does not " +
+        "apply, and an unmapped owner skips dashboards, not views. A view " +
+        "skip under force=true is unexplained: check whether the view " +
+        "exists on the instance and holds this version, and report the skip" +
+        " with the import envelope.")
 
     if ($flagged.ContainsKey("DASHBOARDS")) {
         $counts = $flagged["DASHBOARDS"]

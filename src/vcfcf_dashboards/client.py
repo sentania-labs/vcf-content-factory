@@ -47,37 +47,42 @@ def all_skipped_content_types(result: dict, content_types=None) -> dict:
     return flagged
 
 
-def skipped_import_advice(content_type: str, redo: str = "re-syncing") -> str:
-    """What an ``imported=0 / skipped=N`` result for ``content_type`` can mean.
+def skipped_import_advice(content_type: str) -> str:
+    """What an ``imported=0 / skipped=N`` result for ``content_type`` means
+    for the request every factory import sends, ``force=true``
+    (``import_content_zip``; the installer templates send the same).
 
-    States the demonstrated causes and how to tell them apart, and
-    never asserts that the skipped object exists: under the owner-mapping
-    cause a dashboard was never created. Evidence:
+    ``force=false`` (create-only) is named only to rule it out. It never
+    asserts the skipped object exists: under the owner-mapping cause a
+    dashboard was never created. Evidence and the "unexplained" rule:
     ``knowledge/context/api-surface/content_import_skip_semantics.md``.
-    ``redo`` names the caller's own re-run verb ("re-syncing").
+    The installer templates carry the same two texts verbatim (pinned by
+    a test).
     """
     if content_type == "DASHBOARDS":
         return (
-            "Two causes are known. A create-only import (force=false) leaves "
-            "an existing dashboard as it was. An owner in usermappings.json "
-            "that maps to no user on the target means the dashboard was never "
-            "created. To tell them apart, check whether the dashboard exists "
-            "on the instance, and look in view-bridge.log for 'restoreData "
-            "failed to map Dashboard. File: <ownerId>' (the owner cause). If "
-            f"it exists but is stale, deleting it and {redo} forces an update."
+            "This import sent force=true, so the create-only cause "
+            "(force=false, which leaves an existing dashboard as it was) does "
+            "not apply. The one demonstrated cause under force=true is an owner"
+            " in usermappings.json that maps to no user on the target; the "
+            "dashboard was then never created. Look in view-bridge.log for "
+            "'restoreData failed to map Dashboard. File: <ownerId>' and check "
+            "whether the dashboard exists on the instance. Without that log "
+            "line the skip is unexplained: report it with the import envelope."
         )
     if content_type == "VIEW_DEFINITIONS":
         return (
-            "The one known cause for views is a create-only import "
-            "(force=false), which leaves an existing view as it was; an "
-            "unmapped owner skips dashboards, not views. Check whether the "
-            "view exists on the instance and holds this version; if it is "
-            f"stale, deleting it and {redo} forces an update."
+            "This import sent force=true, so the create-only cause "
+            "(force=false, which leaves an existing view as it was) does not "
+            "apply, and an unmapped owner skips dashboards, not views. A view "
+            "skip under force=true is unexplained: check whether the view "
+            "exists on the instance and holds this version, and report the skip"
+            " with the import envelope."
         )
     return (
         "The cause is not known for this content type. Check on the instance "
-        "whether the object exists and holds this version before treating "
-        "the import as applied."
+        "whether the object exists and holds this version, and report the "
+        "skip with the import envelope."
     )
 
 

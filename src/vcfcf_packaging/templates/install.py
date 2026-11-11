@@ -1975,24 +1975,26 @@ def _install_dashboards(ctx: Dict) -> None:
         dash_json.replace("PLACEHOLDER_USER_ID", owner_id)
     )
     # Not "the existing dashboard was NOT updated": under the owner-mapping
-    # cause the dashboard was never created. Same facts as the factory's
-    # vcfcf_dashboards.client.skipped_import_advice.
-    dash_skip_tail = (
-        " Two causes are known. A create-only import (force=false) leaves "
-        "an existing dashboard as it was. An owner in usermappings.json "
-        "that maps to no user on the target means the dashboard was never "
-        "created. To tell them apart, check whether the dashboard exists "
-        "on the instance, and look in view-bridge.log for 'restoreData "
-        "failed to map Dashboard. File: <ownerId>' (the owner cause). If "
-        "it exists but is stale, deleting it and re-installing forces an "
-        "update."
+    # cause the dashboard was never created, and this import sends
+    # force=true, so the create-only cause does not apply. Same text as the
+    # factory's vcfcf_dashboards.client.skipped_import_advice and install.ps1.
+    dash_skip_tail = " " + (
+        "This import sent force=true, so the create-only cause "
+        "(force=false, which leaves an existing dashboard as it was) does "
+        "not apply. The one demonstrated cause under force=true is an owner"
+        " in usermappings.json that maps to no user on the target; the "
+        "dashboard was then never created. Look in view-bridge.log for "
+        "'restoreData failed to map Dashboard. File: <ownerId>' and check "
+        "whether the dashboard exists on the instance. Without that log "
+        "line the skip is unexplained: report it with the import envelope."
     )
-    view_skip_tail = (
-        " The one known cause for views is a create-only import "
-        "(force=false), which leaves an existing view as it was; an "
-        "unmapped owner skips dashboards, not views. Check whether the "
-        "view exists on the instance and holds this version; if it is "
-        "stale, deleting it and re-installing forces an update."
+    view_skip_tail = " " + (
+        "This import sent force=true, so the create-only cause "
+        "(force=false, which leaves an existing view as it was) does not "
+        "apply, and an unmapped owner skips dashboards, not views. A view "
+        "skip under force=true is unexplained: check whether the view "
+        "exists on the instance and holds this version, and report the skip"
+        " with the import envelope."
     )
 
     if "DASHBOARDS" not in flagged:

@@ -18,10 +18,12 @@ keep the two in step.
 
 History (most recent first):
   2026-11-11-1  install.py / install.ps1: the advisory for a skipped dashboard
-                or view import names the demonstrated causes (create-only
-                force=false; an unmappable usermappings.json owner, under which
-                the dashboard was never created) and how to tell them apart,
-                instead of asserting the existing object was not updated
+                or view import no longer asserts the existing object was not
+                updated. It says the import sent force=true, so the
+                create-only cause does not apply; a dashboard skip is the
+                unmappable usermappings.json owner (the dashboard was never
+                created; check view-bridge.log) or unexplained, and a view
+                skip is unexplained; both say to report it with the envelope
   2026-11-07-1  install.py / install.ps1: custom groups install before views +
                 dashboards (install order 1.5, was 4) so a View widget pinned
                 to a helper custom group by name binds at import, and uninstall
