@@ -55,7 +55,9 @@ and 148 blocking "missing" edges from VMware-shipped content.
 The export's `configuration.json` `"views": N` matched the UI count on all three
 instances. The 9.1.1 export with more content types also carried 1646 alert
 definitions, 2618 symptoms, 1317 recommendations and 97 reports, so stock
-content of those types is exported too. Custom groups (18) and super metrics
+content of those types is exported too. That is not the whole of it: symptoms and
+alerts of adapter kind `ALL` and symptoms on badge or capacity time-remaining
+keys are never exported (`2026-11-11-alert-symptom-export-completeness.md`). Custom groups (18) and super metrics
 (75) are custom ones only, but those are custom by nature.
 
 The comparison is against the UI view list, not an independent store. It is
