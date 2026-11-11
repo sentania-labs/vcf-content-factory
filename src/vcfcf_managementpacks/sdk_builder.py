@@ -2281,10 +2281,15 @@ def _build_overview_packed(project: SdkProjectDef) -> bytes:
 
     Reference size from VCFAutomation-902025137921.pak: 5,772 B.
 
-    The vendor line, and the contact line when adapter.yaml sets
-    vendor_contact, are HTML-escaped with non-ASCII as character references,
-    so they render the same whatever charset the UI decodes with (#336).
+    Every adapter.yaml string on the page (name, description, vendor and,
+    when set, vendor_contact) goes through ``_html_text``: HTML-escaped with
+    non-ASCII as character references, so it reads back as the original
+    text whatever charset the UI decodes with (#336, #338).  The Version
+    line needs none: the loader holds version to digits and dots and
+    build_number to an int.
     """
+    name = _html_text(project.name)
+    description = _html_text(project.description.strip())
     attribution = f"  <p>Vendor: {_html_text(project.vendor)}</p>\n"
     if project.vendor_contact:
         attribution += f"  <p>Contact: {_html_text(project.vendor_contact)}</p>\n"
@@ -2293,7 +2298,7 @@ def _build_overview_packed(project: SdkProjectDef) -> bytes:
         "<html lang=\"en\" class=\"light\">\n"
         "<head>\n"
         "  <meta charset=\"UTF-8\">\n"
-        f"  <title>{project.name}</title>\n"
+        f"  <title>{name}</title>\n"
         "  <style>\n"
         "    body { font-family: sans-serif; margin: 2em; color: #222; background: #fff; }\n"
         "    h1 { font-size: 1.4em; }\n"
@@ -2301,9 +2306,9 @@ def _build_overview_packed(project: SdkProjectDef) -> bytes:
         "  </style>\n"
         "</head>\n"
         "<body>\n"
-        f"  <h1>{project.name}</h1>\n"
+        f"  <h1>{name}</h1>\n"
         f"  <p>Version {project.version}.{project.build_number}</p>\n"
-        f"  <p>{project.description.strip()}</p>\n"
+        f"  <p>{description}</p>\n"
         f"{attribution}"
         "</body>\n"
         "</html>\n"
@@ -2313,7 +2318,7 @@ def _build_overview_packed(project: SdkProjectDef) -> bytes:
         "<html lang=\"en\" class=\"dark\">\n"
         "<head>\n"
         "  <meta charset=\"UTF-8\">\n"
-        f"  <title>{project.name}</title>\n"
+        f"  <title>{name}</title>\n"
         "  <style>\n"
         "    body { font-family: sans-serif; margin: 2em; color: #eee; background: #1a1a1a; }\n"
         "    h1 { font-size: 1.4em; }\n"
@@ -2321,9 +2326,9 @@ def _build_overview_packed(project: SdkProjectDef) -> bytes:
         "  </style>\n"
         "</head>\n"
         "<body>\n"
-        f"  <h1>{project.name}</h1>\n"
+        f"  <h1>{name}</h1>\n"
         f"  <p>Version {project.version}.{project.build_number}</p>\n"
-        f"  <p>{project.description.strip()}</p>\n"
+        f"  <p>{description}</p>\n"
         f"{attribution}"
         "</body>\n"
         "</html>\n"

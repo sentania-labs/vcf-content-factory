@@ -80,6 +80,11 @@ printable text after a leading BOM. The EULA is read once at load and ships
 as read, minus a leading BOM. `build-sdk` prints the vendor and EULA source
 it stamped.
 
+The overview pages HTML-escape `name` and `description` as well as the
+vendor lines, and `validate-sdk` applies the vendor character rule to both
+(a description may span lines; a name is one line and is stripped) (#338,
+buildkit 1.0.27). Write them as plain text, never pre-escaped or as markup.
+
 ## Classloader isolation — the first-principles constraint
 
 Each pak gets its **own classloader**. You cannot borrow jars from
