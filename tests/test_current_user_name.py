@@ -107,6 +107,45 @@ def test_dashboards_handler_writes_the_session_user_name(monkeypatch, tmp_path):
     assert captured[0]["owner_user_id"] == CURRENTUSER_BODY["id"]
 
 
+def test_standalone_sync_writes_the_session_user_name(monkeypatch, tmp_path):
+    """``python3 -m vcfcf_dashboards sync`` (cmd_sync) used to omit
+    owner_username entirely, so it always wrote ``admin``."""
+    import types
+    from vcfcf_dashboards import cli as dash_cli
+
+    captured: list = []
+    stub = _Stub("[VCF Content Factory] Stub")
+    monkeypatch.setattr(dash_cli, "_load", lambda args: ([], [stub]))
+    monkeypatch.setattr(
+        dash_cli.VCFOpsClient, "from_env", classmethod(lambda cls, **kw: object())
+    )
+    monkeypatch.setattr(dash_cli, "get_current_user", lambda c: CURRENTUSER_BODY)
+    monkeypatch.setattr(dash_cli, "discover_marker_filename", lambda c: "1L.v1")
+
+    def _build(*a, **k):
+        captured.append(k)
+        return b"zip"
+
+    monkeypatch.setattr(dash_cli, "build_import_zip", _build)
+    monkeypatch.setattr(
+        dash_cli, "import_content_zip",
+        lambda c, b: {"state": "FINISHED", "operationSummaries": []},
+    )
+    monkeypatch.setattr(dash_cli, "_run_dep_walker", lambda *a, **k: 0)
+    monkeypatch.setattr(dash_cli, "_report_materialization", lambda *a, **k: 0)
+    args = types.SimpleNamespace(
+        views_dir=str(tmp_path / "views"),
+        dashboards_dir=str(tmp_path / "dashboards"),
+        profile=None,
+        supermetrics_dir=str(tmp_path / "supermetrics"),
+        auto_enable_metrics=False,
+        skip_metric_check=True,
+    )
+    dash_cli.cmd_sync(args)
+    assert captured and captured[0]["owner_username"] == "svc.content"
+    assert captured[0]["owner_user_id"] == CURRENTUSER_BODY["id"]
+
+
 def test_views_handler_writes_the_session_user_name(monkeypatch, tmp_path):
     captured: list = []
     _stub(monkeypatch, captured)

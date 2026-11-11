@@ -16,6 +16,7 @@ from .client import (
     DASHBOARD_CONTENT_TYPES,
     all_skipped_content_types,
     check_dashboard_materialization,
+    current_user_name,
     discover_marker_filename,
     get_current_user,
     import_content_zip,
@@ -524,7 +525,8 @@ def cmd_sync(args) -> int:
         user = get_current_user(client)
         marker = discover_marker_filename(client)
         blob = build_import_zip(
-            views, dashboards, owner_user_id=user["id"], marker_filename=marker,
+            views, dashboards, owner_user_id=user["id"],
+            owner_username=current_user_name(user), marker_filename=marker,
             sm_resolver=resolver.uuid_for, known_dashboards=known,
         )
         result = import_content_zip(client, blob)
@@ -546,7 +548,8 @@ def cmd_sync(args) -> int:
         return 1
 
     # A FINISHED import that imported nothing and skipped everything is
-    # not a successful sync: the instance still holds the old content.
+    # not a successful sync: this run's content is not on the instance
+    # (the object may be the old version, or absent).
     # State alone used to gate this, so an all-skipped import reported ok.
     #
     # This zip carries BOTH content types, so each flag is attributed to
