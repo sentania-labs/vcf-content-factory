@@ -1,5 +1,15 @@
 # Legacy /ui/ Struts + Ext.Direct import endpoint reconnaissance (VCF Ops 9.0.2)
 
+> **Qualification, 2026-11-11.** `uploadDashboard` works on 9.1.1. It was called the way
+> the Manage > Import dialog calls it: `utility.action` `prepareFileUpload`, then
+> `dashboard.action?mainAction=uploadDashboard` with the file in field `dashboardConfigFile`
+> and `override=false`. It returned `{"success":true,"status": true, "msg":"success"}`. It
+> was **not re-tested on 9.0.2**, so the 9.0.2 finding below is not overturned. Nothing
+> isolated whether the build, the `prepareFileUpload` call or the field name made the
+> difference. The only record of the field names the 9.0.2 probes tried is the appendix of
+> `knowledge/context/wire-formats/ui_import_formats.md`, and `dashboardConfigFile` is not
+> among them. Evidence: `knowledge/context/investigations/2026-11-11-devel-9-1-ui-import-dashboard-skip-and-gemfire-503.md`.
+
 **Scope:** the backlog in `context/struts_exploration_backlog.md` asked
 for UI-dialog import endpoints for Dashboard, AlertContent, Super
 Metric, View, Custom Group, and Report drop-ins, with the goal that

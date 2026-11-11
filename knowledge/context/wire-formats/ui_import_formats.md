@@ -26,6 +26,14 @@ is:
   (requires a specific envelope shape — see below).
 - `POST /api/policies/import` (+ internal twin) — policy XML only.
 
+(Qualified 2026-11-11: on 9.1.1 `uploadDashboard` works when called the way the
+Manage > Import dialog calls it, `prepareFileUpload` first and then the file in field
+`dashboardConfigFile`; see `../investigations/2026-11-11-devel-9-1-ui-import-dashboard-skip-and-gemfire-503.md`
+§Q3. It was not re-tested on 9.0.2. The paragraph below records the 9.0.2 probes. The
+field names they tried are listed in §Appendix, and `dashboardConfigFile` is not among
+them. Nothing isolated whether the build, the `prepareFileUpload` call or the field name
+made the difference.)
+
 The legacy Struts UI's `dashboard.action?mainAction=uploadDashboard`
 is present in 9.0.2 but **the handler is broken**: any multipart POST
 returns `{"success":false, "msg":"Unable to import dashboard
@@ -35,12 +43,20 @@ HTTP 500 "Internal server error". Neither is a viable import path.
 Verified experimentally with ~15 field-name and parameter-placement
 permutations.
 
-The new SPA UI's "Manage > Dashboards > Import" dialog must
-therefore wrap drag-dropped community zips in a bulk content-zip
-envelope client-side and call `POST /api/content/operations/import`.
-Our install scripts already do this — the drop-in artifacts we ship
-are whatever *inner* format admins recognize from community reference
-packages; the UI layer is responsible for wrapping them.
+This document originally concluded that the "Manage > Dashboards >
+Import" dialog must wrap drag-dropped zips in a content-zip envelope
+and call `POST /api/content/operations/import`. Here that was an
+inference. `../api-surface/struts_exploration_backlog.md` cites an
+operator HAR capture from the same 9.0.2 work, but the HAR is not in
+the repo and the note does not say which dialog it recorded. On 9.1.1 the dialog (`Ext.vcops.dashboard.UploadFileWindow`)
+was read and replayed. It does not wrap anything: it calls
+`utility.action` `prepareFileUpload` and then posts the dashboard zip
+directly to `dashboard.action?mainAction=uploadDashboard`. The dialog
+was not traced on 9.0.2, and the views, reports and alert-content
+import dialogs were not traced on any build. What still holds is that
+our install scripts use the content-zip envelope, and that the
+drop-in artifacts we ship use the *inner* formats admins recognize
+from community reference packages.
 
 ## The content-zip envelope shape that actually works
 

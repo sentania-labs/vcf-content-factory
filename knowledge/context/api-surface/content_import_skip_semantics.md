@@ -15,29 +15,48 @@ normative rule and should point here for the evidence.
 ## The one-line answer
 
 `imported=0 / skipped=N` on `DASHBOARDS` / `VIEW_DEFINITIONS` is **not**
-ghost state in the one cause reproduced here. That cause is the
-importer's create-only mode: the query parameter `force=false` on
-`POST /api/content/operations/import` means "do not overwrite anything
-that already exists". The skip is a clean, idempotent no-op, and the
-pre-existing content survives it intact; the *new* version simply did
-not land.
+ghost state in either of the two causes reproduced so far:
 
-**Read that as a demonstrated cause, not as the meaning of the
-signature.** `force=false` is the only trigger that could be
-reproduced, but three contexts were never tested (§What was not ruled
-out): UI-locked dashboards, a non-admin importer against another user's
-content, and pak-supplied solution content, which is what the spec's
-`force` wording literally addresses. A `force=true` import that reports
-this signature is therefore **unexplained**, not benign, and should be
-treated as a new finding rather than diagnosed from this document.
-Since every factory call site hard-codes `force=true`, any occurrence
-seen through the factory falls into exactly that unexplained category.
+1. **Create-only mode** (this document's 2026-08-21 bisection): the
+   query parameter `force=false` on `POST /api/content/operations/import`
+   means "do not overwrite anything that already exists". The skip is a
+   clean, idempotent no-op, and the pre-existing content survives it
+   intact; the *new* version simply did not land. Affects views and
+   dashboards alike.
+2. **Unmappable dashboard owner** (2026-11-11, devel 9.0.2, and seen
+   from logs on 9.1.1): the `usermappings.json` owner of a
+   `dashboards/<owner>` file cannot be mapped to a user on the target.
+   Run under `force=true`, with the dashboard absent. The bytecode
+   predicts the same with the dashboard present and under any `force`
+   value, but neither was run. **Only dashboards** (and their sharings)
+   are affected; views
+   in the same zip import. The envelope carries no error. Evidence and
+   the mapping rule:
+   `../investigations/2026-11-11-owner-mapping-dashboard-skip-reproduction.md`
+   (§Second demonstrated cause below has the summary).
+
+**Read these as demonstrated causes, not as the meaning of the
+signature.** Contexts never tested (§What could NOT produce a skip,
+its closing "Not tested" paragraph): UI-locked
+dashboards, a non-admin importer against another user's content, and
+pak-supplied solution content, which is what the spec's `force` wording
+literally addresses. A `force=true` import that reports this signature
+on **views**, or on dashboards whose owner maps (source-less `admin`, or
+an owner id equal to the marker content), is still **unexplained** and
+should be treated as a new finding. For a `force=true` dashboard skip,
+first check `view-bridge.log` for `restoreData failed to map Dashboard.
+File: <owner>`; if it is there, cause 2 is the diagnosis.
 
 The super metric ghost-state remedy (re-import the same zip) does
 **not** transfer. Re-importing an identical zip under `force=false`
 skips again, indefinitely.
 
-## The `force` query parameter is the whole story
+## The `force` query parameter (cause 1)
+
+This applies to content whose owner maps. A dashboard with an
+unmappable owner skipped under `force=true` (§Second demonstrated
+cause). That it also skips under the other `force` values is inferred
+from bytecode and was not run.
 
 `operations-api.json`, `POST /api/content/operations/import`:
 
@@ -74,10 +93,20 @@ skip signature.
 - `src/vcfcf_packaging/templates/install.ps1:691`
   (`...?force=true`).
 
-So the signature the factory warns about is, as of today, **not
-reachable through any of the factory's own requests**. It is reachable
-by a client that sets `force=false` — which is the most likely
-explanation for the other team's `total:3 skipped:3 imported:0`.
+So the `force=false` cause is, as of today, **not reachable through
+any of the factory's own requests**. It is reachable by a client that
+sets `force=false`, which was the most likely explanation for the other
+team's `total:3 skipped:3 imported:0` (cause 2 was not known then and
+fits a dashboards-only skip equally well). Cause 2 is not reachable
+with factory-built zips either. Every zip builder (`build_import_zip`
+and the installer template's) writes `sources: []`, one source-less
+owner whose `userId` is the importing session's user id, and that same
+id as the marker content. So the owner maps to the target admin through
+the marker shortcut. The `userName` written is not what makes it map,
+and it varies by path: the packager default `admin`, the sync
+handler's `user.get("userName", "admin")`, the installer's login
+user. It **is** reachable when a third-party or customer bundle is
+imported with its original `usermappings.json`.
 
 Corollary that matters for the SM story: the SM ghost state was
 observed with `force=true` on the wire. It is therefore a genuinely
@@ -86,7 +115,10 @@ the same bug seen from another angle.
 
 ## Question 1: can the signature be reproduced for DASHBOARDS?
 
-Yes, deterministically, and only via `force=false`.
+Yes, deterministically, via `force=false`. In this 2026-08-21
+bisection that was the only trigger, because every probe owner mapped.
+The unmappable-owner trigger was found and reproduced on 2026-11-11
+(§Second demonstrated cause).
 
 Method: a throwaway view + dashboard pair
 (`[VCF Content Factory] EXP97 Probe View A` /
@@ -194,10 +226,18 @@ errorCode: NONE` under `force=true`:
   same UUIDs (`E1`) — the edit landed, in place;
 - importing a dashboard with the **same name but a different UUID**
   (`F1`);
-- importing with a bogus `owner_user_id` / `usermappings.json` naming
-  a user that does not exist on the instance (`G1`);
+- importing with a bogus `owner_user_id` (`G1`), which proves only
+  that the owner *id* value does not matter while it equals the marker
+  content;
 - a zip carrying one already-present dashboard plus one brand-new one
   (`J2`: `DASHBOARDS total=2 imported=2 skipped=0`).
+
+G1 is not evidence that a missing owner imports (2026-11-11
+correction). It changed only the owner id. The packager still wrote
+the same id into the marker file, so the owner mapped through the
+marker shortcut. G1 never tested a user that does not exist on the
+instance, and such a user **does** skip (§Second demonstrated cause,
+run D2).
 
 Not tested, so not ruled out as alternative causes: dashboards locked
 in the UI (`locked: true`), dashboards owned by a different *real*
@@ -306,20 +346,55 @@ The only place views and dashboards diverge is the same-name /
 new-UUID case described above: views duplicate-with-suffix, dashboards
 replace.
 
+## Second demonstrated cause: unmappable dashboard owner
+
+Full record: `../investigations/2026-11-11-owner-mapping-dashboard-skip-reproduction.md`
+(eight `force=true` runs on devel 9.0.2, with the bytecode rule).
+
+- `restoreData` maps every `usermappings.json` owner before it touches
+  `dashboards/`. A source-less owner maps to the target admin when its
+  `userId` equals the content of the marker file
+  `6844548499441080431L.v1`; otherwise it maps by case-insensitive
+  `userName`. An owner with a `userSourceId` maps only if that source
+  matches one on the target (for AD/LDAP: host, port and base DN), and
+  then by `userName`. A local name such as `admin` does not rescue a
+  sourced owner.
+- An unmapped owner's dashboards are counted as skipped from
+  `configuration.json` `dashboardsByOwner`, and `importDashboard` is
+  never called. Envelope: `DASHBOARDS imported=0 skipped=N failed=0`,
+  `errorCode NONE`, no messages. Views import normally.
+- Log signature (`view-bridge.log`, logger
+  `com.vmware.vcops.bridge.plugin.server.BackupRestoreManager.restoreData`,
+  thread `DistTaskBackupRestoreManagerDistributedTask`):
+  `restoreData failed to import User Mappings.` then
+  `restoreData failed to map Dashboard. File: <owner-id>`, twice
+  (dashboards, then sharings). There is no `DASHBOARD_IMPORT` audit
+  line on that thread.
+- Re-importing cannot fix it, because the mapping is deterministic.
+  Rewriting only `usermappings.json` to
+  `{"sources": [], "users": [{"userName": "admin", "userId": <owner>}]}`
+  does.
+
 ## What this means for the factory's behaviour
 
-- The **loud warning is accurate and should stay**. Its text ("existing
-  objects with the same ids/names were left as they were... verify on
-  the instance") is exactly right for the `force=false` case, which is
-  the only reproduced cause.
+- The **loud warning should stay, but its text fits only cause 1**.
+  "Existing objects with the same ids/names were left as they were"
+  is right for `force=false`. It misleads for cause 2: in every run
+  there was no existing object, and the dashboard was simply never
+  created. (If one had existed it would presumably be left alone;
+  that is inferred, not run.) Any wording change should point the
+  operator at the owner mapping when the skip is dashboards-only.
 - **Do not add the SM-style auto-retry to the dashboard or view
   paths.** The skip is idempotent; retrying cannot help and costs a
   round trip plus the import-busy backoff. This is now evidence, not
   caution.
 - The warning is currently **unreachable** through the factory's own
-  code, because all four import call sites hard-code `force=true`. If
-  an operator ever sees it, something outside those call sites changed
-  the request or the server semantics, and that is worth a loud line.
+  zips: all four import call sites hard-code `force=true`, and every
+  factory zip builder's owner maps through the marker shortcut. If an operator sees it on a factory
+  zip, something outside those call sites changed the request or the
+  server semantics, and that is worth a loud line. On a third-party
+  bundle that carries its own `usermappings.json`, a dashboards-only
+  skip is expected under cause 2.
 - **`imported=N` does not mean "content changed"**, only "content
   written". Any future "did my edit land?" check must compare content,
   not counts.

@@ -85,21 +85,38 @@ containing any of these three content types aborts with a clear
 early error if the user is not `admin`. Install (import) works with
 any admin-privileged account.
 
-## 7. No per-object UI import endpoints in VCF Ops 9.0.2
+## 7. Per-object UI import endpoints: dead as probed on 9.0.2, `uploadDashboard` live on 9.1.1
 
-Every legacy `/ui/*.action` upload mainAction and every Ext.Direct
-upload RPC is either unregistered, a dead stub, or wired-but-
-throwing. The new SPA UI wraps drag-dropped files client-side into a
-bulk content-zip envelope and POSTs to
-`/api/content/operations/import` — the same endpoint `install.py`
-already uses. Consequences: (a) our distribution package drop-in
-artifacts (`supermetric.json`, `Dashboard.zip`, `Views.zip`,
-`Reports.zip`, `AlertContent.xml`) work for admins hand-dragging
-into the UI because the SPA does the envelope wrap, but (b)
-qa-tester cannot automate that drag-drop path headlessly — it's
-human-in-the-loop only. See
+As probed on 9.0.2 (2026-04-11), every legacy `/ui/*.action` upload
+mainAction and every Ext.Direct upload RPC was unregistered, a dead
+stub, or wired but throwing. See
 `knowledge/context/api-surface/struts_import_endpoints.md` for the
-per-endpoint dead-end survey behind this.
+per-endpoint survey.
+
+The 2026-04-11 work also concluded that the SPA wraps dropped files
+into a content-zip envelope for `/api/content/operations/import`. That
+rests on an operator HAR capture, which is not in the repo and does
+not record which dialog.
+
+On 9.1.1 (2026-11-11) the Manage > Dashboards > Import dialog was
+traced and replayed. It does **not** wrap the file into a content-zip
+envelope. It calls `utility.action` `prepareFileUpload`, then posts
+the dashboard zip directly to
+`dashboard.action?mainAction=uploadDashboard` (file field
+`dashboardConfigFile`), and that works. See
+`knowledge/context/investigations/2026-11-11-devel-9-1-ui-import-dashboard-skip-and-gemfire-503.md`
+§Q3. The dashboard path was not re-tested on 9.0.2. The views, reports,
+super metric and alert-content dialogs were not traced on any build.
+
+Consequences:
+
+- (a) The `Dashboard.zip` drop-in imports by hand on 9.1.1 through
+  that endpoint. How the other drop-ins (`supermetric.json`,
+  `Views.zip`, `Reports.zip`, `AlertContent.xml`) reach the server
+  from the UI is not observed.
+- (b) qa-tester has no automated path for the drag-drop flow today.
+  The 9.1.1 dashboard replay shows one could be scripted, but the
+  factory has no such tooling, and none has been checked for 9.0.2.
 
 ## 8. MPB events not supported in factory-built paks
 

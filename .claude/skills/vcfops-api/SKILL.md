@@ -92,12 +92,28 @@ Poll `GET /api/content/operations/import` until
    transfer. The factory warns and does not retry, and that is
    correct.
 
-   **Do not read that as the meaning of the signature.** Every factory
-   call site sends `force=true`, so a skip seen through factory code
-   is unexplained by the bisected cause. UI-locked dashboards,
-   non-admin import of another user's content, and pak-supplied
-   solution content were never tested. Treat a `force=true` skip as a
-   new finding. Full evidence:
+   A **second cause** was reproduced 2026-11-11 and it does happen
+   under `force=true`: for **dashboards only**, an owner in
+   `usermappings.json` that maps to no user on the target. An owner
+   tied to an auth source maps only if the target has the same source
+   (host, port, base DN) and a user of that name; a source-less owner
+   maps by user name or when its id equals the marker file's content.
+   No mapping means the dashboard importer is never called: the
+   dashboard is counted skipped with no error, the view in the same
+   zip imports, and the dashboard was never created. Tell-tale in
+   `view-bridge` log: `restoreData failed to map Dashboard. File:
+   <ownerId>`. Factory-built zips map; the exposure is third-party or
+   customer bundles carrying their own `usermappings.json`. Fix:
+   rewrite `usermappings.json` to the factory shape.
+
+   **Do not read either as the meaning of the signature.** On a
+   `force=true` skip, check the owner mapping first. If the owner
+   maps, the skip is unexplained: UI-locked dashboards, non-admin
+   import of another user's content, and pak-supplied solution
+   content were never tested, so treat it as a new finding. Full
+   evidence:
+   `knowledge/context/investigations/2026-11-11-owner-mapping-dashboard-skip-reproduction.md`
+   and
    `knowledge/context/api-surface/content_import_skip_semantics.md`.
 6. **`force` semantics are counter-intuitive**: `force=true`
    overwrites, `force` **omitted** also overwrites, only an explicit
