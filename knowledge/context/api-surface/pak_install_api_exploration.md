@@ -619,6 +619,14 @@ loaded on a collector:
 - `application-resource.agentVersion` (app-monitoring agent) and 9.1
   `ServiceDetails.version` (integration service) are unrelated.
 
+Superseded in part (2026-11-11, `2026-11-11-collector-adapter-sync-signals.md`):
+still true for the REST API proper, but the UI session can read each
+collector's own `'<kind>' adapter version: <v>` log line, Cloud Proxies
+included (`/ui/supportLogs.action searchLogFileContents`), which tells the
+two modes apart without SSH; and on 8.18 the collector resource's
+`Tasks|CollectorToController:Sync Adapters|ElapsedTime|Maximum` over 30,000 ms
+marks a failed sync through the Suite API.
+
 So the installer cannot tell "jar not loaded yet" from "old jar loaded".
 `ACCOUNT NOT STARTED` and the `NOTE` printed after any start tell the user to
 re-run the install when the collector log shows "Adapter jar synchronization

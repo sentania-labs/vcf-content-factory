@@ -146,7 +146,8 @@ shows this.
   re-verified by API read-back because the Suite API was returning 503 (Q2).
 - Side effect worth knowing: the custom group import registered five new Container
   resource kinds named after the customer's group types. They outlive any deletion of the
-  groups.
+  groups, but are removable one by one with
+  `DELETE /api/resources/groups/types/<key>` (done on devel_9_1 2026-11-11, all five).
 
 ## Q2. Why the Suite API returns 503 "Gemfire" while the UI works
 

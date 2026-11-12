@@ -130,3 +130,11 @@ through per-class component loggers never reach the instance log) and fixed
 in vsanperf build 9; the proof is `knowledge/context/reviews/vsanperf-t5-devel-9.0-build-9.md`.
 The sync-timeout sentence "routinely takes 12 to 150 s" should read: 4 of 14
 syncs since 10-23 exceeded the 30 s wait (range 12 to 149 s).
+
+Superseded in part (2026-11-11, `../api-surface/2026-11-11-collector-adapter-sync-signals.md`):
+the 30 s Sync Adapters wait is the 8.18 collector's (protocol version 35). The
+9.0.2 proxy (42) and 9.1.1 proxies (48) waited 93 to 426 s for the same reply
+with no timeout, so "its Sync Adapters answered in about 30 s inside the wait"
+for 9.0.2 describes a wait that does not exist there. What re-triggers a sync
+on 8.18 is now answered in that file: a pak re-run (proven 11-07 04:20Z) or a
+collector start (not invokable through any API).
