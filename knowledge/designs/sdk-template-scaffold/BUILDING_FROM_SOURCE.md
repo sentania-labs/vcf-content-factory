@@ -52,8 +52,8 @@ build the `.pak` — the toolchain is a portable tarball. You need:
   copy to match. The kit identifies the jar by its hash, so a jar from a
   patched appliance is a different build with a different name. If the
   hash is not in the table, the appliance is at a build the kit does not
-  know yet: the jar still compiles, the build reports it as an unknown
-  jar, and you can name it `vrops-adapters-sdk-<version>.<build>.jar`
+  know yet: a hand build still compiles against it and prints a warning,
+  a release build (the tag workflow) refuses it, and you can name it `vrops-adapters-sdk-<version>.<build>.jar`
   from the appliance's own version and build. The same
   section covers the optional 8.18.7 and 9.1.1 jars for the
   compatibility checks. Partners can pull the jar from the Broadcom TAP
