@@ -23,12 +23,17 @@
 #                          (default: every jar in adapter_runtime/lib/, if any)
 #   VCFCF_STITCH_RELEASE   javac --release (default 11, the release that ships)
 #   VCFCF_STITCH_ALLOW_SKIP=1  let a suite that skips for want of log4j pass
+#   VCFCF_SDK_COMPAT_REQUIRED=1 (or VCFCF_RELEASE_BUILD=1)  release run: the
+#                          SDK jar must be a known jar of a supported line
+#                          (sha256 in KNOWN_SDK_JARS below), else exit 3;
+#                          otherwise an unknown jar only warns (#343)
 #   JAVA_HOME              JDK to use (default: javac and java on PATH); it must
 #                          read the SDK jar's class files: JDK 17+ for the 9.0.2
 #                          jar, 11+ for 8.18.7, 25+ for 9.1.1.0100
 #
 # Exit codes: 0 every suite passed, 1 a suite failed or skipped,
-# 3 setup missing (SDK jar, JDK, or a framework compile error).
+# 3 setup missing (SDK jar, JDK, or a framework compile error), or a release
+# run refused an SDK jar (#343).
 
 set -uo pipefail
 
@@ -84,6 +89,61 @@ fi
 if [ ! -f "$SDK_JAR" ]; then
     echo "run_stitch_tests: SDK jar not found: $SDK_JAR (set VCFCF_SDK_JAR)" >&2
     exit 3
+fi
+
+# Known SDK jars (#343). This script ships nothing and runs against any
+# supported line's jar, so the jar plays a compat jar's part: a release run
+# (VCFCF_SDK_COMPAT_REQUIRED=1 or VCFCF_RELEASE_BUILD=1) needs a known jar
+# of any line, with no override; any other run warns and goes on. Keep the
+# table equal to KNOWN_SDK_JARS in build-framework.sh and
+# sdk_builder._SDK_COMPAT_LINES (a test checks).
+KNOWN_SDK_JARS="2d53a91fc2b9a99d9b685ed10c1e37a471c2f71f04e7ae0fb2c53fdaa14b4f54|9.0|VCF Operations 9.0.2.0 build 25137845
+a8e9ebbdc8c622fb89551d51870220e784f0097ed0800a6f490dfdc74a11119b|9.0|VCF Operations 9.0.2.0200 build 25431135
+45d54c6403acf535c982a85d658b422f534c36c90ceab78a224dde67b2a640ea|8.18.7|Aria Operations 8.18.7 build 25423534
+79f7b12340906359e04f3619dd87c7e67a9493b3fa5d86bdffe9242da67f46f7|9.1.1.0100|VCF Operations 9.1.1.0100 build 25795063"
+# A switch value as sdk_builder reads it: str.strip().lower() (leading and
+# trailing whitespace, newlines included, dropped; inner whitespace kept), so
+# "1 " and " TRUE" are a release run on both sides (#343).
+switch_value() {
+    local v="${1:-}"
+    v="${v#"${v%%[![:space:]]*}"}"
+    v="${v%"${v##*[![:space:]]}"}"
+    printf '%s' "$v" | tr '[:upper:]' '[:lower:]'
+}
+
+is_true() {
+    case "$(switch_value "${1:-}")" in
+        1|true|yes) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+JAR_SHA=""
+if command -v sha256sum >/dev/null 2>&1; then
+    JAR_SHA="$(sha256sum "$SDK_JAR" | awk '{print $1}')"
+elif command -v shasum >/dev/null 2>&1; then
+    JAR_SHA="$(shasum -a 256 "$SDK_JAR" | awk '{print $1}')"
+fi
+JAR_PROBLEM=""
+if [ -z "$JAR_SHA" ]; then
+    JAR_PROBLEM="$(basename "$SDK_JAR") was not hash-checked (no sha256sum or shasum), so which jar it is is unknown."
+# A here-string, not printf | grep -q: grep -q exits on the first match, the
+# writer can take SIGPIPE, and pipefail turns a match into "unknown jar".
+elif ! grep -q "^$JAR_SHA|" <<<"$KNOWN_SDK_JARS"; then
+    JAR_PROBLEM="$(basename "$SDK_JAR") has sha256 $JAR_SHA, which matches no known SDK jar (adapter_runtime/PROVENANCE.md)."
+fi
+if [ -n "$JAR_PROBLEM" ]; then
+    if is_true "${VCFCF_SDK_COMPAT_REQUIRED:-}" || is_true "${VCFCF_RELEASE_BUILD:-}"; then
+        echo "run_stitch_tests: a release run (VCFCF_SDK_COMPAT_REQUIRED=1 or VCFCF_RELEASE_BUILD=1)" \
+             "runs only against a known SDK jar, and there is no override (#343): $JAR_PROBLEM" >&2
+        exit 3
+    fi
+    echo "  ========================================================================"
+    echo "  WARNING: SDK JAR A RELEASE RUN WOULD REFUSE: run_stitch_tests"
+    echo "    - $JAR_PROBLEM"
+    echo "    This run continues, but its results say nothing about a supported line."
+    echo "    A release run (VCFCF_SDK_COMPAT_REQUIRED=1 or VCFCF_RELEASE_BUILD=1)"
+    echo "    refuses it (#343)."
+    echo "  ========================================================================"
 fi
 
 # A javac older than the jar's class files cannot read it: say so plainly.

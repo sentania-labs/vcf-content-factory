@@ -39,10 +39,16 @@
 # with --compat-only), it is skipped here in the shell, so a plain framework
 # build still works without python3 or PyYAML.
 #
+# Known SDK jars (issue #343): a release run, VCFCF_SDK_COMPAT_REQUIRED=1
+# (factory CI) or VCFCF_RELEASE_BUILD=1, accepts only SDK jars whose sha256
+# is in KNOWN_SDK_JARS below: the primary jar must be a 9.0 line jar and
+# every compat jar a known jar, with no override. Any other run prints a
+# boxed warning for such a jar and goes on.
+#
 # Exit codes: 0 built (every leg passed or skipped), 1 the framework does not
 # compile (primary pass, or on a leg), 3 a compat leg could not
 # run (required but jar or JDK missing, misconfigured, or python3 cannot
-# import vcfcf_managementpacks).
+# import vcfcf_managementpacks), or a release run refused an SDK jar (#343).
 #
 # Usage:
 #   cd vcfcf_managementpacks/
@@ -112,8 +118,30 @@ COMPAT_JAR_NAMES="vrops-adapters-sdk-8.18.7.25423534.jar vrops-adapters-sdk-9.1.
 COMPAT_JAR_FORMER_NAMES="vrops-adapters-sdk-8.18.7.jar vrops-adapters-sdk-9.1.1.0100.jar"
 COMPAT_COULD_NOT_RUN=3   # sdk_builder.COMPAT_COULD_NOT_RUN
 
+# A switch value as sdk_builder reads it: str.strip().lower() (leading and
+# trailing whitespace, newlines included, dropped; inner whitespace kept), so
+# "1 " and " TRUE" are a release run on both sides (#343).
+switch_value() {
+    local v="${1:-}"
+    v="${v#"${v%%[![:space:]]*}"}"
+    v="${v%"${v##*[![:space:]]}"}"
+    printf '%s' "$v" | tr '[:upper:]' '[:lower:]'
+}
+
 compat_required() {
-    case "$(printf '%s' "${VCFCF_SDK_COMPAT_REQUIRED:-}" | tr '[:upper:]' '[:lower:]')" in
+    case "$(switch_value "${VCFCF_SDK_COMPAT_REQUIRED:-}")" in
+        1|true|yes) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+# A release run (#343): VCFCF_SDK_COMPAT_REQUIRED=1 (factory CI's sdk-compat
+# job) or VCFCF_RELEASE_BUILD=1, the same two switches sdk_builder reads
+# (_sdk_jar_release_mode). It accepts only known SDK jars, with no override;
+# any other run warns and goes on.
+release_mode() {
+    compat_required && return 0
+    case "$(switch_value "${VCFCF_RELEASE_BUILD:-}")" in
         1|true|yes) return 0 ;;
         *) return 1 ;;
     esac
@@ -156,6 +184,8 @@ compat_pass() {
     fi
     echo "Compat pass: framework source once per supported line ..."
     local rc=0
+    # A full build has applied the known-jar rule to the primary jar already
+    # (#343); --compat-only leaves it to python.
     PYTHONPATH="$ROOT/..${PYTHONPATH:+:$PYTHONPATH}" python3 -c '
 import sys
 try:
@@ -165,8 +195,8 @@ except Exception as exc:
           "vcfcf_managementpacks.sdk_builder (%s: %s). It needs python3 with "
           "PyYAML." % (type(exc).__name__, exc), file=sys.stderr)
     sys.exit(3)
-sys.exit(check_framework_sdk_compat())
-' || rc=$?
+sys.exit(check_framework_sdk_compat(check_primary=sys.argv[1] == "1"))
+' "$COMPAT_ONLY" || rc=$?
     return "$rc"
 }
 
@@ -253,6 +283,37 @@ for name in $PRIMARY_JAR_FORMER_NAMES; do
         fi
     fi
 done
+
+# Known SDK jars only in a release run (#343, same rule as
+# sdk_builder._check_sdk_jars): the framework jar is compiled against this
+# jar and ships in every pak, so it must be a known 9.0 line jar. A release
+# run stops (exit 3, no override); any other run prints the box and goes on.
+PRIMARY_PROBLEM=""
+if [ -z "$SDK_SHA" ]; then
+    PRIMARY_PROBLEM="$(basename "$SDK_JAR") was not hash-checked (no sha256sum, shasum or python3), so which jar it is is unknown."
+elif [ -z "$SDK_LINE" ]; then
+    PRIMARY_PROBLEM="$(basename "$SDK_JAR") has sha256 $SDK_SHA, which matches no known SDK jar (adapter_runtime/PROVENANCE.md)."
+elif [ "$SDK_LINE" != "9.0" ]; then
+    PRIMARY_PROBLEM="$(basename "$SDK_JAR") is $SDK_PLATFORM, the $SDK_LINE line's jar, not a 9.0 line jar; pass it as a compat jar (VCFCF_SDK_COMPAT_JARS) instead."
+fi
+if [ -n "$PRIMARY_PROBLEM" ]; then
+    if release_mode; then
+        echo "ERROR: a release run (VCFCF_SDK_COMPAT_REQUIRED=1 or VCFCF_RELEASE_BUILD=1) compiles the framework only against a known 9.0 line SDK jar, and there is no override (#343):" >&2
+        echo "  $PRIMARY_PROBLEM" >&2
+        echo "  Known 9.0 jars: vrops-adapters-sdk-9.0.2.0.25137845.jar (VCF Operations 9.0.2.0 build 25137845)" >&2
+        echo "  or vrops-adapters-sdk-9.0.2.0200.25431135.jar (VCF Operations 9.0.2.0200 build 25431135)." >&2
+        echo "  Adding a jar is a buildkit release (knowledge/context/tier2_architecture.md, \"Adding an SDK jar\")." >&2
+        exit "$COMPAT_COULD_NOT_RUN"
+    fi
+    echo "  ========================================================================"
+    echo "  WARNING: SDK JAR A RELEASE BUILD WOULD REFUSE: build-framework.sh"
+    echo "    - $PRIMARY_PROBLEM"
+    echo "    This run continues, but a pak carrying this framework jar may not"
+    echo "    run on every supported platform line."
+    echo "    A release run (VCFCF_SDK_COMPAT_REQUIRED=1 or VCFCF_RELEASE_BUILD=1)"
+    echo "    refuses it (#343)."
+    echo "  ========================================================================"
+fi
 
 # A javac older than the jar's class files cannot read it. Read the jar's
 # highest class-file major (python3; skipped without it, javac then reports).
@@ -367,14 +428,19 @@ fi
 # ---- Package ----------------------------------------------------------------
 # The manifest carries the framework version (the buildkit version) and the
 # factory commit, so a collector or a pak shows which framework it runs
-# (issue #214). Same attributes as sdk_builder._ensure_framework_jar().
+# (issue #214), and the sha256 of the SDK jar it was compiled against, which
+# build-sdk checks before reusing the jar (#343). Same attributes as
+# sdk_builder._ensure_framework_jar().
 #   VCFCF_FRAMEWORK_VERSION overrides the version (default: BUILDKIT_VERSION
 #   in buildkit.py); the commit gets "-dirty" when adapter_framework/src has
 #   uncommitted changes.
 
 FW_VERSION="${VCFCF_FRAMEWORK_VERSION:-}"
 if [ -z "$FW_VERSION" ]; then
-    FW_VERSION=$(sed -n 's/^BUILDKIT_VERSION *= *"\([^"]*\)".*/\1/p' "$ROOT/buildkit.py" 2>/dev/null | head -1)
+    # No "| head -1": under set -e and pipefail, sed taking SIGPIPE (or a
+    # missing buildkit.py) would end the build here instead of "unknown".
+    FW_VERSION=$(sed -n 's/^BUILDKIT_VERSION *= *"\([^"]*\)".*/\1/p' "$ROOT/buildkit.py" 2>/dev/null || true)
+    FW_VERSION="${FW_VERSION%%$'\n'*}"
 fi
 FW_VERSION="${FW_VERSION:-unknown}"
 FW_COMMIT="unknown"
@@ -385,8 +451,8 @@ if command -v git &>/dev/null && FW_HEAD=$(git -C "$SCRIPT_DIR" rev-parse HEAD 2
     fi
 fi
 MANIFEST_FILE="$BUILD_DIR.manifest"
-printf 'Implementation-Title: vcfcf-adapter-base\nImplementation-Version: %s\nImplementation-Vendor: VCF Content Factory\nX-Vcfcf-Source-Commit: %s\n' \
-    "$FW_VERSION" "$FW_COMMIT" > "$MANIFEST_FILE"
+printf 'Implementation-Title: vcfcf-adapter-base\nImplementation-Version: %s\nImplementation-Vendor: VCF Content Factory\nX-Vcfcf-Source-Commit: %s\nX-Vcfcf-Sdk-Sha256: %s\n' \
+    "$FW_VERSION" "$FW_COMMIT" "${SDK_SHA:-unknown}" > "$MANIFEST_FILE"
 
 echo "Packaging JAR ..."
 jar cfm "$OUTPUT_JAR" "$MANIFEST_FILE" -C "$BUILD_DIR" .

@@ -236,13 +236,18 @@ package entry loaded, Test Connection lines (no instance log exists then)
 reach `collector.log` only at WARN and above, so put diagnostics a user
 must see in the Test Connection result message or log them at WARN;
 compliance's `logInfo("Test OK ...")` (`ComplianceAdapter.java` ~382,
-~426) is the example that now vanishes. (2) **`logging.level: DEBUG` is
-not absolute:** a Test Connection's `raiseToInfo` still adds an INFO
-entry for every name it looks up (the adapter class and the helpers it
-builds), which for instances created afterwards shadows DEBUG and copies
-those lines into `collector.log` until the next log4j reload or
-collector restart; helpers never looked up in Test Connection keep DEBUG
-(adapter-base follow-up #322). (3) **The 9.0.2 and 9.1.1 SDK jars only:** the
+~426) is the example that now vanishes. (2) **Since buildkit 1.0.28 Test
+Connection does not shadow the file (#322):** a name the pak's own
+`conf/logging.properties` covers is not raised to INFO, so
+`logging.level: DEBUG` holds for accounts added after a Test Connection
+and no instance lines are copied into `collector.log`; Test Connection
+INFO under that entry is not logged, so diagnostics go in the result
+message or at WARN. Harness-proven on the 9.0.2 and 8.18.7 jars, not yet
+seen on a live collector. **SDK jars:** release builds (`--release`,
+`--require-sdk-compat`) accept only the four known SDK jars (primary must
+be a 9.0 jar), with no override; a hand build warns and builds. A new jar
+is a buildkit release: checklist in `tier2_architecture.md`, "Adding an
+SDK jar". (3) **The 9.0.2 and 9.1.1 SDK jars only:** the
 8.18.7 SDK factory never reads `conf/logging.properties`, so the file is
 inert there and 8.18 routing is unchanged and unmeasured. Details:
 `knowledge/context/tier2_architecture.md` §Logging.

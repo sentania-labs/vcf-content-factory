@@ -406,6 +406,8 @@ jobs:
         if: steps.key.outputs.present == 'true'
         env:
           JAR_NAME: ${{ matrix.jar }}
+          # A release run: the script refuses a jar the kit does not know.
+          VCFCF_SDK_COMPAT_REQUIRED: "1"
         run: |
           set -euo pipefail
           L4J="$RUNNER_TEMP/log4j"

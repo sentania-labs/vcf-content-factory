@@ -622,7 +622,9 @@ def test_former_name_note_only_when_the_bytes_match(runtime, monkeypatch, capsys
 
 
 def test_the_howto_does_not_claim_a_hash_check_on_the_compile():
-    """Review NIT 3: any jar compiles; the hash decides the leg and the stamp."""
+    """Review NIT 3: the hash decides the leg and the stamp; since #343 a hand
+    build compiles against any jar and a release build only a known one."""
     howto = sdk_builder._SDK_JAR_HOWTO
-    assert "accepted" not in howto
-    assert "Any jar compiles" in howto and "Adapter-Version-Ref" in howto
+    assert "A hand build compiles against any jar" in howto
+    assert "a release build" in howto and "accepts only the known jars" in howto
+    assert "Adapter-Version-Ref" in howto

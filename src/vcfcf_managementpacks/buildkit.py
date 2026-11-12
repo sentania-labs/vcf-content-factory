@@ -89,7 +89,7 @@ from typing import Optional
 # Version constant: bump when kit contents change in a meaningful way
 # ---------------------------------------------------------------------------
 
-BUILDKIT_VERSION = "1.0.27"
+BUILDKIT_VERSION = "1.0.28"
 
 # ---------------------------------------------------------------------------
 # Source paths (relative to this file's parent = vcfcf_managementpacks/)
@@ -375,10 +375,10 @@ ship in a public toolchain tarball.
 ### Which jar
 
 The SDK jar differs per platform version. The shipped compile target is
-the VCF Operations 9.0.2 jar, either 9.0.2 build below. Any jar compiles;
-its sha256, not its file name (the appliance calls every one
-vrops-adapters-sdk.jar), decides which line's compatibility leg it
-satisfies and what conf/version.txt Adapter-Version-Ref records:
+the VCF Operations 9.0.2 jar, either 9.0.2 build below. A jar's sha256,
+not its file name (the appliance calls every one vrops-adapters-sdk.jar),
+decides which line's compatibility leg it satisfies and what
+conf/version.txt Adapter-Version-Ref records:
 
     line        platform                                    name in the kit                               class files  JDK   role
     9.0         VCF Operations 9.0.2.0 build 25137845       vrops-adapters-sdk-9.0.2.0.25137845.jar       Java 17      17+   compile target (either 9.0 jar)
@@ -389,6 +389,18 @@ satisfies and what conf/version.txt Adapter-Version-Ref records:
 sha256 of each: PROVENANCE.md in the factory's
 src/vcfcf_managementpacks/adapter_runtime/. A javac older than a jar's
 class files cannot read it; the build says so and stops.
+
+Known jars only in a release build (kit 1.0.28+, issue #343). A release
+build is build-sdk --release (the pak repos' tag workflow) or any
+build-sdk / validate-sdk run with --require-sdk-compat
+(VCFCF_SDK_COMPAT_REQUIRED=1). It accepts only the jars in the table: the
+--sdk-jar jar must be one of the two 9.0 jars and every --sdk-compat-jar a
+known jar of any line. Anything else stops it with an error naming the
+jar's line (pass another line's jar with --sdk-compat-jar) or its sha256;
+there is no override. A hand build makes the same check, prints a boxed
+warning and builds; validate-sdk warns and still passes. A jar the kit
+does not know (another line, or a build not in the table) is a new kit
+release, not a flag.
 
 ### How to obtain it
 

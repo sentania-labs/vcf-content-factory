@@ -2,6 +2,64 @@ Portable Tier 2 SDK adapter build toolchain (jar-free).
 
 <!-- Order: "Behavior since" sections newest first, so the latest release is at the top. Add a new release's section directly below this comment. The standing reference sections (Consumer contract, Version pinning, Checksum) stay at the end. -->
 
+## Behavior since 1.0.28
+
+- Release builds accept only SDK jars the kit knows (factory issue #343). A
+  release build is `build-sdk --release` (only the pak repos' tag workflow
+  passes it) or any `build-sdk` / `validate-sdk` run with
+  `--require-sdk-compat` (`VCFCF_SDK_COMPAT_REQUIRED=1`). In it the
+  `--sdk-jar` jar must be one of the two 9.0 jars in the Consumer contract
+  table and every `--sdk-compat-jar` one of the four, with no override.
+  Another line's jar as `--sdk-jar` stops the build naming its line and
+  telling you to pass it with `--sdk-compat-jar`; a jar the kit does not
+  know stops it with its sha256. Before, any file passed as the primary jar
+  was compiled against and shipped, with only a SKIPPED notice on the 9.0
+  leg.
+- Hand builds (no `--release`, no `--require-sdk-compat`) make the same
+  check, print one boxed warning saying what the jar is (or that it is
+  unknown), that the pak may not run on every supported line and that a
+  release build would refuse it, and build. `validate-sdk` warns and still
+  exits 0. `conf/version.txt` `Adapter-Version-Ref` still records what it
+  can for an unknown jar.
+- `VCFCF_RELEASE_BUILD` and `VCFCF_SDK_COMPAT_REQUIRED` are read the same
+  way everywhere: surrounding whitespace ignored, case-insensitive, `1`,
+  `true` or `yes`.
+- The framework jar's manifest records the sha256 of the SDK jar it was
+  compiled against (`X-Vcfcf-Sdk-Sha256`). `build-sdk` rebuilds the
+  framework jar whenever that is not the current primary jar, so a release
+  build never reuses one a hand build compiled against another jar. A
+  framework jar built by an older kit is rebuilt once.
+- Test Connection no longer overrides a pak's `conf/logging.properties`
+  (factory issue #322). It used to raise every logger it looked up to
+  INFO, which added an INFO entry for the adapter class and the helpers
+  Test Connection builds: every account added afterwards then lost a
+  `DEBUG` level set in the file for those names, and copied their instance
+  lines into `collector.log`, until the next log4j reload or collector
+  restart. Now the raise is skipped when the pak's own file has a key
+  covering the name, already loaded or still to be loaded by the SDK; an
+  entry from another pak's file does not count. Under that entry Test
+  Connection INFO did not reach `collector.log` before either; WARN and
+  ERROR still do, so keep Test Connection diagnostics in the result
+  message or at WARN. A pak without the file, and every pak on 8.18 (whose
+  SDK never reads the file), behaves as before. Proven in a harness
+  against the 9.0.2 and 8.18.7 SDK jars, not yet on a live collector.
+- `resources/resources.properties` at the pak root writes `VENDOR=` as
+  raw UTF-8, as `DISPLAY_NAME=` and `DESCRIPTION=` always were. Its reader
+  is the platform's pak manager, which decodes the file as UTF-8 and knows
+  no `\uXXXX` escape; 1.0.26 and 1.0.27 wrote a non-ASCII vendor that way.
+  Paks with an ASCII vendor (every pak that sets none) are unchanged.
+- Pak bytes: inside `lib/vcfcf-adapter-base.jar`, the manifest shows
+  1.0.28 and gains the `X-Vcfcf-Sdk-Sha256` line,
+  `com/vcfcf/adapter/VcfCfAdapter.class` changes, two inner classes are
+  new (`VcfCfAdapter$Log4jHandles`, `VcfCfAdapter$PakKeys`), and three
+  inner classes differ only in line numbers. Nothing else changes unless
+  the pak sets a non-ASCII `vendor`.
+- Adoption: no source change. A pak repo whose release workflow already
+  checks a known jar's sha256 is unaffected; one that passes any other jar
+  to `build-sdk --release` now fails its tag build. A pak on the floating
+  major gets this on its next build; a pinned pak bumps `BUILDKIT_TAG` to
+  `sdk-buildkit-v1.0.28` and its committed SHA256SUMS.
+
 ## Behavior since 1.0.27
 
 - The overview pages (`overview.packed`, light and dark) HTML-escape the
@@ -401,6 +459,11 @@ stops the build and says so.
 Former names, still accepted: `vrops-adapters-sdk-2.2.jar` (the 9.0.2.0
 jar), `vrops-adapters-sdk-8.18.7.jar`, `vrops-adapters-sdk-9.1.1.0100.jar`.
 
+**Which builds accept which jars.** Release builds (`--release`,
+`--require-sdk-compat`, `VCFCF_SDK_COMPAT_REQUIRED=1`): `--sdk-jar` must be
+a 9.0 row, every `--sdk-compat-jar` any row, no override. Hand builds: any
+jar, with a boxed warning for one that is not.
+
 **Where it is on an appliance.** On every line the collector's jar is
 
     /usr/lib/vmware-vcops/common/lib/vrops-adapters-sdk.jar
@@ -415,10 +478,11 @@ working tree, and take its hash:
 Find the hash in the table above and rename the copy to the file name on
 that row. Do not name it before checking: a patched appliance of the same
 version carries a different build of the jar. A jar from an appliance at a
-build not in the table has a hash the kit does not know. It still
-compiles, but the 9.0 leg reports it as an unknown jar; name it
-`vrops-adapters-sdk-<version>.<build>.jar` from the appliance's own
-version and build. Partners with access can pull the jar from the Broadcom TAP / partner
+build not in the table has a hash the kit does not know. A hand build
+still compiles against it, with a warning; a release build (`--release` or
+`--require-sdk-compat`) refuses it. A jar outside the table is a new kit
+release, not a flag. Name it `vrops-adapters-sdk-<version>.<build>.jar`
+from the appliance's own version and build. Partners with access can pull the jar from the Broadcom TAP / partner
 SDK portal instead.
 
 **Providing it to the build.**
