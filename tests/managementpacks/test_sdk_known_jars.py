@@ -17,6 +17,7 @@ script equality tests pin.
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 import zipfile
@@ -503,6 +504,60 @@ def test_run_stitch_tests_release_run_accepts_any_known_line(tmp_path):
     env.update({"VCFCF_SDK_JAR": str(jar), "VCFCF_SDK_COMPAT_REQUIRED": "1"})
     r = _bash(script, env)
     assert "no override" not in r.stderr and "WOULD REFUSE" not in r.stdout
+
+
+# The known-jar lookup must not depend on pipe timing. bash's printf writes a
+# line at a time, so `printf ... | grep -q` let grep exit on a match while
+# printf still had lines to write; printf took SIGPIPE, pipefail failed the
+# pipeline, and a known jar read as unknown (seen once in CI on the 4-row
+# table). A table far past the 64 KiB pipe buffer, with the match first, makes
+# that race certain rather than rare.
+_PAD_ROWS = 20000
+
+
+def _pad_table_with_match_first(script: Path, stub: Path, line: str) -> None:
+    text = script.read_text(encoding="utf-8")
+    pad = "".join(f"{i:064x}|0.0|padding row {i}\n" for i in range(1, _PAD_ROWS + 1))
+    first = f"{sdk_builder._sha256_of(stub)}|{line}|Stub platform\n"
+    assert text.count('KNOWN_SDK_JARS="') == 1
+    script.write_text(text.replace('KNOWN_SDK_JARS="', 'KNOWN_SDK_JARS="' + first + pad),
+                      encoding="utf-8")
+
+
+@_needs_jdk
+def test_run_stitch_tests_lookup_survives_a_large_table(tmp_path):
+    script = _stitch_copy(tmp_path)
+    jar = _jar(tmp_path / "sdk.jar", "stub", major=55)
+    _pad_table_with_match_first(script, jar, "9.0")
+    env = {k: v for k, v in os.environ.items() if not k.startswith("VCFCF_")}
+    env.update({"VCFCF_SDK_JAR": str(jar), "VCFCF_SDK_COMPAT_REQUIRED": "1"})
+    r = _bash(script, env)
+    assert "no override" not in r.stderr and "WOULD REFUSE" not in r.stdout, r.stderr
+    assert "run_stitch_tests: " in r.stdout  # it reached the compile banner
+
+
+def test_build_framework_lookup_survives_a_large_table(tmp_path):
+    """Gets past the check: the next stop is the fake javac's version check."""
+    rt, script, env = _framework_tree(tmp_path, "11.0.24")
+    jar = _jar(rt / _N_9_0_2_0, "stub")
+    _pad_table_with_match_first(script, jar, "9.0")
+    env["VCFCF_SDK_COMPAT_REQUIRED"] = "1"
+    r = _bash(script, env)
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "WOULD REFUSE" not in r.stdout and "no override" not in r.stderr
+    assert "javac 11 cannot read" in r.stderr
+
+
+@pytest.mark.parametrize("name", ["run_stitch_tests.sh", "build-framework.sh"])
+def test_no_pipeline_into_an_early_exiting_reader(name):
+    """Both scripts run under pipefail: a writer piped into grep -q / head can
+    take SIGPIPE and fail the pipeline after the reader got its answer."""
+    code = [ln for ln in (_FW / name).read_text(encoding="utf-8").splitlines()
+            if not ln.lstrip().startswith("#")]
+    bad = [ln for ln in code
+           if re.search(r"\|\s*(grep\s+(-\w*[qlm]|--quiet|--max-count)|head\b|sed\s+-n\s+'?\d+q)",
+                        ln)]
+    assert not bad, bad
 
 
 # ---------------------------------------------------------------------------

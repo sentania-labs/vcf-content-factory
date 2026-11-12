@@ -437,7 +437,10 @@ fi
 
 FW_VERSION="${VCFCF_FRAMEWORK_VERSION:-}"
 if [ -z "$FW_VERSION" ]; then
-    FW_VERSION=$(sed -n 's/^BUILDKIT_VERSION *= *"\([^"]*\)".*/\1/p' "$ROOT/buildkit.py" 2>/dev/null | head -1)
+    # No "| head -1": under set -e and pipefail, sed taking SIGPIPE (or a
+    # missing buildkit.py) would end the build here instead of "unknown".
+    FW_VERSION=$(sed -n 's/^BUILDKIT_VERSION *= *"\([^"]*\)".*/\1/p' "$ROOT/buildkit.py" 2>/dev/null || true)
+    FW_VERSION="${FW_VERSION%%$'\n'*}"
 fi
 FW_VERSION="${FW_VERSION:-unknown}"
 FW_COMMIT="unknown"

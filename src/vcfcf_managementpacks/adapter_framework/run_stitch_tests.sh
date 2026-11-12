@@ -126,7 +126,9 @@ fi
 JAR_PROBLEM=""
 if [ -z "$JAR_SHA" ]; then
     JAR_PROBLEM="$(basename "$SDK_JAR") was not hash-checked (no sha256sum or shasum), so which jar it is is unknown."
-elif ! printf '%s\n' "$KNOWN_SDK_JARS" | grep -q "^$JAR_SHA|"; then
+# A here-string, not printf | grep -q: grep -q exits on the first match, the
+# writer can take SIGPIPE, and pipefail turns a match into "unknown jar".
+elif ! grep -q "^$JAR_SHA|" <<<"$KNOWN_SDK_JARS"; then
     JAR_PROBLEM="$(basename "$SDK_JAR") has sha256 $JAR_SHA, which matches no known SDK jar (adapter_runtime/PROVENANCE.md)."
 fi
 if [ -n "$JAR_PROBLEM" ]; then
