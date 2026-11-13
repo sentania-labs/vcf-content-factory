@@ -317,10 +317,13 @@ The per-type floors live in
 `src/vcfcf_core/dashboards/widget_versions.py`
 (`WIDGET_TYPE_MIN_OPS_VERSION`: Section 9.1.1, the lowest build proven to
 import it, with 9.1.0 unchecked; every other renderer type has no known
-floor). `Dashboard.validate()` warns on every validate and SDK pak build
-when a dashboard uses a floored type. It is a warning with no gate because
-no bundle manifest, release manifest, or `adapter.yaml` field declares a
-target VCF Ops version yet (issue #199).
+floor). `Dashboard.validate()` warns on every validate when a dashboard
+uses a floored type, naming the file and the dashboard; content bundles
+declare no target VCF Ops version, so that stays a warning (issue #199).
+Tier 2 paks do declare one: they support 8.18, 9.0 and 9.1 (RULE-019,
+`sdk_builder._SDK_COMPAT_LINES`), so since 2026-11-12 the SDK pak build
+fails a bundled dashboard whose widget types the oldest line (8.18.7)
+cannot import (`dashboard_fidelity_wire_format.md` §Section).
 
 ## Uninstall behavior
 
