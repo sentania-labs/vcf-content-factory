@@ -6,6 +6,8 @@ Subcommands:
   setup:  interactive credential wizard (bootstrap-v2 Phase 2). Must be
             run by the user in a real terminal; refuses a non-TTY stdin
             so no hook or pipe can ever feed it a password.
+  keydiff: read-only key differential between two instances or two
+            saved snapshots (vCommunity Java port design, T5).
 """
 from __future__ import annotations
 
@@ -22,6 +24,10 @@ subcommands:
             writes it to .env. The password is read with a silent
             prompt, so it never reaches the transcript. Run it in your
             own terminal (in a Claude session, prefix with `!`).
+  keydiff   compare stat and property keys and latest values of matching
+            objects on two instances (--profile) or snapshots
+            (--snapshot-in); --snapshot-out captures one side. Read-only:
+            GET requests only. `keydiff --help` for the options.
 """
 
 
@@ -36,6 +42,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if args[0] == "setup":
         from .setup_credentials import main as setup_main  # noqa: PLC0415
         return setup_main(args[1:])
+    if args[0] == "keydiff":
+        from .keydiff import main as keydiff_main  # noqa: PLC0415
+        return keydiff_main(args[1:])
     print(f"unknown subcommand: {args[0]}", file=sys.stderr)
     print(_USAGE, end="", file=sys.stderr)
     return 2

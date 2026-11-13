@@ -1,0 +1,81 @@
+{
+  "_comment": "Synthesized for tests/test_common_keydiff.py. Two VCF Operations instances watching the same two vCenters: A runs the upstream collector, B the Java port. host-12 exists in both vCenters (MOIDs repeat across vCenters). Times are epoch ms; NOW is 1793178366000.",
+  "now": 1793178366000,
+  "vc1": "11111111-aaaa-4bbb-8ccc-000000000001",
+  "vc2": "22222222-aaaa-4bbb-8ccc-000000000002",
+  "a": {
+    "resources": [
+      {"id": "a0000000-0000-4000-8000-000000000001", "name": "esx01.vc1", "ak": "VMWARE", "rk": "HostSystem", "vcid": "11111111-AAAA-4BBB-8CCC-000000000001", "moid": "host-12"},
+      {"id": "a0000000-0000-4000-8000-000000000002", "name": "esx01.vc2", "ak": "VMWARE", "rk": "HostSystem", "vcid": "22222222-aaaa-4bbb-8ccc-000000000002", "moid": "host-12"},
+      {"id": "a0000000-0000-4000-8000-000000000003", "name": "esx02.vc1", "ak": "VMWARE", "rk": "HostSystem", "vcid": "11111111-aaaa-4bbb-8ccc-000000000001", "moid": "host-13"},
+      {"id": "a0000000-0000-4000-8000-000000000004", "name": "orphan-host", "ak": "VMWARE", "rk": "HostSystem", "moid": "host-99"},
+      {"id": "a0000000-0000-4000-8000-000000000005", "name": "Library A", "ak": "vCommunity", "rk": "Content Library"},
+      {"id": "a0000000-0000-4000-8000-000000000006", "name": "Library B", "ak": "vCommunity", "rk": "Content Library"}
+    ],
+    "stats": {
+      "a0000000-0000-4000-8000-000000000001": {
+        "vCommunity|NIC Count": [4.0, 1793178300000],
+        "vCommunity|KPI": [99.0, 1793178300000],
+        "vCommunity|Legacy": [1.0, 1793178300000],
+        "vCommunity|Old": [5.0, 1793178300000],
+        "cpu|usage_average": [12.5, 1793178300000]
+      },
+      "a0000000-0000-4000-8000-000000000002": {
+        "vCommunity|NIC Count": [2.0, 1793178300000]
+      },
+      "a0000000-0000-4000-8000-000000000003": {
+        "vCommunity|NIC Count": [6.0, 1793178300000]
+      },
+      "a0000000-0000-4000-8000-000000000005": {
+        "vCommunity|Items": [12.0, 1793178300000]
+      }
+    },
+    "properties": {
+      "a0000000-0000-4000-8000-000000000001": {
+        "vCommunity|HA Enabled": "true",
+        "vCommunity|Maintenance Mode Required": "1.0",
+        "vCommunity|Version": "7.0",
+        "vCommunity|Threshold": "1.0",
+        "summary|version": "8.0.3"
+      },
+      "a0000000-0000-4000-8000-000000000005": {
+        "vCommunity|Type": "LOCAL\tsubscribed\nyes"
+      }
+    }
+  },
+  "b": {
+    "resources": [
+      {"id": "b0000000-0000-4000-8000-000000000001", "name": "esx01.vc1", "ak": "VMWARE", "rk": "HostSystem", "vcid": "11111111-aaaa-4bbb-8ccc-000000000001", "moid": "host-12"},
+      {"id": "b0000000-0000-4000-8000-000000000002", "name": "esx01-renamed.vc2", "ak": "VMWARE", "rk": "HostSystem", "vcid": "22222222-aaaa-4bbb-8ccc-000000000002", "moid": "host-12"},
+      {"id": "b0000000-0000-4000-8000-000000000005", "name": "Library A", "ak": "vcfcf_vcommunity", "rk": "Content Library"},
+      {"id": "b0000000-0000-4000-8000-000000000007", "name": "Library C", "ak": "vcfcf_vcommunity", "rk": "Content Library"}
+    ],
+    "stats": {
+      "b0000000-0000-4000-8000-000000000001": {
+        "vCommunity|NIC Count": [4.0, 1793178310000],
+        "vCommunity|KPI": [99.004, 1793178310000],
+        "vCommunity|Remaining Days": [30.0, 1793178310000],
+        "vCommunity|Old": [5.5, 1792900000000],
+        "cpu|usage_average": [40.0, 1793178310000]
+      },
+      "b0000000-0000-4000-8000-000000000002": {
+        "vCommunity|NIC Count": [2.0, 1793178310000]
+      },
+      "b0000000-0000-4000-8000-000000000005": {
+        "vCommunity|Items": [12.0, 1793178310000]
+      }
+    },
+    "properties": {
+      "b0000000-0000-4000-8000-000000000001": {
+        "vCommunity|HA Enabled": "true",
+        "vCommunity|Maintenance Mode Required": "1",
+        "vCommunity|Version": "8.0",
+        "vCommunity|Threshold": "1.001",
+        "summary|version": "8.0.3"
+      },
+      "b0000000-0000-4000-8000-000000000005": {
+        "vCommunity|Type": "LOCAL\tsubscribed\nyes"
+      }
+    }
+  }
+}
