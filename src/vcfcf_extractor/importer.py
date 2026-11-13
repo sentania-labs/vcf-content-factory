@@ -196,11 +196,19 @@ def _write(plan: Plan, out: Path, report_dir: Path, args, inputs: List[Path]) ->
     (report_dir / "id_map.tsv").write_text("\n".join(lines) + "\n", encoding="utf-8")
     if args.layout == "pak":
         bc: Dict[str, List[str]] = defaultdict(list)
+        kinds = set()
         for e in plan.emitted:
             bc[TYPE_DIRS[e.type]].append(e.relpath)
+            if e.type in ("symptom", "alert") and e.yaml_tree.get("adapter_kind"):
+                kinds.add(str(e.yaml_tree["adapter_kind"]))
+        head = ["# Merge into the pak's adapter.yaml (paths are relative to it)."]
+        if args.naming == "unprefixed":
+            head.append("# The names are unprefixed: also set  content_naming: unprefixed")
+        if kinds:
+            head.append(f"# Symptoms and alerts here target {', '.join(sorted(kinds))}: unless that is the pak's own "
+                        f"adapter kind, also set  content_foreign_adapter_kinds: [{', '.join(sorted(kinds))}]")
         (report_dir / "bundled_content.yaml").write_text(
-            "# Paste under bundled_content: in the pak's adapter.yaml (paths are relative to it).\n"
-            + dump_yaml({"bundled_content": dict(bc)}), encoding="utf-8")
+            "\n".join(head) + "\n" + dump_yaml({"bundled_content": dict(bc)}), encoding="utf-8")
     return notes
 
 
