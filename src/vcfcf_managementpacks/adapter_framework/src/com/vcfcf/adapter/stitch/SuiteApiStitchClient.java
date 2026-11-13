@@ -143,7 +143,7 @@ import java.util.regex.Pattern;
  * // Many resources per cycle (1.0.24): properties first, then stats, chunked.
  * SuiteApiBatchResult r = client.pushBatch(propsByUuid, statsByUuid, System.currentTimeMillis());
  * String body = client.get("/api/resources?adapterKind=VMWARE");
- * // Read-style POST queries only (path must end in /query); throws like get:
+ * // Read-style POST queries only (last path segment "query"); throws like get:
  * String latest = client.post("/api/resources/stats/latest/query", queryJson);
  * // Events (DIAGNOSTIC; NOTIFICATION is refused, see SuiteApiEvent):
  * SuiteApiBatchResult ev = client.pushEvents(events);
@@ -734,7 +734,7 @@ public final class SuiteApiStitchClient {
     }
 
     /**
-     * Push properties whose values may be strings or numbers (buildkit, T3):
+     * Push properties whose values may be strings or numbers:
      * same endpoint, chunking, id handling and failure rules as
      * {@link #pushPropertiesBatch(Map, long, int, int)}. A {@link String}
      * value is sent as {@code "values":["..."]}, byte for byte as
@@ -745,17 +745,28 @@ public final class SuiteApiStitchClient {
      * and 9.1. The schema allows one of {@code values} and {@code data} per
      * entry, never both, and that is what each entry carries.
      *
+     * <p><strong>Every number is sent as a double.</strong> The wire's only
+     * numeric type is {@code data}, a double in the schema
+     * ({@code format: double} on 8.18, 9.0 and 9.1), and a value is written
+     * as {@code Double.toString(n.doubleValue())}: {@code 5} goes out as
+     * {@code 5.0}, {@code 0.1f} as {@code 0.10000000149011612}, and a
+     * {@code BigDecimal} with a fractional part is rounded to the nearest
+     * double. An integer value whose magnitude exceeds 2^53
+     * (9007199254740992), a {@code Long} byte counter or a microsecond epoch
+     * for example, has no exact double, so it is dropped and counted rather
+     * than sent as a different number ({@link #isUnrepresentableInteger}).
+     * Send a {@code String} when the exact value matters.
+     *
      * <p>Rejected at this boundary, never sent: a {@code null} key or value, a
      * NaN or infinite number (after {@link Number#doubleValue()}, so an
-     * out-of-range {@code BigDecimal} too), and any value that is neither a
-     * {@code String} nor a {@code Number} (a {@code Boolean} included: send
-     * {@code "true"} or {@code 1}). Each counts in
-     * {@link SuiteApiBatchResult#getDropped()}, one WARN per call, as in the
-     * stats batch.
+     * out-of-range {@code BigDecimal} too), an integer beyond 2^53 (above),
+     * and any value that is neither a {@code String} nor a {@code Number} (a
+     * {@code Boolean} included: send {@code "true"} or {@code 1}). Each counts
+     * in {@link SuiteApiBatchResult#getDropped()}, one WARN per call, as in
+     * the stats batch.
      *
-     * <p>Not established: what the platform does with a numeric sample on a
-     * key whose history holds strings, or the reverse (design experiment E3).
-     * Keep one type per key.
+     * <p>Keep one type per key: what a numeric sample does to a key whose
+     * earlier samples are strings, or the reverse, is untested.
      *
      * @param byResource   resource UUID to (statKey to {@link String} or
      *                     {@link Number}); no-op if {@code null} or empty
@@ -906,9 +917,12 @@ public final class SuiteApiStitchClient {
         STATS("pushStatsBatch", "null, NaN or infinite"),
         /** {@code String} values only, {@code POST /api/resources/properties}. */
         PROPERTIES("pushPropertiesBatch", "null"),
-        /** {@code String} or finite {@code Number} values, same endpoint as PROPERTIES. */
+        /**
+         * {@code String} or finite {@code Number} values (no integer beyond
+         * 2^53), same endpoint as PROPERTIES.
+         */
         TYPED_PROPERTIES("pushTypedPropertiesBatch",
-                "null, NaN, infinite, or neither string nor number");
+                "null, NaN, infinite, integer beyond 2^53, or neither string nor number");
 
         final String op;
         final String badValue;
@@ -1054,9 +1068,14 @@ public final class SuiteApiStitchClient {
                 }
                 java.util.function.Consumer<String> hook = serializeHook;
                 if (hook != null) hook.accept(r.getKey());
+                // Typed properties go through the typed serializer; string
+                // properties through the String-only one, as before typed
+                // properties existed.
                 BatchEntry be = new BatchEntry(r.getKey(), stats
                         ? statsBatchEntry(r.getKey(), castStats(clean), timestamp)
-                        : propertiesBatchEntryOf(r.getKey(), clean, timestamp),
+                        : kind == Kind.TYPED_PROPERTIES
+                                ? propertiesBatchEntryOf(r.getKey(), clean, timestamp, true)
+                                : propertiesBatchEntry(r.getKey(), castProps(clean), timestamp),
                         r.getValue());
                 if (!chunk.isEmpty() && !fits(chunk.size(), chunkBytes, be.bytes, maxRes, maxB)) {
                     sendChunk(kind, op, path, prefix, chunk, timestamp, run);
@@ -1224,7 +1243,9 @@ public final class SuiteApiStitchClient {
         Map<String, Object> clean = cleanValues(kind, be.values, null);
         String path = "/api/resources/" + be.id + (stats ? "/stats" : "/properties");
         String body = stats ? buildStatsJson(castStats(clean), timestamp)
-                : buildPropertiesJsonOf(clean, timestamp);
+                : kind == Kind.TYPED_PROPERTIES
+                        ? buildPropertiesJsonOf(clean, timestamp, true)
+                        : buildPropertiesJson(castProps(clean), timestamp);
         try {
             postWithToken(path, body, tok, REQUEST_TIMEOUT);
             return PerIdOutcome.OK;
@@ -1288,10 +1309,46 @@ public final class SuiteApiStitchClient {
             case STATS:
                 return v instanceof Double && !((Double) v).isNaN() && !((Double) v).isInfinite();
             case TYPED_PROPERTIES:
-                return v instanceof String || isFiniteNumber(v);
+                return v instanceof String || (isFiniteNumber(v) && !isUnrepresentableInteger(v));
             default:
                 return v instanceof String;
         }
+    }
+
+    /** 2^53: every integer of at most this magnitude is exactly a double. */
+    static final long MAX_EXACT_DOUBLE_INTEGER = 1L << 53;
+
+    /**
+     * True for an integer value whose magnitude exceeds 2^53, which a double
+     * (the only numeric type the wire carries) cannot hold exactly: a
+     * {@code Long}, {@code Integer}, {@code Short}, {@code Byte},
+     * {@code AtomicLong}, {@code AtomicInteger}, {@code LongAdder} or
+     * {@code LongAccumulator} beyond it, a {@code BigInteger} beyond it, or a
+     * {@code BigDecimal} with no fractional part beyond it. Sending its
+     * double would send a different number, so it is dropped and counted.
+     * {@code Double} and {@code Float} values are already doubles and are
+     * sent as they are; a {@code BigDecimal} with a fractional part is
+     * rounded to the nearest double (documented, not dropped).
+     */
+    static boolean isUnrepresentableInteger(Object v) {
+        if (v instanceof Long || v instanceof Integer || v instanceof Short
+                || v instanceof Byte || v instanceof java.util.concurrent.atomic.AtomicLong
+                || v instanceof java.util.concurrent.atomic.AtomicInteger
+                || v instanceof java.util.concurrent.atomic.LongAdder
+                || v instanceof java.util.concurrent.atomic.LongAccumulator) {
+            long l = ((Number) v).longValue();
+            return l > MAX_EXACT_DOUBLE_INTEGER || l < -MAX_EXACT_DOUBLE_INTEGER;
+        }
+        if (v instanceof java.math.BigInteger) {
+            return ((java.math.BigInteger) v).abs()
+                    .compareTo(java.math.BigInteger.valueOf(MAX_EXACT_DOUBLE_INTEGER)) > 0;
+        }
+        if (v instanceof java.math.BigDecimal) {
+            java.math.BigDecimal d = (java.math.BigDecimal) v;
+            if (d.signum() == 0 || d.stripTrailingZeros().scale() > 0) return false;
+            return d.abs().compareTo(java.math.BigDecimal.valueOf(MAX_EXACT_DOUBLE_INTEGER)) > 0;
+        }
+        return false;
     }
 
     /** A {@link Number} whose {@code doubleValue()} is neither NaN nor infinite. */
@@ -1307,6 +1364,12 @@ public final class SuiteApiStitchClient {
         return (Map<String, Double>) m;
     }
 
+    /** Values were checked by {@link #isSendable}; the cast is safe. */
+    @SuppressWarnings("unchecked")
+    private static Map<String, String> castProps(Map<String, ?> m) {
+        return (Map<String, String>) m;
+    }
+
     /** The first {@link #BATCH_FAILURE_IDS_LOGGED} ids of a chunk, for a WARN. */
     private static List<String> firstIds(List<BatchEntry> chunk) {
         List<String> ids = new ArrayList<>();
@@ -1315,6 +1378,20 @@ public final class SuiteApiStitchClient {
             ids.add(be.id);
         }
         return ids;
+    }
+
+    /**
+     * The first {@link #BATCH_FAILURE_IDS_LOGGED} distinct resource ids of an
+     * events chunk, in order, for a WARN: several events can target one
+     * resource, and the line names each resource once. Visible to tests.
+     */
+    static List<String> firstDistinctIds(List<BatchEntry> chunk) {
+        Set<String> ids = new LinkedHashSet<>();
+        for (BatchEntry be : chunk) {
+            if (ids.size() >= BATCH_FAILURE_IDS_LOGGED) break;
+            ids.add(be.id);
+        }
+        return new ArrayList<>(ids);
     }
 
     /**
@@ -1341,14 +1418,16 @@ public final class SuiteApiStitchClient {
 
     /**
      * {@link #propertiesBatchEntry} for values already checked by
-     * {@link #isSendable}: a {@link String} (sent as {@code values}) or a
-     * finite {@link Number} (sent as {@code data}). For a map of strings the
-     * bytes are those of {@link #propertiesBatchEntry}. Visible to tests.
+     * {@link #isSendable}. With {@code typed} (only
+     * {@link Kind#TYPED_PROPERTIES} passes it), a {@link String} is sent as
+     * {@code values} and a {@link Number} as {@code data}; without it every
+     * value must be a {@link String}. For a map of strings the bytes are those
+     * of {@link #propertiesBatchEntry}. Visible to tests.
      */
     static String propertiesBatchEntryOf(String resourceId, Map<String, ?> properties,
-            long timestamp) {
+            long timestamp, boolean typed) {
         return "{\"resourceId\":" + jsonStr(resourceId) + ",\"property-contents\":"
-                + buildPropertiesJsonOf(properties, timestamp) + "}";
+                + buildPropertiesJsonOf(properties, timestamp, typed) + "}";
     }
 
     /** {@code prefix}, the entries joined by {@code ","}, then {@code "]}"}. */
@@ -1399,7 +1478,7 @@ public final class SuiteApiStitchClient {
     }
 
     // -----------------------------------------------------------------------
-    // Events (T2)
+    // Events
     // -----------------------------------------------------------------------
 
     /** Bulk events endpoint. Never {@code /adapterkinds/{kind}}: GENERAL kinds get 400 (1514). */
@@ -1446,16 +1525,20 @@ public final class SuiteApiStitchClient {
      * (the caps here are conservative, not measured), whether one invalid
      * event fails the whole request or only itself (the answer carries no
      * per-event result), and the lifecycle of a {@code managedExternally:false}
-     * event from a GENERAL adapter.
+     * event from a GENERAL adapter (untested).
      *
      * <p><strong>Refused at this boundary, never sent</strong> (each counted
      * in {@link SuiteApiBatchResult#getDropped()}, one WARN per call with the
      * counts by reason, never the message text): a {@code null} event; a
      * {@code NOTIFICATION} event (see {@link SuiteApiEvent}: silently
      * discarded on a foreign resource; send {@code DIAGNOSTIC}); a resource
-     * id that is not a UUID; a {@code null} or blank message; a start time,
-     * or a set cancel time, before {@link SuiteApiEvent#MIN_TIME_UTC}. Ids
-     * are trimmed and lowercased.
+     * id that is not a UUID; a {@code null} or blank message; a start time
+     * before {@link SuiteApiEvent#MIN_TIME_UTC} (the spec's floor), or a set
+     * cancel time before it (the framework's rule: the spec does not floor
+     * the cancel time, and a cancel time of 0 or less is unset, not sent).
+     * Ids are trimmed and lowercased. A {@code NOTIFICATION} event is refused
+     * on every resource: it is discarded on a foreign one, whether it is on a
+     * pak's own resource is untested, and this call cannot tell them apart.
      *
      * <p><strong>Failures.</strong> Never throws. Events are packed in caller
      * order into requests of at most {@code maxEvents} events and
@@ -1516,7 +1599,9 @@ public final class SuiteApiStitchClient {
                         + " event(s), not sent: " + refused
                         + (refused.containsKey(REFUSED_NOTIFICATION)
                                 ? " (NOTIFICATION events are answered 200 and silently"
-                                + " discarded on another adapter's resource; send DIAGNOSTIC)"
+                                + " discarded on another adapter's resource, and are refused on"
+                                + " every resource because this call cannot tell a pak's own"
+                                + " resource from a foreign one; send DIAGNOSTIC)"
                                 : ""));
             }
             long emptyBytes = EVENTS_PREFIX.getBytes(StandardCharsets.UTF_8).length + 2L;
@@ -1601,7 +1686,7 @@ public final class SuiteApiStitchClient {
             run.stopped = true;
             Exception cause = e instanceof TokenRetryException ? (Exception) e.getCause() : e;
             logFailure("pushEvents", "SuiteApiStitchClient: pushEvents request of " + n
-                    + " event(s) failed, first resource ids " + firstIds(chunk) + "; "
+                    + " event(s) failed, first resource ids " + firstDistinctIds(chunk) + "; "
                     + stopReason(e) + "; not re-sent, the rest of this call is not sent",
                     cause);
             return false;
@@ -2038,8 +2123,75 @@ public final class SuiteApiStitchClient {
         }
     }
 
-    /** The path suffix {@link #post} requires: the Suite API's read-style POST queries. */
+    /** The last path segment {@link #post} requires: the Suite API's read-style POST queries. */
     public static final String QUERY_PATH_SUFFIX = "/query";
+
+    /**
+     * Default cap on a {@link #post} response body: 8 MiB (8388608 bytes).
+     * The body is read whole into memory, and the one collector heap this
+     * framework has measured (a 2 vCPU / 8 GB node, {@code -Xmx1024m})
+     * leaves a new adapter instance about 65 MB
+     * ({@code knowledge/context/investigations/2026-11-06-collector-jvm-sizing.md}).
+     * Reading a body costs about three times its size while it is decoded,
+     * so 8 MiB keeps one query under half that budget. A Cloud Proxy's heap
+     * is not measured.
+     */
+    public static final int POST_MAX_RESPONSE_BYTES_DEFAULT = 8 * 1024 * 1024;
+
+    /**
+     * The only paths {@link #post} accepts: one or more {@code /}-separated
+     * segments of {@code [A-Za-z0-9_-]} (a UUID segment fits), the last of
+     * them exactly {@code query}, then at most one query string of
+     * {@code key=value} pairs joined by {@code &}, keys of
+     * {@code [A-Za-z0-9_]} and values of {@code [A-Za-z0-9_.,:-]}. Nothing
+     * else: no {@code #}, {@code ;}, {@code %}, {@code \}, {@code .} or
+     * {@code ..} segment, empty segment, whitespace, control character or
+     * absolute URL.
+     */
+    static final Pattern QUERY_PATH = Pattern.compile(
+            "(?:/[A-Za-z0-9_-]+)+/query"
+            + "(?:\\?[A-Za-z0-9_]+=[A-Za-z0-9_.,:-]+(?:&[A-Za-z0-9_]+=[A-Za-z0-9_.,:-]+)*)?");
+
+    /**
+     * Thrown by {@link #post} when the response body is larger than the cap.
+     * Carries the cap and the URL, never any of the body.
+     */
+    public static final class ResponseTooLargeException extends IOException {
+        private static final long serialVersionUID = 1L;
+        private final int limit;
+
+        ResponseTooLargeException(String method, String fullUrl, int limit) {
+            super("Suite API " + method + " " + fullUrl + " response is larger than " + limit
+                    + " bytes, the cap for this call; nothing returned. Bound the resource ids"
+                    + " per query and use page/pageSize where the endpoint takes them, or pass"
+                    + " a larger cap");
+            this.limit = limit;
+        }
+
+        /** The cap, in bytes, that the body exceeded. */
+        public int getLimit() {
+            return limit;
+        }
+    }
+
+    /**
+     * {@link #post(String, String, int)} with the default response cap,
+     * {@link #POST_MAX_RESPONSE_BYTES_DEFAULT}.
+     *
+     * @param path     path relative to the Suite API base, last segment
+     *                 {@code query} (e.g. {@code "/api/resources/stats/latest/query"})
+     * @param jsonBody the query document; not {@code null}
+     * @return the response body as a string
+     * @throws IllegalArgumentException   if the path is not an accepted query
+     *                                    path or the body is {@code null}
+     * @throws SuiteApiHttpException      on a non-2xx answer
+     * @throws ResponseTooLargeException  if the response body exceeds the cap
+     * @throws IOException                on any other HTTP or network error
+     * @throws InterruptedException       if the calling thread is interrupted
+     */
+    public String post(String path, String jsonBody) throws IOException, InterruptedException {
+        return post(path, jsonBody, POST_MAX_RESPONSE_BYTES_DEFAULT);
+    }
 
     /**
      * Authenticated POST of a JSON query to a <strong>read-style</strong>
@@ -2061,60 +2213,87 @@ public final class SuiteApiStitchClient {
      * in the operations-api specs for 8.18, 9.0 and 9.1); this method does
      * not build or check them.
      *
-     * <p><strong>Not a write path.</strong> The path (before any {@code ?})
-     * must end in {@link #QUERY_PATH_SUFFIX}; anything else is refused with
-     * {@link IllegalArgumentException} before a token is fetched or a byte
-     * is sent. Pushes have their own calls ({@link #pushPropertiesBatch},
-     * {@link #pushStatsBatch}, {@link #pushEvents}, {@link #addChildren}),
-     * which never throw into the collect cycle and isolate bad entries; a
-     * write through this method would have none of that. Widening the
-     * suffix rule is a framework change, made on purpose.
+     * <p><strong>Not a write path.</strong> The path must match
+     * {@link #QUERY_PATH}: {@code /}-separated segments of
+     * {@code [A-Za-z0-9_-]}, the last exactly {@code query}, and at most one
+     * query string of {@code key=value} pairs (keys {@code [A-Za-z0-9_]},
+     * values {@code [A-Za-z0-9_.,:-]}). Anything else, a {@code #} fragment,
+     * {@code ;}, {@code %}, {@code \}, a {@code .} or {@code ..} segment,
+     * an empty segment, whitespace or a control character included, is
+     * refused with {@link IllegalArgumentException} before a token is fetched
+     * or a connection is opened. Pushes have their own calls
+     * ({@link #pushPropertiesBatch}, {@link #pushStatsBatch},
+     * {@link #pushEvents}, {@link #addChildren}), which never throw into the
+     * collect cycle and isolate bad entries; a write through this method
+     * would have none of that. Widening the rule is a framework change, made
+     * on purpose.
      *
-     * <p>Same contract as {@link #get(String)}: the cached token, one
-     * re-acquire and retry on HTTP 401, the same platform transport (TLS
-     * posture of {@link VcfCfAdapter#openPlatformConnection(String)}), the
-     * same 30 s connect and read timeouts, {@code Accept: application/json},
-     * no other retry. A non-2xx answer throws {@link SuiteApiHttpException}
-     * with the status, the {@code apiErrorCode} and a sanitized body excerpt
-     * (message {@code "Suite API POST <url> HTTP <status>[ apiErrorCode <n>]"});
-     * a closed client throws an {@link IOException} without a token. Nothing
+     * <p><strong>Size and time.</strong> The response body is read whole into
+     * memory, up to {@code maxResponseBytes}; a larger body throws
+     * {@link ResponseTooLargeException} (no part of the body is returned or
+     * put in the message). The connect and read timeouts are 30 s each, the
+     * same as {@link #get(String)}, and shorter than the 120 s the batch
+     * pushes allow. A query over many resources can exceed both: bound the
+     * resource ids per query (send several queries rather than one for every
+     * object in scope) and use {@code page} and {@code pageSize} where the
+     * endpoint takes them ({@code /api/resources/query} does).
+     *
+     * <p>Otherwise the same contract as {@link #get(String)}: the cached
+     * token, one re-acquire and retry on HTTP 401, the same platform
+     * transport (TLS posture of
+     * {@link VcfCfAdapter#openPlatformConnection(String)}),
+     * {@code Accept: application/json}, no other retry. A non-2xx answer
+     * throws {@link SuiteApiHttpException} with the status, the
+     * {@code apiErrorCode} and a sanitized body excerpt (message
+     * {@code "Suite API POST <url> HTTP <status>[ apiErrorCode <n>]"}); a
+     * closed client throws an {@link IOException} without a token. Nothing
      * is logged on success, and neither the request body nor the response
      * body is ever logged by this method or put in an exception message
      * (only the server's error excerpt rides the exception, as for
      * {@code get}).
      *
-     * @param path     path relative to the Suite API base, ending in
-     *                 {@code /query} (e.g. {@code "/api/resources/stats/latest/query"})
-     * @param jsonBody the query document; not {@code null}
+     * @param path             path relative to the Suite API base, last
+     *                         segment {@code query} (e.g.
+     *                         {@code "/api/resources/stats/latest/query"})
+     * @param jsonBody         the query document; not {@code null}
+     * @param maxResponseBytes most bytes of response body to read; at least 1
      * @return the response body as a string
-     * @throws IllegalArgumentException if the path is not a query path or
-     *                                  carries a control character, or the
-     *                                  body is {@code null}
-     * @throws SuiteApiHttpException    on a non-2xx answer
-     * @throws IOException              on any other HTTP or network error
-     * @throws InterruptedException     if the calling thread is interrupted
+     * @throws IllegalArgumentException   if the path is not an accepted query
+     *                                    path, the body is {@code null}, or
+     *                                    {@code maxResponseBytes} is below 1
+     * @throws SuiteApiHttpException      on a non-2xx answer
+     * @throws ResponseTooLargeException  if the response body exceeds
+     *                                    {@code maxResponseBytes}
+     * @throws IOException                on any other HTTP or network error
+     * @throws InterruptedException       if the calling thread is interrupted
      */
-    public String post(String path, String jsonBody) throws IOException, InterruptedException {
+    public String post(String path, String jsonBody, int maxResponseBytes)
+            throws IOException, InterruptedException {
         checkQueryPath(path);
         if (jsonBody == null) {
             throw new IllegalArgumentException("SuiteApiStitchClient: post needs a JSON body"
                     + " (the query document)");
         }
+        if (maxResponseBytes < 1) {
+            throw new IllegalArgumentException("SuiteApiStitchClient: post maxResponseBytes must"
+                    + " be at least 1, got " + maxResponseBytes);
+        }
         String tok = ensureToken();
         try {
-            return urlConnRequest("POST", suiteApiBase + path, jsonBody, tok, DEFAULT_ACCEPT);
+            return urlConnRequest("POST", suiteApiBase + path, jsonBody, tok, DEFAULT_ACCEPT,
+                    REQUEST_TIMEOUT, maxResponseBytes);
         } catch (Suite401Exception e) {
             tok = reAcquireToken(tok);
-            return urlConnRequest("POST", suiteApiBase + path, jsonBody, tok, DEFAULT_ACCEPT);
+            return urlConnRequest("POST", suiteApiBase + path, jsonBody, tok, DEFAULT_ACCEPT,
+                    REQUEST_TIMEOUT, maxResponseBytes);
         }
     }
 
     /**
-     * Refuse a {@link #post} path that is not a read-style query: it must
-     * start with {@code /}, hold no control character, and end (before any
-     * {@code ?}) in {@link #QUERY_PATH_SUFFIX}. Visible to tests.
+     * Refuse a {@link #post} path that is not an accepted read-style query
+     * path ({@link #QUERY_PATH}). Visible to tests.
      *
-     * @throws IllegalArgumentException when it does not
+     * @throws IllegalArgumentException when it is not
      */
     static void checkQueryPath(String path) {
         if (path == null || !path.startsWith("/")) {
@@ -2127,12 +2306,11 @@ public final class SuiteApiStitchClient {
                         + " control character: " + loggable(path));
             }
         }
-        int q = path.indexOf('?');
-        String bare = q < 0 ? path : path.substring(0, q);
-        if (!bare.endsWith(QUERY_PATH_SUFFIX)) {
+        if (!QUERY_PATH.matcher(path).matches()) {
             throw new IllegalArgumentException("SuiteApiStitchClient: post is for read-style"
-                    + " query endpoints only (path ending in " + QUERY_PATH_SUFFIX + ", e.g."
-                    + " /api/resources/stats/latest/query); refused " + loggable(bare)
+                    + " query endpoints only (segments of [A-Za-z0-9_-], the last exactly"
+                    + " \"query\", e.g. /api/resources/stats/latest/query, then at most one"
+                    + " ?key=value&... query string); refused " + loggable(path)
                     + ". Pushes have their own calls.");
         }
     }
@@ -2349,9 +2527,23 @@ public final class SuiteApiStitchClient {
      * {@link #urlConnRequest(String, String, String, String, String)} with a
      * caller-chosen read timeout (the connect timeout stays
      * {@link #REQUEST_TIMEOUT}). Batch pushes use {@link #BATCH_READ_TIMEOUT}.
+     * The response body is read without a size cap.
      */
     private String urlConnRequest(String method, String fullUrl, String body, String opsToken,
             String accept, Duration readTimeout) throws IOException, InterruptedException {
+        return urlConnRequest(method, fullUrl, body, opsToken, accept, readTimeout, -1);
+    }
+
+    /**
+     * {@link #urlConnRequest(String, String, String, String, String, Duration)}
+     * with a cap on the 2xx response body: a body longer than
+     * {@code maxResponseBytes} throws {@link ResponseTooLargeException}
+     * after reading at most one buffer past the cap. A negative cap reads
+     * the whole body, as every caller but {@link #post} does.
+     */
+    private String urlConnRequest(String method, String fullUrl, String body, String opsToken,
+            String accept, Duration readTimeout, int maxResponseBytes)
+            throws IOException, InterruptedException {
         if (Thread.currentThread().isInterrupted()) {
             throw new InterruptedException(
                     "SuiteApiStitchClient: thread interrupted before "
@@ -2402,6 +2594,9 @@ public final class SuiteApiStitchClient {
             // Read response body. Callers that do not need it ignore the return value.
             InputStream is = conn.getInputStream();
             if (is == null) return "";
+            if (maxResponseBytes >= 0) {
+                return readCapped(is, method, fullUrl, maxResponseBytes);
+            }
             try (InputStreamReader reader =
                     new InputStreamReader(is, StandardCharsets.UTF_8)) {
                 char[] buf = new char[8192];
@@ -2412,6 +2607,30 @@ public final class SuiteApiStitchClient {
             }
         } finally {
             conn.disconnect();
+        }
+    }
+
+    /**
+     * Read a 2xx body of at most {@code max} bytes and decode it as UTF-8;
+     * throw {@link ResponseTooLargeException} as soon as more arrive. The
+     * stream is closed either way.
+     */
+    private static String readCapped(InputStream is, String method, String fullUrl, int max)
+            throws IOException {
+        try (InputStream in = is) {
+            java.io.ByteArrayOutputStream out =
+                    new java.io.ByteArrayOutputStream(Math.min(max, 8192));
+            byte[] buf = new byte[8192];
+            long total = 0;
+            int n;
+            while ((n = in.read(buf)) != -1) {
+                total += n;
+                if (total > max) {
+                    throw new ResponseTooLargeException(method, fullUrl, max);
+                }
+                out.write(buf, 0, n);
+            }
+            return new String(out.toByteArray(), StandardCharsets.UTF_8);
         }
     }
 
@@ -2479,11 +2698,11 @@ public final class SuiteApiStitchClient {
 
     /**
      * {@link #buildPropertiesJson} for values already checked by
-     * {@link #isSendable}: a {@link String} or a finite {@link Number}.
+     * {@link #isSendable}; {@code typed} as for {@link #propertiesBatchEntryOf}.
      */
     private static String buildPropertiesJsonOf(
-            Map<String, ?> properties, long timestamp) {
-        return "{\"property-content\":" + propertyContentArray(properties, timestamp, true)
+            Map<String, ?> properties, long timestamp, boolean typed) {
+        return "{\"property-content\":" + propertyContentArray(properties, timestamp, typed)
                 + "}";
     }
 
@@ -2495,11 +2714,13 @@ public final class SuiteApiStitchClient {
     /**
      * {@code [{"statKey":k,"timestamps":[ts],"values":[v]},...]}: the
      * {@code property-content} array, shared by the per-id body and the batch
-     * entry so the two cannot drift. With {@code typed} (values checked by
-     * {@link #isSendable}), a {@link Number} is written as
-     * {@code "data":[<double>]} instead of {@code "values"}. Without it every
-     * value is cast to {@link String} exactly as before typed properties
-     * existed, so the string pushes' bytes and failure modes are unchanged.
+     * entry so the two cannot drift. {@code typed} is {@code true} only for
+     * {@link Kind#TYPED_PROPERTIES} (values checked by {@link #isSendable}):
+     * then a {@link Number} is written as {@code "data":[<double>]} instead
+     * of {@code "values"}, as {@code Double.toString(n.doubleValue())}. With
+     * {@code false} every value is cast to {@link String} and written as
+     * {@code "values"}, the serialization the string pushes used before typed
+     * properties existed; the string pushes pass {@code false}.
      */
     private static String propertyContentArray(Map<String, ?> properties,
             long timestamp, boolean typed) {

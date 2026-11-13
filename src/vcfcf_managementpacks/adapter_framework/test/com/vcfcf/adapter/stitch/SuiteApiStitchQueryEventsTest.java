@@ -17,17 +17,17 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Tests for the three facade additions the vCommunity Java port design names
- * (T1 to T3), against the scripted fake Suite API of
+ * Tests for three stitcher additions (read-style {@code post}, events,
+ * numeric properties), against the scripted fake Suite API of
  * {@link SuiteApiStitchClientTransportTest}:
  * <ul>
- *   <li>T1 {@link SuiteApiStitchClient#post}: request shape, the query-path
+ *   <li>{@link SuiteApiStitchClient#post}: request shape, the query-path
  *       guard, error mapping identical to {@code get}, one 401 retry, and that
  *       neither body reaches a log line or an exception message.</li>
- *   <li>T2 {@link SuiteApiStitchClient#pushEvents}: body shape, NOTIFICATION
+ *   <li>{@link SuiteApiStitchClient#pushEvents}: body shape, NOTIFICATION
  *       refused, invalid events dropped, chunking, stop on failure, never the
  *       message text in a log line.</li>
- *   <li>T3 {@link SuiteApiStitchClient#pushTypedPropertiesBatch}: numeric
+ *   <li>{@link SuiteApiStitchClient#pushTypedPropertiesBatch}: numeric
  *       properties as {@code data}, null / NaN / infinite / other types
  *       rejected, and string-only input byte-identical to
  *       {@link SuiteApiStitchClient#pushPropertiesBatch}.</li>
@@ -64,42 +64,48 @@ public class SuiteApiStitchQueryEventsTest {
             System.out.println("OK: 0/0 tests passed (1 group(s) skipped).");
             return;
         }
-        // T1
-        run("T1 post: request shape and body returned", SuiteApiStitchQueryEventsTest::testPostShape);
-        run("T1 post: query string allowed after /query", SuiteApiStitchQueryEventsTest::testPostQueryString);
-        run("T1 post: non-query paths refused before sending", SuiteApiStitchQueryEventsTest::testPostGuard);
-        run("T1 post: non-2xx is SuiteApiHttpException like get", SuiteApiStitchQueryEventsTest::testPostErrorMapping);
-        run("T1 post: 401 re-acquires once and retries", SuiteApiStitchQueryEventsTest::testPost401Retry);
-        run("T1 post: persistent 401 surfaces as 401", SuiteApiStitchQueryEventsTest::testPostPersistent401);
-        run("T1 post: bodies never logged or in messages", SuiteApiStitchQueryEventsTest::testPostRedaction);
-        run("T1 post: closed client fails fast, no token", SuiteApiStitchQueryEventsTest::testPostClosed);
-        run("T1 post: facade delegates", SuiteApiStitchQueryEventsTest::testPostFacade);
-        // T2
-        run("T2 events: exact body, optional fields omitted", SuiteApiStitchQueryEventsTest::testEventsShape);
-        run("T2 events: NOTIFICATION refused, not sent", SuiteApiStitchQueryEventsTest::testEventsNotificationRefused);
-        run("T2 events: invalid events dropped and counted", SuiteApiStitchQueryEventsTest::testEventsInvalidDropped);
-        run("T2 events: control characters escaped", SuiteApiStitchQueryEventsTest::testEventsEscaping);
-        run("T2 events: chunked by count and bytes", SuiteApiStitchQueryEventsTest::testEventsChunking);
-        run("T2 events: a failure stops the call, one WARN", SuiteApiStitchQueryEventsTest::testEventsFailureStops);
-        run("T2 events: 401 re-acquires once and retries", SuiteApiStitchQueryEventsTest::testEvents401Retry);
-        run("T2 events: message text never logged", SuiteApiStitchQueryEventsTest::testEventsMessageNotLogged);
-        run("T2 events: nothing to send, no request", SuiteApiStitchQueryEventsTest::testEventsNothing);
-        run("T2 events: builder rules and cancelledAt", SuiteApiStitchQueryEventsTest::testEventBuilder);
-        run("T2 events: closed client sends nothing", SuiteApiStitchQueryEventsTest::testEventsClosed);
-        run("T2 events: facade delegates", SuiteApiStitchQueryEventsTest::testEventsFacade);
-        // T3
-        run("T3 typed: string-only bodies byte-identical", SuiteApiStitchQueryEventsTest::testTypedStringsIdentical);
-        run("T3 typed: pushTypedBatch strings equal pushBatch", SuiteApiStitchQueryEventsTest::testTypedBatchStringsIdentical);
-        run("T3 typed: numbers sent as data", SuiteApiStitchQueryEventsTest::testTypedNumbers);
-        run("T3 typed: null, NaN, infinite, other types rejected", SuiteApiStitchQueryEventsTest::testTypedRejected);
-        run("T3 typed: string batch still drops numbers", SuiteApiStitchQueryEventsTest::testUntypedStillStrict);
-        run("T3 typed: per-id fallback keeps the numeric shape", SuiteApiStitchQueryEventsTest::testTypedFallback);
-        run("T3 typed: facade delegates", SuiteApiStitchQueryEventsTest::testTypedFacade);
+        // post
+        run("post: request shape and body returned", SuiteApiStitchQueryEventsTest::testPostShape);
+        run("post: query string allowed after /query", SuiteApiStitchQueryEventsTest::testPostQueryString);
+        run("post: non-query paths refused before sending", SuiteApiStitchQueryEventsTest::testPostGuard);
+        run("post: allowlist accepts only the strict query-path shape", SuiteApiStitchQueryEventsTest::testPostGuardAllowlist);
+        run("post: refused paths never open a connection", SuiteApiStitchQueryEventsTest::testPostRefusedNeverLeaves);
+        run("post: response size cap, default and overload", SuiteApiStitchQueryEventsTest::testPostResponseCap);
+        run("post: non-2xx is SuiteApiHttpException like get", SuiteApiStitchQueryEventsTest::testPostErrorMapping);
+        run("post: 401 re-acquires once and retries", SuiteApiStitchQueryEventsTest::testPost401Retry);
+        run("post: persistent 401 surfaces as 401", SuiteApiStitchQueryEventsTest::testPostPersistent401);
+        run("post: bodies never logged or in messages", SuiteApiStitchQueryEventsTest::testPostRedaction);
+        run("post: closed client fails fast, no token", SuiteApiStitchQueryEventsTest::testPostClosed);
+        run("post: facade delegates", SuiteApiStitchQueryEventsTest::testPostFacade);
+        // events
+        run("events: exact body, optional fields omitted", SuiteApiStitchQueryEventsTest::testEventsShape);
+        run("events: NOTIFICATION refused, not sent", SuiteApiStitchQueryEventsTest::testEventsNotificationRefused);
+        run("events: invalid events dropped and counted", SuiteApiStitchQueryEventsTest::testEventsInvalidDropped);
+        run("events: control characters escaped", SuiteApiStitchQueryEventsTest::testEventsEscaping);
+        run("events: chunked by count and bytes", SuiteApiStitchQueryEventsTest::testEventsChunking);
+        run("events: a failure stops the call, one WARN", SuiteApiStitchQueryEventsTest::testEventsFailureStops);
+        run("events: 401 re-acquires once and retries", SuiteApiStitchQueryEventsTest::testEvents401Retry);
+        run("events: message text never logged", SuiteApiStitchQueryEventsTest::testEventsMessageNotLogged);
+        run("events: nothing to send, no request", SuiteApiStitchQueryEventsTest::testEventsNothing);
+        run("events: builder rules and cancelledAt", SuiteApiStitchQueryEventsTest::testEventBuilder);
+        run("events: cancel time 0 or less is unset", SuiteApiStitchQueryEventsTest::testEventsCancelZeroUnset);
+        run("events: failure WARN names each resource once", SuiteApiStitchQueryEventsTest::testEventsFailureIdsDistinct);
+        run("events: closed client sends nothing", SuiteApiStitchQueryEventsTest::testEventsClosed);
+        run("events: facade delegates", SuiteApiStitchQueryEventsTest::testEventsFacade);
+        // typed properties
+        run("typed: string-only bodies byte-identical", SuiteApiStitchQueryEventsTest::testTypedStringsIdentical);
+        run("typed: pushTypedBatch strings equal pushBatch", SuiteApiStitchQueryEventsTest::testTypedBatchStringsIdentical);
+        run("typed: numbers sent as data", SuiteApiStitchQueryEventsTest::testTypedNumbers);
+        run("typed: null, NaN, infinite, other types rejected", SuiteApiStitchQueryEventsTest::testTypedRejected);
+        run("typed: string batch still drops numbers", SuiteApiStitchQueryEventsTest::testUntypedStillStrict);
+        run("typed: per-id fallback keeps the numeric shape", SuiteApiStitchQueryEventsTest::testTypedFallback);
+        run("typed: integers beyond 2^53 dropped, never rounded", SuiteApiStitchQueryEventsTest::testTypedBeyond2p53);
+        run("typed: facade delegates", SuiteApiStitchQueryEventsTest::testTypedFacade);
         report();
     }
 
     // -----------------------------------------------------------------------
-    // T1 post
+    // post
     // -----------------------------------------------------------------------
 
     private static void testPostShape() throws Exception {
@@ -132,16 +138,10 @@ public class SuiteApiStitchQueryEventsTest {
 
     private static void testPostGuard() throws Exception {
         Harness h = new Harness(SuiteApiStitchClientTransportTest.okTokenThen(200, ""));
-        String[] bad = {
-            "/api/resources/properties", "/api/resources/stats", "/api/events/bulk",
-            "/api/resources/" + A + "/relationships/children", "/api/resources/query/x",
-            "/api/x?y=/query", "api/resources/query", null, "/api/resources/query\r\nX: 1",
-            "/api/queryx", "/api/resources/query/",
-        };
-        for (String p : bad) {
+        for (String p : BAD_POST_PATHS) {
             try {
                 h.client.post(p, "{}");
-                fail("post must refuse " + p);
+                fail("post must refuse " + SuiteApiStitchClient.loggable(p));
             } catch (IllegalArgumentException e) {
                 assertTrue("refusal says what post is for ("
                         + SuiteApiStitchClient.loggable(p) + ")",
@@ -155,6 +155,208 @@ public class SuiteApiStitchQueryEventsTest {
             assertTrue("null body refused", e.getMessage().contains("JSON body"));
         }
         assertEquals("nothing sent, not even a token request", 0, h.requests.size());
+    }
+
+    /**
+     * Paths {@link SuiteApiStitchClient#post} must refuse. The first group
+     * are the reviewer's reproduced bypasses of the old suffix check (a
+     * fragment, {@code ;}, a {@code ..} segment, percent-encoding); the rest
+     * are their siblings and the original write paths.
+     */
+    static final String[] BAD_POST_PATHS = {
+        // Reproduced bypasses: the fragment hides a write path from the wire.
+        "/api/resources/" + A + "/properties#/query",
+        "/api/events/bulk#/query",
+        "/api/resources/" + A + "/properties;/query",
+        "/api/events/bulk/../../resources/query",
+        "/api/events/bulk%23/query",
+        // Siblings.
+        "/api/resources/query#frag",
+        "/api/resources/query?name=a#b",
+        "/api/resources/query?#",
+        "/api/resources/query;jsessionid=x",
+        "/api/resources;x/query",
+        "/api/resources/%71uery",
+        "/api/resources/query%3F",
+        "/api/resources/query?name=%2F",
+        "/api/./resources/query",
+        "/api/resources/./query",
+        "/api/../resources/query",
+        "/../api/resources/query",
+        "/api/resources/../query",
+        "/api//resources/query",
+        "//evil.example/api/resources/query",
+        "/api/resources\\query",
+        "/api\\resources/query",
+        "/api/resources/query\\",
+        "https://evil.example/suite-api/api/resources/query",
+        "/api/resources/ query",
+        "/api/resources/query ",
+        "/api/resources/query?page=0 &pageSize=1",
+        "/api/resources/query\tx",
+        "/api/resources/query\u0000",
+        "/api/resources/query\u001b[31m",
+        "/api/resources/query\r\nX: 1",
+        "/api/resources/query\u0085",
+        "/api/resources/query\u00a0",
+        "/api/resources/qu\u00e9ry",
+        "/api/resources/query?page=0&&pageSize=1",
+        "/api/resources/query?page",
+        "/api/resources/query?page=",
+        "/api/resources/query?=1",
+        "/api/resources/query?page=0?pageSize=1",
+        "/api/resources/query?page=0&",
+        "/api/resources/query?a=b/c",
+        "/api/resources/query?a=b;c",
+        "/api/resources/query?a=b+c",
+        "/api/resources/query?a.b=c",
+        "/api/resources/QUERY",
+        "/api/resources/Query",
+        "/query",
+        // Write paths and near misses.
+        "/api/resources/properties", "/api/resources/stats", "/api/events/bulk",
+        "/api/resources/" + A + "/relationships/children", "/api/resources/query/x",
+        "/api/x?y=/query", "api/resources/query", null, "", "/",
+        "/api/queryx", "/api/resources/query/", "/api/resources/query.json",
+        "/api/resources/query/.", "/api/resources/query/..",
+    };
+
+    private static void testPostGuardAllowlist() throws Exception {
+        String[] good = {
+            "/api/resources/query",
+            "/api/resources/stats/latest/query",
+            "/api/resources/properties/latest/query",
+            "/api/resources/stats/query",
+            "/api/resources/query?page=0&pageSize=1000",
+            "/api/resources/query?_no_links=true",
+            "/api/resources/stats/query?resourceId=" + A,
+            "/api/resources/" + A + "/query",
+            "/api/resources/query?t=1.5,2:3-4_5",
+        };
+        for (String p : good) {
+            try {
+                SuiteApiStitchClient.checkQueryPath(p);
+                assertTrue("accepted: " + p, true);
+            } catch (IllegalArgumentException e) {
+                fail("must accept " + p + ": " + e.getMessage());
+            }
+        }
+        for (String p : BAD_POST_PATHS) {
+            try {
+                SuiteApiStitchClient.checkQueryPath(p);
+                fail("checkQueryPath must refuse " + SuiteApiStitchClient.loggable(p));
+            } catch (IllegalArgumentException e) {
+                assertTrue("refused: " + SuiteApiStitchClient.loggable(p), true);
+            }
+        }
+    }
+
+    private static void testPostRefusedNeverLeaves() throws Exception {
+        // FakeAdapter.openPlatformConnection records every connection the
+        // client opens, token acquire included: it is the only way a byte
+        // leaves. A refused path must record none, per path, and a later
+        // good call must still work (the refusal leaves no state behind).
+        for (String p : BAD_POST_PATHS) {
+            Harness h = new Harness(SuiteApiStitchClientTransportTest.okTokenThen(200, "{}"));
+            try {
+                h.client.post(p, "{\"name\":[\"" + SECRET + "\"]}");
+            } catch (IllegalArgumentException expected) {
+                assertFalse("refusal message carries no body (" + SuiteApiStitchClient.loggable(p)
+                        + ")", String.valueOf(expected.getMessage()).contains(SECRET));
+            }
+            assertEquals("no connection opened, not even a token, for "
+                    + SuiteApiStitchClient.loggable(p), 0, h.requests.size());
+        }
+        Harness h = new Harness(SuiteApiStitchClientTransportTest.okTokenThen(200, "{}"));
+        try {
+            h.client.post("/api/events/bulk#/query", "{}");
+        } catch (IllegalArgumentException expected) {
+            // refused
+        }
+        assertEquals("good call after a refusal", "{}", h.client.post("/api/resources/query", "{}"));
+        for (Req r : h.requests) {
+            assertFalse("never the events endpoint on the wire", r.url.contains("/events/"));
+        }
+    }
+
+    private static void testPostResponseCap() throws Exception {
+        assertEquals("default cap is 8 MiB", 8 * 1024 * 1024,
+                SuiteApiStitchClient.POST_MAX_RESPONSE_BYTES_DEFAULT);
+        int cap = SuiteApiStitchClient.POST_MAX_RESPONSE_BYTES_DEFAULT;
+        String marker = "RESPONSE-BODY-MARKER-91c2";
+        StringBuilder sb = new StringBuilder(marker);
+        while (sb.length() < cap) sb.append('x');
+        String atCap = sb.toString();
+        Harness h = new Harness(SuiteApiStitchClientTransportTest.okTokenThen(200, atCap));
+        assertEquals("a body of exactly the cap is returned", atCap.length(),
+                h.client.post("/api/resources/query", "{}").length());
+        Harness over = new Harness(SuiteApiStitchClientTransportTest.okTokenThen(200, atCap + "y"));
+        try {
+            over.client.post("/api/resources/query", "{}");
+            fail("a body one byte over the default cap must throw");
+        } catch (SuiteApiStitchClient.ResponseTooLargeException e) {
+            assertEquals("the cap rides the exception", cap, e.getLimit());
+            assertTrue("message names the cap", e.getMessage().contains(String.valueOf(cap)));
+            assertTrue("message gives the paging advice", e.getMessage().contains("page/pageSize"));
+            assertFalse("message carries no body content", e.getMessage().contains(marker));
+            assertFalse("message carries no body content (x run)",
+                    e.getMessage().contains("xxxxxxxx"));
+            assertFalse("not an HTTP exception", ((Object) e) instanceof SuiteApiHttpException);
+        }
+        // Multi-byte UTF-8: the cap counts bytes, not chars.
+        String euro = "\u20ac\u20ac\u20ac"; // 9 bytes
+        Harness hb = new Harness(SuiteApiStitchClientTransportTest.okTokenThen(200, euro));
+        assertEquals("9 bytes under a cap of 9", euro, hb.client.post("/api/resources/query", "{}", 9));
+        Harness hb2 = new Harness(SuiteApiStitchClientTransportTest.okTokenThen(200, euro));
+        try {
+            hb2.client.post("/api/resources/query", "{}", 8);
+            fail("9 bytes over a cap of 8 must throw");
+        } catch (SuiteApiStitchClient.ResponseTooLargeException e) {
+            assertEquals("overload cap", 8, e.getLimit());
+        }
+        Harness hz = new Harness(SuiteApiStitchClientTransportTest.okTokenThen(200, ""));
+        assertEquals("empty body under any cap", "", hz.client.post("/api/resources/query", "{}", 1));
+        for (int bad : new int[] {0, -1, Integer.MIN_VALUE}) {
+            Harness hc = new Harness(SuiteApiStitchClientTransportTest.okTokenThen(200, "{}"));
+            try {
+                hc.client.post("/api/resources/query", "{}", bad);
+                fail("cap " + bad + " must be refused");
+            } catch (IllegalArgumentException e) {
+                assertEquals("cap " + bad + ": refused before any connection", 0,
+                        hc.requests.size());
+            }
+        }
+        // The cap also applies to the 401 retry.
+        AtomicInteger posts = new AtomicInteger();
+        Harness hr = new Harness((m, u, b) -> {
+            if (u.equals(TOKEN_URL)) return new Resp(200, "{\"token\":\"tok\"}");
+            return posts.incrementAndGet() == 1 ? new Resp(401, "") : new Resp(200, "0123456789");
+        });
+        try {
+            hr.client.post("/api/resources/query", "{}", 5);
+            fail("the retried answer is capped too");
+        } catch (SuiteApiStitchClient.ResponseTooLargeException e) {
+            assertEquals("retried once", 2, posts.get());
+        }
+        // get is unchanged: no cap.
+        Harness hg = new Harness(SuiteApiStitchClientTransportTest.okTokenThen(200, atCap + "y"));
+        assertEquals("get reads the whole body, as before", atCap.length() + 1,
+                hg.client.get("/api/resources").length());
+        // Facade overload.
+        FakeAdapter a = SuiteApiStitchClientTransportTest.allocate(FakeAdapter.class);
+        a.requests = new ArrayList<>();
+        a.responder = SuiteApiStitchClientTransportTest.okTokenThen(200, "0123456789");
+        LogCapture log = LogCapture.create();
+        SuiteApiStitcher st = SuiteApiStitcher.createExplicit(a, log.logger(), "localhost",
+                SuiteApiStitchClientTransportTest.USER, "p");
+        assertEquals("facade cap allows", "0123456789",
+                st.post("/api/resources/query", "{}", 10));
+        try {
+            st.post("/api/resources/query", "{}", 9);
+            fail("facade cap must apply");
+        } catch (SuiteApiStitchClient.ResponseTooLargeException e) {
+            assertEquals("facade cap", 9, e.getLimit());
+        }
     }
 
     private static void testPostErrorMapping() throws Exception {
@@ -268,7 +470,7 @@ public class SuiteApiStitchQueryEventsTest {
     }
 
     // -----------------------------------------------------------------------
-    // T2 events
+    // events
     // -----------------------------------------------------------------------
 
     static SuiteApiEvent diag(String id, String msg) {
@@ -342,8 +544,8 @@ public class SuiteApiStitchQueryEventsTest {
         in.add(diag(A, "  "));
         in.add(diag(A, null));
         in.add(SuiteApiEvent.builder(SuiteApiEvent.Type.DIAGNOSTIC, A, "early", 0L).build());
-        in.add(SuiteApiEvent.builder(SuiteApiEvent.Type.DIAGNOSTIC, A, "cancel 0", T0)
-                .cancelTimeUtc(0L).build());
+        in.add(SuiteApiEvent.builder(SuiteApiEvent.Type.DIAGNOSTIC, A, "cancel 1970", T0)
+                .cancelTimeUtc(1L).build());
         in.add(diag(A, "good"));
         h.log.clear();
         SuiteApiBatchResult r = h.client.pushEvents(in);
@@ -487,6 +689,41 @@ public class SuiteApiStitchQueryEventsTest {
         }
     }
 
+    private static void testEventsCancelZeroUnset() throws Exception {
+        Harness h = new Harness(SuiteApiStitchClientTransportTest.okTokenThen(200, ""));
+        SuiteApiEvent zero = SuiteApiEvent.builder(SuiteApiEvent.Type.DIAGNOSTIC, A, "z", T0)
+                .cancelTimeUtc(0L).build();
+        SuiteApiEvent neg = SuiteApiEvent.builder(SuiteApiEvent.Type.DIAGNOSTIC, A, "n", T0)
+                .cancelTimeUtc(-5L).build();
+        SuiteApiEvent viaCancel = diag(B, "c").cancelledAt(0L);
+        assertEquals("cancel 0 reads as unset", null, zero.getCancelTimeUtc());
+        assertEquals("cancel -5 reads as unset", null, neg.getCancelTimeUtc());
+        assertEquals("cancelledAt(0) reads as unset", null, viaCancel.getCancelTimeUtc());
+        SuiteApiBatchResult r = h.client.pushEvents(Arrays.asList(zero, neg, viaCancel));
+        assertEquals("all three sent, none refused", 3, r.getSent());
+        assertEquals("none dropped", 0, r.getDropped());
+        assertFalse("cancelTimeUTC not on the wire", h.lastTo(EVENTS_URL).body.contains("cancelTimeUTC"));
+        SuiteApiEvent set = SuiteApiEvent.builder(SuiteApiEvent.Type.DIAGNOSTIC, A, "s", T0)
+                .cancelTimeUtc(SuiteApiEvent.MIN_TIME_UTC).build();
+        Harness h2 = new Harness(SuiteApiStitchClientTransportTest.okTokenThen(200, ""));
+        h2.client.pushEvents(Arrays.asList(set));
+        assertTrue("a cancel time at the floor is sent",
+                h2.lastTo(EVENTS_URL).body.contains("\"cancelTimeUTC\":" + SuiteApiEvent.MIN_TIME_UTC));
+        assertEquals("a set cancel time before 2000 is refused (framework rule)",
+                SuiteApiStitchClient.REFUSED_TIME, SuiteApiStitchClient.eventRefusal(
+                        SuiteApiEvent.builder(SuiteApiEvent.Type.DIAGNOSTIC, A, "e", T0)
+                                .cancelTimeUtc(SuiteApiEvent.MIN_TIME_UTC - 1).build()));
+    }
+
+    private static void testEventsFailureIdsDistinct() throws Exception {
+        Harness h = new Harness(SuiteApiStitchClientTransportTest.okTokenThen(500, ""));
+        h.log.clear();
+        h.client.pushEvents(Arrays.asList(diag(A, "1"), diag(A, "2"), diag(B, "3"), diag(A, "4")));
+        assertEquals("one WARN", 1, h.log.count("WARN"));
+        assertTrue("each resource once, in order: " + h.log.lines(),
+                h.log.contains("first resource ids [" + A + ", " + B + "]"));
+    }
+
     private static void testEventsClosed() throws Exception {
         Harness h = new Harness(SuiteApiStitchClientTransportTest.okTokenThen(200, ""));
         h.client.close();
@@ -513,7 +750,7 @@ public class SuiteApiStitchQueryEventsTest {
     }
 
     // -----------------------------------------------------------------------
-    // T3 typed properties
+    // typed properties
     // -----------------------------------------------------------------------
 
     static Map<String, Map<String, String>> stringProps() {
@@ -549,9 +786,12 @@ public class SuiteApiStitchQueryEventsTest {
                 pb);
         assertEquals("same result", rp.toString(), rt.toString());
         assertFalse("a string stays a string, never data", pb.contains("\"data\""));
-        assertEquals("static entry builders agree",
+        assertEquals("static entry builders agree (typed)",
                 SuiteApiStitchClient.propertiesBatchEntry(A, stringProps().get(A), T0),
-                SuiteApiStitchClient.propertiesBatchEntryOf(A, stringProps().get(A), T0));
+                SuiteApiStitchClient.propertiesBatchEntryOf(A, stringProps().get(A), T0, true));
+        assertEquals("static entry builders agree (untyped)",
+                SuiteApiStitchClient.propertiesBatchEntry(A, stringProps().get(A), T0),
+                SuiteApiStitchClient.propertiesBatchEntryOf(A, stringProps().get(A), T0, false));
     }
 
     private static void testTypedBatchStringsIdentical() throws Exception {
@@ -639,7 +879,8 @@ public class SuiteApiStitchQueryEventsTest {
         assertEquals("one WARN", 1, h.log.count("WARN"));
         assertTrue("WARN names the count and the rule",
                 h.log.contains("pushTypedPropertiesBatch dropped 9 entries with a null key or a"
-                        + " null, NaN, infinite, or neither string nor number value"));
+                        + " null, NaN, infinite, integer beyond 2^53, or neither string nor number"
+                        + " value"));
     }
 
     private static void testUntypedStillStrict() throws Exception {
@@ -678,6 +919,50 @@ public class SuiteApiStitchQueryEventsTest {
                 + "{\"statKey\":\"G|s\",\"timestamps\":[9],\"values\":[\"x\"]}]}",
                 per.body);
         assertEquals("fell back once", 1, r.getFellBack());
+    }
+
+    private static void testTypedBeyond2p53() throws Exception {
+        long p53 = 1L << 53;
+        Harness h = new Harness(SuiteApiStitchClientTransportTest.okTokenThen(200, ""));
+        Map<String, Map<String, Object>> in = new LinkedHashMap<>();
+        Map<String, Object> v = new LinkedHashMap<>();
+        v.put("G|p53", p53);
+        v.put("G|negp53", -p53);
+        v.put("G|bip53", java.math.BigInteger.valueOf(p53));
+        v.put("G|bdfrac", new BigDecimal("12345678901234567890.5"));
+        v.put("G|dbl", 1.0e20);
+        v.put("G|p53plus1", p53 + 1);
+        v.put("G|negp53minus1", -p53 - 1);
+        v.put("G|max", Long.MAX_VALUE);
+        v.put("G|min", Long.MIN_VALUE);
+        v.put("G|bi", new java.math.BigInteger("123456789012345678901234567890"));
+        v.put("G|bd", new BigDecimal("9007199254740993"));
+        v.put("G|bdexp", new BigDecimal("1E+20"));
+        v.put("G|bdtrail", new BigDecimal("9007199254740993.000"));
+        v.put("G|atomic", new java.util.concurrent.atomic.AtomicLong(p53 + 2));
+        in.put(A, v);
+        h.log.clear();
+        SuiteApiBatchResult r = h.client.pushTypedPropertiesBatch(in, T0);
+        String body = h.lastTo(PROPS_URL).body;
+        assertEquals("2^53 and below sent; fractional BigDecimal rounded; doubles as they are",
+                "{\"values\":[{\"resourceId\":\"" + A + "\",\"property-contents\":{\"property-content\":["
+                + "{\"statKey\":\"G|p53\",\"timestamps\":[" + T0 + "],\"data\":[9.007199254740992E15]},"
+                + "{\"statKey\":\"G|negp53\",\"timestamps\":[" + T0 + "],\"data\":[-9.007199254740992E15]},"
+                + "{\"statKey\":\"G|bip53\",\"timestamps\":[" + T0 + "],\"data\":[9.007199254740992E15]},"
+                + "{\"statKey\":\"G|bdfrac\",\"timestamps\":[" + T0 + "],\"data\":[1.2345678901234567E19]},"
+                + "{\"statKey\":\"G|dbl\",\"timestamps\":[" + T0 + "],\"data\":[1.0E20]}]}}]}",
+                body);
+        assertEquals("nine integers beyond 2^53 dropped", 9, r.getDropped());
+        assertEquals("one WARN", 1, h.log.count("WARN"));
+        assertTrue("WARN names the rule", h.log.contains("integer beyond 2^53"));
+        assertFalse("never a rounded neighbour of 2^53+1 on the wire",
+                body.contains("9.007199254740994E15"));
+        assertTrue("helper: 2^53 is exact", !SuiteApiStitchClient.isUnrepresentableInteger(p53));
+        assertTrue("helper: 2^53+1 is not", SuiteApiStitchClient.isUnrepresentableInteger(p53 + 1));
+        assertTrue("helper: Integer never beyond",
+                !SuiteApiStitchClient.isUnrepresentableInteger(Integer.MIN_VALUE));
+        assertTrue("helper: BigDecimal zero", !SuiteApiStitchClient.isUnrepresentableInteger(
+                new BigDecimal("0E+400")));
     }
 
     private static void testTypedFacade() throws Exception {

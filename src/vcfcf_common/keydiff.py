@@ -1,10 +1,12 @@
 """Key differential: compare stat and property keys of matching objects on two
 VCF Operations instances (or two saved snapshots).
 
-Read-only recon tooling (vCommunity Java port design, section 11, toolset gap
-T5). Every Suite API call is a GET; nothing is created, changed, or deleted.
-The only non-GET request is the token acquire the shared client makes to log
-in.
+Read-only recon tooling, for checking that a port of a management pack
+reports the same keys and values as the original. Every Suite API read is a
+GET; nothing is created, changed, or deleted. The only other requests are the
+login of each live side: ``POST /api/auth/token/acquire`` and, when the side
+is done, ``POST /api/auth/token/release``. Every request has a timeout
+(``--timeout``, default 60 s).
 
     python3 -m vcfcf_common keydiff --profile devel --profile devel_9_1 \\
         --adapter-kind VMWARE --resource-kind HostSystem --key-prefix 'vCommunity|'
@@ -49,8 +51,30 @@ for objects present on one side. Numbers compare within ``--tolerance``
 whichever is wider; property values compare as strings, or as numbers when both
 parse as finite numbers (``"1"`` equals ``"1.0"``), without tolerance.
 
-Exit status: 0 nothing differs (stale rows do not count), 1 a difference was
-found, 2 usage error, 3 a fetch or snapshot read failed.
+Every run reports what it compared: objects on each side and on both, keys
+on each side and on both (and how many of those were stale), and objects not
+compared (no stable identity, or ambiguous). In ``--format tsv`` that summary
+goes to stderr so stdout stays TSV.
+
+Exit status, checked in this order:
+  2  usage error.
+  3  a fetch or snapshot read failed.
+  4  nothing was compared: no object is on both sides, no key is on both sides
+     of a matched object (an empty scope, a ``--key-prefix`` that matches
+     nothing, every object unidentified), or every key on both sides is stale.
+  1  a difference was found (an object or key on one side only, or a value
+     that differs).
+  5  no difference among what was compared, but some objects were not
+     compared: a VMWARE object without both identifiers, or two objects with
+     one identity.
+  0  objects and keys were compared, nothing differs, and every object was
+     compared. Stale rows do not count as differences.
+
+Snapshot files (``--snapshot-out``) hold what the instance returned for the
+objects in scope: object names, resource ids, keys and their values (guest
+names, IP addresses, annotations, anything a property carries). They hold the
+profile name and Suite API base URL of the side, and no credentials or token.
+Treat them as you would an export of the instance.
 """
 from __future__ import annotations
 
@@ -59,6 +83,7 @@ import json
 import math
 import sys
 import time
+import unicodedata
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
 SNAPSHOT_FORMAT = "vcfcf-keydiff-snapshot/1"
@@ -70,9 +95,21 @@ MOID = "VMEntityObjectID"
 PAGE_SIZE = 1000
 IDS_PER_GET = 50
 
+# Seconds per request (token acquire, GETs and release); --timeout overrides.
+REQUEST_TIMEOUT_DEFAULT = 60.0
+
+EXIT_OK = 0
+EXIT_DIFFER = 1
+EXIT_USAGE = 2
+EXIT_FETCH = 3
+EXIT_NOTHING_COMPARED = 4
+EXIT_NOT_COMPARED = 5
+
 CATEGORIES = ("object_only_a", "object_only_b", "only_a", "only_b", "differ",
               "stale", "match")
 DIFFERENCES = {"object_only_a", "object_only_b", "only_a", "only_b", "differ"}
+# Key rows whose key is on both sides of a matched object.
+KEYS_ON_BOTH = {"differ", "stale", "match"}
 
 TSV_COLUMNS = ("category", "kind", "identity", "object_a", "object_b",
                "resource_kind", "key", "value_a", "value_b", "delta", "ts_a",
@@ -88,8 +125,14 @@ class KeydiffError(RuntimeError):
 # ---------------------------------------------------------------------------
 
 def _get_json(client: Any, path: str, params: Optional[List[Tuple[str, Any]]] = None) -> Any:
-    """GET ``path`` and return the parsed JSON body. The only request verb used."""
-    r = client._request("GET", path, params=params or [])
+    """GET ``path`` and return the parsed JSON body. The only read verb used.
+
+    The request carries the client's ``keydiff_timeout`` (set by
+    :func:`_client_for_profile`), so a stalled instance cannot hang the CLI.
+    """
+    timeout = getattr(client, "keydiff_timeout", None)
+    extra = {} if timeout is None else {"timeout": timeout}
+    r = client._request("GET", path, params=params or [], **extra)
     if r.status_code != 200:
         raise KeydiffError(f"GET {path} returned HTTP {r.status_code}")
     try:
@@ -418,12 +461,86 @@ def compare(a: dict, b: dict, *, tolerance: float = 0.0, rel_tolerance: float = 
     unidentified = ([dict(u, side="a") for u in a.get("unidentified") or []]
                     + [dict(u, side="b") for u in b.get("unidentified") or []]
                     + amb_a + amb_b)
-    return {"rows": rows, "counts": counts, "unidentified": unidentified}
+    both = set(ia) & set(ib)
+    keys_a = sum(1 for r in rows if r["category"] in KEYS_ON_BOTH | {"only_a"})
+    keys_b = sum(1 for r in rows if r["category"] in KEYS_ON_BOTH | {"only_b"})
+    keys_both = sum(1 for r in rows if r["category"] in KEYS_ON_BOTH)
+    compared = {
+        "objects_a": len(ia),
+        "objects_b": len(ib),
+        "objects_both": len(both),
+        "keys_a": keys_a,
+        "keys_b": keys_b,
+        "keys_both": keys_both,
+        "keys_stale": counts["stale"],
+        "not_compared_a": sum(1 for u in unidentified if u.get("side") == "a"),
+        "not_compared_b": sum(1 for u in unidentified if u.get("side") == "b"),
+    }
+    return {"rows": rows, "counts": counts, "unidentified": unidentified,
+            "compared": compared}
+
+
+def exit_code(result: dict) -> int:
+    """The CLI's exit status for a comparison (module docstring, in order)."""
+    c = result["compared"]
+    if c["objects_both"] == 0 or c["keys_both"] == 0 or c["keys_stale"] == c["keys_both"]:
+        return EXIT_NOTHING_COMPARED
+    if any(result["counts"][k] for k in DIFFERENCES):
+        return EXIT_DIFFER
+    if result["unidentified"]:
+        return EXIT_NOT_COMPARED
+    return EXIT_OK
+
+
+def compared_line(result: dict) -> str:
+    """One line saying what was compared, for every run."""
+    c = result["compared"]
+    nc = c["not_compared_a"] + c["not_compared_b"]
+    return (f"compared: objects a={c['objects_a']} b={c['objects_b']}"
+            f" on both={c['objects_both']}; keys a={c['keys_a']} b={c['keys_b']}"
+            f" on both={c['keys_both']} (stale {c['keys_stale']});"
+            f" objects not compared: {nc} (a={c['not_compared_a']}"
+            f" b={c['not_compared_b']})")
+
+
+def verdict_line(result: dict) -> str:
+    """Why the run exits as it does, in words."""
+    code = exit_code(result)
+    c = result["compared"]
+    if code == EXIT_NOTHING_COMPARED:
+        if c["objects_both"] == 0:
+            why = "no object is on both sides"
+        elif c["keys_both"] == 0:
+            why = "no key is on both sides of a matched object"
+        else:
+            why = "every key on both sides is stale"
+        return f"result: NOTHING COMPARED ({why}); exit {code}"
+    if code == EXIT_DIFFER:
+        return f"result: differences found; exit {code}"
+    if code == EXIT_NOT_COMPARED:
+        return (f"result: no differences among what was compared, but"
+                f" {len(result['unidentified'])} object(s) were not compared; exit {code}")
+    return f"result: no differences; exit {code}"
 
 
 # ---------------------------------------------------------------------------
 # Output
 # ---------------------------------------------------------------------------
+
+_NAMED_ESCAPES = {"\\": "\\\\", "\t": "\\t", "\r": "\\r", "\n": "\\n"}
+
+
+def _escape_char(ch: str) -> str:
+    if ch in _NAMED_ESCAPES:
+        return _NAMED_ESCAPES[ch]
+    o = ord(ch)
+    # C0 (ESC included), DEL, C1, and format/separator characters that a
+    # terminal acts on or hides (bidi overrides, zero-width, U+2028/9).
+    if o < 0x20 or o == 0x7F or 0x80 <= o <= 0x9F or unicodedata.category(ch) in (
+            "Cf", "Zl", "Zp"):
+        return f"\\x{o:02x}" if o <= 0xFF else f"\\u{o:04x}" if o <= 0xFFFF else f"\\U{o:08x}"
+    return ch
+
 
 def _cell(v: Any) -> str:
     if v is None:
@@ -431,8 +548,9 @@ def _cell(v: Any) -> str:
     if isinstance(v, float):
         return repr(v)
     s = str(v)
-    # One row per line, one cell per tab: never let a value break the shape.
-    return s.replace("\\", "\\\\").replace("\t", "\\t").replace("\r", "\\r").replace("\n", "\\n")
+    # One row per line, one cell per tab, and nothing the terminal would act
+    # on: never let a value from the instance break the shape or the screen.
+    return "".join(_escape_char(ch) for ch in s)
 
 
 def to_tsv(result: dict) -> str:
@@ -454,9 +572,11 @@ def to_table(result: dict, show_matches: bool = False, width: int = 40) -> str:
     out = []
     counts = result["counts"]
     out.append("summary: " + ", ".join(f"{c}={counts[c]}" for c in CATEGORIES))
+    out.append(compared_line(result))
+    out.append(verdict_line(result))
     if result["unidentified"]:
         out.append(f"not compared: {len(result['unidentified'])} object(s) without a"
-                   " stable identity (listed below)")
+                   " stable identity or with a shared one (listed below)")
     if cells:
         out.append("")
         out.append("  ".join(c.ljust(widths[i]) for i, c in enumerate(cols)).rstrip())
@@ -471,8 +591,9 @@ def to_table(result: dict, show_matches: bool = False, width: int = 40) -> str:
         out.append("")
         out.append("not compared:")
         for u in result["unidentified"]:
-            out.append(f"  [{u.get('side')}] {u.get('resource_kind')} {u.get('name')!r}"
-                       f" ({u.get('resource_id')}): {u.get('reason')}")
+            out.append(f"  [{_cell(u.get('side'))}] {_cell(u.get('resource_kind'))}"
+                       f" '{_cell(u.get('name'))}' ({_cell(u.get('resource_id'))}):"
+                       f" {_cell(u.get('reason'))}")
     return "\n".join(out) + "\n"
 
 
@@ -495,7 +616,22 @@ def build_parser() -> argparse.ArgumentParser:
         prog="python -m vcfcf_common keydiff",
         description=("Compare stat and property keys and latest values of matching"
                      " objects on two VCF Operations instances or snapshots."
-                     " Read-only: GET requests only."),
+                     " Read-only: reads are GETs; the only other requests are each"
+                     " live side's login, POST /api/auth/token/acquire, and logout,"
+                     " POST /api/auth/token/release."),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=("exit status (checked in this order):\n"
+                "  2  usage error\n"
+                "  3  a fetch or snapshot read failed\n"
+                "  4  nothing compared: no object on both sides, no key on both sides,\n"
+                "     or every key on both sides stale\n"
+                "  1  a difference was found\n"
+                "  5  no difference, but some objects were not compared (a VMWARE object\n"
+                "     without VMEntityVCID and VMEntityObjectID, or a shared identity)\n"
+                "  0  objects and keys compared, nothing differs, every object compared\n"
+                "\n"
+                "Every run prints what it compared (objects and keys on each side and on\n"
+                "both); with --format tsv that summary goes to stderr."),
     )
     p.add_argument("--profile", action=_SideAction, dest="sides", metavar="NAME",
                    help="a live side: credential profile from .env (VCFOPS_<NAME>_*)."
@@ -503,11 +639,15 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--snapshot-in", action=_SideAction, dest="sides", metavar="FILE",
                    help="a saved side, written earlier with --snapshot-out")
     p.add_argument("--snapshot-out", metavar="FILE",
-                   help="with exactly one live side: write its snapshot and stop")
+                   help="with exactly one live side: write its snapshot and stop. The"
+                        " file holds object names, resource ids, keys and values from"
+                        " the instance (guest names, IP addresses, annotations), plus the"
+                        " profile name and base URL; no credentials or token")
     p.add_argument("--adapter-kind", metavar="KEY", help="scope: adapter kind (e.g. VMWARE)")
     p.add_argument("--b-adapter-kind", metavar="KEY",
                    help="adapter kind for side B (the second side) when it is live and its"
-                        " adapter kind differs (e.g. a port that renamed its kind)")
+                        " adapter kind differs (e.g. a port that renamed its kind); a usage"
+                        " error when side B is a snapshot or there is no side B")
     p.add_argument("--resource-kind", metavar="KEY", help="scope: resource kind")
     p.add_argument("--name", action="append", default=[], metavar="NAME",
                    help="scope: an object name (repeatable), exact match")
@@ -527,6 +667,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--tsv-out", metavar="FILE", help="also write every row as TSV")
     p.add_argument("--show-matches", action="store_true",
                    help="table: list matching keys too (TSV always does)")
+    p.add_argument("--timeout", type=float, default=REQUEST_TIMEOUT_DEFAULT,
+                   metavar="SECONDS",
+                   help="timeout for each request to a live side, token acquire and"
+                        f" release included (default {REQUEST_TIMEOUT_DEFAULT:g})")
     return p
 
 
@@ -535,13 +679,45 @@ def _client_for_profile(profile: str) -> Any:
     return VCFOpsClient.from_env(profile=profile)
 
 
+def _apply_timeout(client: Any, timeout: float) -> None:
+    """Bound every request this CLI makes through ``client``: the GETs read
+    ``keydiff_timeout``; ``VCFOpsClient``'s token acquire reads
+    ``_auth_timeout`` when set."""
+    client.keydiff_timeout = timeout
+    if hasattr(client, "_auth_timeout"):
+        client._auth_timeout = timeout
+
+
+def release_token(client: Any, timeout: Optional[float]) -> None:
+    """Log the side out: ``POST /api/auth/token/release`` when the client
+    holds a token. Never raises; a failure is one stderr line, never a body."""
+    token = getattr(client, "_token", None)
+    session = getattr(client, "_session", None)
+    if not token or session is None:
+        return
+    extra = {} if timeout is None else {"timeout": timeout}
+    try:
+        r = session.post(f"{client.base}/api/auth/token/release", **extra)
+        status = getattr(r, "status_code", None)
+        if status is not None and not 200 <= status < 300:
+            print(f"keydiff: token release returned HTTP {status} (ignored)", file=sys.stderr)
+    except Exception as e:  # noqa: BLE001 - logout must never mask the result
+        print(f"keydiff: token release failed ({type(e).__name__}; ignored)", file=sys.stderr)
+    finally:
+        client._token = None
+
+
 def _live_side(profile: str, args: argparse.Namespace, adapter_kind: Optional[str],
                client_factory: Callable[[str], Any]) -> dict:
     client = client_factory(profile)
-    host = getattr(client, "base", "")
-    return capture(client, adapter_kind=adapter_kind, resource_kind=args.resource_kind,
-                   names=args.name, key_prefixes=args.key_prefix,
-                   source={"profile": profile, "base": host})
+    _apply_timeout(client, args.timeout)
+    try:
+        host = getattr(client, "base", "")
+        return capture(client, adapter_kind=adapter_kind, resource_kind=args.resource_kind,
+                       names=args.name, key_prefixes=args.key_prefix,
+                       source={"profile": profile, "base": host})
+    finally:
+        release_token(client, args.timeout)
 
 
 def main(argv: Optional[Sequence[str]] = None,
@@ -550,13 +726,13 @@ def main(argv: Optional[Sequence[str]] = None,
     try:
         args = parser.parse_args(argv)
     except SystemExit as e:
-        return int(e.code or 0) if e.code in (0, None) else 2
+        return int(e.code or 0) if e.code in (0, None) else EXIT_USAGE
     sides = list(args.sides or [])
     live = [s for s in sides if s[0] == "profile"]
 
     def usage(msg: str) -> int:
         print(f"keydiff: {msg}", file=sys.stderr)
-        return 2
+        return EXIT_USAGE
 
     if not sides:
         return usage("give two sides (--profile and/or --snapshot-in), or one"
@@ -577,6 +753,12 @@ def main(argv: Optional[Sequence[str]] = None,
     if args.stale_hours is not None and (not math.isfinite(args.stale_hours)
                                          or args.stale_hours <= 0):
         return usage("--stale-hours must be a finite number > 0")
+    if not math.isfinite(args.timeout) or args.timeout <= 0:
+        return usage("--timeout must be a finite number > 0")
+    if args.b_adapter_kind and (len(sides) < 2 or sides[1][0] != "profile"):
+        return usage("--b-adapter-kind sets the scope of a live side B; side B is"
+                     + (" a snapshot, whose scope was fixed when it was captured"
+                        if len(sides) >= 2 else " not given"))
 
     try:
         docs: List[dict] = []
@@ -587,11 +769,11 @@ def main(argv: Optional[Sequence[str]] = None,
             ak = args.b_adapter_kind if (i == 1 and args.b_adapter_kind) else args.adapter_kind
             docs.append(_live_side(value, args, ak, client_factory))
     except KeydiffError as e:
-        print(f"keydiff: {e}", file=sys.stderr)
-        return 3
+        print(f"keydiff: {_cell(str(e))}", file=sys.stderr)
+        return EXIT_FETCH
     except Exception as e:  # credential or transport failure from the client
-        print(f"keydiff: {type(e).__name__}: {e}", file=sys.stderr)
-        return 3
+        print(f"keydiff: {type(e).__name__}: {_cell(str(e))}", file=sys.stderr)
+        return EXIT_FETCH
 
     if args.snapshot_out:
         doc = docs[0]
@@ -599,7 +781,7 @@ def main(argv: Optional[Sequence[str]] = None,
         print(f"keydiff: wrote {len(doc['objects'])} object(s)"
               f" ({len(doc['unidentified'])} without a stable identity) to"
               f" {args.snapshot_out}")
-        return 0
+        return EXIT_OK
 
     result = compare(docs[0], docs[1], tolerance=args.tolerance,
                      rel_tolerance=args.rel_tolerance, stale_hours=args.stale_hours,
@@ -607,9 +789,13 @@ def main(argv: Optional[Sequence[str]] = None,
     if args.tsv_out:
         with open(args.tsv_out, "w", encoding="utf-8") as fh:
             fh.write(to_tsv(result))
-    sys.stdout.write(to_tsv(result) if args.format == "tsv"
-                     else to_table(result, show_matches=args.show_matches))
-    return 1 if any(result["counts"][c] for c in DIFFERENCES) else 0
+    if args.format == "tsv":
+        sys.stdout.write(to_tsv(result))
+        print(f"keydiff: {compared_line(result)}", file=sys.stderr)
+        print(f"keydiff: {verdict_line(result)}", file=sys.stderr)
+    else:
+        sys.stdout.write(to_table(result, show_matches=args.show_matches))
+    return exit_code(result)
 
 
 if __name__ == "__main__":

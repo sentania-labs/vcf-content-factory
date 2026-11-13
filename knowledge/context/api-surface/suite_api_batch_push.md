@@ -132,7 +132,12 @@ beside `{"statKey":"system|availability",...,"values":["UP"]}` in one
 (`POST /api/resources/properties/latest/query`) answers in the same shape.
 The facade's `pushTypedPropertiesBatch` / `pushTypedBatch` emit it
 (`tier2_architecture.md`, "Stitcher reads, events and numeric properties").
-Open: a numeric sample on a key whose history is strings (design E3).
+`data` is `format: double` in all three specs, so every number is sent as a
+double: `5` goes out as `5.0`, and an integer whose magnitude exceeds 2^53
+has no exact double, so the facade drops and counts it rather than send a
+different number. Send a string when the exact value matters. Untested: what
+a numeric sample does to a key whose earlier samples are strings, or the
+reverse; keep one type per key.
 
 ### 8.18 schema caveat
 

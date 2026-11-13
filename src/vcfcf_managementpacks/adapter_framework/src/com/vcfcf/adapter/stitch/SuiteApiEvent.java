@@ -15,16 +15,22 @@ package com.vcfcf.adapter.stitch;
  *       {@code DIAGNOSTIC} event onto a foreign VM was proven to land on its
  *       timeline about 45 s later (9.x devel, 2026-06-22).</li>
  *   <li>{@code startTimeUTC}: epoch milliseconds, at least
- *       {@link #MIN_TIME_UTC} (2000-01-01, the spec's floor and its default;
- *       sent always, so an event never silently starts in 2000).</li>
+ *       {@link #MIN_TIME_UTC} (2000-01-01). The spec floors this field at
+ *       that value and uses it as the default; the framework sends it
+ *       always, so an event never silently starts in 2000.</li>
  *   <li>{@code cancelTimeUTC}: optional. For a {@code managedExternally}
  *       event the spec says the event is cancelled by sending a new event
  *       with the <em>same message</em> and a cancel time
- *       ({@link #cancelledAt}).</li>
+ *       ({@link #cancelledAt}). The spec sets no floor on it, and its
+ *       examples send {@code 0} for an event that is not cancelled, so a
+ *       value of 0 or less is treated as unset and not sent. A set cancel
+ *       time before {@link #MIN_TIME_UTC} is refused by {@code pushEvents}:
+ *       that is the framework's rule, not the spec's.</li>
  *   <li>{@code message}: identifies the event in the system (cancel matches
  *       on it).</li>
  *   <li>{@code severity}: optional {@link Severity} (JSON name
- *       {@code severity}, XML name {@code criticality}).</li>
+ *       {@code severity} on every line; XML name {@code severity} on 8.18,
+ *       {@code criticality} on 9.0 and 9.1).</li>
  *   <li>{@code diagnosticSubType}: optional {@link DiagnosticSubType}, for a
  *       {@code DIAGNOSTIC} event only.</li>
  *   <li>{@code managedExternally}: optional. {@code true}: the event persists
@@ -32,15 +38,16 @@ package com.vcfcf.adapter.stitch;
  *       explicitly). {@code false}: the spec says it is cancelled during the
  *       next collection cycle if it is not pushed again. Whether that
  *       happens after one cycle, several, or at all for a {@code GENERAL}
- *       adapter's REST event is not established (design experiment G5).</li>
+ *       adapter's REST event is untested.</li>
  * </ul>
  *
  * <p><strong>No auto-cancel or watch/cancel cycle counts.</strong> The Python
  * Integration SDK's {@code auto_cancel}, {@code watch_wait_cycle} and
  * {@code cancel_wait_cycle} belong to its collect result; the REST event has
  * no such fields. The REST analogue is {@code managedExternally(false)} and
- * not re-pushing, or {@code managedExternally(true)} with an explicit
- * {@link #cancelledAt} after the pak's own count of quiet cycles.
+ * not re-pushing (whether a {@code GENERAL} adapter's event is cancelled
+ * this way is untested), or {@code managedExternally(true)} with an
+ * explicit {@link #cancelledAt} after the pak's own count of quiet cycles.
  *
  * <p><strong>NOTIFICATION is refused by {@code pushEvents}.</strong> Pushed
  * onto another adapter's resource through {@code /api/events/bulk}, a
@@ -50,7 +57,9 @@ package com.vcfcf.adapter.stitch;
  * ({@code knowledge/context/investigations/vcommunity-notification-events-foreign-vm.md},
  * 9.x devel, 2026-06-22). A 200 that produces nothing is the failure this
  * framework refuses, so {@code pushEvents} does not send it and counts it
- * dropped. Use {@code DIAGNOSTIC} (for log-derived events,
+ * dropped. Whether a {@code NOTIFICATION} event is also discarded on a
+ * pak's own resource is untested; it is refused everywhere because
+ * {@code pushEvents} cannot tell a pak's own resource from a foreign one. Use {@code DIAGNOSTIC} (for log-derived events,
  * {@code DIAGNOSTIC}/{@code LOG}). The type stays in {@link Type} so that a
  * pak reaching for it gets the explanation, not a missing constant.
  *
@@ -59,7 +68,11 @@ package com.vcfcf.adapter.stitch;
  */
 public final class SuiteApiEvent {
 
-    /** Earliest start or cancel time the spec accepts: 2000-01-01T00:00:00Z. */
+    /**
+     * 2000-01-01T00:00:00Z. The spec's floor for {@code startTimeUTC}; the
+     * framework also refuses a set cancel time before it (the spec does not
+     * floor {@code cancelTimeUTC}).
+     */
     public static final long MIN_TIME_UTC = 946684800000L;
 
     /** {@code eventType} values (the spec enum, without {@code HARD_THRESHOLD}). */
@@ -104,7 +117,9 @@ public final class SuiteApiEvent {
         this.resourceId = b.resourceId;
         this.message = b.message;
         this.startTimeUtc = b.startTimeUtc;
-        this.cancelTimeUtc = b.cancelTimeUtc;
+        // 0 or less means "not cancelled", as in the spec's examples: unset.
+        this.cancelTimeUtc = b.cancelTimeUtc == null || b.cancelTimeUtc <= 0
+                ? null : b.cancelTimeUtc;
         this.severity = b.severity;
         this.diagnosticSubType = b.diagnosticSubType;
         this.managedExternally = b.managedExternally;
@@ -112,8 +127,9 @@ public final class SuiteApiEvent {
 
     /**
      * Start an event. Only a {@code null} type is refused here (a programming
-     * error); the data-dependent checks (UUID, non-blank message, times at
-     * or after {@link #MIN_TIME_UTC}) run in {@code pushEvents}, which drops
+     * error); the data-dependent checks (UUID, non-blank message, a start
+     * time and any set cancel time at or after {@link #MIN_TIME_UTC}) run in
+     * {@code pushEvents}, which drops
      * and counts a bad event rather than throwing into the collect cycle.
      *
      * @param type         event type; not {@code null}
@@ -175,7 +191,10 @@ public final class SuiteApiEvent {
             return this;
         }
 
-        /** {@code cancelTimeUTC}, epoch milliseconds; {@code null} omits it. */
+        /**
+         * {@code cancelTimeUTC}, epoch milliseconds; {@code null}, 0 or a
+         * negative value omits it (0 means "not cancelled" in the spec).
+         */
         public Builder cancelTimeUtc(Long t) {
             this.cancelTimeUtc = t;
             return this;
@@ -191,7 +210,8 @@ public final class SuiteApiEvent {
      * {@code cancelTimeUTC}: how the spec says an externally managed event is
      * cancelled.
      *
-     * @param cancelTimeUtc cancel time, epoch milliseconds
+     * @param cancelTimeUtc cancel time, epoch milliseconds; 0 or less leaves
+     *                      the event not cancelled (field omitted)
      */
     public SuiteApiEvent cancelledAt(long cancelTimeUtc) {
         Builder b = new Builder(type, resourceId, message, startTimeUtc);
@@ -206,7 +226,7 @@ public final class SuiteApiEvent {
     public String getResourceId() { return resourceId; }
     public String getMessage() { return message; }
     public long getStartTimeUtc() { return startTimeUtc; }
-    /** {@code null} when not set. */
+    /** {@code null} when not set, or set to 0 or less. */
     public Long getCancelTimeUtc() { return cancelTimeUtc; }
     /** {@code null} when not set. */
     public Severity getSeverity() { return severity; }

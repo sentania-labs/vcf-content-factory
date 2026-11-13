@@ -7,7 +7,7 @@ Subcommands:
             run by the user in a real terminal; refuses a non-TTY stdin
             so no hook or pipe can ever feed it a password.
   keydiff: read-only key differential between two instances or two
-            saved snapshots (vCommunity Java port design, T5).
+            saved snapshots (a port's parity check).
 """
 from __future__ import annotations
 
@@ -27,7 +27,10 @@ subcommands:
   keydiff   compare stat and property keys and latest values of matching
             objects on two instances (--profile) or snapshots
             (--snapshot-in); --snapshot-out captures one side. Read-only:
-            GET requests only. `keydiff --help` for the options.
+            reads are GETs; each live side also logs in and out (token
+            acquire and release). Exits 0 only when objects and keys were
+            compared and nothing differs. `keydiff --help` for the options
+            and exit codes.
 """
 
 

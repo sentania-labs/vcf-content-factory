@@ -59,7 +59,7 @@ import java.util.Map;
  * // Events onto foreign resources: DIAGNOSTIC (NOTIFICATION is refused).
  * stitcher.pushEvents(events);
  *
- * // Read-style POST queries (path must end in /query); throws like get().
+ * // Read-style POST queries (last path segment "query"); throws like get().
  * String json = stitcher.post("/api/resources/properties/latest/query", query);
  * }</pre>
  *
@@ -325,7 +325,18 @@ public final class SuiteApiStitcher {
      * ({@code "values":["..."]}); a {@link Number} is sent as a numeric
      * property ({@code "data":[<double>]}). {@code null}, NaN, infinite and
      * any other value type are dropped and counted, never sent. Never throws.
-     * Full contract:
+     *
+     * <p>Every number is sent as a double ({@code 5} as {@code 5.0}): a
+     * {@code BigDecimal} with a fractional part is rounded to the nearest
+     * double, and an integer value whose magnitude exceeds 2^53 (a
+     * {@code Long} byte counter, a microsecond epoch) has no exact double, so
+     * it is dropped and counted rather than sent as a different number. Send
+     * a {@code String} when the exact value matters.
+     *
+     * <p>Keep one type per key: what a numeric sample does to a key whose
+     * earlier samples are strings, or the reverse, is untested.
+     *
+     * <p>Full contract:
      * {@link SuiteApiStitchClient#pushTypedPropertiesBatch(Map, long, int, int)}.
      *
      * @param byResource resource UUID to (statKey to {@link String} or {@link Number})
@@ -355,7 +366,8 @@ public final class SuiteApiStitcher {
     /**
      * {@link #pushBatch(Map, Map, long)} whose property values may be strings
      * or numbers (sent as {@link #pushTypedPropertiesBatch(Map, long)} sends
-     * them): properties first, then stats.
+     * them, every number as a double, one type per key): properties first,
+     * then stats.
      *
      * @param propertiesByResource resource UUID to (statKey to {@link String}
      *                             or {@link Number})
@@ -398,8 +410,10 @@ public final class SuiteApiStitcher {
      *
      * <p><strong>Use {@code DIAGNOSTIC}.</strong> A {@code NOTIFICATION}
      * event pushed onto another adapter's resource is answered 200 and
-     * silently discarded, so this call refuses it (dropped, counted, WARN);
-     * {@code DIAGNOSTIC} events onto a foreign VM are proven to land (see
+     * silently discarded, so this call refuses it (dropped, counted, WARN).
+     * Whether it is also discarded on a pak's own resource is untested; it
+     * is refused on every resource because this call cannot tell the two
+     * apart. {@code DIAGNOSTIC} events onto a foreign VM are proven to land (see
      * {@link SuiteApiEvent}). A 2xx means "accepted", not "landed". Full
      * contract: {@link SuiteApiStitchClient#pushEvents(java.util.Collection, int, int)}.
      *
@@ -530,24 +544,55 @@ public final class SuiteApiStitcher {
      * {@code /api/resources/properties/latest/query},
      * {@code /api/resources/stats/query}), returning the response body.
      *
-     * <p>Not a write path: a path that does not end in {@code /query} is
-     * refused with {@link IllegalArgumentException} before anything is sent.
-     * Otherwise the contract is {@link #get(String)}'s: it throws, so catch at
+     * <p>Not a write path: only a path of {@code /}-separated
+     * {@code [A-Za-z0-9_-]} segments whose last segment is exactly
+     * {@code query}, with at most one {@code ?key=value&...} query string
+     * of conservative characters, is accepted. Anything else (a {@code #}
+     * fragment, {@code ;}, {@code %}, {@code \}, {@code .} or {@code ..}
+     * segments, whitespace) is refused with {@link IllegalArgumentException}
+     * before a token is fetched or a connection is opened.
+     *
+     * <p>The response body is read whole into memory, up to
+     * {@link SuiteApiStitchClient#POST_MAX_RESPONSE_BYTES_DEFAULT} (8 MiB); a
+     * larger body throws {@link SuiteApiStitchClient.ResponseTooLargeException}.
+     * The read timeout is 30 s. Bound the resource ids per query and use
+     * {@code page}/{@code pageSize} where the endpoint takes them; pass a
+     * different cap with {@link #post(String, String, int)}.
+     *
+     * <p>Otherwise the contract is {@link #get(String)}'s: it throws, so catch at
      * the call site; a non-2xx answer is a {@link SuiteApiHttpException}
      * carrying the status, the {@code apiErrorCode} and a body excerpt; one
      * re-acquire and retry on 401; bodies are never logged.
      *
-     * @param path     path relative to the Suite API base, ending in {@code /query}
+     * @param path     path relative to the Suite API base, last segment {@code query}
      * @param jsonBody the query document
      * @return the response body
-     * @throws java.io.IOException  on HTTP (as {@link SuiteApiHttpException})
-     *                              or network error
+     * @throws java.io.IOException  on HTTP (as {@link SuiteApiHttpException}),
+     *                              an oversized body, or a network error
      * @throws InterruptedException if the calling thread is interrupted
-     * @see SuiteApiStitchClient#post(String, String)
+     * @see SuiteApiStitchClient#post(String, String, int)
      */
     public String post(String path, String jsonBody)
             throws java.io.IOException, InterruptedException {
         return client.post(path, jsonBody);
+    }
+
+    /**
+     * {@link #post(String, String)} with a caller-chosen cap on the response
+     * body, in bytes (at least 1).
+     *
+     * @param path             path relative to the Suite API base, last segment {@code query}
+     * @param jsonBody         the query document
+     * @param maxResponseBytes most bytes of response body to read
+     * @return the response body
+     * @throws java.io.IOException  on HTTP (as {@link SuiteApiHttpException}),
+     *                              a body over the cap, or a network error
+     * @throws InterruptedException if the calling thread is interrupted
+     * @see SuiteApiStitchClient#post(String, String, int)
+     */
+    public String post(String path, String jsonBody, int maxResponseBytes)
+            throws java.io.IOException, InterruptedException {
+        return client.post(path, jsonBody, maxResponseBytes);
     }
 
     /**

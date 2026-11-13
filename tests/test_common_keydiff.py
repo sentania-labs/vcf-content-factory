@@ -1,5 +1,4 @@
-"""Key differential CLI (vcfcf_common.keydiff), toolset gap T5 of the vCommunity
-Java port design (section 11).
+"""Key differential CLI (vcfcf_common.keydiff): a port's parity check.
 
 No live instance: a fake Suite API serves recorded instance state from
 ``tests/fixtures/keydiff/two_instances.json`` and implements the three GET
@@ -294,13 +293,247 @@ def test_pagination(monkeypatch):
     assert pages == [0, 1]
 
 
+LIBS = ["--adapter-kind", "vCommunity", "--resource-kind", "Content Library"]
+
+
 def test_no_differences_exits_zero(capsys):
-    rc, _, out = _run(["--profile", "a", "--profile", "a", *HOSTS], capsys=capsys)
-    assert rc == 0
+    rc, _, out = _run(["--profile", "a", "--profile", "a", *LIBS], capsys=capsys)
+    assert rc == keydiff.EXIT_OK == 0
     assert "no differences" in out.out
-    rc2, _, out2 = _run(["--profile", "a", "--profile", "a", *HOSTS, "--show-matches"],
+    assert "compared: objects a=2 b=2 on both=2;" in out.out
+    rc2, _, out2 = _run(["--profile", "a", "--profile", "a", *LIBS, "--show-matches"],
                         capsys=capsys)
-    assert rc2 == 0 and "vCommunity|NIC Count" in out2.out
+    assert rc2 == 0 and "vCommunity|Items" in out2.out
+
+
+def _counts(out_text: str) -> str:
+    return [line for line in out_text.splitlines() if line.startswith("compared:")][0]
+
+
+def test_b3a_two_empty_scopes_exit_4(capsys):
+    rc, _, out = _run(["--profile", "a", "--profile", "b", "--adapter-kind", "VMWARE",
+                       "--resource-kind", "Datastore"], capsys=capsys)
+    assert rc == keydiff.EXIT_NOTHING_COMPARED == 4
+    assert _counts(out.out) == ("compared: objects a=0 b=0 on both=0; keys a=0 b=0 on both=0"
+                                " (stale 0); objects not compared: 0 (a=0 b=0)")
+    assert "NOTHING COMPARED (no object is on both sides)" in out.out
+
+
+def test_b3b_every_object_unidentified_exit_4(capsys):
+    # A VMWARE listing without VMEntityVCID/VMEntityObjectID: never name-matched.
+    rc, _, out = _run(["--profile", "a", "--profile", "a", "--name", "orphan-host"],
+                      capsys=capsys)
+    assert rc == 4
+    assert "on both=0" in _counts(out.out)
+    assert "objects not compared: 2 (a=1 b=1)" in _counts(out.out)
+    assert "orphan-host" in out.out
+
+
+def test_b3c_key_prefix_matching_nothing_exit_4(capsys):
+    rc, _, out = _run(["--profile", "a", "--profile", "b", "--adapter-kind", "VMWARE",
+                       "--resource-kind", "HostSystem", "--key-prefix", "noSuchGroup|"],
+                      capsys=capsys)
+    assert rc == 4  # objects on one side only are differences, but no key was compared
+    assert "keys a=0 b=0 on both=0" in _counts(out.out)
+    assert "no key is on both sides of a matched object" in out.out
+
+
+def test_b3d_every_compared_row_stale_exit_4(capsys):
+    a = keydiff.capture(FakeOps("a"), adapter_kind="VMWARE", resource_kind="HostSystem",
+                        names=["esx01.vc1"], key_prefixes=["vCommunity|NIC"], source={},
+                        now_ms=NOW + 10 * 86400_000)
+    res = keydiff.compare(a, a, stale_hours=24)
+    assert res["compared"]["keys_both"] == res["compared"]["keys_stale"] == 1
+    assert keydiff.exit_code(res) == 4
+    assert "every key on both sides is stale" in keydiff.verdict_line(res)
+    # Through the CLI: the live capture time is now, the fixture samples are older.
+    rc, _, out = _run(["--profile", "a", "--profile", "a", "--name", "esx01.vc1",
+                       "--key-prefix", "vCommunity|NIC", "--stale-hours", "1"], capsys=capsys)
+    assert rc == 4 and "(stale 1)" in _counts(out.out)
+
+
+def test_unidentified_vmware_objects_make_the_run_non_zero(capsys):
+    # Everything compared matches, but orphan-host (no VCID) was not compared.
+    rc, _, out = _run(["--profile", "a", "--profile", "a", *HOSTS], capsys=capsys)
+    assert rc == keydiff.EXIT_NOT_COMPARED == 5
+    assert "objects not compared: 2 (a=1 b=1)" in _counts(out.out)
+    assert "were not compared; exit 5" in out.out
+    # A difference outranks it: exit 1.
+    rc1, _, _ = _run(["--profile", "a", "--profile", "b", *HOSTS], capsys=capsys)
+    assert rc1 == 1
+
+
+def test_ambiguous_objects_make_the_run_non_zero():
+    a = keydiff.capture(FakeOps("a"), adapter_kind="vCommunity", resource_kind="Content Library",
+                        names=[], key_prefixes=[], source={}, now_ms=NOW)
+    dup = json.loads(json.dumps(a))
+    keyless = [o for o in dup["objects"] if not o["stats"] and not o["properties"]]
+    assert keyless and len(dup["objects"]) == 2
+    dup["objects"].append(dict(keyless[0], resource_id="dup"))  # Library A stays compared
+    res = keydiff.compare(dup, dup)
+    assert res["compared"]["objects_both"] == 1 and res["compared"]["keys_both"] >= 1
+    assert res["compared"]["not_compared_a"] == 2 and res["compared"]["not_compared_b"] == 2
+    assert keydiff.exit_code(res) == 5
+
+
+def test_tsv_counts_go_to_stderr(capsys):
+    rc, _, out = _run(["--profile", "a", "--profile", "a", *LIBS, "--format", "tsv"],
+                      capsys=capsys)
+    assert rc == 0
+    assert out.out.startswith("category\t")
+    assert "compared:" not in out.out
+    assert "keydiff: compared: objects a=2 b=2 on both=2" in out.err
+    assert "keydiff: result: no differences; exit 0" in out.err
+
+
+def test_help_states_requests_and_exit_codes(capsys):
+    assert keydiff.main(["--help"]) == 0
+    text = " ".join(capsys.readouterr().out.split())
+    assert "GET requests only" not in text
+    assert "POST /api/auth/token/acquire" in text and "POST /api/auth/token/release" in text
+    for line in ("2 usage error", "3 a fetch or snapshot read failed", "4 nothing compared",
+                 "1 a difference was found", "5 no difference, but some objects were not",
+                 "0 objects and keys compared"):
+        assert line in text
+    assert "no credentials or token" in text  # --snapshot-out help
+    assert "--timeout" in text
+
+
+def test_table_escapes_terminal_control_characters():
+    a = keydiff.capture(FakeOps("a"), adapter_kind="vCommunity", resource_kind="Content Library",
+                        names=[], key_prefixes=[], source={}, now_ms=NOW)
+    b = json.loads(json.dumps(a))
+    evil = "x\x1b[2J\x1b]0;title\x07\u202e\u2028\x9b\x7fy"
+    b["objects"][0]["properties"]["vCommunity|Evil"] = {"value": evil}
+    b["objects"][0]["name"] = "lib\x1bname"
+    b["unidentified"] = [{"name": "u\x1b[31m", "resource_kind": "K", "resource_id": "r",
+                          "reason": "why\x1b"}]
+    res = keydiff.compare(a, b)
+    table = keydiff.to_table(res, show_matches=True)
+    tsv = keydiff.to_tsv(res)
+    for text in (table, tsv):
+        assert "\x1b" not in text and "\x07" not in text and "\x9b" not in text
+        assert "\x7f" not in text and "\u202e" not in text and "\u2028" not in text
+    assert "x\\x1b[2J" in table
+    assert "u\\x1b[31m" in table  # the not-compared list is escaped too
+    assert len(tsv.rstrip("\n").split("\n")) == len(res["rows"]) + 1
+
+
+def test_b_adapter_kind_needs_a_live_side_b(tmp_path, capsys):
+    sb = tmp_path / "b.json"
+    assert _run(["--profile", "b", *HOSTS, "--snapshot-out", str(sb)])[0] == 0
+    capsys.readouterr()
+    rc, clients, out = _run(["--profile", "a", "--snapshot-in", str(sb), *HOSTS,
+                             "--b-adapter-kind", "X"], capsys=capsys)
+    assert rc == 2 and "side B is a snapshot" in out.err
+    assert clients["a"].calls == []
+    rc2, clients2, out2 = _run(["--profile", "a", *HOSTS, "--b-adapter-kind", "X",
+                                "--snapshot-out", str(tmp_path / "x.json")], capsys=capsys)
+    assert rc2 == 2 and "not given" in out2.err
+    assert clients2["a"].calls == []
+    # Live side B: it is used.
+    rc3, clients3, _ = _run(["--profile", "a", "--profile", "b", "--adapter-kind", "vCommunity",
+                             "--b-adapter-kind", "vcfcf_vcommunity", "--resource-kind",
+                             "Content Library"], capsys=capsys)
+    kinds_b = {dict(p).get("adapterKind") for _, path, p in clients3["b"].calls
+               if path == "/api/resources"}
+    assert kinds_b == {"vcfcf_vcommunity"}
+
+
+class _SessResp:
+    def __init__(self, code: int, body: Any = None):
+        self.status_code = code
+        self._body = body
+        self.text = "" if body is None else json.dumps(body)
+
+    def json(self):
+        return self._body
+
+
+class FakeSession:
+    """Stands in for VCFOpsClient's requests.Session: serves FakeOps state,
+    records every request with its keyword arguments."""
+
+    def __init__(self, ops: FakeOps, base: str, token: str):
+        self.ops, self.base, self.token = ops, base, token
+        self.headers: Dict[str, str] = {}
+        self.log: List[Tuple[str, str, Dict[str, Any]]] = []
+
+    def post(self, url, **kw):
+        self.log.append(("POST", url[len(self.base):], kw))
+        if url.endswith("/api/auth/token/acquire"):
+            return _SessResp(200, {"token": self.token})
+        if url.endswith("/api/auth/token/release"):
+            return _SessResp(200)
+        return _SessResp(404)
+
+    def request(self, method, url, **kw):
+        self.log.append((method, url[len(self.base):], kw))
+        r = self.ops._request(method, url[len(self.base):], **kw)
+        return _SessResp(r.status_code, r._body)
+
+
+def _real_client(side: str, password: str, token: str):
+    from vcfcf_common.client import VCFOpsClient
+    c = VCFOpsClient(host=f"ops-{side}.example.test", username=f"svc-{side}",
+                     password=password)
+    c._session = FakeSession(FakeOps(side), c.base, token)
+    return c
+
+
+def test_real_client_timeouts_release_and_no_credentials_in_snapshot(tmp_path, capsys):
+    pw, tok = "Pa55-SECRET-pw-7731", "TOKEN-SECRET-5521"
+    clients = {"a": _real_client("a", pw, tok)}
+    snap = tmp_path / "a.json"
+    rc = keydiff.main(["--profile", "a", *HOSTS, "--snapshot-out", str(snap),
+                       "--timeout", "12.5"], client_factory=lambda p: clients[p])
+    assert rc == 0
+    log = clients["a"]._session.log
+    verbs = [(m, p) for m, p, _ in log]
+    assert verbs[0] == ("POST", "/api/auth/token/acquire")
+    assert verbs[-1] == ("POST", "/api/auth/token/release")
+    assert {m for m, p in verbs[1:-1]} == {"GET"}
+    assert all(kw.get("timeout") == 12.5 for _, _, kw in log), log
+    assert clients["a"]._token is None  # released
+    text = snap.read_text(encoding="utf-8")
+    for secret in (pw, tok, "svc-a", "vRealizeOpsToken", "Authorization"):
+        assert secret not in text
+    doc = json.loads(text)
+    assert doc["source"] == {"profile": "a", "base": "https://ops-a.example.test/suite-api"}
+    assert "esx01.vc1" in text  # names and values from the instance are there
+
+
+def test_token_released_when_a_fetch_fails(capsys):
+    c = _real_client("a", "pw", "tok")
+    c._session.ops.fail = {"/api/resources/properties": 500}
+    rc = keydiff.main(["--profile", "a", "--profile", "a", *HOSTS],
+                      client_factory=lambda p: c)
+    assert rc == 3
+    assert c._session.log[-1][:2] == ("POST", "/api/auth/token/release")
+    assert "HTTP 500" in capsys.readouterr().err
+
+
+def test_release_failure_is_one_line_never_fatal(capsys):
+    c = _real_client("a", "pw", "tok")
+
+    def boom(url, **kw):
+        if url.endswith("release"):
+            raise OSError("connection reset with body SECRET-BODY")
+        return FakeSession.post(c._session, url, **kw)
+
+    c._session.post = boom
+    rc = keydiff.main(["--profile", "a", "--profile", "a", *LIBS], client_factory=lambda p: c)
+    assert rc == 0
+    err = capsys.readouterr().err
+    assert "token release failed (OSError; ignored)" in err
+    assert "SECRET-BODY" not in err
+
+
+def test_timeout_must_be_positive(capsys):
+    for v in ("0", "-1", "nan", "inf"):
+        rc, clients, _ = _run(["--profile", "a", "--profile", "b", *HOSTS, "--timeout", v],
+                              capsys=capsys)
+        assert rc == 2 and all(c.calls == [] for c in clients.values())
 
 
 @pytest.mark.parametrize("argv", [
