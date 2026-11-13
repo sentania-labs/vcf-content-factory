@@ -3161,20 +3161,29 @@ _UUID_RE = re.compile(
 )
 
 
+def _rendered_box(w: "Widget") -> "tuple[int, int, int, int]":
+    """``(x, y, w, h)`` of a widget as the renderer writes it: the coords go
+    through ``render._clamp_gridster_floor`` itself (DEF-013: x and y to at
+    least 1; w and h untouched, no right-edge clamp), so the Section
+    fallback can never disagree with the wire when the clamp changes. A
+    missing w or h counts as 1. Section coords are already 12 x 1 here (the
+    loader stores them so, as the renderer writes them)."""
+    from .render import _clamp_gridster_floor
+    c = _clamp_gridster_floor(w.coords)
+    return (int(c.get("x", 1)), int(c.get("y", 1)),
+            max(1, int(c.get("w", 1))), max(1, int(c.get("h", 1))))
+
+
 def _grid_rows(w: "Widget") -> "tuple[int, int]":
-    """``(top row, height in rows)`` of a widget as it renders: the top row
-    is ``max(1, y)``, the same floor ``render._clamp_gridster_floor`` applies
-    (DEF-013; the loader accepts an authored y below 1 and the renderer
-    clamps it), so the Section transform and its overlap check see the rows
-    the wire carries."""
-    return max(1, int(w.coords.get("y", 1))), max(1, int(w.coords.get("h", 1)))
+    """``(top row, height in rows)`` as rendered (``_rendered_box``)."""
+    _x, y, _w, h = _rendered_box(w)
+    return y, h
 
 
 def _widgets_overlap(a: "Widget", b: "Widget") -> bool:
-    ay, ah = _grid_rows(a)
-    by, bh = _grid_rows(b)
-    ax, aw = int(a.coords.get("x", 1)), max(1, int(a.coords.get("w", 1)))
-    bx, bw = int(b.coords.get("x", 1)), max(1, int(b.coords.get("w", 1)))
+    """Whether two widgets overlap as rendered (``_rendered_box``)."""
+    ax, ay, aw, ah = _rendered_box(a)
+    bx, by, bw, bh = _rendered_box(b)
     return ay < by + bh and by < ay + ah and ax < bx + bw and bx < ax + aw
 
 

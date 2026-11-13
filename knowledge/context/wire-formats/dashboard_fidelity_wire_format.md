@@ -413,9 +413,12 @@ incoming navigations are unchanged; Sections contribute nothing to
 closes each removed Section row that no remaining widget covers: every
 widget below moves up one row per closed row above it. A row a remaining
 widget still covers (a widget starting above the Section and spanning past
-it) is left open. Rows are counted as rendered: an authored `y` below 1 is
-row 1, the floor `render._clamp_gridster_floor` applies (DEF-013), so a
-0-based Section that renders on another widget's row is not closed. Why
+it) is left open. Every coordinate the transform and its overlap check read
+is the rendered one: `loader._rendered_box` passes the coords through
+`render._clamp_gridster_floor` itself (DEF-013: x and y to at least 1; w
+and h unchanged, no right-edge clamp), so a 0-based Section that renders on
+another widget's row is not closed, and an x below 1 is compared where it
+renders. Why
 close rather than leave the gap:
 
 - Saved product layouts carry no empty rows: of 227 dashboards in the

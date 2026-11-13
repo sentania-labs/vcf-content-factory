@@ -336,6 +336,12 @@ _IMPORT_REWRITES: dict[str, list[tuple[str, str]]] = {
             r"from \.render import _VIEW_PIN_CONTAINER",
             "from .dashboard_render import _VIEW_PIN_CONTAINER",
         ),
+        # from .render import _clamp_gridster_floor  (inline in _rendered_box;
+        # the Section fallback reads coords as the renderer writes them)
+        (
+            r"from \.render import _clamp_gridster_floor",
+            "from .dashboard_render import _clamp_gridster_floor",
+        ),
         # from .widget_versions import widget_version_problems  (inline in
         # Dashboard.validate; issue #199 per-widget minimum Ops version)
         (

@@ -157,6 +157,38 @@ def test_collapsed_section_whose_members_would_overlap_is_rejected(tmp_path):
         core_load_dashboard(p2).validate({})
 
 
+@pytest.mark.parametrize("hidden_x,hidden_w,visible_x", [
+    (0, 1, 1),     # Codex P2 on PR 364: both render at x 1
+    (-2, 3, 2),    # sibling: authored [-2, 1) misses x 2; rendered [1, 4) covers it
+])
+def test_overlap_check_reads_x_as_rendered(tmp_path, hidden_x, hidden_w, visible_x):
+    widgets = [
+        _section("s1", 1, collapsed=True),
+        {**_text("m", 1, 2, 1, 4), "coords": {"x": hidden_x, "y": 2, "w": hidden_w, "h": 4}},
+        _section("s2", 3),
+        _text("v", visible_x, 4, 1, 2),
+    ]
+    p = _write(tmp_path / "d.yaml", _dash_yaml(widgets, interactions=None))
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        d = core_load_dashboard(p)
+        with pytest.raises(DashboardValidationError, match="widgets 'm' and 'v' overlap"):
+            d.validate({})
+
+
+def test_fallback_geometry_is_the_renderers_clamp(tmp_path, monkeypatch):
+    """One source for coordinates: the fallback reads them through
+    render._clamp_gridster_floor, so a change there cannot diverge."""
+    from vcfcf_core.dashboards import loader as core_loader
+    from vcfcf_core.dashboards import render as core_render
+    d = _load(_write(tmp_path / "d.yaml", _dash_yaml(SOURCE_WIDGETS)))
+    a = next(w for w in d.widgets if w.local_id == "a")
+    assert core_loader._rendered_box(a) == (1, 4, 6, 3)
+    monkeypatch.setattr(core_render, "_clamp_gridster_floor",
+                        lambda c: {**c, "x": 5, "y": 9})
+    assert core_loader._rendered_box(a) == (5, 9, 6, 3)
+
+
 def test_validate_warning_says_where_the_key_applies(source):
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
@@ -519,6 +551,7 @@ def test_buildkit_rewrites_the_new_import():
     loader_src = (REPO_ROOT / "src" / "vcfcf_core" / "dashboards" / "loader.py").read_text(encoding="utf-8")
     kit_loader = _apply_rewrites(loader_src, _IMPORT_REWRITES["dashboard_loader.py"])
     assert "from . import widget_versions as _wv" not in kit_loader
+    assert "from .dashboard_render import _clamp_gridster_floor" in kit_loader
 
 
 # --- 6. live sync by instance version ------------------------------------------
