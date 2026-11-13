@@ -884,6 +884,16 @@ current pip (26.2.1), so a base-image rebuild cannot clear them.
 - [ ] The release states the registry path and image digest, and the
       registry allows anonymous pull from Cloud Proxies.
 
+**Content ids (issue #345)**
+- [ ] `python3 -m vcfcf_packaging stock-id-check <built.pak>` (or the
+      unpacked pak tree) exits 0: no view, dashboard, report, symptom or
+      alert ships under a VCF Operations stock id. Python packs are built by
+      `mp-build`, not `build-sdk`, so this is their only stock-id check;
+      exit 2 lists the stock ids to re-mint, exit 1 means part of the pak
+      could not be read or there was nothing to check. Super metric and
+      recommendation ids are not in the baseline (`stock_id_guard.md`,
+      Known holes): review those by hand.
+
 ---
 
 ## Not established from source

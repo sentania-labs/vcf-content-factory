@@ -98,6 +98,19 @@ Schema (all fields):
                            or name a UTF-8 regular file inside the project
                            with printable text and no NUL (eula_file; read
                            once at load, leading BOM dropped).
+    stock_id_allowlist: list (optional, absent by default) bundled content
+                           that may ship under a VCF Operations stock id
+                           (issue #345). Each entry is a mapping with
+                           exactly type (view, dashboard, report,
+                           supermetric, symptom, alert, recommendation), id
+                           and a non-blank reason. validate-sdk and
+                           build-sdk refuse any bundled definition whose id
+                           is in the stock-id baseline unless an entry
+                           names it, and print a warning for every entry
+                           that matched on every run. Parsed here as a list
+                           only; the entries are checked by
+                           vcfcf_core.stock_ids.guard.parse_allowlist in
+                           sdk_builder.check_stock_ids.
 """
 from __future__ import annotations
 
@@ -718,6 +731,9 @@ class SdkProjectDef:
     eula_file: str = ""
     eula_path: Optional[Path] = None
     eula_bytes: Optional[bytes] = None
+    # Explicit escape hatch for stock content ids (#345); raw entries,
+    # validated by sdk_builder.check_stock_ids. None when absent.
+    stock_id_allowlist: Optional[list] = None
 
     @property
     def entry_package(self) -> str:
@@ -903,6 +919,13 @@ def load_sdk_project(path: Path) -> SdkProjectDef:
     vendor_contact = _parse_one_line(raw, "vendor_contact", where)
     eula_file, eula_path, eula_bytes = _parse_eula_file(raw, path.parent, where)
 
+    stock_id_allowlist = raw.get("stock_id_allowlist")
+    if stock_id_allowlist is not None and not isinstance(stock_id_allowlist, list):
+        raise SdkProjectError(
+            f"{where}: 'stock_id_allowlist' must be a list of {{type, id, reason}} "
+            f"entries; got {type(stock_id_allowlist).__name__}"
+        )
+
     return SdkProjectDef(
         name=name,
         version=version,
@@ -925,6 +948,7 @@ def load_sdk_project(path: Path) -> SdkProjectDef:
         eula_file=eula_file,
         eula_path=eula_path,
         eula_bytes=eula_bytes,
+        stock_id_allowlist=stock_id_allowlist,
     )
 
 

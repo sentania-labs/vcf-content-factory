@@ -356,12 +356,19 @@ def core_wheel_site(tmp_path_factory) -> Path:
         assert not stale, f"wheel modules differ from src/: {stale}"
         on_disk = {str(p.relative_to(SRC)) for p in (SRC / "vcfcf_core").rglob("*.py")}
         assert set(py_members) == on_disk, f"missing from wheel: {sorted(on_disk - set(py_members))}"
+        # Package data (#345 review W7): the stock-id guard fails closed
+        # without its baseline, so a wheel that drops it breaks every gate.
+        baseline = "vcfcf_core/stock_ids/stock_ids_baseline.json"
+        assert baseline in z.namelist(), "the stock-id baseline is missing from the wheel"
+        assert z.read(baseline) == (SRC / baseline).read_bytes(), "wheel baseline differs from src/"
     install = subprocess.run(
         [sys.executable, "-m", "pip", "install", "--quiet", "--no-deps", "--target", str(site), str(wheels[0])],
         capture_output=True, text=True, timeout=600,
     )
     assert install.returncode == 0, install.stderr[-2000:]
     assert sorted(p.name for p in site.iterdir() if not p.name.endswith(".dist-info")) == ["vcfcf_core"]
+    installed = site / "vcfcf_core" / "stock_ids" / "stock_ids_baseline.json"
+    assert installed.is_file(), "the installed wheel has no stock-id baseline"
     return site
 
 

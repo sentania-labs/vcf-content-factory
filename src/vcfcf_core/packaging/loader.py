@@ -89,6 +89,7 @@ from ..dashboards.loader import (
 from ..customgroups.loader import CustomGroupDef, load_file as load_cg
 from ..reports.loader import ReportDef, load_file as load_report
 from ..symptoms.loader import SymptomDef, load_file as load_symptom
+from ..stock_ids.guard import AllowlistEntry, StockIdAllowlistError, parse_allowlist
 from ..alerts.loader import (
     AlertDef, load_file as load_alert,
     Recommendation, load_recommendation_file,
@@ -257,6 +258,10 @@ class Bundle:
     design: str = ""  # explicit design artifact path from manifest (optional)
     released: bool = False   # publish gate, True means include in /publish output
     version: str = "1.0.0"  # internal semver for duplicate-version guard
+    # Explicit escape hatch for content shipped under a VCF Operations
+    # stock id (#345): manifest ``stock_id_allowlist`` entries, each with a
+    # required reason. Absent by default.
+    stock_id_allowlist: List[AllowlistEntry] = field(default_factory=list)
 
 
 def load_bundle(
@@ -524,6 +529,11 @@ def load_bundle(
     if not version:
         version = "1.0.0"
 
+    try:
+        stock_id_allowlist = parse_allowlist(data.get("stock_id_allowlist"), str(path))
+    except StockIdAllowlistError as e:
+        raise BundleValidationError(str(e)) from e
+
     return Bundle(
         name=name,
         description=description,
@@ -547,6 +557,7 @@ def load_bundle(
         design=design,
         released=released,
         version=version,
+        stock_id_allowlist=stock_id_allowlist,
     )
 
 

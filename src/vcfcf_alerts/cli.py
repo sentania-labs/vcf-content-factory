@@ -99,6 +99,13 @@ def cmd_validate(args) -> int:
             print(f"INVALID: {e}", file=sys.stderr)
             rc = 1
 
+    # Stock content ids (#345): no alert or recommendation may ship under a
+    # stock id (ids as rendered into AlertContent.xml / a pak). Checked
+    # before the OK line, which prints only when every check passed.
+    from vcfcf_packaging.stock_ids import alert_definitions, report_stock_ids
+    rc |= report_stock_ids(alert_definitions(defs, repo_recs),
+                           "alert definitions and recommendations")
+
     if rc == 0:
         symptom_count = len(_collect_repo_symptom_names())
         print(
