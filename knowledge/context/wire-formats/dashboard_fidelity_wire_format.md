@@ -53,6 +53,7 @@ and the per-type renderers). Tests: `tests/test_dashboard_fidelity.py`.
 | `doc_center_key: vcom_522` | `docCenterKey` | `vcom_<digits>` |
 | `column_proportion: "1-1"` | `columnProportion` | legacy layout; values seen `1`, `1-1`, `0.5`, `0.5-0.5`, `0.333-0.334-0.333`, `0.95`, `0` |
 | `column_count: 0` | `columnCount` | values seen -1, 0, 1, 2, 3 |
+| `section_fallback: omit` | none (decides which variant renders) | where the target cannot import Section, the dashboard renders without its Section widgets, rows closed up. Needs at least one Section. §Section fallback |
 | `omit: [temporary]` | no `temporary` | 9.1.1 exports drop it. Floor 9.1.1 (§Omit version floors): a Tier 2 pak build fails on it |
 | `name_path: ""` | `namePath: ""`, `name` without a folder prefix | no folder, whatever the entry point's default (below) |
 | `omit: [name_path]` | no `namePath` | needs `name_path: ""` written in the YAML: an absent `name_path` is a load error, as is a non-empty one. Floor 8.18.7: passes the Tier 2 pak gate |
@@ -329,7 +330,110 @@ The gate runs after the bundled content loads, in
 `sdk_builder.check_bundled_version_floors`, beside the `omit:` gate below:
 `build-sdk` fails on it, and `validate-sdk` reports each problem as
 `version floor: ...` next to the naming, bundled-content, stock-id and
-localization checks instead of stopping them.
+localization checks instead of stopping them. The way out for a dashboard
+that is complete without its header rows is `section_fallback: omit`
+(next section); the build error says so.
+
+## Section fallback (`section_fallback: omit`, 2026-11-13)
+
+A Section is a full-width, zero-height collapsible header row; its members
+are the widgets below it up to the next Section. A dashboard without its
+Sections is the same dashboard minus those rows. `section_fallback: omit`
+(dashboard level, the only value) declares that variant acceptable, so one
+committed YAML (with the Sections) yields both variants, and the build or
+sync picks one from the lowest product version its output targets. When the
+floor rises to a version that imports Section, the same source ships the
+Sections with no content edit. Code: `widget_versions.section_omission_reason`
+(the decision), `Dashboard.without_sections` (the transform),
+`loader.apply_section_fallback` (both, with the notes). Tests:
+`tests/test_section_fallback.py`.
+
+**Contract.** Without the key nothing changes: same objects, same bytes
+(78 renders of every dashboard in `content/`, `tests/fixtures/`,
+`third_party/*/` and the registered paks, content-import and pak path,
+identical before and after). With the key, every omission prints
+`SECTIONS OMITTED: dashboard '<name>': <n> Section widget(s) left out
+(section_fallback: omit): <reason>.`, the reason naming the target version
+and the floor. Load errors: any other value (the message names `omit`), and
+the key on a dashboard without a Section (meaningless, as an `omit:` entry
+that contradicts the YAML is). Validate error: the key on a dashboard where a
+collapsed Section's members would overlap the widgets below once the Section
+is gone (below).
+
+**Floor.** `widget_versions.section_ship_floor()` is Section's proven floor,
+`WIDGET_TYPE_MIN_OPS_VERSION["Section"]` (9.1.1), not the measured-failing
+bound `WIDGET_TYPE_REFUSE_BELOW_OPS_VERSION` (9.1.0): 9.1.0 is unmeasured, and
+omitting there costs header rows the author already gave up while shipping
+there risks the whole batch. Measuring 9.1.0 lowers it by editing the table.
+
+| where | target | key set | key not set |
+|---|---|---|---|
+| `build-sdk`, `validate-sdk` (Tier 2) | oldest supported line, `_oldest_supported_line()` (8.18.7 today) | below 9.1.1: omitted; from 9.1.1: shipped | below 9.1.1: build error (as before, now naming the key); from 9.1.1: shipped |
+| `build-sdk --sections ship` (dev only) | same | shipped, `SECTIONS KEPT BELOW FLOOR` printed below 9.1.1; Section left out of the floor gate | same |
+| `build-sdk --sections omit` (dev only) | same | omitted at any floor | unchanged (gated as above) |
+| `build-sdk --release` with `--sections ship` or `omit` | | refused | refused |
+| live sync: `vcfcf_dashboards sync`, the dashboards handler, bundle sync preflight | instance `releaseName` | below 9.1.1 (8.18.7, 9.0.x, 9.1.0): omitted; from 9.1.1: shipped; version unreadable: omitted | as before: refused below 9.1.0, warned on 9.1.0, warned and imported when unreadable |
+| `vcfcf_dashboards package` | none declared | shipped as authored; `--sections omit` omits | unchanged |
+| content bundles, `install.py` / `install.ps1` | none declared | Sections shipped; the installer refuses below 9.1.0 as before | same |
+
+Unreadable version on live sync: omitted rather than warned and imported,
+because the key says the Section-less variant is acceptable and the other
+outcome is a lost batch on 8.18.7 or 9.0.x. A Section dashboard without the
+key in the same import keeps today's handling, and a refusal names only the
+dashboards whose Sections remain.
+
+The Tier 2 floor is the RULE-019 oldest line, the same target the floor gate
+uses, not `manifest.txt` `vcops_minimum_version` (hardcoded `8.0.0` in
+`sdk_builder._generate_outer_manifest`, not read from `adapter.yaml`). When
+8.18 and 9.0 leave RULE-019 and their entries leave `_SDK_COMPAT_LINES`, the
+oldest line becomes 9.1.1.0100 and every Tier 2 pak ships its Sections.
+Tier 1 (MPB) paks render no dashboards. Distribution bundles carry no
+minimum version, so the installer templates are unchanged; a bundle
+dashboard with the key still meets the refusal on 8.18.7 and 9.0.x.
+
+**What refers to a Section.** Only its own `config.widgets` member list
+(`SectionConfig.member_ids`), which goes with it. `validate()` already
+rejects interactions to or from a Section and navigations on one, and the
+renderer never offers a Section as a navigation receiver. Every other widget
+keeps its local id, so its uuid (dashboard name + local id), interactions and
+incoming navigations are unchanged; Sections contribute nothing to
+`entries.resourceKind` / `entries.resource`. The pak's
+`resources/resources.properties` loses the Section titles with them.
+
+**Rows close up.** A Section owns one grid row (12 x 1, class statics
+`gridsterH: 1, gridsterW: 12`, `../api-surface/dashboard_widgets_alertvolume_section_viewdetails.md`
+§3; the loader rejects any widget starting on that row). The transform
+closes each removed Section row that no remaining widget covers: every
+widget below moves up one row per closed row above it. A row a remaining
+widget still covers (a widget starting above the Section and spanning past
+it) is left open. Why close rather than leave the gap:
+
+- Saved product layouts carry no empty rows: of 227 dashboards in the
+  reference corpus (205 under `reference/references/`, 22 under
+  `reference/docs/extracted/` and `knowledge/context/exports/`), none has a
+  row between row 1 and its last row that no widget covers (survey
+  2026-11-13, `gridsterCoords` y and h). A gap would be a shape no export
+  shows.
+- The grid moves widgets up into vacated rows at run time: collapsing a
+  Section re-derives the rows under it, and exports of a collapsed Section
+  show its hidden children on rows the next Section also uses (§3 above).
+  So a gap would probably close on display anyway; closing it in the
+  render does not depend on that.
+- Closing only rows nothing covers cannot create an overlap: every widget is
+  wholly above or below each closed row, and the distance between two
+  widgets shrinks only by closed rows that lie between them.
+
+Not browser-checked (no live instance in this change).
+
+**Collapsed Sections.** Their members are hidden at load and their saved rows
+can overlap the widgets below (the next Section floats up under a collapsed
+one). Without the Section they are shown at those rows, so `validate()`
+rejects `section_fallback` when a member of a collapsed Section would overlap
+another widget, naming both and the Section.
+
+**The importer** (`import-local`) never writes the key (no wire key maps to
+it); its Section warning and its `--target-min` deviation name it as the way
+out.
 
 ## Omit version floors
 
@@ -458,6 +562,11 @@ ships the dashboard disabled (above), and, on alerts and recommendations,
   renders `""`.
 - Heatmap tab: `name_localized`, `name_orig`, `model_id`, `tag_filter`,
   `filter_mode`, `custom_filter`, `omit`, `group_by.parent_text`.
+
+Since 2026-11-13: dashboard `section_fallback` (§Section fallback). An older
+loader, including a buildkit cut before it, ignores the key and ships the
+Sections; on such a kit a Section dashboard below the floor still fails
+the build if the kit has the Section gate, and ships silently if it does not.
 
 Newly accepted rather than newly read (a load error before, valid now):
 `collapsed` on TextDisplay, View, MetricChart, Scoreboard, ResourceList and

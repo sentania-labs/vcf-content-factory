@@ -22,13 +22,14 @@ from .client import (
     import_content_zip,
     import_shortfall_errors,
     import_shortfalls,
+    plan_dashboard_import,
     print_import_count_warnings,
     skipped_import_advice,
-    widget_import_refusal,
 )
 from .id_guard import check_dashboard_id_stability
 from .loader import (
     DashboardValidationError,
+    apply_section_fallback,
     check_dashboard_navigations,
     load_all,
     split_navigation_targets,
@@ -497,6 +498,12 @@ def cmd_package(args) -> int:
         views, getattr(args, "supermetrics_dir", str(DEFAULT_SUPERMETRICS)))
     if col_rc:
         return 1
+    # section_fallback: no target is declared here, so only --sections omit
+    # changes anything; each omission is said.
+    dashboards, notes = apply_section_fallback(
+        dashboards, None, getattr(args, "sections", "auto"))
+    for note in notes:
+        print(note, file=sys.stderr)
     blob = build_import_zip(
         views, dashboards, sm_resolver=corpus.resolver().uuid_for,
         known_dashboards=known,
@@ -546,9 +553,11 @@ def cmd_sync(args) -> int:
 
     # Widget types the instance's version cannot import (issue #199): one
     # such dashboard loses every dashboard in this import, so the whole
-    # import is refused, before anything is sent.
-    refusal, note = widget_import_refusal(client, dashboards)
-    if note:
+    # import is refused, before anything is sent. A dashboard with
+    # section_fallback: omit is imported without its Sections instead, and
+    # the rest of this run (materialization, dependency walk) sees that.
+    dashboards, refusal, notes = plan_dashboard_import(client, dashboards)
+    for note in notes:
         print(f"WARNING: {note}", file=sys.stderr)
     if refusal:
         print(f"REFUSED: {refusal}", file=sys.stderr)
@@ -1243,6 +1252,20 @@ def build_parser() -> argparse.ArgumentParser:
             "Allow a Dashboard Navigation to a repo dashboard this import does "
             "not carry (it is listed as a PREREQUISITE and must already be "
             "installed). Default: fail."
+        ),
+    )
+    pp.add_argument(
+        "--sections",
+        dest="sections",
+        choices=("auto", "ship", "omit"),
+        default="auto",
+        help=(
+            "which variant of a dashboard that sets section_fallback: omit to "
+            "write: omit leaves its Section widgets out (the variant live sync "
+            "and Tier 2 paks use below VCF Operations 9.1.1); ship and auto "
+            "keep them (a local package declares no target version, so auto "
+            "writes the dashboards as authored). A dashboard without the key "
+            "is never changed. Each omission is printed with its reason."
         ),
     )
     pp.set_defaults(func=cmd_package)

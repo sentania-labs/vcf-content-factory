@@ -410,7 +410,8 @@ def _apply_sdk_jar_flag(args) -> None:
 
 
 def _cmd_build_sdk_inner(project_dir: Path, output_dir: Path,
-                         pak_compare_warn_only: bool = False) -> int:
+                         pak_compare_warn_only: bool = False,
+                         sections: str = "auto") -> int:
     """Inner helper: build a Tier 2 SDK adapter pak from project_dir."""
     from .sdk_builder import build_sdk_pak, SdkBuildError
     from .sdk_project import SdkProjectError
@@ -419,6 +420,7 @@ def _cmd_build_sdk_inner(project_dir: Path, output_dir: Path,
         pak_path = build_sdk_pak(
             project_dir, output_dir,
             pak_compare_warn_only=pak_compare_warn_only,
+            sections=sections,
         )
         print(f"Built: {pak_path}")
         return 0
@@ -450,6 +452,7 @@ def cmd_build_sdk(args) -> int:
     return _cmd_build_sdk_inner(
         Path(args.project_dir), Path(args.output),
         pak_compare_warn_only=getattr(args, "pak_compare_warn_only", False),
+        sections=getattr(args, "sections", "auto"),
     )
 
 
@@ -1078,6 +1081,23 @@ def build_parser() -> argparse.ArgumentParser:
             "dev builds only: report pak-compare BLOCKING findings as "
             "warnings instead of failing the build (default: fail). "
             "Rejected together with --release."
+        ),
+    )
+    pbsdk.add_argument(
+        "--sections",
+        dest="sections",
+        choices=("auto", "ship", "omit"),
+        default="auto",
+        help=(
+            "which variant of a dashboard that sets section_fallback: omit "
+            "the pak ships: auto (default) ships its Section widgets only "
+            "when the oldest supported line imports Section (9.1.1 and "
+            "later) and leaves them out below; ship keeps every Section "
+            "(the Section variant, e.g. for a 9.1-only test); omit leaves "
+            "them out of every dashboard with the key. A dashboard without "
+            "the key is never changed. Each omission is printed with its "
+            "reason. Dev builds only: ship and omit are rejected together "
+            "with --release."
         ),
     )
     pbsdk.add_argument(

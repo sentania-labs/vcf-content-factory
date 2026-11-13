@@ -749,6 +749,10 @@ def test_without_target_reproduces_source_and_warns(source, tmp_path, capsys):
     assert _yaml(out, "dashboards/probe-dashboard-a.yaml")["omit"] == ["temporary"]
     assert "omit: temporary reproduces the source, but its floor is 9.1.1" in text
     assert "(Section): needs VCF Operations 9.1.1 or later; on any build below it" in text
+    # section_fallback has no wire counterpart: the importer names it as the
+    # way out but never writes it, and verification still passes.
+    assert "add section_fallback: omit to the written YAML (never added here)" in text
+    assert "section_fallback" not in _yaml(out, "dashboards/probe-dashboard-b.yaml")
 
 
 # -------------------------------------------------------------- safety

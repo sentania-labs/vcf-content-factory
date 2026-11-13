@@ -51,6 +51,11 @@ pins, `self_provider`, `view_details`, `navigations`
 (`dashboard_navigations.md`), or interaction endpoints; Sections do not
 nest.
 
+Version: Section imports from 9.1.1 only (8.18.7 and 9.0.x lose the
+dashboard and more, issue #199). A dashboard complete without its header
+rows sets `section_fallback: omit` and ships without them below 9.1.1
+(`dashboard_fidelity_wire_format.md` §Section fallback).
+
 ## Gauge scoreboard (`visualTheme: 9`)
 
 See the `ScoreboardConfig` docstring in `loader.py` for the recipe, and
