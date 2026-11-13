@@ -3610,19 +3610,24 @@ def load_view(
             """A bound on a string attribute column: VCF Ops matches it as
             text, so it is the exact string written (``"0"`` stays ``0``,
             never ``0.0``). An unquoted YAML number or bool there would be
-            respelled, so it is an error."""
+            respelled, so it is an error. The message never echoes the
+            parsed value: YAML has already rewritten the author's text
+            (``Off`` is False, ``010`` is 8), so a spelling built from it
+            would be a different match string."""
             v = c.get(key)
             if v is None or isinstance(v, str):
                 return v
-            spelled = str(v).lower() if isinstance(v, bool) else str(v)
+            what = ("a boolean (YAML reads unquoted yes/no/on/off/true/false that way)"
+                    if isinstance(v, bool) else "a number")
             raise DashboardValidationError(
-                f"{path}: view column {c.get('display_name') or c.get('attribute')!r}: "
-                f"{key} {v!r} is not a string; on a string attribute column "
-                f"(is_string_attribute: true) a bound is the exact text to match, so "
-                f"quote it as written in the source (e.g. {key}: \"{spelled}\")"
+                f"{bound_ctx}: {key} is unquoted and YAML read it as {what}; on a string "
+                f"attribute column (is_string_attribute: true) a bound is the exact text "
+                f"VCF Ops matches, so put the exact text in quotes (e.g. {key}: \"...\")"
             )
 
-        if c.get("is_string_attribute"):
+        bound_ctx = f"{path}: view column {c.get('display_name') or c.get('attribute')!r}"
+        is_string_attr = _opt_bool(c, "is_string_attribute", bound_ctx) or False
+        if is_string_attr:
             yellow = _text_bound("yellow_bound")
             orange = _text_bound("orange_bound")
             red = _text_bound("red_bound")
@@ -3805,7 +3810,7 @@ def load_view(
             red_bound=red,
             ascending_range=ascending,
             is_property=bool(c.get("is_property", False)),
-            is_string_attribute=bool(c.get("is_string_attribute", False)),
+            is_string_attribute=is_string_attr,
             instanced_group=instanced_group,
             time_segment=time_segment,
             subject=col_subject,

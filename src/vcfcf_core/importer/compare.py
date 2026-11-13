@@ -141,14 +141,23 @@ _FILTER_VALUE = re.compile(r"(ViewDef/SubjectType\{[^}]*\}(?:~\d+)?@filter\[\d+\
 _COND_VALUE = re.compile(r"(SymptomDefinition/State/Condition\[\d+\])@value")
 
 
+def is_string_attribute(value) -> bool:
+    """Whether a column's wire ``isStringAttribute`` value marks a string
+    attribute column: exactly ``"true"`` (a ``"True"`` or a missing value is
+    not). The importer's wire-side test: ``views`` sets the YAML's
+    ``is_string_attribute: true`` from it (and so writes the column's bounds
+    as strings), and :func:`string_attribute_bound` applies it to the flat
+    form for accounting and the comparison. The view loader then reads the
+    YAML flag (``dashboards.loader.numeric_bound``)."""
+    return value == "true"
+
+
 def string_attribute_bound(path: str, leaves: Leaves) -> bool:
     """True when ``path`` is a view column bound on a string attribute
-    column (``isStringAttribute="true"``, the YAML's
-    ``is_string_attribute: true``): VCF Ops matches such a bound as text, so
-    it is a string, carried verbatim. The one definition the importer,
-    accounting and the comparison share."""
+    column (:func:`is_string_attribute` of its ``isStringAttribute``): VCF
+    Ops matches such a bound as text, so it is a string, carried verbatim."""
     return bool(_VIEW_BOUND.fullmatch(path)) and \
-        leaves.get(path.rsplit("/", 1)[0] + "/Property{isStringAttribute}@value") == "true"
+        is_string_attribute(leaves.get(path.rsplit("/", 1)[0] + "/Property{isStringAttribute}@value"))
 
 
 def xml_numeric(path: str, leaves: Leaves) -> bool:

@@ -30,6 +30,7 @@ from typing import Dict, List, Tuple
 
 from . import flat as _flat
 from .accounting import account
+from .compare import is_string_attribute
 from .model import MappedObject, MappingError, Mark, documented_loss, gap_error, wire_number
 from .refs import Ref
 
@@ -259,7 +260,7 @@ class _ViewMapper:
             col["is_property"] = True
         elif "isProperty" not in d:
             omit.append("is_property")
-        if d.get("isStringAttribute") == "true":
+        if is_string_attribute(d.get("isStringAttribute")):
             col["is_string_attribute"] = True
         elif "isStringAttribute" not in d:
             self.loss(f"column {idx}: absent isStringAttribute is not modeled (renders false)")
@@ -318,7 +319,7 @@ class _ViewMapper:
         for wk, yk in (("yellowBound", "yellow_bound"), ("orangeBound", "orange_bound"), ("redBound", "red_bound")):
             if wk in d:
                 # A bound on a string attribute column (is_string_attribute,
-                # set above; compare.string_attribute_bound) is text, carried
+                # set above from compare.is_string_attribute) is text, carried
                 # verbatim; the loader keeps it as written.
                 col[yk] = d[wk] if col.get("is_string_attribute") else _bound(d[wk])
         has_num_bound = any(isinstance(col.get(k), (int, float))
@@ -363,7 +364,7 @@ class _ViewMapper:
             self.doc("empty preferredUnitId", f"additional column {idx}: empty preferredUnitId is not modeled (view "
                      f"fidelity doc §Not modeled)", [Mark(_flat.view_additional_column(idx, "preferredUnitId"), "any",
                                                           subtree=True)])
-        if d.get("isStringAttribute") == "true":
+        if is_string_attribute(d.get("isStringAttribute")):
             col["is_string_attribute"] = True
         if d.get("isProperty") == "true":
             col["is_property"] = True

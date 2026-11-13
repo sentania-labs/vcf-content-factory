@@ -86,8 +86,18 @@ def test_quoted_bounds_on_a_string_column_render_verbatim(tmp_path):
     assert _bounds(xml, "summary|guest|toolsRunningStatus") == {"redBound": " Not Running "}
 
 
-@pytest.mark.parametrize("raw,spelled", [("0", "0"), ("1.5", "1.5"), ("true", "true")])
-def test_an_unquoted_number_or_bool_on_a_string_column_is_an_error(tmp_path, raw, spelled):
+@pytest.mark.parametrize("raw,kind,coerced", [
+    ("Off", "a boolean", ('"false"', "False")),   # a real vendor string-column bound
+    ("yes", "a boolean", ('"true"', "True")),
+    ("true", "a boolean", ("True",)),
+    ("010", "a number", ('"8"', " 8")),                # YAML 1.1 octal
+    ("1.50", "a number", ("1.5",)),
+    ("0", "a number", ()),
+])
+def test_an_unquoted_number_or_bool_on_a_string_column_is_an_error(tmp_path, raw, kind, coerced):
+    """The error says what YAML read the scalar as and asks for the exact
+    text quoted; it never echoes a spelling built from the converted value
+    (``Off`` is False, ``010`` is 8), which would be a different match."""
     p = _view(tmp_path, f"""\
         - attribute: config|hyperThread|active
           display_name: HT
@@ -98,7 +108,40 @@ def test_an_unquoted_number_or_bool_on_a_string_column_is_an_error(tmp_path, raw
     with pytest.raises(DashboardValidationError) as exc:
         load_view(p, enforce_framework_prefix=False)
     msg = str(exc.value)
-    assert "string attribute column" in msg and f'red_bound: "{spelled}"' in msg, msg
+    assert "string attribute column" in msg and f"YAML read it as {kind}" in msg, msg
+    assert 'red_bound: "..."' in msg, msg
+    for spelling in coerced:
+        assert spelling not in msg, (spelling, msg)
+
+
+def test_is_string_attribute_must_be_a_bool(tmp_path):
+    """A quoted 'false' is not truthy-coerced into a string column."""
+    p = _view(tmp_path, """\
+        - attribute: cpu|usage_average
+          display_name: CPU
+          is_string_attribute: 'false'
+          red_bound: 90
+        """)
+    with pytest.raises(DashboardValidationError, match="is_string_attribute must be a bool"):
+        load_view(p, enforce_framework_prefix=False)
+
+
+@pytest.mark.parametrize("attribute", ["config|policies|security|vlan_id", "cpu|usage_average"])
+def test_a_red_only_bound_on_a_string_column_takes_the_property_match_ascending_rule(tmp_path, attribute):
+    """Every bound on a string column is text, so a red-only ``'0'`` is a
+    property-match bound: ascending_range may be omitted or true, never
+    false (no export carries false there). This holds whatever the
+    attribute is, a metric key flagged as a string attribute included."""
+    base = f"""\
+        - attribute: {attribute}
+          display_name: Probe
+          is_string_attribute: true
+          red_bound: '0'
+        """
+    with pytest.raises(DashboardValidationError, match="ascending_range may be omitted or true"):
+        load_view(_view(tmp_path, base + "  ascending_range: false\n"), enforce_framework_prefix=False)
+    v = load_view(_view(tmp_path, base + "  ascending_range: true\n"), enforce_framework_prefix=False)
+    assert _bounds(render_views_xml([v]), attribute) == {"redBound": "0", "ascendingRange": "true"}
 
 
 def test_a_string_column_needs_no_ascending_range_and_cannot_omit_it(tmp_path):
