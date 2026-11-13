@@ -336,6 +336,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             f'prefix to "{FACTORY_PREFIX_LABEL}" in content names and by-name '
             f"references (factory checkout or pak repo)."
         ),
+        # No abbreviations: "--f" must not mean --force.
+        allow_abbrev=False,
     )
     ap.add_argument("root", nargs="?", default=".",
                     help="factory checkout or pak repo root (default: .)")

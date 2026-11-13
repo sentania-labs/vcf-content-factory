@@ -243,12 +243,40 @@ def _bundled(*names):
     return (objs, [], [], [], [], [], [])
 
 
-def test_pak_factory_prefixed_rejects_legacy_even_when_undeclared():
+def test_pak_uniformly_legacy_is_accepted_with_one_warning():
+    """Transition: a pak repo migrates at its own pace (prefix_migration.md)."""
     from vcfcf_managementpacks.sdk_builder import check_content_naming
     for declared in (True, False):
-        errors, warnings_ = check_content_naming(_proj("factory_prefixed", declared), _bundled(OLD + "V"))
-        assert len(errors) == 1 and "migrate-prefix" in errors[0] and not warnings_
+        errors, warnings_ = check_content_naming(
+            _proj("factory_prefixed", declared), _bundled(OLD + "V", OLD + "W", OLD + "X"))
+        assert errors == []
+        assert len(warnings_) == 1
+        assert "migrate-prefix" in warnings_[0] and "later sdk-buildkit" in warnings_[0]
+        assert "error" in warnings_[0]
+
+
+def test_pak_mixed_spellings_is_an_error():
+    from vcfcf_managementpacks.sdk_builder import check_content_naming
+    for declared in (True, False):
+        errors, warnings_ = check_content_naming(
+            _proj("factory_prefixed", declared), _bundled(OLD + "V", NEW + "W", OLD + "X"))
+        assert len(errors) == 2 and not warnings_
+        assert all("migrate-prefix" in e and "split" in e for e in errors)
+
+
+def test_pak_new_spelling_passes_silently():
+    from vcfcf_managementpacks.sdk_builder import check_content_naming
     assert check_content_naming(_proj("factory_prefixed"), _bundled(NEW + "V")) == ([], [])
+    assert check_content_naming(_proj("factory_prefixed", False), _bundled(NEW + "V")) == ([], [])
+
+
+def test_pak_legacy_with_an_unprefixed_name():
+    """A legacy pak's unprefixed name is still a mismatch, as before the rename."""
+    from vcfcf_managementpacks.sdk_builder import check_content_naming
+    errors, warnings_ = check_content_naming(_proj("factory_prefixed"), _bundled(OLD + "V", "Bare"))
+    assert len(errors) == 1 and "'Bare'" in errors[0] and len(warnings_) == 1
+    errors, warnings_ = check_content_naming(_proj("factory_prefixed", False), _bundled(OLD + "V", "Bare"))
+    assert errors == [] and len(warnings_) == 2
 
 
 def test_pak_unprefixed_rejects_both_spellings():
@@ -264,7 +292,7 @@ def test_buildkit_ships_naming_module():
     for dest in ("sdk_builder.py", "dashboard_loader.py", "sm_loader.py", "symptoms_loader.py",
                  "alerts_loader.py", "alerts_render.py", "reports_loader.py"):
         assert (r"from vcfcf_core\.naming import", "from .naming import") in _IMPORT_REWRITES[dest]
-    assert BUILDKIT_VERSION == "1.0.29"
+    assert tuple(int(p) for p in BUILDKIT_VERSION.split(".")) >= (1, 0, 29)
 
 
 # ---------------------------------------------------------------------------
@@ -423,88 +451,285 @@ def test_collect_repo_items_factory_and_pak(tmp_path):
     assert [(i.kind, i.name) for i in collect_repo_items(pak)] == [("dashboard", NEW + "PD")]
 
 
-def _item(kind, name, id_=None, name_path=""):
+def _item(kind, name, id_=None, name_path="", **kw):
     from vcfcf_common.legacy_cleanup import RepoItem
-    return RepoItem(kind=kind, name=NEW + name, id=id_, source=f"{kind}.yaml", name_path=name_path)
+    return RepoItem(kind=kind, name=NEW + name, id=id_, source=f"{kind}.yaml", name_path=name_path, **kw)
 
 
 def _verdicts(plan):
     return [(a.kind, a.verdict, a.id) for a in plan.actions]
 
 
+_AK = {"adapter_kind": "mpb_synology_dsm", "resource_kind": "ups"}
+
+
+def _live(id_, name, **kw):
+    return {"id": id_, "name": name, **kw}
+
+
 def test_plan_name_owned_requires_the_twin():
     from vcfcf_common.legacy_cleanup import plan_cleanup
-    live = {"alert": [{"id": "a-old", "name": OLD + "A"}]}
-    assert _verdicts(plan_cleanup([_item("alert", "A")], live)) == [("alert", "skip", "a-old")]
-    live["alert"].append({"id": "a-new", "name": NEW + "A"})
-    assert _verdicts(plan_cleanup([_item("alert", "A")], live)) == [("alert", "delete", "a-old")]
+    live = {"alert": [_live("a-old", OLD + "A", **_AK)]}
+    assert _verdicts(plan_cleanup([_item("alert", "A", **_AK)], live)) == [("alert", "skip", "a-old")]
+    live["alert"].append(_live("a-new", NEW + "A", **_AK))
+    assert _verdicts(plan_cleanup([_item("alert", "A", **_AK)], live)) == [("alert", "delete", "a-old")]
 
 
 def test_plan_exact_names_only():
     from vcfcf_common.legacy_cleanup import plan_cleanup
     live = {"symptom": [
-        {"id": "s1", "name": OLD + "S (copy)"},
-        {"id": "s2", "name": OLD + "Other"},
-        {"id": "s3", "name": NEW + "S"},
-        {"id": "s4", "name": "[VCF Content Factory]S"},
+        _live("s1", OLD + "S (copy)", **_AK),
+        _live("s2", OLD + "Other", **_AK),
+        _live("s3", NEW + "S", **_AK),
+        _live("s4", "[VCF Content Factory]S", **_AK),
     ]}
-    assert plan_cleanup([_item("symptom", "S")], live).actions == []
+    assert plan_cleanup([_item("symptom", "S", **_AK)], live).actions == []
 
 
-def test_plan_id_owned_needs_repo_id_on_the_twin():
+def test_plan_pak_symptom_with_the_same_legacy_name_survives():
+    """The collision in the repo today: content/symptoms/synology_ups_on_battery.yaml
+    (mpb_synology_dsm/ups) and the synology pak's symptom of the same legacy
+    name (synology_diskstation/SynologyUps). Run from the factory root, only
+    the factory's old MPB symptom is a leftover."""
+    from vcfcf_common.legacy_cleanup import plan_cleanup
+    name = "Synology UPS On Battery"
+    pak = {"adapter_kind": "synology_diskstation", "resource_kind": "SynologyUps"}
+    live = {"symptom": [
+        _live("factory-old", OLD + name, **_AK),
+        _live("pak-installed", OLD + name, **pak),
+        _live("factory-new", NEW + name, **_AK),
+    ]}
+    plan = plan_cleanup([_item("symptom", name, **_AK)], live)
+    v = {a.id: a.verdict for a in plan.actions}
+    assert v == {"factory-old": "delete", "pak-installed": "skip"}
+    # Mirror image, from the pak root, before the pak's renamed symptom is
+    # installed: the factory's symptom is not the pak's, and the pak's has no twin.
+    plan = plan_cleanup([_item("symptom", name, **pak)], live)
+    assert {a.id: a.verdict for a in plan.actions} == {"factory-old": "skip", "pak-installed": "skip"}
+    # A twin of another kind does not count as the successor either.
+    live = {"alert": [_live("a-old", OLD + "A", **_AK), _live("a-new", NEW + "A", **pak)]}
+    assert _verdicts(plan_cleanup([_item("alert", "A", **_AK)], live)) == [("alert", "skip", "a-old")]
+
+
+def test_plan_symptom_without_kinds_in_repo_is_a_conflict():
+    from vcfcf_common.legacy_cleanup import plan_cleanup
+    live = {"symptom": [_live("s-old", OLD + "S"), _live("s-new", NEW + "S")]}
+    assert _verdicts(plan_cleanup([_item("symptom", "S")], live)) == [("symptom", "conflict", "s-old")]
+
+
+def test_plan_customgroup_matches_group_type():
+    from vcfcf_common.legacy_cleanup import plan_cleanup
+    env = {"group_type": "Environment"}
+    item = _item("customgroup", "G", **env)
+    live = {"customgroup": [_live("g-old", OLD + "G", **env), _live("g-app", OLD + "G", group_type="Application"),
+                            _live("g-new", NEW + "G", **env)]}
+    assert {a.id: a.verdict for a in plan_cleanup([item], live).actions} == {"g-old": "delete", "g-app": "skip"}
+
+
+def test_collect_reads_kinds_and_group_type(tmp_path):
+    from vcfcf_common.legacy_cleanup import collect_repo_items
+    _write(tmp_path, "content/symptoms/s.yaml", f'name: "{NEW}S"\nadapter_kind: AK\nresource_kind: RK\n')
+    _write(tmp_path, "content/customgroups/g.yaml", f'name: "{NEW}G"\n')
+    got = {i.kind: i for i in collect_repo_items(tmp_path)}
+    assert (got["symptom"].adapter_kind, got["symptom"].resource_kind) == ("AK", "RK")
+    assert got["customgroup"].group_type == "Environment"
+
+
+def test_plan_in_place_kinds_are_never_deleted():
+    """SMs, views, reports: the rename lands in place (same UUID)."""
+    from vcfcf_common.legacy_cleanup import plan_cleanup
+    for kind in ("supermetric", "view", "report"):
+        item = _item(kind, "X", "R1")
+        # A legacy-named object under a non-repo id: a conflict, never a delete.
+        live = {kind: [_live("OTHER", OLD + "X"), _live("R1", NEW + "X")]}
+        assert _verdicts(plan_cleanup([item], live)) == [(kind, "conflict", "OTHER")], kind
+        # Even without the twin.
+        live = {kind: [_live("OTHER", OLD + "X")]}
+        assert _verdicts(plan_cleanup([item], live)) == [(kind, "conflict", "OTHER")], kind
+        # The repo object itself, not yet renamed: left alone, sync renames it.
+        live = {kind: [_live("R1", OLD + "X")]}
+        assert _verdicts(plan_cleanup([item], live)) == [(kind, "skip", "R1")], kind
+
+
+def test_plan_dashboard_needs_repo_id_on_the_twin_and_the_sync_owner():
     from vcfcf_common.legacy_cleanup import plan_cleanup
     item = _item("dashboard", "D", "R1", name_path="VCF Content Factory")
-    # Twin carries the repo id, leftover does not: delete.
-    live = {"dashboard": [{"id": "OLD9", "name": OLD + "D"}, {"id": "R1", "name": NEW + "D"}]}
-    assert _verdicts(plan_cleanup([item], live)) == [("dashboard", "delete", "OLD9")]
+    me = "svc-factory"
+
+    def plan(live, owner=me):
+        return _verdicts(plan_cleanup([item], {"dashboard": live}, dashboard_owner=owner))
+
+    # Twin carries the repo id, leftover does not, owner is the sync account: delete.
+    live = [_live("OLD9", OLD + "D", owner=me), _live("R1", NEW + "D", owner=me)]
+    assert plan(live) == [("dashboard", "delete", "OLD9")]
+    # Owner compared case-insensitively.
+    assert plan(live, owner="SVC-Factory") == [("dashboard", "delete", "OLD9")]
+    # Someone else's dashboard: conflict.
+    live = [_live("OLD9", OLD + "D", owner="alice"), _live("R1", NEW + "D", owner=me)]
+    assert plan(live) == [("dashboard", "conflict", "OLD9")]
+    # Sync owner unknown: conflict.
+    live = [_live("OLD9", OLD + "D", owner=me), _live("R1", NEW + "D", owner=me)]
+    assert plan(live, owner=None) == [("dashboard", "conflict", "OLD9")]
     # Leftover still carries the repo id: conflict, never deleted.
-    live = {"dashboard": [{"id": "R1", "name": OLD + "D"}, {"id": "N2", "name": NEW + "D"}]}
-    assert _verdicts(plan_cleanup([item], live)) == [("dashboard", "conflict", "R1")]
+    live = [_live("R1", OLD + "D", owner=me), _live("N2", NEW + "D", owner=me)]
+    assert plan(live) == [("dashboard", "conflict", "R1")]
     # Neither carries it: conflict.
-    live = {"dashboard": [{"id": "X", "name": OLD + "D"}, {"id": "Y", "name": NEW + "D"}]}
-    assert _verdicts(plan_cleanup([item], live)) == [("dashboard", "conflict", "X")]
+    live = [_live("X", OLD + "D", owner=me), _live("Y", NEW + "D", owner=me)]
+    assert plan(live) == [("dashboard", "conflict", "X")]
     # Folder-qualified listing names match too.
-    live = {"dashboard": [{"id": "OLD9", "name": "VCF Content Factory/" + OLD + "D"},
-                          {"id": "R1", "name": "VCF Content Factory/" + NEW + "D"}]}
-    assert _verdicts(plan_cleanup([item], live)) == [("dashboard", "delete", "OLD9")]
-
-
-def test_plan_report_is_manual():
-    from vcfcf_common.legacy_cleanup import plan_cleanup
-    live = {"report": [{"id": "O", "name": OLD + "R"}, {"id": "R1", "name": NEW + "R"}]}
-    assert _verdicts(plan_cleanup([_item("report", "R", "R1")], live)) == [("report", "manual", "O")]
+    live = [_live("OLD9", "VCF Content Factory/" + OLD + "D", owner=me),
+            _live("R1", "VCF Content Factory/" + NEW + "D", owner=me)]
+    assert plan(live) == [("dashboard", "delete", "OLD9")]
 
 
 class _FakeInstance:
-    def __init__(self, live):
+    def __init__(self, live, owner="svc-factory", fail_on=None):
         self.live = live
+        self.owner = owner
+        self.fail_on = fail_on
         self.deleted = []
 
     def list(self, kind):
         return self.live.get(kind, [])
 
+    def dashboard_owner(self):
+        return self.owner
+
     def delete(self, a):
+        if a.id == self.fail_on:
+            raise RuntimeError("HTTP 500")
         self.deleted.append((a.kind, a.id))
 
 
-def test_run_dry_run_by_default_and_apply_deletes_in_order(tmp_path, capsys):
-    from vcfcf_common.legacy_cleanup import KINDS, run
-    _write(tmp_path, "content/symptoms/s.yaml", f'name: "{NEW}S"\n')
-    _write(tmp_path, "content/alerts/a.yaml", f'name: "{NEW}A"\n')
+_TARGET = ("devel", "ops.example.invalid", "from --profile")
+
+
+def _cleanup_tree(tmp_path):
+    _write(tmp_path, "content/symptoms/s.yaml", f'name: "{NEW}S"\nadapter_kind: AK\nresource_kind: RK\n')
+    _write(tmp_path, "content/alerts/a.yaml", f'name: "{NEW}A"\nadapter_kind: AK\nresource_kind: RK\n')
     _write(tmp_path, "content/dashboards/d.yaml", f'id: R1\nname: "{NEW}D"\n')
-    live = {
-        "symptom": [{"id": "s-old", "name": OLD + "S"}, {"id": "s-new", "name": NEW + "S"}],
-        "alert": [{"id": "a-old", "name": OLD + "A"}, {"id": "a-new", "name": NEW + "A"}],
-        "dashboard": [{"id": "d-old", "name": OLD + "D"}, {"id": "R1", "name": NEW + "D"}],
+    k = {"adapter_kind": "AK", "resource_kind": "RK"}
+    return {
+        "symptom": [_live("s-old", OLD + "S", **k), _live("s-new", NEW + "S", **k)],
+        "alert": [_live("a-old", OLD + "A", **k), _live("a-new", NEW + "A", **k)],
+        "dashboard": [_live("d-old", OLD + "D", owner="svc-factory"),
+                      _live("R1", NEW + "D", owner="svc-factory")],
     }
-    inst = _FakeInstance(live)
-    assert run(tmp_path, inst, KINDS, apply=False) == 0
+
+
+def _digest_from(out: str) -> str:
+    import re
+    return re.search(r"plan digest: ([0-9a-f]+)", out).group(1)
+
+
+def test_run_dry_run_names_target_backup_and_digest(tmp_path, capsys):
+    from vcfcf_common.legacy_cleanup import KINDS, run
+    inst = _FakeInstance(_cleanup_tree(tmp_path))
+    assert run(tmp_path, inst, KINDS, apply=False, target=_TARGET) == 0
     assert inst.deleted == []
-    assert "WOULD DELETE" in capsys.readouterr().out
-    assert run(tmp_path, inst, KINDS, apply=True) == 0
+    out = capsys.readouterr().out
+    first = out.splitlines()[0]
+    assert "profile=devel" in first and "host=ops.example.invalid" in first and "from --profile" in first
+    assert "WOULD DELETE" in out and "owner=svc-factory" in out and "twin id=R1" in out
+    assert "BEFORE --apply" in out and "Export" in out and "snapshot" in out
+    assert "--plan-digest " + _digest_from(out) in out
+
+
+def test_run_apply_needs_the_reviewed_digest(tmp_path, capsys):
+    from vcfcf_common.legacy_cleanup import KINDS, run
+    live = _cleanup_tree(tmp_path)
+    inst = _FakeInstance(live)
+    run(tmp_path, inst, KINDS, apply=False, target=_TARGET)
+    digest = _digest_from(capsys.readouterr().out)
+    # No digest, a wrong one, or the same plan on another host: refused.
+    assert run(tmp_path, inst, KINDS, apply=True, target=_TARGET) == 2
+    assert run(tmp_path, inst, KINDS, apply=True, target=_TARGET, expected_digest="0" * 16) == 2
+    other = ("devel", "other.example.invalid", "from --profile")
+    assert run(tmp_path, inst, KINDS, apply=True, target=other, expected_digest=digest) == 2
+    # The plan changed since the review: refused.
+    live["symptom"].append(_live("s-old2", OLD + "S", adapter_kind="AK", resource_kind="RK"))
+    assert run(tmp_path, inst, KINDS, apply=True, target=_TARGET, expected_digest=digest) == 2
+    assert inst.deleted == []
+    assert "REFUSED" in capsys.readouterr().err
+    live["symptom"].pop()
+    # The reviewed plan: deleted, dependents first.
+    assert run(tmp_path, inst, KINDS, apply=True, target=_TARGET, expected_digest=digest) == 0
     assert inst.deleted == [("dashboard", "d-old"), ("alert", "a-old"), ("symptom", "s-old")]
+
+
+def test_run_apply_stops_at_the_first_failure(tmp_path, capsys):
+    from vcfcf_common.legacy_cleanup import KINDS, run
+    inst = _FakeInstance(_cleanup_tree(tmp_path), fail_on="a-old")
+    run(tmp_path, inst, KINDS, apply=False, target=_TARGET)
+    digest = _digest_from(capsys.readouterr().out)
+    assert run(tmp_path, inst, KINDS, apply=True, target=_TARGET, expected_digest=digest) == 2
+    assert inst.deleted == [("dashboard", "d-old")]  # the symptom was not attempted
+    err = capsys.readouterr().err
+    assert "stopped at the first failure" in err
+    assert "deleted      dashboard d-old" in err
+    assert "not deleted  alert a-old" in err and "not deleted  symptom s-old" in err
 
 
 def test_cleanup_cli_rejects_unknown_kind():
     from vcfcf_common.legacy_cleanup import main
     assert main([".", "--types", "widgets"]) == 2
+
+
+def test_cleanup_cli_apply_without_digest_is_refused(capsys):
+    from vcfcf_common.legacy_cleanup import main
+    assert main([".", "--profile", "devel", "--apply"]) == 2
+    assert "--plan-digest" in capsys.readouterr().err
+
+
+def test_cleanup_cli_requires_an_explicit_profile(monkeypatch, capsys):
+    from vcfcf_common import _env
+    from vcfcf_common.legacy_cleanup import resolve_target
+    monkeypatch.setattr(_env, "_LOADED", True)  # do not read a real .env
+    monkeypatch.delenv("VCFOPS_PROFILE", raising=False)
+    with pytest.raises(ValueError, match="does not default to a profile"):
+        resolve_target(None)
+    monkeypatch.setenv("VCFOPS_PROFILE", "lab")
+    monkeypatch.setenv("VCFOPS_LAB_HOST", "lab.example.invalid")
+    monkeypatch.setenv("VCFOPS_LAB_USER", "u")
+    monkeypatch.setenv("VCFOPS_LAB_PASSWORD", "p")
+    assert resolve_target(None) == ("lab", "lab.example.invalid",
+                                    "from the VCFOPS_PROFILE environment variable (shell or .env)")
+    monkeypatch.setenv("VCFOPS_DEVEL_HOST", "devel.example.invalid")
+    monkeypatch.setenv("VCFOPS_DEVEL_USER", "u")
+    monkeypatch.setenv("VCFOPS_DEVEL_PASSWORD", "p")
+    assert resolve_target("devel") == ("devel", "devel.example.invalid", "from --profile")
+
+
+@pytest.mark.parametrize("flag", ["--a", "--ap", "--appl"])
+def test_cleanup_cli_rejects_abbreviated_apply(flag, capsys):
+    from vcfcf_common.legacy_cleanup import main
+    with pytest.raises(SystemExit) as ei:
+        main([".", "--profile", "devel", flag])
+    assert ei.value.code == 2
+
+
+@pytest.mark.parametrize("flag", ["--f", "--fo", "--dry"])
+def test_migrate_cli_rejects_abbreviated_flags(flag, tmp_path):
+    from vcfcf_common import migrate_prefix as mp
+    with pytest.raises(SystemExit) as ei:
+        mp.main([str(tmp_path), flag])
+    assert ei.value.code == 2
+
+
+def test_discrete_zip_name_carries_the_prefix_once(tmp_path):
+    """N1: the display name already carries the prefix; the zip name must
+    not double it."""
+    from vcfcf_packaging.discrete_builder import build_discrete
+    sm_dir = tmp_path / "proj" / "supermetrics"
+    sm_dir.mkdir(parents=True)
+    (sm_dir / "sm.yaml").write_text(yaml.safe_dump({
+        "id": "5c1e0a6e-4a43-4b9f-9a3e-1f0c2d3b4a5e",
+        "name": NEW + "Discrete Zip Name",
+        "formula": "${this, metric=cpu|usage_average}",
+        "description": "Fixture.",
+        "resource_kinds": [{"resource_kind_key": "VirtualMachine", "adapter_kind_key": "VMWARE"}],
+    }))
+    out = build_discrete(content_type="supermetric", item_name=NEW + "Discrete Zip Name",
+                         output_dir=tmp_path / "out", extra_search_dirs=[tmp_path / "proj"],
+                         skip_audit=True)
+    assert out.name == NEW + "Discrete Zip Name.zip"

@@ -29,9 +29,14 @@ subcommands:
   migrate-prefix [ROOT] [--dry-run] [--force]
             rewrite the retired "[VCF Content Factory]" content-name
             prefix to "[VCF CF]" in names and by-name references.
-  cleanup-legacy-prefix [ROOT] [--profile NAME] [--apply]
+  cleanup-legacy-prefix [ROOT] --profile NAME [--dry-run] [--types KINDS]
+                        [--apply --plan-digest DIGEST]
             list the old-named copies a prefix rename left on an
-            instance; --apply deletes them.
+            instance (the default, a dry run that prints a plan
+            digest); --apply --plan-digest DIGEST deletes exactly the
+            reviewed plan. --profile is required unless VCFOPS_PROFILE
+            is set. KINDS: comma-separated, from report, dashboard,
+            view, alert, symptom, customgroup, supermetric.
 """
 
 

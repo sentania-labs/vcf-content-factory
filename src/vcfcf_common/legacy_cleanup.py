@@ -16,7 +16,7 @@ Per type (sources: ``knowledge/context/authoring/prefix_migration.md``):
   old dashboard has not been observed;
 - super metrics, views, reports: content-zip import is keyed by the YAML
   UUID, so a rename is expected to land in place and leave nothing; they are
-  checked anyway;
+  checked anyway, and any legacy-named one is reported, never deleted;
 - recommendations: keyed by ``Recommendation-df-<kind>-<slug>``, which the
   renderer derives with the prefix stripped, so the key does not change and
   the rename lands in place. Not checked (the factory has no recommendation
@@ -27,33 +27,47 @@ Safety rules, all of which must hold before an object is deleted:
 1. Its name is exactly the legacy spelling of a current repo object's name
    (``[VCF CF] X`` -> ``[VCF Content Factory] X``). No pattern match, no
    prefix match: only names computed from the repo's content.
-2. The replacement, an object with the exact new name, exists on the
-   instance. Nothing is deleted before its successor is installed.
-3. Where the repo owns the id (super metrics, views, dashboards, reports):
-   the new-named twin carries the repo id and the leftover does not. A
-   legacy-named object that still carries the repo id, or a twin that does
-   not, is reported as a conflict and left alone.
-4. Where the server owns the id (custom groups, symptoms, alerts): the
-   leftover is a different object from the twin (different id).
+2. It is the same kind of object as the repo's: symptoms and alerts match
+   on name, adapter kind and resource kind; custom groups on name and group
+   type. A same-named object of another kind (a pak's symptom beside the
+   factory's MPB one) is not this repo's and is left alone.
+3. The replacement, an object with the exact new name (and the same kind),
+   exists on the instance. Nothing is deleted before its successor is
+   installed.
+4. Super metrics, views and reports: never deleted. Their import is keyed
+   by the YAML UUID, so the rename lands in place; a legacy-named object
+   under another id is not a leftover of this migration (a pak's object, a
+   user's clone) and is reported as a conflict.
+5. Dashboards: the new-named twin carries the repo id, the leftover does
+   not, and the leftover's owner is the account the factory's dashboard
+   sync imports as on this profile (``/api/auth/currentuser``). Anything
+   else is a conflict.
+6. Custom groups, symptoms, alerts (server-owned ids): the leftover is a
+   different object from the twin (different id).
 
-The default is a dry run; ``--apply`` deletes. Deletion order runs
-dependents first: reports, dashboards, views, alerts, symptoms, custom
-groups, super metrics. Report definitions have no delete API: a report
-leftover is listed for removal in the UI.
+The default is a dry run. It names the profile and host first, ends with
+what to back up and a plan digest, and ``--apply`` needs
+``--plan-digest <digest>``: the plan is recomputed and nothing is deleted
+unless it is the plan that was reviewed. Deletion runs dependents first
+(dashboards, alerts, symptoms, custom groups) and stops at the first
+failure.
 """
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
+import os
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, Dict, Iterable, List, Optional, Sequence
+from typing import Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
 import yaml
 
-from vcfcf_core.naming import LEGACY_FACTORY_PREFIX_LABEL, legacy_name
+from vcfcf_core.naming import CLEANUP_COMMAND, LEGACY_FACTORY_PREFIX_LABEL, legacy_name
 
-from ._profile_cli import add_profile_arg, resolve_profile_from_args
+from ._env import load_dotenv, resolve_profile_credentials
 from .migrate_prefix import detect_layout
 
 #: Content-type directory -> kind, in deletion order (dependents first).
@@ -69,6 +83,10 @@ _DIR_KIND = {
 }
 #: Kinds whose YAML carries the id the instance keeps.
 ID_OWNED = frozenset({"supermetric", "view", "dashboard", "report"})
+#: Id-owned kinds whose rename lands in place: never deleted here.
+IN_PLACE = frozenset({"supermetric", "view", "report"})
+#: Kinds whose identity on the instance includes their adapter/resource kind.
+_KIND_SCOPED = frozenset({"symptom", "alert"})
 _DEFAULT_NAME_PATH = "VCF Content Factory"
 
 
@@ -79,16 +97,21 @@ class RepoItem:
     id: Optional[str]
     source: str
     name_path: str = ""
+    adapter_kind: str = ""   # symptoms, alerts
+    resource_kind: str = ""  # symptoms, alerts
+    group_type: str = ""     # custom groups
 
 
 @dataclass
 class Action:
     kind: str
-    verdict: str  # "delete" | "skip" | "conflict" | "manual"
+    verdict: str  # "delete" | "skip" | "conflict"
     name: str
     id: Optional[str]
     reason: str
     source: str = ""
+    owner: str = ""
+    twin_id: str = ""
 
 
 @dataclass
@@ -114,9 +137,15 @@ def _read_item(kind: str, path: Path) -> Optional[RepoItem]:
     name_path = ""
     if kind == "dashboard":
         name_path = str(data.get("name_path") or _DEFAULT_NAME_PATH)
+    def _s(key: str, default: str = "") -> str:
+        return str(data.get(key) or default).strip()
     return RepoItem(kind=kind, name=data["name"].strip(),
                     id=str(ident) if ident else None, source=str(path),
-                    name_path=name_path)
+                    name_path=name_path,
+                    adapter_kind=_s("adapter_kind") if kind in _KIND_SCOPED else "",
+                    resource_kind=_s("resource_kind") if kind in _KIND_SCOPED else "",
+                    # The customgroups loader defaults the type to Environment.
+                    group_type=_s("type", "Environment") if kind == "customgroup" else "")
 
 
 def collect_repo_items(root: Path) -> List[RepoItem]:
@@ -166,11 +195,33 @@ def _names_for(item: RepoItem, name: str) -> set:
     return out
 
 
-def plan_cleanup(items: Iterable[RepoItem], live: Dict[str, List[dict]]) -> CleanupPlan:
+def _scope_of(item: RepoItem) -> Optional[tuple]:
+    """The non-name identity a live object must share with *item*, or None."""
+    if item.kind in _KIND_SCOPED:
+        return (item.adapter_kind, item.resource_kind)
+    if item.kind == "customgroup":
+        return (item.group_type,)
+    return None
+
+
+def _live_scope(item: RepoItem, entry: dict) -> Optional[tuple]:
+    if item.kind in _KIND_SCOPED:
+        return (str(entry.get("adapter_kind") or ""), str(entry.get("resource_kind") or ""))
+    if item.kind == "customgroup":
+        return (str(entry.get("group_type") or ""),)
+    return None
+
+
+def plan_cleanup(items: Iterable[RepoItem], live: Dict[str, List[dict]],
+                 dashboard_owner: Optional[str] = None) -> CleanupPlan:
     """Decide, per legacy-named object on the instance, delete or leave.
 
     *live* maps kind -> list of ``{"id": ..., "name": ...}`` as listed on the
-    instance. Kinds missing from *live* are not checked.
+    instance, plus ``adapter_kind``/``resource_kind`` (symptoms, alerts),
+    ``group_type`` (custom groups) and ``owner`` (dashboards). Kinds missing
+    from *live* are not checked. *dashboard_owner* is the account the
+    factory's dashboard sync imports as on this profile; without it no
+    dashboard is deleted.
     """
     plan = CleanupPlan()
     items = sorted(items, key=lambda i: (KINDS.index(i.kind), i.name))
@@ -181,20 +232,61 @@ def plan_cleanup(items: Iterable[RepoItem], live: Dict[str, List[dict]]) -> Clea
         entries = live[item.kind]
         old_names = _names_for(item, old)
         new_names = _names_for(item, item.name)
-        leftovers = [e for e in entries if e.get("name") in old_names]
-        twins = [e for e in entries if e.get("name") in new_names]
+        scope = _scope_of(item)
+
+        def _ours(e: dict) -> bool:
+            return scope is None or _live_scope(item, e) == scope
+
+        named_old = [e for e in entries if e.get("name") in old_names]
+        leftovers = [e for e in named_old if _ours(e)]
+        twins = [e for e in entries if e.get("name") in new_names and _ours(e)]
+        twin_ids = {str(t.get("id") or "") for t in twins}
+        twin_label = ",".join(sorted(i for i in twin_ids if i)) or ""
+
+        for e in named_old:
+            if _ours(e):
+                continue
+            plan.actions.append(Action(
+                kind=item.kind, verdict="skip", name=str(e.get("name")),
+                id=str(e.get("id") or "") or None, source=item.source,
+                reason=(f"same name, different {'/'.join(_live_scope(item, e) or ())!r} "
+                        f"from the repo's {'/'.join(scope or ())!r}: not this repo's object")))
+
         for lo in leftovers:
             lo_id = str(lo.get("id") or "")
             act = Action(kind=item.kind, verdict="skip", name=str(lo.get("name")),
-                         id=lo_id or None, reason="", source=item.source)
+                         id=lo_id or None, reason="", source=item.source,
+                         owner=str(lo.get("owner") or ""), twin_id=twin_label)
             plan.actions.append(act)
+            repo_id = (item.id or "").lower()
+            if scope is not None and not all(scope):
+                act.verdict = "conflict"
+                act.reason = (f"the repo object has no {'adapter/resource kind' if item.kind in _KIND_SCOPED else 'group type'} "
+                              f"to compare")
+                continue
+            if item.kind in IN_PLACE:
+                # The rename lands in place for these: a legacy-named object
+                # with the repo id is the not-yet-synced object itself, and
+                # one with any other id is not a leftover of this migration.
+                if repo_id and lo_id.lower() == repo_id and not twins:
+                    act.reason = ("the repo object, not yet renamed here: sync it and "
+                                  "the rename lands in place")
+                elif repo_id and lo_id.lower() == repo_id:
+                    act.verdict = "conflict"
+                    act.reason = (f"carries the repo id {item.id}, and \"{item.name}\" also "
+                                  f"exists. Check the instance by hand")
+                else:
+                    act.verdict = "conflict"
+                    act.reason = (f"not the repo's object (repo id {item.id or 'none'}): a "
+                                  f"{item.kind} rename lands in place, so this is not a "
+                                  f"leftover of the migration (a pak's object, or a "
+                                  f"clone?). Never deleted here; check by hand")
+                continue
             if not twins:
                 act.reason = (f'no "{item.name}" on the instance yet: sync the '
                               f"renamed content first, then run this again")
                 continue
-            twin_ids = {str(t.get("id") or "") for t in twins}
-            if item.kind in ID_OWNED:
-                repo_id = (item.id or "").lower()
+            if item.kind == "dashboard":
                 if not repo_id:
                     act.verdict = "conflict"
                     act.reason = "the repo object has no id to compare"
@@ -207,33 +299,60 @@ def plan_cleanup(items: Iterable[RepoItem], live: Dict[str, List[dict]]) -> Clea
                     act.verdict = "conflict"
                     act.reason = (f'"{item.name}" exists but not with the repo id '
                                   f"{item.id}. Check the instance by hand")
-                else:
-                    act.verdict = "manual" if item.kind == "report" else "delete"
-                    act.reason = (f'"{item.name}" is installed with the repo id')
-                    if item.kind == "report":
-                        act.reason += ("; report definitions have no delete API: remove "
-                                       "it in Administration > Content > Reports")
-            else:
-                if lo_id and lo_id in twin_ids:
+                elif not dashboard_owner:
                     act.verdict = "conflict"
-                    act.reason = "the old and new names list the same id"
+                    act.reason = ("the account the factory syncs dashboards as on this "
+                                  "profile is unknown, so the owner cannot be checked")
+                elif act.owner.lower() != dashboard_owner.lower():
+                    act.verdict = "conflict"
+                    act.reason = (f"owned by {act.owner or 'nobody listed'!r}, not "
+                                  f"{dashboard_owner!r} (the account the factory syncs "
+                                  f"dashboards as on this profile): someone else's. "
+                                  f"Check by hand")
                 else:
                     act.verdict = "delete"
-                    act.reason = f'"{item.name}" is installed as a separate object'
+                    act.reason = (f'"{item.name}" is installed with the repo id, and '
+                                  f"this one is owned by {dashboard_owner!r}")
+                continue
+            if lo_id and lo_id in twin_ids:
+                act.verdict = "conflict"
+                act.reason = "the old and new names list the same id"
+            else:
+                act.verdict = "delete"
+                act.reason = f'"{item.name}" is installed as a separate object'
     return plan
+
+
+def plan_digest(plan: CleanupPlan, profile: str, host: str) -> str:
+    """A short digest of *plan* on one target, for ``--apply --plan-digest``.
+
+    Covers the target and every action (kind, verdict, id, name), so a
+    different instance, a new leftover or a changed verdict changes it.
+    """
+    body = json.dumps({
+        "profile": profile.lower(), "host": host.lower(),
+        "actions": sorted([a.kind, a.verdict, a.id or "", a.name] for a in plan.actions),
+    }, sort_keys=True)
+    return hashlib.sha256(body.encode("utf-8")).hexdigest()[:16]
 
 
 # ---------------------------------------------------------------------------
 # Instance side
 # ---------------------------------------------------------------------------
 
-def _pairs(objs: Iterable[dict], name_of: Callable[[dict], Optional[str]]) -> List[dict]:
+def _pairs(objs: Iterable[dict], name_of: Callable[[dict], Optional[str]],
+           extra: Optional[Callable[[dict], dict]] = None) -> List[dict]:
     out = []
     for o in objs:
         n = name_of(o)
         if o.get("id") and n:
-            out.append({"id": str(o["id"]), "name": n})
+            out.append({"id": str(o["id"]), "name": n, **(extra(o) if extra else {})})
     return out
+
+
+def _kinds_of(o: dict) -> dict:
+    return {"adapter_kind": o.get("adapterKindKey") or "",
+            "resource_kind": o.get("resourceKindKey") or ""}
 
 
 class Instance:
@@ -287,21 +406,34 @@ class Instance:
             return _pairs(
                 (g for g in self._client("cg").list_groups()
                  if (g.get("resourceKey") or {}).get("adapterKindKey") == "Container"),
-                lambda o: (o.get("resourceKey") or {}).get("name"))
+                lambda o: (o.get("resourceKey") or {}).get("name"),
+                lambda o: {"group_type": (o.get("resourceKey") or {}).get("resourceKindKey") or ""})
         if kind == "symptom":
-            return _pairs(self._client("sym").list_symptoms(), lambda o: o.get("name"))
+            return _pairs(self._client("sym").list_symptoms(), lambda o: o.get("name"), _kinds_of)
         if kind == "alert":
-            return _pairs(self._client("alert").list_alerts(), lambda o: o.get("name"))
+            return _pairs(self._client("alert").list_alerts(), lambda o: o.get("name"), _kinds_of)
         if kind == "report":
             from vcfcf_reports.client import list_reports
             return _pairs(list_reports(self._client("suite")), lambda o: o.get("name"))
         if kind == "dashboard":
-            return _pairs(self._client("ui").list_dashboards(), lambda o: o.get("name"))
+            return _pairs(self._client("ui").list_dashboards(), lambda o: o.get("name"),
+                          lambda o: {"owner": o.get("owner") or ""})
         if kind == "view":
             from vcfcf_dashboards.cli import flatten_view_groups
             return _pairs(flatten_view_groups(self._client("ui").list_views()),
                           lambda o: o.get("name"))
         raise KeyError(kind)
+
+    def dashboard_owner(self) -> Optional[str]:
+        """The account the factory's dashboard sync imports as on this profile.
+
+        ``vcfcf_dashboards sync`` stamps the content zip with the
+        ``/api/auth/currentuser`` account of the profile; the same call here.
+        """
+        from vcfcf_dashboards.client import current_user_name, get_current_user
+        user = get_current_user(self._client("suite"))
+        name = current_user_name(user, default="")
+        return name or None
 
     def delete(self, a: Action) -> None:
         if a.kind == "supermetric":
@@ -324,40 +456,119 @@ class Instance:
 # CLI
 # ---------------------------------------------------------------------------
 
-def run(root: Path, instance, kinds: Sequence[str], apply: bool, out=None) -> int:
+_TAG = {"delete": "DELETE", "skip": "SKIP", "conflict": "CONFLICT"}
+
+
+def _backup_advice(plan: CleanupPlan, profile: str, host: str) -> List[str]:
+    lines = [
+        f"  BEFORE --apply: back up profile {profile!r} ({host}). Export its content",
+        "  (Administration > Content > Export, all content types) or snapshot the",
+        "  instance; a delete here cannot be undone. The objects to be deleted:",
+    ]
+    lines += [f"    {a.kind} {a.id}  {a.name}" for a in plan.by_verdict("delete")]
+    return lines
+
+
+def run(root: Path, instance, kinds: Sequence[str], apply: bool, out=None, *,
+        target: Optional[Tuple[str, str, str]] = None,
+        expected_digest: Optional[str] = None) -> int:
+    """List, or with *apply* delete, the legacy-named leftovers for *root*.
+
+    *target* is ``(profile, host, how the profile was chosen)``, printed
+    first. With *apply*, *expected_digest* must equal the digest of the plan
+    recomputed now; otherwise nothing is deleted (rc 2). The first failed
+    delete stops the run (rc 2).
+    """
     out = out or sys.stdout
+    profile, host, how = target or ("?", "?", "unknown")
+    print(f"cleanup-legacy-prefix: profile={profile} host={host} ({how})", file=out)
     items = collect_repo_items(root)
     wanted = [k for k in KINDS if k in kinds and any(i.kind == k for i in items)]
     live: Dict[str, List[dict]] = {}
     for k in wanted:
         live[k] = instance.list(k)
-    plan = plan_cleanup(items, live)
-    print(f"cleanup-legacy-prefix: {len(items)} prefixed object(s) in {root}; "
+    owner = None
+    if "dashboard" in wanted and live.get("dashboard"):
+        get_owner = getattr(instance, "dashboard_owner", None)
+        owner = get_owner() if get_owner else None
+    plan = plan_cleanup(items, live, dashboard_owner=owner)
+    digest = plan_digest(plan, profile, host)
+    print(f"  {len(items)} prefixed object(s) in {root}; "
           f"checked {', '.join(wanted) or 'nothing'}", file=out)
+    if owner:
+        print(f"  dashboards sync as {owner!r} on this profile", file=out)
     if not plan.actions:
         print(f'  no "{LEGACY_FACTORY_PREFIX_LABEL} ..." object matching the repo '
               f"is on the instance", file=out)
         return 0
     for a in plan.actions:
-        tag = {"delete": "DELETE" if apply else "WOULD DELETE", "skip": "SKIP",
-               "conflict": "CONFLICT", "manual": "MANUAL"}[a.verdict]
+        tag = "WOULD DELETE" if a.verdict == "delete" and not apply else _TAG[a.verdict]
         print(f"  {tag:12s} {a.kind:11s} {a.id or '-'}  {a.name}", file=out)
+        detail = []
+        if a.kind == "dashboard":
+            detail.append(f"owner={a.owner or '-'}")
+        if a.twin_id:
+            detail.append(f"new-named twin id={a.twin_id}")
+        if detail:
+            print(f"               {'  '.join(detail)}", file=out)
         print(f"               {a.reason}", file=out)
-    rc = 0
-    if apply:
-        for a in plan.by_verdict("delete"):
-            try:
-                instance.delete(a)
-                print(f"  deleted {a.kind} {a.id}  {a.name}", file=out)
-            except Exception as e:  # noqa: BLE001
-                print(f"  FAILED {a.kind} {a.id}  {a.name}: {e}", file=sys.stderr)
-                rc = 2
+    deletes = plan.by_verdict("delete")
+    conflicts = plan.by_verdict("conflict")
+
+    if not apply:
+        print(f"  dry run: {len(deletes)} to delete, {len(conflicts)} conflict(s), "
+              f"{len(plan.by_verdict('skip'))} left alone", file=out)
+        if deletes:
+            for line in _backup_advice(plan, profile, host):
+                print(line, file=out)
+            print(f"  plan digest: {digest}", file=out)
+            print(f"  to delete exactly this plan: {CLEANUP_COMMAND} {root} "
+                  f"--profile {profile} --apply --plan-digest {digest}", file=out)
+        return 1 if conflicts else 0
+
+    if expected_digest != digest:
+        print(f"  REFUSED: the plan is not the one reviewed (digest now {digest}, "
+              f"given {expected_digest or 'none'}). Run the dry run again, review "
+              f"it, and pass its digest. Nothing was deleted.", file=sys.stderr)
+        return 2
+    done: List[Action] = []
+    for i, a in enumerate(deletes):
+        try:
+            instance.delete(a)
+        except Exception as e:  # noqa: BLE001
+            print(f"  FAILED {a.kind} {a.id}  {a.name}: {e}", file=sys.stderr)
+            print(f"  stopped at the first failure. Deleted {len(done)}:", file=sys.stderr)
+            for d in done:
+                print(f"    deleted      {d.kind} {d.id}  {d.name}", file=sys.stderr)
+            print(f"  Not deleted ({len(deletes) - len(done)}):", file=sys.stderr)
+            for n in deletes[i:]:
+                print(f"    not deleted  {n.kind} {n.id}  {n.name}", file=sys.stderr)
+            return 2
+        done.append(a)
+        print(f"  deleted {a.kind} {a.id}  {a.name}", file=out)
+    print(f"  deleted {len(done)} object(s)", file=out)
+    return 1 if conflicts else 0
+
+
+def resolve_target(profile_arg: Optional[str]) -> Tuple[str, str, str]:
+    """``(profile, host, how)`` for the instance to act on. No silent default.
+
+    The profile comes from ``--profile`` or from ``VCFOPS_PROFILE`` (shell
+    or ``.env``); with neither, ``ValueError``: this command deletes, so it
+    does not fall back to a per-command default.
+    """
+    load_dotenv()
+    if profile_arg and profile_arg.strip():
+        name, how = profile_arg.strip(), "from --profile"
+    elif os.environ.get("VCFOPS_PROFILE", "").strip():
+        name = os.environ["VCFOPS_PROFILE"].strip()
+        how = "from the VCFOPS_PROFILE environment variable (shell or .env)"
     else:
-        n = len(plan.by_verdict("delete"))
-        print(f"  dry run: {n} object(s) would be deleted; pass --apply to delete", file=out)
-    if plan.by_verdict("conflict") and rc == 0:
-        rc = 1
-    return rc
+        raise ValueError(
+            "no profile: pass --profile NAME or set VCFOPS_PROFILE. This command "
+            "can delete content, so it does not default to a profile.")
+    creds = resolve_profile_credentials(name)
+    return name.lower(), creds.host, how
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
@@ -368,6 +579,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             "an instance: exact legacy names of the repo's current content whose "
             "renamed successor is installed. Never a pattern delete."
         ),
+        # No abbreviations: "--a" / "--appl" must not mean --apply.
+        allow_abbrev=False,
     )
     ap.add_argument("root", nargs="?", default=".",
                     help="factory checkout or pak repo whose content defines the names (default: .)")
@@ -375,10 +588,15 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     mode.add_argument("--dry-run", action="store_true",
                       help="list only (the default)")
     mode.add_argument("--apply", action="store_true",
-                      help="delete the objects marked WOULD DELETE")
+                      help="delete the objects marked WOULD DELETE; needs --plan-digest")
+    ap.add_argument("--plan-digest", metavar="DIGEST", default=None,
+                    help="the digest the dry run printed; --apply deletes only if the "
+                         "recomputed plan has the same digest")
     ap.add_argument("--types", default=",".join(KINDS),
                     help=f"comma-separated kinds to check (default: {','.join(KINDS)})")
-    add_profile_arg(ap, default="devel")
+    ap.add_argument("--profile", metavar="NAME", default=None,
+                    help="credential profile (VCFOPS_<NAME>_HOST/USER/PASSWORD in .env). "
+                         "Required unless VCFOPS_PROFILE is set; no default")
     args = ap.parse_args(list(argv) if argv is not None else None)
 
     kinds = [k.strip() for k in args.types.split(",") if k.strip()]
@@ -386,11 +604,16 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if bad:
         print(f"ERROR: unknown kind(s) {bad}; choose from {list(KINDS)}", file=sys.stderr)
         return 2
+    if args.apply and not args.plan_digest:
+        print("ERROR: --apply needs --plan-digest DIGEST from a dry run of the same "
+              "plan; run without --apply first", file=sys.stderr)
+        return 2
     try:
-        profile, default = resolve_profile_from_args(args)
-        inst = Instance(profile, default)
+        target = resolve_target(args.profile)
+        inst = Instance(target[0], target[0])
         try:
-            return run(Path(args.root), inst, kinds, args.apply)
+            return run(Path(args.root), inst, kinds, args.apply, target=target,
+                       expected_digest=args.plan_digest)
         finally:
             inst.close()
     except ValueError as e:
