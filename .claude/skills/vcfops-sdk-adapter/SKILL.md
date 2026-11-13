@@ -142,8 +142,10 @@ discover, so stitching onto foreign resources goes through the Suite
 API. Hold a `SuiteApiStitcher` (`SuiteApiStitcher.create(this, logger)`
 in `configureAdapter`, `discard()` in `onDiscard`). Surface:
 `pushProperties`, `pushStats`, the batch pushes (`pushBatch`,
-`pushPropertiesBatch`, `pushStatsBatch`), `addChild` / `addChildren`,
-`findSingletonResourceId`, `get`, `close` / `isClosed`. The push,
+`pushPropertiesBatch`, `pushStatsBatch`), the typed batch pushes
+(`pushTypedBatch`, `pushTypedPropertiesBatch`: property values `String`
+or `Number`), `pushEvents`, `addChild` / `addChildren`,
+`findSingletonResourceId`, `get`, `post`, `close` / `isClosed`. The push,
 relationship and lookup calls log and swallow failures and never throw
 into the collect cycle: a failed push is one WARN line per cycle, with
 the stack trace at DEBUG, except that the first time a client sees an
@@ -205,6 +207,36 @@ scope, so removal is the pak's job. Edges in the
 adapter's own collect result still go through `RelationshipBuilder`. Do
 not mix the two routes on one parent until a live install proves it
 safe. Contract: `knowledge/context/tier2_architecture.md`.
+
+**Read-style queries: `post(path, jsonBody)`.** For the queries the Suite
+API only offers as POST (`/api/resources/query`,
+`/api/resources/stats/latest/query`,
+`/api/resources/properties/latest/query`, `/api/resources/stats/query`).
+It throws exactly like `get`, so catch at the call site. A path not
+ending in `/query` is refused with `IllegalArgumentException`: it is not
+a write path.
+
+**Events: `pushEvents`, DIAGNOSTIC only.** Build `SuiteApiEvent`s
+(`SuiteApiEvent.builder(Type.DIAGNOSTIC, resourceId, message, now)
+.severity(...).diagnosticSubType(LOG)`) and call
+`stitcher.pushEvents(list)` (`POST /api/events/bulk`). A `NOTIFICATION`
+event on another adapter's object is answered 200 and silently discarded,
+so the framework refuses it (dropped, counted, WARN). The REST event has
+no auto-cancel or watch/cancel cycle counts: use `managedExternally(false)`
+and stop re-pushing, or `managedExternally(true)` and
+`event.cancelledAt(t)` after your own count of quiet cycles. A 2xx means
+accepted, not landed. Never throws.
+
+**Numeric properties: `pushTypedBatch`.** Put a `Number` in the property
+map and it is sent as a numeric property (`"data":[1.0]`); a `String` is
+sent as before. Null, NaN and infinite values are dropped and counted.
+Keep one type per key: a numeric sample on a key whose history is strings
+is untested.
+
+**Key differential.** `python3 -m vcfcf_common keydiff` compares the keys
+a pak pushes across two instances or saved snapshots (GET only). VMWARE
+objects match on vCenter UUID plus MOID, never on name. Use it for a
+port's parity check.
 
 ## Logging: what reaches the per-instance log
 

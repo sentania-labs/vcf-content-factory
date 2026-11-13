@@ -2,6 +2,29 @@ Portable Tier 2 SDK adapter build toolchain (jar-free).
 
 <!-- Order: "Behavior since" sections newest first, so the latest release is at the top. Add a new release's section directly below this comment. The standing reference sections (Consumer contract, Version pinning, Checksum) stay at the end. -->
 
+## Behavior since 1.0.29
+
+- `SuiteApiStitcher.post(path, jsonBody)` for the Suite API's read-style POST
+  queries (`/api/resources/query`, `/api/resources/stats/latest/query`,
+  `/api/resources/properties/latest/query`, `/api/resources/stats/query`).
+  It throws like `get` (`SuiteApiHttpException` on a non-2xx, one 401
+  retry) and refuses any path not ending in `/query` before sending. Bodies
+  are never logged.
+- `SuiteApiStitcher.pushEvents(events)` with the new `SuiteApiEvent` pushes
+  events onto any resource, foreign ones included, through
+  `POST /api/events/bulk`. `NOTIFICATION` events are refused, not sent: the
+  Suite API answers 200 and silently discards them on another adapter's
+  resource. Send `DIAGNOSTIC`. Never throws; count from the returned
+  `SuiteApiBatchResult` (events, not resources).
+- Numeric property values: `pushTypedPropertiesBatch` and `pushTypedBatch`
+  take `String` or `Number` values and send numbers as `"data":[...]`.
+  Null, NaN and infinite values are dropped and counted, never sent.
+  `pushPropertiesBatch` and `pushBatch` are unchanged and send the same
+  bytes as before.
+- Icon hints `content_library`, `library_item`, `vm_template`.
+- No pak changes behaviour until it calls the new methods; a rebuild alone
+  changes nothing on the wire.
+
 ## Behavior since 1.0.28
 
 - Release builds accept only SDK jars the kit knows (factory issue #343). A
