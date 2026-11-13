@@ -189,6 +189,12 @@ _IMPORT_REWRITES: dict[str, list[tuple[str, str]]] = {
             r"from vcfcf_dashboards\.loader import load_view, load_dashboard",
             "from .dashboard_loader import load_view, load_dashboard",
         ),
+        # from vcfcf_dashboards.loader import apply_section_fallback  (inline
+        # in apply_bundled_section_fallback; section_fallback: omit)
+        (
+            r"from vcfcf_dashboards\.loader import apply_section_fallback",
+            "from .dashboard_loader import apply_section_fallback",
+        ),
         # from vcfcf_dashboards.render import render_views_xml
         (
             r"from vcfcf_dashboards\.render import render_views_xml",
@@ -329,6 +335,12 @@ _IMPORT_REWRITES: dict[str, list[tuple[str, str]]] = {
         (
             r"from \.render import _VIEW_PIN_CONTAINER",
             "from .dashboard_render import _VIEW_PIN_CONTAINER",
+        ),
+        # from .render import _clamp_gridster_floor  (inline in _rendered_box;
+        # the Section fallback reads coords as the renderer writes them)
+        (
+            r"from \.render import _clamp_gridster_floor",
+            "from .dashboard_render import _clamp_gridster_floor",
         ),
         # from .widget_versions import widget_version_problems  (inline in
         # Dashboard.validate; issue #199 per-widget minimum Ops version)
@@ -713,6 +725,23 @@ def _build_parser() -> argparse.ArgumentParser:
             "Rejected together with --release."
         ),
     )
+    pbsdk.add_argument(
+        "--sections",
+        dest="sections",
+        choices=("auto", "ship", "omit"),
+        default="auto",
+        help=(
+            "which variant of a dashboard that sets section_fallback: omit "
+            "the pak ships: auto (default) ships its Section widgets only "
+            "when the oldest supported line imports Section (9.1.1 and "
+            "later) and leaves them out below; ship keeps every Section "
+            "(the Section variant, e.g. for a 9.1-only test); omit leaves "
+            "them out of every dashboard with the key. A dashboard without "
+            "the key is never changed. Each omission is printed with its "
+            "reason. Dev builds only: ship and omit are rejected together "
+            "with --release."
+        ),
+    )
 
     pbsdk.add_argument(
         "--sdk-compat-jar",
@@ -826,6 +855,7 @@ def main() -> int:
             pak_path = build_sdk_pak(
                 project_dir, output_dir,
                 pak_compare_warn_only=args.pak_compare_warn_only,
+                sections=args.sections,
             )
             print(f"Built: {pak_path}")
             return 0

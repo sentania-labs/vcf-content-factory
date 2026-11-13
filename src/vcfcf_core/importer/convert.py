@@ -892,13 +892,20 @@ class _Planner:
                         e.undeliverable.append(
                             f"widget {w.get('id')} ({wt}) needs VCF Operations {format_ops_version(floor)} or later; "
                             f"the stated target {format_ops_version(self.target)} aborts the whole dashboard on "
-                            f"import (issue #199)")
+                            f"import (issue #199)"
+                            + ("; to deliver it without its Section rows, convert it at a target that "
+                               "imports Section (9.1.1 or later) or without --target-min, then add "
+                               "section_fallback: omit to the written dashboard YAML (the importer never "
+                               "adds it)" if wt == "Section" else ""))
                     else:
                         e.version_warnings.append(
                             f"dashboard {e.name!r} widget {w.get('id')} ({wt}): needs VCF Operations "
                             f"{format_ops_version(floor)} or later; on any build below it (no --target-min given) "
                             f"the importer aborts the whole dashboard (issue #199). Not converted away; a Tier 2 "
-                            f"pak build fails on it")
+                            f"pak build fails on it"
+                            + ("; to accept the dashboard without its Section rows there, add "
+                               "section_fallback: omit to the written YAML (never added here)"
+                               if wt == "Section" else ""))
                 wo = w.get("omit") or []
                 if wo:
                     kept = []

@@ -251,6 +251,108 @@ def import_check(dashboards, instance_version) -> Tuple[Optional[str], Optional[
 
 
 # ---------------------------------------------------------------------------
+# section_fallback: the Section-less variant of a dashboard (2026-11-13)
+# ---------------------------------------------------------------------------
+#
+# A dashboard that sets ``section_fallback: omit`` may be rendered without
+# its Section widgets where the target cannot import Section. One YAML
+# source, two variants: the build or sync picks one from the lowest product
+# version its output targets, so when the floor rises the same source
+# ships its Sections with no content edit.
+
+#: Allowed values of the dashboard YAML key ``section_fallback``.
+SECTION_FALLBACK_VALUES: Tuple[str, ...] = ("omit",)
+
+#: Values of the ``--sections`` override (``build-sdk``, dashboards
+#: ``package``). ``auto``: the target decides. ``ship``: keep every Section.
+#: ``omit``: leave the Sections out of every dashboard that sets
+#: ``section_fallback: omit`` (a dashboard without the key keeps them).
+SECTIONS_CHOICES: Tuple[str, ...] = ("auto", "ship", "omit")
+
+
+def section_ship_floor() -> OpsVersion:
+    """The lowest target on which a Section is shipped: Section's PROVEN
+    floor, ``WIDGET_TYPE_MIN_OPS_VERSION["Section"]`` (9.1.1), not its
+    measured-failing bound (``WIDGET_TYPE_REFUSE_BELOW_OPS_VERSION``, 9.1.0).
+
+    Between the two nothing is measured: 9.1.0 may import Section or may lose
+    every dashboard in the import. Omitting there costs the header rows of a
+    dashboard whose author declared it complete without them; shipping there
+    risks the whole batch. So the conservative constant governs omission, and
+    a measurement of 9.1.0 lowers it by editing the one table above.
+    """
+    return parse_ops_version(WIDGET_TYPE_MIN_OPS_VERSION["Section"])
+
+
+def _section_floor_sentence() -> str:
+    below = WIDGET_TYPE_REFUSE_BELOW_OPS_VERSION.get("Section")
+    tail = (f"; measured not to import below {format_ops_version(below)}"
+            if below is not None else "")
+    return (f"{format_ops_version(section_ship_floor())}, the first VCF Operations "
+            f"build proven to import Section{tail}")
+
+
+def section_omission_reason(
+    target_version,
+    fallback: Optional[str],
+    sections: str = "auto",
+    unknown_target: str = "ship",
+) -> Optional[str]:
+    """Why a dashboard's Section widgets are left out, or None to ship them.
+
+    *fallback* is the dashboard's ``section_fallback`` (None or ``"omit"``).
+    *target_version* is the lowest product version the output targets (a
+    tuple or dotted string), or None when it is unknown. *sections* is the
+    ``--sections`` override. *unknown_target* is what a None target means:
+    ``"ship"`` where no target is declared at all (a content bundle, a local
+    ``package``; today's output), ``"omit"`` where a target exists but could
+    not be read (live sync with the instance version unreadable).
+
+    Only a dashboard with *fallback* set is ever omitted. Decision:
+
+    ================  ==================================  ===========
+    sections          target                              result
+    ================  ==================================  ===========
+    ship              any                                 ship
+    omit              any                                 omit
+    auto              >= section_ship_floor() (9.1.1)     ship
+    auto              below it (8.18.7, 9.0.x, 9.1.0)     omit
+    auto              None                                unknown_target
+    ================  ==================================  ===========
+    """
+    if sections not in SECTIONS_CHOICES:
+        raise ValueError(f"sections must be one of {', '.join(SECTIONS_CHOICES)}; got {sections!r}")
+    if fallback is None or sections == "ship":
+        return None
+    if sections == "omit":
+        return "--sections omit was given"
+    if target_version is None:
+        if unknown_target == "omit":
+            return (f"the target version could not be read, and the Section variant "
+                    f"needs VCF Operations {_section_floor_sentence()}")
+        return None
+    target = parse_ops_version(target_version)
+    if target >= section_ship_floor():
+        return None
+    return (f"the target is VCF Operations {format_ops_version(target)}, below "
+            f"{_section_floor_sentence()}")
+
+
+def section_omitted_note(name: str, count: int, reason: str) -> str:
+    """The line every omission prints: dashboard, count, reason."""
+    return (f"SECTIONS OMITTED: dashboard {name!r}: {count} Section widget(s) left out "
+            f"(section_fallback: omit): {reason}.")
+
+
+def section_kept_below_floor_note(name: str, count: int, target_version) -> str:
+    """The line ``--sections ship`` prints for a target below the floor."""
+    return (f"SECTIONS KEPT BELOW FLOOR (--sections ship): dashboard {name!r} keeps "
+            f"{count} Section widget(s) although the target is VCF Operations "
+            f"{format_ops_version(parse_ops_version(target_version))}, below "
+            f"{_section_floor_sentence()}; on such a build {IMPORT_LOSS_SENTENCE}.")
+
+
+# ---------------------------------------------------------------------------
 # omit: version floors (2026-11-12 fidelity review, W3)
 # ---------------------------------------------------------------------------
 #

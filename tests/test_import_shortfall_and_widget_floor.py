@@ -412,7 +412,7 @@ class TestRefusalAtEntryPoints:
     def test_no_floored_widget_makes_no_version_request(self, tmp_path):
         session = _VersionSession()
         d2 = [d for d in _load(tmp_path) if "Plain" in d.name]
-        assert dash_client.widget_import_refusal(session, d2) == (None, None)
+        assert dash_client.plan_dashboard_import(session, d2) == (d2, None, [])
         assert session.calls == []
 
     def test_dashboards_handler_refuses_every_dashboard(self, monkeypatch, tmp_path):

@@ -332,7 +332,15 @@ accepts it in the content and third-party layouts (the dashboard is written;
 it imports on the newer lines only), never in the pak layout (the pak build
 refuses it). The caller's options: raise `--target-min` to the widget's
 floor, drop the dashboard (`--drop`), or remove the widget from the source
-before converting. Floors: `widget_versions.py`, `reports/loader.py`,
+before converting. For Section there is a fourth, after the import: convert
+at a target that accepts it (or without `--target-min`), then add
+`section_fallback: omit` to the written dashboard YAML. Builds and syncs
+below 9.1.1 then leave the Sections out and say so
+(`../wire-formats/dashboard_fidelity_wire_format.md` §Section fallback).
+The importer never writes that key itself: no source key maps to it, and
+it is the author's decision that the dashboard is complete without its
+header rows. The `NOT DELIVERABLE` and `VERSION:` lines for a Section name
+it. Floors: `widget_versions.py`, `reports/loader.py`,
 `symptoms/loader.py` (dashboard fidelity doc §Omit version floors).
 
 ## Verification and its limits

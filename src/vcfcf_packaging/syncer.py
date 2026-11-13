@@ -227,9 +227,13 @@ def _refuse_unimportable_widgets(bundle, session) -> bool:
     dashboards = list(getattr(bundle, "dashboards", None) or [])
     if not dashboards:
         return False
-    from vcfcf_dashboards.client import widget_import_refusal
-    refusal, note = widget_import_refusal(session, dashboards)
-    if note:
+    from vcfcf_dashboards.client import plan_dashboard_import
+    # A dashboard with section_fallback: omit is checked as the dashboards
+    # handler will import it (without its Sections below the floor); the
+    # handler, which imports, says each omission, so it is said once.
+    _planned, refusal, notes = plan_dashboard_import(
+        session, dashboards, omission_notes=False)
+    for note in notes:
         _print_warn(note)
     if refusal:
         print(f"FATAL: {refusal}", file=sys.stderr)

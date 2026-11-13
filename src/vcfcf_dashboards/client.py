@@ -214,32 +214,55 @@ def get_ops_version(client: VCFOpsClient):
         return None
 
 
-def widget_import_refusal(client: VCFOpsClient, dashboards) -> "tuple":
-    """``(refusal, note)`` for a content import of ``dashboards`` on ``client``.
+def plan_dashboard_import(client: VCFOpsClient, dashboards, *, omission_notes: bool = True) -> "tuple":
+    """``(dashboards, refusal, notes)`` for a content import of ``dashboards``
+    on ``client``: what to import, whether to import at all, what to say.
 
-    ``refusal``: the instance is below a widget type's measured-failing
-    version (``widget_versions.import_check``); the caller must not import.
-    ``note``: a WARNING, and the import goes ahead with the import result
-    check as the backstop, when the version is unmeasured for a type (9.1.0
-    for Section) or could not be read. Both None when no dashboard carries a
-    floored type (no request is made) or every type is proven there.
+    ``dashboards``: the input, except that each dashboard setting
+    ``section_fallback: omit`` is its Section-less variant when the instance
+    is below the Section floor (9.1.1, ``widget_versions.section_ship_floor``)
+    or its version cannot be read (``unknown_target="omit"``: leaving header
+    rows out of a dashboard whose author accepted that is cheaper than a
+    lost batch). ``refusal``: a widget type left in is below its
+    measured-failing version (``widget_versions.import_check``); the caller
+    must not import. ``notes``: one ``SECTIONS OMITTED`` line per omitted
+    dashboard, then any WARNING (unmeasured version, 9.1.0 for Section; or
+    version unreadable) under which the import goes ahead with the import
+    result check as the backstop. No request is made and nothing changes
+    when no dashboard carries a floored widget type. ``omission_notes=False``
+    leaves the ``SECTIONS OMITTED`` lines out of ``notes`` for a caller that
+    only checks and is followed by one that imports and says them (bundle
+    sync's preflight before the dashboards handler), so each is said once.
     """
+    from vcfcf_core.dashboards.loader import apply_section_fallback
     from vcfcf_core.dashboards.widget_versions import (
         WIDGET_TYPE_MIN_OPS_VERSION,
         import_check,
     )
-    pairs = [
-        (d.name, [(w.local_id, w.type) for w in d.widgets]) for d in dashboards
-    ]
-    if not any(
-        WIDGET_TYPE_MIN_OPS_VERSION.get(t) is not None
-        for _n, ws in pairs for _i, t in ws
-    ):
-        return None, None
+    dashboards = list(dashboards)
+
+    def _pairs(ds):
+        return [(d.name, [(w.local_id, w.type) for w in d.widgets]) for d in ds]
+
+    def _floored(pairs):
+        return any(
+            WIDGET_TYPE_MIN_OPS_VERSION.get(t) is not None
+            for _n, ws in pairs for _i, t in ws
+        )
+
+    if not _floored(_pairs(dashboards)):
+        return dashboards, None, []
     version = get_ops_version(client)
+    planned, notes = apply_section_fallback(dashboards, version, unknown_target="omit")
+    if not omission_notes:
+        notes = []
+    pairs = _pairs(planned)
+    if not _floored(pairs):
+        return planned, None, notes
     if version is None:
-        return None, VERSION_UNREADABLE_NOTE
-    return import_check(pairs, version)
+        return planned, None, notes + [VERSION_UNREADABLE_NOTE]
+    refusal, warning = import_check(pairs, version)
+    return planned, refusal, notes + ([warning] if warning else [])
 
 
 #: Same text in install.py and install.ps1.

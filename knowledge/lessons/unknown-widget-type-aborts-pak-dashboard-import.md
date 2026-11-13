@@ -85,3 +85,18 @@ never created, not even partly, on either path.
   `install.py` and `install.ps1`) read the instance version and refuse
   before importing below 9.1.0, or warn on 9.1.0, naming the dashboards;
   every content-import reader fails on a DASHBOARDS count shortfall.
+
+## The way out for Section (2026-11-13)
+
+A dashboard that is complete without its Section header rows does not need
+a second, hand-maintained copy: set `section_fallback: omit` on it and keep
+the Sections in the committed YAML. Tier 2 pak builds and live sync then
+ship it without the Sections wherever the target is below 9.1.1 (pak: the
+oldest supported line; sync: the instance version, or when it cannot be
+read), and with them from 9.1.1, so the same source ships the Section
+version once 8.x and 9.0 leave the supported lines. Every omission is
+printed with the dashboard, the count and the version reason; nothing is
+dropped silently. Content bundles still declare no target, so their
+installers still refuse. Reference:
+`knowledge/context/wire-formats/dashboard_fidelity_wire_format.md`
+§Section fallback.

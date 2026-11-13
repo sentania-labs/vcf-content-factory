@@ -4787,7 +4787,8 @@ def _generate_docs(project_dir: Path, version_string: str, *,
 
 
 def build_sdk_pak(project_dir: Path, output_dir: Optional[Path] = None,
-                  *, pak_compare_warn_only: bool = False) -> Path:
+                  *, pak_compare_warn_only: bool = False,
+                  sections: str = "auto") -> Path:
     """End-to-end Tier 2 SDK adapter build pipeline.
 
     Args:
@@ -4796,6 +4797,12 @@ def build_sdk_pak(project_dir: Path, output_dir: Optional[Path] = None,
         pak_compare_warn_only: dev builds only.  Report pak-compare BLOCKING
                       findings as warnings instead of failing the build.
                       Rejected on a release build.
+        sections:     ``--sections``: ``auto`` (default) lets the oldest
+                      supported line decide whether a dashboard that sets
+                      ``section_fallback: omit`` ships its Section widgets;
+                      ``ship`` / ``omit`` force the variant (dev builds
+                      only; rejected on a release build).  See
+                      ``apply_bundled_section_fallback``.
 
     Returns:
         Path to the produced .pak file.
@@ -4830,6 +4837,12 @@ def build_sdk_pak(project_dir: Path, output_dir: Optional[Path] = None,
             "pak-compare warn-only mode is not allowed on a release build: "
             "a release must pass the pak-compare gate."
         )
+    if release_build and sections != "auto":
+        raise SdkBuildError(
+            f"--sections {sections} is not allowed on a release build: a release "
+            f"ships the variant its oldest supported line "
+            f"({_oldest_supported_line()}) decides."
+        )
     _stamp_build_version(project, release_build)
 
     # Step 1a': describe.xml composite SymptomSets check (issue #203).  The
@@ -4848,10 +4861,17 @@ def build_sdk_pak(project_dir: Path, output_dir: Optional[Path] = None,
     bundled_views, bundled_dashboards, bundled_supermetrics, bundled_symptoms, bundled_alerts, bundled_reports, bundled_recommendations = _load_bundled_content(
         _raw_adapter_yaml, project_dir, project_dir
     )
+    # section_fallback (before the floor gate, which then sees what ships):
+    # every dashboard that leaves its Sections out is named, with the count
+    # and the version reason.
+    bundled_dashboards, _section_notes = apply_bundled_section_fallback(
+        bundled_dashboards, sections)
+    for _n in _section_notes:
+        print(f"  build-sdk: {_n}", file=sys.stderr)
     _floor_errors = check_bundled_version_floors((
         bundled_views, bundled_dashboards, bundled_supermetrics, bundled_symptoms,
         bundled_alerts, bundled_reports, bundled_recommendations,
-    ))
+    ), sections=sections)
     if _floor_errors:
         raise SdkBuildError("\n".join(_floor_errors))
     for _w in bundled_reference_warnings((
@@ -5759,7 +5779,24 @@ def check_bundled_content_against_describe(
     return errors
 
 
-def check_bundled_version_floors(bundled: tuple) -> List[str]:
+def apply_bundled_section_fallback(dashboards, sections: str = "auto"):
+    """``(dashboards, notes)``: the bundled dashboards as this pak ships them.
+
+    The pak's floor is the oldest supported line (``_oldest_supported_line``,
+    RULE-019), the same target ``check_bundled_version_floors`` gates. A
+    dashboard that sets ``section_fallback: omit`` ships without its Section
+    widgets while that line is below the Section floor
+    (``widget_versions.section_ship_floor``, 9.1.1) and with them once the
+    line rises to it; ``sections`` (``--sections``) forces either variant.
+    A dashboard without the key is never changed: below the floor the
+    version gate fails it. One note per omission (and per ``--sections
+    ship`` dashboard kept below the floor); the caller prints them.
+    """
+    from vcfcf_dashboards.loader import apply_section_fallback
+    return apply_section_fallback(dashboards or [], _oldest_supported_line(), sections)
+
+
+def check_bundled_version_floors(bundled: tuple, sections: str = "auto") -> List[str]:
     """Bundled content the oldest supported platform line may not import.
 
     A Tier 2 pak targets every line in _SDK_COMPAT_LINES (RULE-019), so a
@@ -5768,20 +5805,29 @@ def check_bundled_version_floors(bundled: tuple) -> List[str]:
     (dashboards, reports, symptoms; alerts have no ``omit:``; W3 of the
     2026-11-12 fidelity review), is an error. ``build-sdk`` fails on it;
     ``validate-sdk`` reports it under its own label. ``bundled`` is the
-    tuple ``_load_bundled_content`` returns.
+    tuple ``_load_bundled_content`` returns, after
+    ``apply_bundled_section_fallback``. ``sections="ship"`` (``build-sdk
+    --sections ship``, a dev build) leaves Section out of the widget-type
+    check; ``apply_bundled_section_fallback`` names each such dashboard.
     """
     _views, dashboards, _sms, symptoms, _alerts, reports, _recs = bundled
     oldest = _oldest_supported_line()
     tail = (f" Tier 2 paks support VCF Operations {oldest} and later (RULE-019); "
             f"remove it or move it to content that targets newer builds only.")
+    ignore = ("Section",) if sections == "ship" else ()
     errors: List[str] = []
     for d in dashboards or []:
         src = getattr(d, "source_path", None) or d.name
-        widget_problems = d.widget_version_problems(oldest)
+        widget_problems = d.widget_version_problems(oldest, ignore_types=ignore)
         if widget_problems:
+            hint = ""
+            if any(w.type == "Section" for w in d.widgets) and "Section" not in ignore:
+                hint = (" To ship this dashboard without its Section rows where the "
+                        "oldest line cannot import them (and with them once it can), "
+                        "set section_fallback: omit on the dashboard.")
             errors.append(
                 f"bundled_content.dashboards: {src}: dashboard {d.name!r}: "
-                + " ".join(widget_problems) + tail
+                + " ".join(widget_problems) + tail + hint
             )
         for problem in d.omit_version_problems(oldest):
             errors.append(f"bundled_content.dashboards: {problem}" + tail)
@@ -5881,6 +5927,12 @@ def validate_sdk_project(project_dir: Path) -> List[str]:
             _raw_adapter_yaml = _yaml.safe_load(adapter_yaml.read_text(encoding="utf-8")) or {}
         _bundled = _load_bundled_content(_raw_adapter_yaml, project_dir, project_dir)
         bundled_views, _bdc_dash, _bdc_sms, _bdc_syms, _bdc_alerts, _bdc_reports, _bdc_recs = _bundled
+        # section_fallback: the dashboards as build-sdk (auto) would ship them.
+        _bdc_dash, _section_notes = apply_bundled_section_fallback(_bdc_dash)
+        for _n in _section_notes:
+            print(f"  validate-sdk: {_n}", file=sys.stderr)
+        _bundled = (bundled_views, _bdc_dash, _bdc_sms, _bdc_syms, _bdc_alerts,
+                    _bdc_reports, _bdc_recs)
         # Naming contract (#229): adapter.yaml content_naming.
         _naming_errors, _naming_warnings = check_content_naming(project, _bundled)
         errors.extend(_naming_errors)

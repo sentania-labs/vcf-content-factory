@@ -730,6 +730,8 @@ def test_target_min_drops_newer_omit_and_lists_the_deviation(source, tmp_path, c
     assert rc == 1 and not out.exists()
     assert "NOT DELIVERABLE to 8.18.7: dashboards/probe-dashboard-b.yaml" in text
     assert "widget w0 (Section) needs VCF Operations 9.1.1" in text
+    assert ("convert it at a target that imports Section (9.1.1 or later) or without "
+            "--target-min, then add section_fallback: omit") in text
     rc, text = _run(source, out, capsys, "--layout", "third-party", "--ids", "keep", "--naming", "unprefixed",
                     "--target-min", "8.18.7", "--allow-partial")
     assert rc == 0, text
@@ -749,6 +751,10 @@ def test_without_target_reproduces_source_and_warns(source, tmp_path, capsys):
     assert _yaml(out, "dashboards/probe-dashboard-a.yaml")["omit"] == ["temporary"]
     assert "omit: temporary reproduces the source, but its floor is 9.1.1" in text
     assert "(Section): needs VCF Operations 9.1.1 or later; on any build below it" in text
+    # section_fallback has no wire counterpart: the importer names it as the
+    # way out but never writes it, and verification still passes.
+    assert "add section_fallback: omit to the written YAML (never added here)" in text
+    assert "section_fallback" not in _yaml(out, "dashboards/probe-dashboard-b.yaml")
 
 
 # -------------------------------------------------------------- safety

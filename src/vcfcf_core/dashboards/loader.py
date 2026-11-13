@@ -2720,6 +2720,103 @@ class Dashboard:
     column_proportion: Optional[str] = None
     column_count: Optional[int] = None
     omit: List[str] = field(default_factory=list)
+    # ``section_fallback: omit``: where the target cannot import Section,
+    # this dashboard may ship without its Section widgets (without_sections,
+    # apply_section_fallback). None: the Sections always ship, and a target
+    # that cannot import them is refused or warned on as before.
+    section_fallback: Optional[str] = None
+
+    @property
+    def section_count(self) -> int:
+        """Number of Section widgets on this dashboard."""
+        return sum(1 for w in self.widgets if w.type == "Section")
+
+    def without_sections(self) -> "Dashboard":
+        """This dashboard with every Section widget removed (a new object;
+        ``self`` is not changed). ``self`` when there is no Section.
+
+        What refers to a Section: only its own ``config.widgets`` member list
+        (``SectionConfig.member_ids``), which goes with it. ``validate()``
+        rejects interactions to or from a Section and the renderer never
+        offers a Section as a navigation receiver; interactions naming a
+        removed id are dropped all the same. Every other widget keeps its
+        local id, so its rendered uuid (dashboard name + local id), its
+        interactions and the navigations naming it are unchanged.
+
+        Rows close up: a Section occupies one grid row of its own (12 x 1,
+        the loader rejects any widget starting on it). Each removed Section
+        row that no remaining widget covers is closed, so every widget below
+        moves up one row per closed row above it; a row a remaining widget
+        still covers is left as it is. Rows are the rendered ones (y below 1
+        counts as row 1, as the renderer clamps it), so a 0-based Section
+        that renders on a widget's row is not closed. Closing only empty rows
+        cannot create an overlap, and it keeps the layout gap-free, as every
+        saved product
+        layout is (reasoning: knowledge/context/wire-formats/
+        dashboard_fidelity_wire_format.md §Section fallback).
+
+        Members of a collapsed Section become visible; ``validate()`` rejects
+        ``section_fallback`` when that makes two widgets overlap.
+        """
+        import bisect
+        import dataclasses
+        sections = [w for w in self.widgets if w.type == "Section"]
+        if not sections:
+            return self
+        removed = {w.local_id for w in sections}
+        rest = [w for w in self.widgets if w.type != "Section"]
+        covered: set = set()
+        for w in rest:
+            top, height = _grid_rows(w)
+            covered.update(range(top, top + height))
+        closed = sorted({_grid_rows(s)[0] for s in sections} - covered)
+        widgets = []
+        for w in rest:
+            top = _grid_rows(w)[0]
+            shift = bisect.bisect_left(closed, top)
+            widgets.append(
+                w if shift == 0
+                else dataclasses.replace(w, coords={**w.coords, "y": top - shift})
+            )
+        return dataclasses.replace(
+            self,
+            widgets=widgets,
+            interactions=[ix for ix in self.interactions
+                          if ix.from_local_id not in removed and ix.to_local_id not in removed],
+        )
+
+    def section_fallback_problems(self) -> List[str]:
+        """Why ``section_fallback`` cannot apply to this dashboard as authored
+        (empty when it can, or when the key is unset): pairs of widgets that
+        overlap once the Sections are gone and one of them is a member of a
+        collapsed Section (members of a collapsed Section keep rows that the
+        widgets below it also use; with the Section gone they are shown)."""
+        if self.section_fallback is None:
+            return []
+        hidden = {}
+        for w in self.widgets:
+            if w.type == "Section" and w.section_config is not None and w.section_config.collapsed:
+                for mid in w.section_config.member_ids:
+                    hidden.setdefault(mid, w.local_id)
+        if not hidden:
+            return []
+        rest = self.without_sections().widgets
+        out: List[str] = []
+        for i, a in enumerate(rest):
+            for b in rest[i + 1:]:
+                if a.local_id not in hidden and b.local_id not in hidden:
+                    continue
+                if _widgets_overlap(a, b):
+                    m = a if a.local_id in hidden else b
+                    out.append(
+                        f"section_fallback: omit: without its Sections, widgets "
+                        f"{a.local_id!r} and {b.local_id!r} overlap; {m.local_id!r} is a "
+                        f"member of collapsed Section {hidden[m.local_id]!r}, whose members "
+                        f"sit on rows the widgets below it also use. Expand the Section "
+                        f"(collapsed: false) and lay its members out without overlap, or "
+                        f"remove section_fallback"
+                    )
+        return out
 
     @property
     def summary_kinds(self) -> "list[tuple[str, str]]":
@@ -2729,14 +2826,17 @@ class Dashboard:
             return []
         return [parse_summary_for(v) for v in self.summary_for]
 
-    def widget_version_problems(self, target_version) -> List[str]:
+    def widget_version_problems(self, target_version, ignore_types=()) -> List[str]:
         """Widget types this dashboard uses that ``target_version`` (the
         oldest VCF Ops build the artifact declares) cannot import (issue
         #199). The SDK pak build passes its oldest supported platform line
-        (RULE-019) and fails on any problem."""
+        (RULE-019) and fails on any problem. ``ignore_types``: types left
+        out of the check (``build-sdk --sections ship`` passes Section, and
+        says so per dashboard)."""
         from .widget_versions import widget_version_problems
         return widget_version_problems(
-            ((w.local_id, w.type) for w in self.widgets), target_version
+            ((w.local_id, w.type) for w in self.widgets if w.type not in ignore_types),
+            target_version,
         )
 
     def omit_version_problems(self, target_version=None) -> List[str]:
@@ -2844,6 +2944,12 @@ class Dashboard:
             (w.local_id, w.type) for w in self.widgets
         ):
             src = str(self.source_path) if self.source_path else self.name
+            if self.section_fallback is not None and "widget type Section " in _problem:
+                _problem += (
+                    " section_fallback: omit applies where a target version is known: "
+                    "live sync and Tier 2 pak builds leave the Sections out below it; "
+                    "content bundles declare no target, so their installers still refuse."
+                )
             warnings.warn(f"{src}: dashboard {self.name!r}: {_problem}", UserWarning, stacklevel=2)
         # W3: an omit: entry no export at or below the oldest export read
         # shows absent. A warning here; the Tier 2 pak build gates it.
@@ -3032,6 +3138,12 @@ class Dashboard:
                     f"dashboard {self.name}: interaction {ix.from_local_id} -> "
                     f"{ix.to_local_id} references a Section; Sections carry no interactions"
                 )
+        # After the Section checks above: the Section-less variant must not
+        # stack a collapsed Section's members on the widgets below it.
+        _fallback_problems = self.section_fallback_problems()
+        if _fallback_problems:
+            raise DashboardValidationError(
+                f"dashboard {self.name}: " + "; ".join(_fallback_problems))
         # Self-targeting navigation is allowed (the product allows it), but
         # a widget cannot name itself as a receiver on its own dashboard.
         for w in self.widgets:
@@ -3047,6 +3159,67 @@ class Dashboard:
 _UUID_RE = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
 )
+
+
+def _rendered_box(w: "Widget") -> "tuple[int, int, int, int]":
+    """``(x, y, w, h)`` of a widget as the renderer writes it: the coords go
+    through ``render._clamp_gridster_floor`` itself (DEF-013: x and y to at
+    least 1; w and h untouched, no right-edge clamp), so the Section
+    fallback can never disagree with the wire when the clamp changes. A
+    missing w or h counts as 1. Section coords are already 12 x 1 here (the
+    loader stores them so, as the renderer writes them)."""
+    from .render import _clamp_gridster_floor
+    c = _clamp_gridster_floor(w.coords)
+    return (int(c.get("x", 1)), int(c.get("y", 1)),
+            max(1, int(c.get("w", 1))), max(1, int(c.get("h", 1))))
+
+
+def _grid_rows(w: "Widget") -> "tuple[int, int]":
+    """``(top row, height in rows)`` as rendered (``_rendered_box``)."""
+    _x, y, _w, h = _rendered_box(w)
+    return y, h
+
+
+def _widgets_overlap(a: "Widget", b: "Widget") -> bool:
+    """Whether two widgets overlap as rendered (``_rendered_box``)."""
+    ax, ay, aw, ah = _rendered_box(a)
+    bx, by, bw, bh = _rendered_box(b)
+    return ay < by + bh and by < ay + ah and ax < bx + bw and bx < ax + aw
+
+
+def apply_section_fallback(
+    dashboards: Iterable["Dashboard"],
+    target_version,
+    sections: str = "auto",
+    unknown_target: str = "ship",
+) -> "tuple[list[Dashboard], list[str]]":
+    """``(dashboards, notes)`` for an output whose lowest target is
+    *target_version*: each dashboard that sets ``section_fallback: omit``
+    and carries Sections is replaced by ``without_sections()`` when
+    ``widget_versions.section_omission_reason`` says so, with one note per
+    omission naming the dashboard, the count and the reason. A dashboard
+    without the key is returned as it is, the same object; so is every
+    dashboard when nothing is omitted. With ``sections="ship"`` a note is
+    also returned for each dashboard that keeps Sections on a target below
+    the Section floor. Arguments: ``section_omission_reason``.
+    """
+    from . import widget_versions as _wv
+    out: List[Dashboard] = []
+    notes: List[str] = []
+    for d in dashboards:
+        count = d.section_count
+        reason = (_wv.section_omission_reason(target_version, d.section_fallback,
+                                              sections, unknown_target)
+                  if count else None)
+        if reason is not None:
+            out.append(d.without_sections())
+            notes.append(_wv.section_omitted_note(d.name, count, reason))
+            continue
+        if (count and sections == "ship" and target_version is not None
+                and _wv.parse_ops_version(target_version) < _wv.section_ship_floor()):
+            notes.append(_wv.section_kept_below_floor_note(d.name, count, target_version))
+        out.append(d)
+    return out, notes
 
 
 #: Longest dashboard name the VCF Operations dashboard editor will save
@@ -5343,7 +5516,22 @@ def _load_dashboard(
     column_count = data.get("column_count")
     if column_count is not None and (isinstance(column_count, bool) or column_count not in _COLUMN_COUNTS):
         raise DashboardValidationError(f"{path}: column_count must be one of {sorted(_COLUMN_COUNTS)}; got {column_count!r}")
-    dash_omit = _parse_omit_list(data.get("omit"), DASHBOARD_OMIT_KEYS, str(path))
+    section_fallback = data.get("section_fallback")
+    if section_fallback is not None:
+        from . import widget_versions as _wv
+        if not isinstance(section_fallback, str) or section_fallback not in _wv.SECTION_FALLBACK_VALUES:
+            raise DashboardValidationError(
+                f"{path}: section_fallback must be one of "
+                f"{', '.join(_wv.SECTION_FALLBACK_VALUES)}; got {section_fallback!r}"
+            )
+        # Meaningless without a Section, so an error, as an omit: entry that
+        # contradicts the YAML is (precedent: omit folder_in_name).
+        if not any(w.type == "Section" for w in widgets):
+            raise DashboardValidationError(
+                f"{path}: section_fallback: {section_fallback} says what to do with this "
+                f"dashboard's Section widgets, and it has none; remove the key"
+            )
+    dash_omit =_parse_omit_list(data.get("omit"), DASHBOARD_OMIT_KEYS, str(path))
     # The two folder omits are checked against the YAML alone, never the
     # caller's default folder, so a file loads the same way in every entry
     # point (Codex P2 on PR 356).
@@ -5372,6 +5560,7 @@ def _load_dashboard(
         column_proportion=column_proportion,
         column_count=column_count,
         omit=dash_omit,
+        section_fallback=section_fallback,
         id=dash_id,
         name=name,
         description=str(data.get("description", "") or "").strip(),

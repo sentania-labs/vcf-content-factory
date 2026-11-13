@@ -38,9 +38,9 @@ from .client import (
     get_current_user,
     import_content_zip,
     import_shortfall_errors,
+    plan_dashboard_import,
     print_import_count_warnings,
     skipped_import_advice,
-    widget_import_refusal,
 )
 from .loader import DashboardValidationError, load_view, load_dashboard
 from .packager import build_import_zip
@@ -356,9 +356,10 @@ class DashboardsHandler(ContentHandler):
 
         # Widget types this instance's version cannot import (issue #199):
         # one such dashboard loses every dashboard in the import, so every
-        # dashboard is refused, before anything is sent.
-        refusal, note = widget_import_refusal(session, dashboards)
-        if note:
+        # dashboard is refused, before anything is sent. A dashboard with
+        # section_fallback: omit is imported without its Sections instead.
+        dashboards, refusal, notes = plan_dashboard_import(session, dashboards)
+        for note in notes:
             print(f"  WARN  {note}", file=sys.stderr)
         if refusal:
             for d in dashboards:
