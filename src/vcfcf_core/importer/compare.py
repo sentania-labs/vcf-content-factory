@@ -141,6 +141,16 @@ _FILTER_VALUE = re.compile(r"(ViewDef/SubjectType\{[^}]*\}(?:~\d+)?@filter\[\d+\
 _COND_VALUE = re.compile(r"(SymptomDefinition/State/Condition\[\d+\])@value")
 
 
+def string_attribute_bound(path: str, leaves: Leaves) -> bool:
+    """True when ``path`` is a view column bound on a string attribute
+    column (``isStringAttribute="true"``, the YAML's
+    ``is_string_attribute: true``): VCF Ops matches such a bound as text, so
+    it is a string, carried verbatim. The one definition the importer,
+    accounting and the comparison share."""
+    return bool(_VIEW_BOUND.fullmatch(path)) and \
+        leaves.get(path.rsplit("/", 1)[0] + "/Property{isStringAttribute}@value") == "true"
+
+
 def xml_numeric(path: str, leaves: Leaves) -> bool:
     """True when the XML key ``path`` is numeric by its semantics, read from
     the object's own flat form ``leaves`` (the source side): a column bound
@@ -151,7 +161,7 @@ def xml_numeric(path: str, leaves: Leaves) -> bool:
     if _VIEW_NUMERIC.fullmatch(path):
         return True
     if _VIEW_BOUND.fullmatch(path):
-        return leaves.get(path.rsplit("/", 1)[0] + "/Property{isStringAttribute}@value") != "true"
+        return not string_attribute_bound(path, leaves)
     m = _FILTER_VALUE.fullmatch(path)
     if m:
         return leaves.get(m.group(1) + ".isStringMetric") is False

@@ -317,7 +317,10 @@ class _ViewMapper:
             col["sort"] = "asc" if d["sortCriteria"] == "true" else "desc"
         for wk, yk in (("yellowBound", "yellow_bound"), ("orangeBound", "orange_bound"), ("redBound", "red_bound")):
             if wk in d:
-                col[yk] = _bound(d[wk])
+                # A bound on a string attribute column (is_string_attribute,
+                # set above; compare.string_attribute_bound) is text, carried
+                # verbatim; the loader keeps it as written.
+                col[yk] = d[wk] if col.get("is_string_attribute") else _bound(d[wk])
         has_num_bound = any(isinstance(col.get(k), (int, float))
                             for k in ("yellow_bound", "orange_bound", "red_bound"))
         if "ascendingRange" in d:

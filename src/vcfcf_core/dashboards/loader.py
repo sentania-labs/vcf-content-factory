@@ -202,6 +202,20 @@ class TimeSegmentSpec:
     starting_on_count: int = 1
 
 
+def numeric_bound(col: "ViewColumn", v) -> bool:
+    """True when the color bound ``v`` of view column ``col`` is a number:
+    set, not a bool, a number spelling, and not on a string attribute column
+    (``is_string_attribute: true``, the wire's ``isStringAttribute="true"``),
+    where VCF Ops matches every bound as text."""
+    if v is None or isinstance(v, bool) or col.is_string_attribute:
+        return False
+    try:
+        float(str(v))
+        return True
+    except ValueError:
+        return False
+
+
 @dataclass
 class ViewColumn:
     attribute: str
@@ -224,6 +238,9 @@ class ViewColumn:
     # Which extreme of the related metric to find: "MAX" or "MIN".
     operator_to_relate_with: Optional[str] = None
     # Per-column color thresholds. See knowledge/context/wire-formats/view_column_wire_format.md.
+    # On an is_string_attribute column every bound is the exact text to
+    # match (a str, rendered verbatim); elsewhere a number is a float
+    # (numeric_bound). view_fidelity_wire_format.md §String-column bounds.
     yellow_bound: Optional[Union[float, str]] = None
     orange_bound: Optional[Union[float, str]] = None
     # red_bound accepts float for numeric, str for property-match (e.g. "Powered Off")
@@ -1178,13 +1195,7 @@ class ViewDef:
                 )
 
         def _numeric(v) -> bool:
-            if v is None or isinstance(v, bool):
-                return False
-            try:
-                float(str(v))
-                return True
-            except ValueError:
-                return False
+            return numeric_bound(c, v)
 
         conflicts = {
             "roll_up_type": c.roll_up_type is not None or c.roll_up_unit is not None,
@@ -1568,15 +1579,10 @@ class ViewDef:
             )
 
         # Color threshold validation
-        # Determine which bounds are numeric vs string
+        # Determine which bounds are numeric vs string (every bound on a
+        # string attribute column is a string: numeric_bound).
         def _is_numeric(v) -> bool:
-            if v is None:
-                return False
-            try:
-                float(str(v))
-                return True
-            except (ValueError, TypeError):
-                return False
+            return numeric_bound(c, v)
 
         has_yellow = c.yellow_bound is not None
         has_orange = c.orange_bound is not None
@@ -3600,12 +3606,33 @@ def load_view(
             except ValueError:
                 return s  # string-match bound (e.g. "Powered Off")
 
-        yellow = _maybe_float(c.get("yellow_bound"))
-        orange = _maybe_float(c.get("orange_bound"))
-        red = _maybe_float(c.get("red_bound")) if c.get("red_bound") is not None else None
-        # For string red_bound, _maybe_float returns the string itself
-        if "red_bound" in c and isinstance(c["red_bound"], str):
-            red = c["red_bound"].strip()
+        def _text_bound(key):
+            """A bound on a string attribute column: VCF Ops matches it as
+            text, so it is the exact string written (``"0"`` stays ``0``,
+            never ``0.0``). An unquoted YAML number or bool there would be
+            respelled, so it is an error."""
+            v = c.get(key)
+            if v is None or isinstance(v, str):
+                return v
+            spelled = str(v).lower() if isinstance(v, bool) else str(v)
+            raise DashboardValidationError(
+                f"{path}: view column {c.get('display_name') or c.get('attribute')!r}: "
+                f"{key} {v!r} is not a string; on a string attribute column "
+                f"(is_string_attribute: true) a bound is the exact text to match, so "
+                f"quote it as written in the source (e.g. {key}: \"{spelled}\")"
+            )
+
+        if c.get("is_string_attribute"):
+            yellow = _text_bound("yellow_bound")
+            orange = _text_bound("orange_bound")
+            red = _text_bound("red_bound")
+        else:
+            yellow = _maybe_float(c.get("yellow_bound"))
+            orange = _maybe_float(c.get("orange_bound"))
+            red = _maybe_float(c.get("red_bound")) if c.get("red_bound") is not None else None
+            # For string red_bound, _maybe_float returns the string itself
+            if "red_bound" in c and isinstance(c["red_bound"], str):
+                red = c["red_bound"].strip()
 
         ascending_raw = c.get("ascending_range")
         ascending = bool(ascending_raw) if ascending_raw is not None else None

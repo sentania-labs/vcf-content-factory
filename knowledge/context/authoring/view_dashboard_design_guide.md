@@ -193,6 +193,12 @@ columns:
 - `ascending_range: true` — lower is worse (e.g., free space)
 - Bounds can be numeric or string (for property match, e.g.,
   `red_bound: "Powered Off"`)
+- On a string attribute column (`is_string_attribute: true`) every bound
+  is the exact text to match and must be quoted: `orange_bound: "0"`
+  renders `0`, while an unquoted `0` there is a load error (it would
+  render `0.0`, a different string). On other columns a number is a float
+  (`70` renders `70.0`). See `view_fidelity_wire_format.md`
+  §String-column bounds
 - Thresholds are static literals, not symptom-driven
 - Color method defaults to "no color" when no bounds set
 - Dashboard widget metrics (Scoreboard, MetricChart, PropertyList with

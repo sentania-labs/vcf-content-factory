@@ -394,14 +394,39 @@ sample: the vendor majority carries it (22 vCommunity columns and 59
 9.1.1 built-in columns with, 2 and 3 without). `false` is not accepted on
 such a column, no export carries it.
 
-A bound on a **string** attribute column (`isStringAttribute="true"`) is
-matched as a string, but the loader reads every numeric-looking bound
-through `float` (`_maybe_float`), so `"0"` / `"1"` render as `"0.0"` /
-`"1.0"` (4 vCommunity columns, VLAN ids and flags, mixed with a string
-`redBound="none"`). Not modeled: `import-local` stops such a view with a
-TOOLSET GAP (before 2026-11-13 its comparison treated the two spellings as
-one number). A numeric column's bounds are numbers: `70` and `70.0` are the
-same bound.
+## String-column bounds
+
+A bound on a **string** attribute column is matched as text, so it is a
+string. The one definition of a string column: `is_string_attribute: true`
+in the YAML, which is `isStringAttribute="true"` on the wire (the importer
+sets the field from that Property; `loader.numeric_bound`,
+`compare.string_attribute_bound`). Since 2026-11-13:
+
+- On a string column every bound is the exact string written, through
+  load, validate and render: `orange_bound: "0"` renders
+  `orangeBound="0"`, `red_bound: " x "` keeps its spaces. Before, the
+  loader read every numeric-looking bound through `float`, so `"0"` /
+  `"1"` rendered `"0.0"` / `"1.0"`, a different string (4 vCommunity 0.8.1
+  views, VLAN ids and flags mixed with `redBound="none"`, and 4 9.1.1
+  built-ins; `import-local` stopped them as a GAP).
+- An unquoted YAML number or bool on a string column is a load error that
+  names the bound and the quoted spelling to write (`red_bound: "0"`): it
+  would otherwise be respelled.
+- A string column's bounds are never numeric bounds: `ascending_range` is
+  not required with three of them (it renders when set), and
+  `omit: [ascending_range]` is an error there (nothing to omit).
+- Every other column is unchanged: a number, quoted or not, is a float
+  (`70` renders `70.0`, the same bound as `70`); a non-numeric string is
+  accepted without a warning and renders as written, stripped (vendor
+  exports and the idps-planner view carry `"Powered Off"`-style bounds on
+  columns not flagged as string attributes, and VCF Ops matches them as
+  text).
+
+`import-local` writes a string column's bounds as the source strings, and
+its comparison treats them as strings (`"1"` is not `"1.0"`), so a change of
+one character is a difference. The reverse paths (`/extract`,
+`reverse_local`) do not carry `is_string_attribute` at all, so their columns
+are numeric columns and keep the float behaviour.
 
 ## SDK pak owning SubjectType (not changed)
 

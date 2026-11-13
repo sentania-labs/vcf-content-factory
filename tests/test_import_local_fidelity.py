@@ -1397,8 +1397,6 @@ def _dist_buckets(**props):
     ("view buckets maxValue 2**53+1", V_DIST, _dist_buckets(maxValue=BIG), "float"),
     ("view bound with more digits than a float", V_HOST, _host_first_column(yellowBound="0.10000000000000000001"),
      "more digits than a YAML float"),
-    ("view string-attribute bound the loader respells", V_HOST,
-     _host_first_column(isStringAttribute="true", yellowBound="70"), "string attribute"),
 ])
 def test_a_value_a_loader_rounds_through_float_is_a_gap(mutation_source, tmp_path, label, vid, mutate, text):
     from vcfcf_core.importer.convert import norm_id
@@ -1418,6 +1416,24 @@ def test_a_numeric_bound_spelled_differently_still_verifies(mutation_source, tmp
     plan, tree = _convert(src, tmp_path)
     e = next(e for e in plan.emitted if e.source_id == V_HOST)
     assert _status(plan, tree, e.relpath) == "identical"
+
+
+def test_a_string_attribute_bound_is_carried_verbatim(mutation_source, tmp_path):
+    """``70`` on a string attribute column is text: it converts as the string
+    ``'70'`` (no GAP since 2026-11-13), verifies identical, and the written
+    YAML respelled ``70.0`` (what the loader used to render) differs."""
+    src = tmp_path / "src"
+    shutil.copytree(mutation_source, src)
+    _host_first_column(isStringAttribute="true", yellowBound="70")(src)
+    plan, tree = _convert(src, tmp_path)
+    assert not [f for f in plan.failures if f.id.endswith(V_HOST)], [f.reason for f in plan.failures]
+    e = next(e for e in plan.emitted if e.source_id == V_HOST)
+    col = yaml.safe_load((tree / e.relpath).read_text())["columns"][0]
+    assert col["is_string_attribute"] is True and col["yellow_bound"] == "70"
+    assert _status(plan, tree, e.relpath) == "identical"
+    p = tree / e.relpath
+    p.write_text(p.read_text().replace("yellow_bound: '70'", "yellow_bound: '70.0'", 1))
+    assert _status(plan, tree, e.relpath) == "differs"
 
 
 def test_a_dashboard_bound_a_loader_rounds_through_float_is_a_gap(mutation_source, tmp_path):
