@@ -41,7 +41,7 @@ Output paths inside the pak:
 - `conf/images/TraversalSpec/default.svg` — traversal browser
 - `default.svg` at pak root — manifest `pak_icon`
 
-## Available hints (2026-05-16)
+## Available hints (2026-05-16; content_library, library_item, vm_template 2026-11-12)
 
 | Hint | Silhouette | Typical use |
 |---|---|---|
@@ -61,6 +61,13 @@ Output paths inside the pak:
 | `iscsi_lun` | Cylinder (LUN shape) with target/crosshair overlay on top face | iSCSI LUNs |
 | `nfs_export` | Folder shape with share arrow and dual destination nodes | NFS exports, shared folders |
 | `ups` | Rectangular battery body with positive terminal nub and lightning bolt | UPS devices |
+| `content_library` | Three book spines standing on a shelf | vSphere Content Libraries, catalogs, repositories |
+| `library_item` | A document with a folded corner over a small box | Items inside a library (OVF, ISO, file sets) |
+| `vm_template` | A monitor outline inside a dashed stencil border | VM templates, golden images |
+
+Tier 2 (SDK) paks name the file, not the stem, in `icons/icons.yaml`
+(`Content Library: content_library.svg`); `_pack_icons` resolves it
+against the pak's own `icons/` first, then this library.
 
 ## When the library doesn't have a fit
 

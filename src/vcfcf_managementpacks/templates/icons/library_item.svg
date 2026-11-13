@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400">
+  <!-- Library item: a single document with a folded corner over a small box -->
+  <!-- Document body -->
+  <path d="M 124,48 H 236 L 284,96 V 244 H 124 Z" fill="#0098c7" opacity="0.12"/>
+  <path d="M 124,48 H 236 L 284,96 V 244 H 124 Z"
+        fill="none" stroke="#0098c7" stroke-width="16" stroke-linejoin="round"/>
+  <!-- Folded corner -->
+  <path d="M 236,48 V 96 H 284" fill="none" stroke="#005c8a" stroke-width="10" stroke-linejoin="round"/>
+  <!-- Text lines -->
+  <line x1="152" y1="132" x2="256" y2="132" stroke="#005c8a" stroke-width="10" stroke-linecap="round"/>
+  <line x1="152" y1="164" x2="256" y2="164" stroke="#005c8a" stroke-width="10" stroke-linecap="round"/>
+  <line x1="152" y1="196" x2="220" y2="196" stroke="#005c8a" stroke-width="10" stroke-linecap="round"/>
+  <!-- Box below the document -->
+  <rect x="92" y="268" width="216" height="84" rx="8" fill="#0098c7" opacity="0.20"/>
+  <rect x="92" y="268" width="216" height="84" rx="8"
+        fill="none" stroke="#0098c7" stroke-width="14" stroke-linejoin="round"/>
+  <!-- Box lid seam and tape -->
+  <line x1="92" y1="296" x2="308" y2="296" stroke="#005c8a" stroke-width="10"/>
+  <line x1="200" y1="268" x2="200" y2="324" stroke="#005c8a" stroke-width="10" stroke-linecap="round"/>
+</svg>
