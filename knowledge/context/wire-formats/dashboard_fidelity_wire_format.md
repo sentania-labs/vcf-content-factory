@@ -339,6 +339,15 @@ the lines. Check: `Dashboard.external_view_references()` and
 `stock_ids.guard.reference_warnings`. Navigation `dashboard_id:` targets
 are raw dashboard ids too and are still unchecked.
 
+The dependency walker `common/dep_walker.collect_deps` (the third-party
+project-boundary check in `vcfcf_dashboards validate`, discrete builds, the
+bundle composer, navigation targets) records such an id as external
+(`DepGraph.external_views`): nothing to bundle and no error. Before
+2026-11-13 it reported it as an unknown view name, so a third-party project
+could not use the passthrough at all (found running the validation chain on
+`import-local` output). A raw id that is one of the corpus's own views is an
+error there: reference it by name so it is bundled.
+
 ## Keys an older loader ignored
 
 Each key below was read as nothing by the loader before 2026-11-12 (it does

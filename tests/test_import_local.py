@@ -899,3 +899,26 @@ def test_factory_corpus_renders_convert_back_identically(tmp_path, capsys):
     n = len(views) + len(dashes) + len(reports) + len(sms) + len(syms) + len(alerts) + len(recs)
     assert f"compared {n} object(s)" in text, text
     assert f"{n} identical" in text, text
+
+
+# -------------------------------------------- project boundary (dep walker)
+def test_project_boundary_accepts_a_raw_external_view_id(source, tmp_path, capsys):
+    """A converted third-party dashboard that names a product view by raw id
+    (the external-view passthrough) passes the project-boundary walk; one
+    that names its own project's view by raw id is still an error."""
+    from vcfcf_packaging.project import check_project_membership
+    proj = tmp_path / "third_party" / "probe-port"
+    rc, text = _run(source, proj, capsys, "--layout", "third-party", "--ids", "keep", "--naming", "unprefixed")
+    assert rc == 0, text
+    from vcfcf_packaging.loader import load_bundle
+    b = load_bundle(proj / "PROJECT.yaml")
+    for o in b.dashboards + b.views:
+        o.provenance = "probe-port"
+    bare = next(d for d in b.dashboards if d.name == "Probe Bare")
+    assert bare.widgets[0].view_name == STOCK_VIEW_ID
+    errors = check_project_membership(b.dashboards, b.views, b.supermetrics, [], third_party_dir=tmp_path / "third_party")
+    assert not [e for e in errors if "unknown view" in e], errors
+    # the same widget naming the project's own view by raw id: by name is the rule
+    bare.widgets[0].view_name = V_HOST
+    errors = check_project_membership([bare], b.views, b.supermetrics, [], third_party_dir=tmp_path / "third_party")
+    assert any("by its raw id" in e for e in errors), errors
