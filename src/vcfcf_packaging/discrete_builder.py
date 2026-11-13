@@ -751,8 +751,10 @@ def _assemble_zip(
     """Assemble the output zip from a synthetic Bundle, mirroring build_bundle
     (same ``vcfcf_core.packaging.assembly`` layout; only bundle.json,
     the README and the manifest fields are item-shaped)."""
-    # Zip filename follows the same factory prefix convention
-    out_path = output_dir / f"{FACTORY_PREFIX}{display_name}.zip"
+    # Zip filename: "[VCF CF] <title>.zip". The display name usually carries
+    # the prefix already, so strip it (either spelling) before prepending,
+    # or the name doubles it. Release builds rename this to the release slug.
+    out_path = output_dir / f"{FACTORY_PREFIX}{strip_factory_prefix(display_name)}.zip"
     slug = bundle.name
 
     # Static templates
