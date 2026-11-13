@@ -392,6 +392,9 @@ The bounds Property elements sit **after** `isProperty` and
 - Coerce to string at render time. Floats like `0.1` become `"0.1"`;
   booleans become lowercase `"true"`/`"false"` (observed in
   ESXi_Host_Capacity_Details_v6 for `redBound="false"`).
+  On an `is_string_attribute: true` column the bounds are the exact
+  strings written, never floated (2026-11-13;
+  `view_fidelity_wire_format.md` §String-column bounds).
 - Validation rules:
   - If any of the three bounds is set, emit all set ones and
     `ascendingRange`. If only `red_bound` is set (string-match

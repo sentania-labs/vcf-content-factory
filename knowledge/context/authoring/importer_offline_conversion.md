@@ -378,10 +378,11 @@ number through a float (view column bounds and bucket min / max; dashboard
 metric entry bounds and `maxValue`, Scoreboard `boxHeight` and
 `roundDecimals`, ParetoAnalysis and HealthChart bounds, Heatmap colour min
 / max; `accounting._FLOATED`), a value a float does not hold exactly stops
-the object as a GAP rather than ship rounded, and so does a numeric-looking
-bound on a string attribute column that the loader would respell (`"0"`
-written as `"0.0"`, a string match changed). Symptom condition values are not
-floated on the content path and survive exactly.
+the object as a GAP rather than ship rounded. A bound on a string attribute
+column is not a number: it is written and rendered as the exact source
+string (`"0"` stays `"0"`; view fidelity doc §String-column bounds; until
+2026-11-13 the loader respelled it and the view stopped as a GAP). Symptom
+condition values are not floated on the content path and survive exactly.
 
 Limits, each a place a difference can still pass or a check the run does not
 make:
@@ -459,27 +460,24 @@ preferred). Each run takes 2 to 4 seconds.
 - `--ids keep`: every one of the 274 objects maps (no GAP); the stock-id
   guard refuses 120 stock ids among them, nothing written.
 - With the 101-entry id map and the 19-entry drop list, third-party layout:
-  166 views, 50 dashboards, 15 templates, 10 symptoms, 4 alerts, 1
-  recommendation and 2 super metrics convert. 4 views stop on a GAP: a
-  numeric-looking bound (`"0"`, `"1"`) on a string attribute column, which
-  the view loader writes as `"0.0"` / `"1.0"` ("Report: vSphere Clusters for
-  CSV Export", "vSphere Port Group Configuration", "vSphere Cluster
-  Configuration List", "ESXi Cluster Settings"); 2 dashboards and 1
-  template cascade from them. 248 objects and 42,445 fields compared: 148
-  identical, 100 differ only at recorded losses, 0 differ. The losses:
-  Description whitespace on 51 views and 10 templates, `adapterName` on 32 dashboards,
+  every object converts: 170 views, 52 dashboards, 16 templates, 10
+  symptoms, 4 alerts, 1 recommendation and 2 super metrics (the 4 views
+  with a numeric-looking bound on a string attribute column, and the 2
+  dashboards and 1 template on them, stopped until 2026-11-13). 255 objects
+  and 46,117 fields compared: 152 identical, 103 differ only at recorded
+  losses, 0 differ. The losses:
+  Description whitespace on 51 views and 11 templates, `adapterName` on 34 dashboards,
   a buckets-control on 5 list views, a `config.widgetId` naming no widget of
   its dashboard on 3, stale navigations on 3, metric label whitespace on 2
   (11 Scoreboard labels), and one each of tab-name whitespace, formula
   whitespace, `displayName` `localizationKey`, Title / Description
   `localizationKey` and empty `preferredUnitId`. 11 view names lose trailing
   whitespace (recorded renames). The run exits 1 because losses were
-  recorded and 4 views stop; with `--allow-partial` it exits 0 and writes the
-  248 that convert.
-- The same as a pak with `--target-min 8.18.7`: the same objects; 142
+  recorded; with `--allow-partial` it exits 0 and writes all 255.
+- The same as a pak with `--target-min 8.18.7`: the same objects; 146
   identical, 6 identical apart from forced keys (`temporary` is forced on 11
   dashboards, the folder in the name and `widgetInteractions` on one each),
-  100 differ only at recorded losses, 0 differ. "Overall Daily Check" and
+  103 differ only at recorded losses, 0 differ. "Overall Daily Check" and
   "vSphere Cluster Capacity 2.0" carry Sections, so they are not deliverable
   to 8.18.7, and the pak layout never accepts that: the run exits 1 even
   with `--allow-partial` (raise the target to 9.1.1 or drop them).
@@ -489,16 +487,16 @@ preferred). Each run takes 2 to 4 seconds.
   differ.
 
 9.1.1 built-in export, views, report templates and dashboards (851 + 62 +
-179), `--ids mint`, third-party layout: no internal error. 752 views, 55
-templates and 43 dashboards convert (850 compared: 62 identical, 783 differ
+179), `--ids mint`, third-party layout: no internal error. 756 views, 56
+templates and 43 dashboards convert (855 compared: 62 identical, 788 differ
 only at recorded losses, mostly the Title / Description and `displayName`
 `localizationKey` and empty `preferredUnitId`, 5 dashboards differ at real
 mismatches: TextDisplay `editorData`, HealthChart bounds and
-`relationshipMode`, a View state value); 99
-views stop (4 of them on a string attribute bound the loader respells) on the gaps listed above (fractional `percentile`, text views,
+`relationshipMode`, a View state value); 95
+views stop on the gaps listed above (fractional `percentile`, text views,
 `relatedAdapterKind` columns, a metadata control without
 `hideObjectNameColumn` ...), 134 dashboards on their own gaps (unmodeled
-widget types, renderer constants) and 2 dashboards and 7 templates cascade.
+widget types, renderer constants) and 2 dashboards and 6 templates cascade.
 The dashboards alone: 46 of 179 convert (4 identical, 36 only at recorded
 losses, 6 differ at real mismatches verification reports); 133 stop, 26 of
 them on widget types the schema does not model.

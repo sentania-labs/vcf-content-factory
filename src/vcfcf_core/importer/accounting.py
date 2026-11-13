@@ -503,7 +503,7 @@ for _rows in STRIPPED_TEXT.values():
 _FLOATED = {
     "view": [
         (f"{_COL}/Property{{(yellowBound|orangeBound|redBound)}}@value",
-         "dashboards.loader._load_column: _maybe_float on every bound"),
+         "dashboards.loader._load_column: _maybe_float on every bound of a column that is not a string attribute"),
         (f"{_BKT}/Property{{(minValue|maxValue)}}@value", "dashboards.loader._load_view: buckets min_value / max_value"),
     ],
     "dashboard": [
@@ -526,6 +526,10 @@ def _float_problem(type_: str, path: str, value, leaves) -> Optional[str]:
     ev = next((e for rx, e in _FLOATED_RX.get(type_, ()) if rx.fullmatch(g)), None)
     if ev is None or isinstance(value, bool) or value is None:
         return None
+    if type_ == "view":
+        from .compare import string_attribute_bound
+        if string_attribute_bound(path, leaves):
+            return None  # a string-column bound is a string: the loader keeps it verbatim
     if isinstance(value, (int, float)):
         text = repr(value)
     elif isinstance(value, str):
@@ -546,10 +550,6 @@ def _float_problem(type_: str, path: str, value, leaves) -> Optional[str]:
         exact = False
     if not exact:
         return f"the loader reads it through float, which holds {f!r}, not {text} ({ev})"
-    if (type_ == "view" and isinstance(value, str) and str(f) != value
-            and leaves.get(path.rsplit("/", 1)[0] + "/Property{isStringAttribute}@value") == "true"):
-        return (f"a bound on a string attribute column is matched as a string, and the loader writes {value!r} "
-                f"as {str(f)!r} ({ev})")
     return None
 
 
