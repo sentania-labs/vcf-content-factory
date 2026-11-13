@@ -70,9 +70,9 @@ widgets:
   type: ResourceList
   ...
   navigations:
-  - dashboard: "[VCF Content Factory] Cluster Detail"     # factory dashboard, by exact name
+  - dashboard: "[VCF CF] Cluster Detail"     # factory dashboard, by exact name
     widgets: [cluster_picker, cluster_metrics]            # local ids on the target
-  - dashboard: "[VCF Content Factory] Capacity Assessment & Right-Sizing"
+  - dashboard: "[VCF CF] Capacity Assessment & Right-Sizing"
   - dashboard_id: 533e14ed-2796-4ead-a644-468beb6396f8    # raw id escape hatch
     label: Cluster Performance                             # documentation only
 ```

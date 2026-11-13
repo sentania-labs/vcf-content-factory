@@ -11,8 +11,11 @@ Environment Overview (issue #198).
 
 ## Rule
 
-The `[VCF Content Factory] ` prefix uses 22 of the 50, leaving 28 for the
-title, so pick the title with that budget from the start.
+The `[VCF CF] ` prefix uses 9 of the 50, leaving 41 for the title, so
+pick the title with that budget from the start. (Until 2026-11-12 the
+prefix was `[VCF Content Factory] `, which spent 22 and left 28; the
+prefix was shortened for this reason, see
+`knowledge/context/authoring/prefix_migration.md`.)
 
 Renaming later is expensive: dashboard import identity is the name, so
 renaming an installed dashboard ships a second dashboard beside the old one
@@ -21,9 +24,11 @@ needs an explicit go.
 
 ## Guard
 
-Validate warns through `DASHBOARD_NAME_MAX_LEN` in
-`src/vcfcf_core/dashboards/loader.py`. It is a warning, not an error, until
-the existing over-length dashboards are renamed: four factory dashboards
+Validate checks `DASHBOARD_NAME_MAX_LEN` in
+`src/vcfcf_core/dashboards/loader.py`. Since the prefix change it is an
+error for a factory-prefixed dashboard and stays a warning for unprefixed
+and third-party dashboards, whose names come from their source. Before
+the change it was a warning only, because four factory dashboards
 (capacity_assessment, demand_driven_capacity_v2, summary_widget_smoke,
 vcf_license_consumption_overview) and two compliance pak dashboards were
-over the limit on 2026-10-18.
+over the limit on 2026-10-18; all six fit with the shorter prefix.

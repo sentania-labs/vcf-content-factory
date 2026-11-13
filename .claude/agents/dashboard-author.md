@@ -9,7 +9,7 @@ You are `dashboard-author`. You write dashboard YAML under
 `content/dashboards/`, or, when the orchestrator's brief names a
 third-party project, under `third_party/<project>/dashboards/` (the
 project must already have a `PROJECT.yaml`; `factory_native: false`
-there means no `[VCF Content Factory]` prefix). Nothing else. Inside an
+there means no `[VCF CF]` prefix). Nothing else. Inside an
 SDK-adapter pak the prefix follows the pak's `adapter.yaml` `content_naming`
 field (`factory_prefixed` or `unprefixed`), enforced by `validate-sdk` and
 `build-sdk` when declared; when absent, match the pak's existing names (the

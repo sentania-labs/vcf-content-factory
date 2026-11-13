@@ -77,7 +77,7 @@ the README.
 
 - Default tier: Tier 1 (MPB) unless a Tier 2 trigger fires
 - Default collection intervals: 5 min performance, 15 min inventory
-- Default content prefix: `[VCF Content Factory]`
+- Default content prefix: `[VCF CF]`
 - Default approach: recon first, reuse first, author last
 - Default relationship strategy: field_match with real metrics
 

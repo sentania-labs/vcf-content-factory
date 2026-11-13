@@ -2,6 +2,30 @@ Portable Tier 2 SDK adapter build toolchain (jar-free).
 
 <!-- Order: "Behavior since" sections newest first, so the latest release is at the top. Add a new release's section directly below this comment. The standing reference sections (Consumer contract, Version pinning, Checksum) stay at the end. -->
 
+## Behavior since 1.0.29
+
+- The factory content-name prefix is `[VCF CF] ` (it was
+  `[VCF Content Factory] `). A pak whose `adapter.yaml` declares
+  `content_naming: factory_prefixed`, or declares nothing, must carry the
+  new prefix on every bundled name. A bundled name in the old spelling
+  fails `validate-sdk` and `build-sdk` in every pak, declared or not, with
+  a message naming the file and the fix. `content_naming: unprefixed` paks
+  are unaffected.
+- To move a pak: from a factory clone run
+  `python3 -m vcfcf_common migrate-prefix <pak dir>` (the kit does not ship
+  the command), then bump `BUILDKIT_TAG` and its `SHA256SUMS`. Ids derived
+  from names (alert definitions, symptoms without an `id:`, dashboard
+  widget ids) are computed from the old spelling on purpose, so they do not
+  change with the rename.
+- A factory-prefixed dashboard name over 50 characters is now a build
+  error (41 characters remain for the title). Unprefixed dashboards still
+  get a warning.
+- On an instance that already has the pak, an upgrade renames views,
+  symptoms, alerts and recommendations in place. Dashboards are matched by
+  name on import, so an old-named copy may remain beside the new one; the
+  factory's `python3 -m vcfcf_common cleanup-legacy-prefix` lists and
+  removes exact old-name twins (dry run by default).
+
 ## Behavior since 1.0.28
 
 - Release builds accept only SDK jars the kit knows (factory issue #343). A

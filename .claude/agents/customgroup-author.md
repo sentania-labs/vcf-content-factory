@@ -78,7 +78,7 @@ authoritative."
 ## YAML schema
 
 ```yaml
-name: "[VCF Content Factory] <Human Name>"
+name: "[VCF CF] <Human Name>"
 description: >
   Why this group exists.
 type: Environment

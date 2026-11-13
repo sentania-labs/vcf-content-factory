@@ -47,7 +47,7 @@ Drive a conversational flow to pull a dashboard and its dependencies off the liv
 Ask these questions in order. Accept free-form answers; don't coerce. Defaults are suggestions only.
 
 1. **Bundle slug** — kebab-case short identifier used as the directory name under `bundles/third_party/` and the manifest filename.
-   - Default: slugified dashboard name with the `[VCF Content Factory]` prefix stripped if present, lowercased, spaces→hyphens, non-alphanum stripped.
+   - Default: slugified dashboard name with the `[VCF CF]` prefix stripped if present, lowercased, spaces→hyphens, non-alphanum stripped.
    - Example: `IDPS Planner` → `idps-planner`.
 2. **Author / attribution** — free-form string shown in the bundle README.
    - Example: `"Scott Bowe"` or `"Community — Various"` or `"Brock Peterson (Broadcom)"`.
@@ -133,7 +133,7 @@ Final summary:
 
 ## Safety
 
-- Never run `/extract` against a dashboard UUID that's in the factory's first-party `dashboards/` tree (check by UUID before extracting). Extracted content mirrors factory-authored content with lower naming-convention guarantees; overwriting first-party content would break the `[VCF Content Factory]` identity invariant.
+- Never run `/extract` against a dashboard UUID that's in the factory's first-party `dashboards/` tree (check by UUID before extracting). Extracted content mirrors factory-authored content with lower naming-convention guarantees; overwriting first-party content would break the `[VCF CF]` identity invariant.
 - The extractor is READ-ONLY against the live lab. No `remove`, no upload, no pak-lifecycle touches.
 - If the lab is in a stuck `isPakInstalling` state, `/extract` is STILL safe — it uses `/ui/dashboard.action` Struts GETs and `/api/supermetrics` REST GETs, neither of which touches the pak state machine.
 

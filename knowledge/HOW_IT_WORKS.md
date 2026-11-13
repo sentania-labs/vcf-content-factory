@@ -31,7 +31,7 @@ both names and UUIDs. Authoring it correctly requires knowing:
   `sm_<uuid>` strings; views in dashboards resolve to view UUIDs;
   symptoms in alerts resolve to names then to server-assigned IDs).
 - The validation rules (factory-emits-derived-key trap;
-  `[VCF Content Factory]` prefix; `instanced="true"` is Tier 2 only;
+  `[VCF CF]` prefix; `instanced="true"` is Tier 2 only;
   ARIA_OPS stitching gotchas).
 - The live instance's state (existing content, enabled super
   metrics, available adapter kinds).
