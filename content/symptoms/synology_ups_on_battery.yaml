@@ -1,4 +1,4 @@
-name: "[VCF Content Factory] Synology UPS On Battery"
+name: "[VCF CF] Synology UPS On Battery"
 # TODO: verify resource kind prefix at install-verification time
 # (MPB may expose this as mpb_synology_dsm_ups rather than ups)
 adapter_kind: mpb_synology_dsm

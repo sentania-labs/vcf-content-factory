@@ -1,4 +1,4 @@
-name: "[VCF Content Factory] Synology Storage Pool Health Remediation"
+name: "[VCF CF] Synology Storage Pool Health Remediation"
 description: |
   For a DEGRADED pool: the pool has lost redundancy, at least one member
   disk has failed. The pool is still accessible but a second disk failure

@@ -1,5 +1,5 @@
 id: faabf549-64c8-4003-afcc-8966f18f3eb6
-name: "[VCF Content Factory] Datastore Reclaimable Space"
+name: "[VCF CF] Datastore Reclaimable Space"
 description: >
   Per-datastore capacity and reclaimable-space list. Columns cover total
   capacity, used percentage, free space, snapshot space consumed, and

@@ -1,4 +1,4 @@
-name: "[VCF Content Factory] Synology Volume Space Alert"
+name: "[VCF CF] Synology Volume Space Alert"
 description: >
   Alerts when a Synology volume is running low on space. Uses a two-tier
   model: Volume Low Space fires at above 85% usage (WARNING) providing
@@ -26,13 +26,13 @@ symptom_sets:
     - defined_on: SELF
       operator: ALL
       symptoms:
-        - name: "[VCF Content Factory] Synology Volume Low Space"
+        - name: "[VCF CF] Synology Volume Low Space"
 
     - defined_on: SELF
       operator: ALL
       symptoms:
-        - name: "[VCF Content Factory] Synology Volume Critical"
+        - name: "[VCF CF] Synology Volume Critical"
 
 recommendations:
-  - name: "[VCF Content Factory] Synology Volume Space Remediation"
+  - name: "[VCF CF] Synology Volume Space Remediation"
     priority: 1

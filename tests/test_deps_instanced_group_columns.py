@@ -139,7 +139,7 @@ def _write_view(tmp_path: Path, data: dict, stem: str = "view") -> Path:
 
 def _snapshot_style_view_data() -> dict:
     return {
-        "name": "[VCF Content Factory] Instanced Group Audit Test",
+        "name": "[VCF CF] Instanced Group Audit Test",
         "description": "",
         "subject": {"adapter_kind": "VMWARE", "resource_kind": "VirtualMachine"},
         "columns": [

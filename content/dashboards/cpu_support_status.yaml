@@ -19,7 +19,7 @@ interactions:
 - from: cpu_support_status_cluster_view
   to: cpu_support_status_view
   type: resourceId
-name: '[VCF Content Factory] CPU Support Status'
+name: '[VCF CF] CPU Support Status'
 released: true
 version: 1.0.0
 widgets:
@@ -47,7 +47,7 @@ widgets:
   title: 'CPU Support Status by Cluster (worst status: 0=supported 1=deprecated 2=discontinued
     9.2 3=discontinued 4=unsupported (pre-9.0), KB 318697)'
   type: View
-  view: '[VCF Content Factory] CPU Support Status by Cluster'
+  view: '[VCF CF] CPU Support Status by Cluster'
 - coords:
     h: 12
     w: 12
@@ -57,4 +57,4 @@ widgets:
   title: CPU Support Status by Host (0=supported 1=deprecated 2=discontinued 9.2 3=discontinued
     4=unsupported (pre-9.0), KB 318697)
   type: View
-  view: '[VCF Content Factory] CPU Support Status by Host'
+  view: '[VCF CF] CPU Support Status by Host'

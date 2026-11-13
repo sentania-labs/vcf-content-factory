@@ -1,5 +1,5 @@
 id: 55ef6c51-3b90-4a6e-800a-983d2e86a8a5
-name: "[VCF Content Factory] Storage Active Path Count"
+name: "[VCF CF] Storage Active Path Count"
 resource_kinds:
   - resource_kind_key: HostSystem
     adapter_kind_key: VMWARE

@@ -1,4 +1,4 @@
-name: "[VCF Content Factory] Synology Storage Pool Health Alert"
+name: "[VCF CF] Synology Storage Pool Health Alert"
 description: >
   Alerts when a Synology storage pool is in a degraded or crashed state.
   Both conditions are CRITICAL severity. A degraded pool has lost redundancy
@@ -25,13 +25,13 @@ symptom_sets:
     - defined_on: SELF
       operator: ALL
       symptoms:
-        - name: "[VCF Content Factory] Synology Storage Pool Degraded"
+        - name: "[VCF CF] Synology Storage Pool Degraded"
 
     - defined_on: SELF
       operator: ALL
       symptoms:
-        - name: "[VCF Content Factory] Synology Storage Pool Crashed"
+        - name: "[VCF CF] Synology Storage Pool Crashed"
 
 recommendations:
-  - name: "[VCF Content Factory] Synology Storage Pool Health Remediation"
+  - name: "[VCF CF] Synology Storage Pool Health Remediation"
     priority: 1

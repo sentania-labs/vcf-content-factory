@@ -1,5 +1,5 @@
 id: a7becc4c-22f4-4946-acf9-6cb559672544
-name: "[VCF Content Factory] CPU Support Status (KB318697)"
+name: "[VCF CF] CPU Support Status (KB318697)"
 resource_kinds:
   - resource_kind_key: HostSystem
     adapter_kind_key: VMWARE

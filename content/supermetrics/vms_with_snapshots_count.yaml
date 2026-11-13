@@ -1,12 +1,12 @@
 id: 77dca431-01ec-4a7c-824e-275908b89472
-name: "[VCF Content Factory] VMs with Snapshots (Count)"
+name: "[VCF CF] VMs with Snapshots (Count)"
 resource_kinds:
   - resource_kind_key: vSphere World
     adapter_kind_key: VMWARE
 description: >
   Fleet-wide count of VMWARE VirtualMachine descendants carrying at least
   one AGED snapshot, assigned to vSphere World so it computes once per
-  fleet. Aligned with the companion "[VCF Content Factory] VM Snapshot
+  fleet. Aligned with the companion "[VCF CF] VM Snapshot
   Inventory" view's row population, which surfaces only snapshots whose
   instanced numberOfDays > 0 (a snapshot's instanced properties, incl.
   Age, populate once the snapshot is 24 hours old; RECLAIM_SNAPSHOTS_DAYS

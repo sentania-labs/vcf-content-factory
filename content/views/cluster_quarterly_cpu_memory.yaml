@@ -1,5 +1,5 @@
 id: d3d4e151-65c3-4266-8e72-366953c6e7e1
-name: "[VCF Content Factory] Cluster Quarterly CPU & Memory Demand"
+name: "[VCF CF] Cluster Quarterly CPU & Memory Demand"
 description: >
   Per-cluster CPU and memory demand statistics over a 90-day rolling window
   for quarterly executive capacity review. Columns cover average, maximum, and 95th

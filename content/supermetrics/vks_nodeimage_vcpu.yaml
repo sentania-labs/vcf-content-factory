@@ -1,5 +1,5 @@
 id: dd8a6df8-7454-4b8e-a6fe-65a662f9cbd4
-name: "[VCF Content Factory] VKS Node Image vCPU (count)"
+name: "[VCF CF] VKS Node Image vCPU (count)"
 resource_kinds:
   - resource_kind_key: ClusterComputeResource
     adapter_kind_key: VMWARE

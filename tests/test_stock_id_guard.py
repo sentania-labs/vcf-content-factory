@@ -596,6 +596,9 @@ def test_generator_purity_rules():
         # factory marker on two instances: candidate
         _obs("view", "v-fac", "[VCF Content Factory] Mine", "A", "8.18.7"),
         _obs("view", "v-fac", "[VCF Content Factory] Mine", "B", "9.1.1"),
+        # the current factory prefix is a marker too
+        _obs("view", "v-fac-cf", "[VCF CF] Mine", "A", "8.18.7"),
+        _obs("view", "v-fac-cf", "[VCF CF] Mine", "B", "9.1.1"),
         # factory id without a marker: candidate
         _obs("view", "v-minted", "Unmarked", "A", "8.18.7"),
         _obs("view", "v-minted", "Unmarked", "B", "9.1.1"),
@@ -634,13 +637,14 @@ def test_generator_purity_rules():
     reasons = {c.id: c.reason for c in build.candidates}
     assert "one clean instance" in reasons["v-one"]
     assert "marker" in reasons["v-fac"]
+    assert "[VCF CF]" in reasons["v-fac-cf"]
     assert "factory id" in reasons["v-minted"]
     assert "custom-scope" in reasons["d-custom"]
     assert "installed-pak is installed" in reasons["v-pak1"]
     assert "localizationKey" in reasons["v-copied-raw"]
     assert "adapter kind" in reasons["AlertDefinition-mypak-x"]
     assert "needs two" in reasons["AlertDefinition-one"]
-    assert build.baseline["candidates_not_included"]["view"] == 6
+    assert build.baseline["candidates_not_included"]["view"] == 7
 
 
 def test_generator_policy_copies_are_not_observations():

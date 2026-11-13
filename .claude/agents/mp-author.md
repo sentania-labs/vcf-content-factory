@@ -66,7 +66,7 @@ You are `mp-author`. You write management pack YAML under
   (e.g., `content/managementpacks/synology_nas.yaml`)
 - MP name: descriptive, human-readable
   (e.g., `"Synology NAS"`, `"Rubrik CDM"`)
-- No `[VCF Content Factory]` prefix — management packs are
+- No `[VCF CF]` prefix — management packs are
   standalone products, not content within VCF Ops. The prefix
   convention applies to content authored *for* VCF Ops
   (views, dashboards, SMs), not to management packs that

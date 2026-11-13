@@ -2,7 +2,7 @@
 name: vcfops-project-conventions
 description: >
   Project-specific conventions for the VCF Content Factory repo.
-  Covers the [VCF Content Factory] naming prefix, YAML schema
+  Covers the [VCF CF] naming prefix, YAML schema
   conventions, validation commands, the TOOLSET GAP reporting
   format, and the recon-before-authoring requirement. Use this
   skill whenever authoring content in this repo, reporting gaps,
@@ -19,10 +19,10 @@ description: >
 ## Naming prefix
 
 Every content object this repo creates has its display name
-prefixed with `[VCF Content Factory] ` (literal brackets, one
+prefixed with `[VCF CF] ` (literal brackets, one
 space after).
 
-Example: `[VCF Content Factory] Cluster - Avg Powered-On VM CPU Usage (%)`
+Example: `[VCF CF] Cluster - Avg Powered-On VM CPU Usage (%)`
 
 - Do NOT invent alternate prefixes.
 - `[AI Content]` is a legacy name and must NOT be reintroduced.

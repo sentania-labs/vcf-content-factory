@@ -220,7 +220,7 @@ class TestDiscreteBuildRegressionNoField:
         out_dir = tmp_path / "out"
         zip_path = build_discrete(
             content_type="dashboard",
-            item_name="[VCF Content Factory] Demand-Driven Capacity Planning v2",
+            item_name="[VCF CF] Demand-Driven Capacity Planning v2",
             output_dir=out_dir,
             skip_audit=True,
         )
@@ -359,7 +359,7 @@ class TestAuditGateRegressionRealContent:
         which runs before render_views_xml() resolves them to sm_<uuid>."""
         zip_path = build_discrete(
             content_type="dashboard",
-            item_name="[VCF Content Factory] CPU Support Status",
+            item_name="[VCF CF] CPU Support Status",
             output_dir=tmp_path / "out",
             skip_audit=False,
             live_describe=False,
@@ -370,7 +370,7 @@ class TestAuditGateRegressionRealContent:
         """B1 regression on a second SM-backed view."""
         zip_path = build_discrete(
             content_type="dashboard",
-            item_name="[VCF Content Factory] Quarterly Capacity Review",
+            item_name="[VCF CF] Quarterly Capacity Review",
             output_dir=tmp_path / "out",
             skip_audit=False,
             live_describe=False,
@@ -395,7 +395,7 @@ class TestAuditGateRegressionRealContent:
         manifest's declarations (via the build-discrete CLI wiring)."""
         zip_path = build_discrete(
             content_type="dashboard",
-            item_name="[VCF Content Factory] VM Snapshot Inventory",
+            item_name="[VCF CF] VM Snapshot Inventory",
             output_dir=tmp_path / "out",
             skip_audit=False,
             live_describe=False,
@@ -407,7 +407,7 @@ class TestAuditGateRegressionRealContent:
         since _refs_from_view is the function B2 fixes."""
         zip_path = build_discrete(
             content_type="view",
-            item_name="[VCF Content Factory] VM Snapshot Inventory",
+            item_name="[VCF CF] VM Snapshot Inventory",
             output_dir=tmp_path / "out",
             skip_audit=False,
             live_describe=False,
@@ -430,7 +430,7 @@ class TestAuditGateRegressionRealContent:
 
         args = SimpleNamespace(
             content_type="dashboard",
-            item_name="[VCF Content Factory] VM Snapshot Inventory",
+            item_name="[VCF CF] VM Snapshot Inventory",
             output_dir=str(tmp_path / "out"),
             strict_deps=True,
             lax_deps=False,

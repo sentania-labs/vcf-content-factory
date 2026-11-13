@@ -131,7 +131,7 @@ def test_factory_column_still_resolves_to_the_factory_sm(monkeypatch, tmp_path):
     """A factory view never sees a third-party SM of the same name."""
     _repo(tmp_path)
     view = _load_view(_write_view(
-        tmp_path / "content/views/v.yaml", "[VCF Content Factory] V", SHARED))
+        tmp_path / "content/views/v.yaml", "[VCF CF] V", SHARED))
     rc, blob = _package(monkeypatch, tmp_path, [view])
     assert rc == 0
     xml = _views_xml(blob)
@@ -144,7 +144,7 @@ def test_mixed_import_binds_each_view_to_its_own_set(monkeypatch, tmp_path):
     tp = _load_view(_write_view(
         tmp_path / "third_party/acme/views/v.yaml", "[Acme] View", SHARED))
     fac = _load_view(_write_view(
-        tmp_path / "content/views/v.yaml", "[VCF Content Factory] V", SHARED))
+        tmp_path / "content/views/v.yaml", "[VCF CF] V", SHARED))
     rc, blob = _package(monkeypatch, tmp_path, [tp, fac])
     assert rc == 0
     xml = _views_xml(blob)
@@ -580,7 +580,7 @@ def _validate(monkeypatch, tmp_path, sm_name: str) -> int:
     from vcfcf_dashboards.cli import main
 
     _write_view(tmp_path / "content/views/v.yaml",
-                "[VCF Content Factory] Column Probe View", sm_name)
+                "[VCF CF] Column Probe View", sm_name)
     monkeypatch.chdir(tmp_path)
     return main([
         "--views-dir", str(tmp_path / "content/views"),

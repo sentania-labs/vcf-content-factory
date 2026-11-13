@@ -1,5 +1,5 @@
 id: b16e3bb4-b8aa-4844-af10-d9b30702318a
-name: "[VCF Content Factory] Regular VM vCPU (count)"
+name: "[VCF CF] Regular VM vCPU (count)"
 resource_kinds:
   - resource_kind_key: ClusterComputeResource
     adapter_kind_key: VMWARE

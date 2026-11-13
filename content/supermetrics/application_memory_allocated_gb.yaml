@@ -1,5 +1,5 @@
 id: 47d5fc8f-9b31-4e0e-a4bb-02d418723bf8
-name: "[VCF Content Factory] Application Memory Allocated (GB)"
+name: "[VCF CF] Application Memory Allocated (GB)"
 resource_kinds:
   - resource_kind_key: "(Custom) Application"
     adapter_kind_key: Container

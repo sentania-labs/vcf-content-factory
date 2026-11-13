@@ -1,4 +1,4 @@
-name: "[VCF Content Factory] Host Compliance Remediate via SCG or CIS Benchmark"
+name: "[VCF CF] Host Compliance Remediate via SCG or CIS Benchmark"
 description: |
   Use the VMware Security Configuration Guide (SCG) or CIS Benchmark
   documentation to understand the remediation steps for each failing control.

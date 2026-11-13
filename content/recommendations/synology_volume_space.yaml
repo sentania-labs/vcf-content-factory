@@ -1,4 +1,4 @@
-name: "[VCF Content Factory] Synology Volume Space Remediation"
+name: "[VCF CF] Synology Volume Space Remediation"
 description: |
   Free space on the volume immediately. At the CRITICAL threshold (above
   95% usage), data writes are likely to begin failing and services

@@ -30,7 +30,7 @@ def _write_view(tmp_path: Path, data: dict, stem: str = "view") -> Path:
 
 def _view_data(description: str) -> dict:
     return {
-        "name": "[VCF Content Factory] Description Length Test",
+        "name": "[VCF CF] Description Length Test",
         "description": description,
         "subject": {"adapter_kind": "VMWARE", "resource_kind": "VirtualMachine"},
         "columns": [

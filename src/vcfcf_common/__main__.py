@@ -8,6 +8,10 @@ Subcommands:
             so no hook or pipe can ever feed it a password.
   keydiff: read-only key differential between two instances or two
             saved snapshots (a port's parity check).
+  migrate-prefix: rewrite the retired "[VCF Content Factory]" content-name
+            prefix to "[VCF CF]" in a factory checkout or pak repo.
+  cleanup-legacy-prefix: list (default) or delete the old-named copies a
+            prefix rename left on an instance.
 """
 from __future__ import annotations
 
@@ -31,6 +35,17 @@ subcommands:
             acquire and release). Exits 0 only when objects and keys were
             compared and nothing differs. `keydiff --help` for the options
             and exit codes.
+  migrate-prefix [ROOT] [--dry-run] [--force]
+            rewrite the retired "[VCF Content Factory]" content-name
+            prefix to "[VCF CF]" in names and by-name references.
+  cleanup-legacy-prefix [ROOT] --profile NAME [--dry-run] [--types KINDS]
+                        [--apply --plan-digest DIGEST]
+            list the old-named copies a prefix rename left on an
+            instance (the default, a dry run that prints a plan
+            digest); --apply --plan-digest DIGEST deletes exactly the
+            reviewed plan. --profile is required unless VCFOPS_PROFILE
+            is set. KINDS: comma-separated, from report, dashboard,
+            view, alert, symptom, customgroup, supermetric.
 """
 
 
@@ -48,6 +63,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if args[0] == "keydiff":
         from .keydiff import main as keydiff_main  # noqa: PLC0415
         return keydiff_main(args[1:])
+    if args[0] == "migrate-prefix":
+        from .migrate_prefix import main as migrate_main  # noqa: PLC0415
+        return migrate_main(args[1:])
+    if args[0] == "cleanup-legacy-prefix":
+        from .legacy_cleanup import main as cleanup_main  # noqa: PLC0415
+        return cleanup_main(args[1:])
     print(f"unknown subcommand: {args[0]}", file=sys.stderr)
     print(_USAGE, end="", file=sys.stderr)
     return 2

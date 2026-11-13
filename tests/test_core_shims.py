@@ -228,7 +228,7 @@ def test_loader_wrapper_keeps_minting_and_provenance_on_the_factory_side(tmp_pat
 
     view = tmp_path / "v.yaml"
     view.write_text(
-        "name: \"[VCF Content Factory] Row2 Mint Probe\"\n"
+        "name: \"[VCF CF] Row2 Mint Probe\"\n"
         "subject: {adapter_kind: VMWARE, resource_kind: HostSystem}\n"
         "columns:\n  - {display_name: CPU, attribute: cpu|usage_average}\n",
         encoding="utf-8",
@@ -272,13 +272,13 @@ def test_core_loader_validates_the_minted_id_like_a_yaml_id(tmp_path, garbage) -
 
     view = tmp_path / "v.yaml"
     view.write_text(
-        "name: \"[VCF Content Factory] Row2 Garbage Mint Probe\"\n"
+        "name: \"[VCF CF] Row2 Garbage Mint Probe\"\n"
         "subject: {adapter_kind: VMWARE, resource_kind: HostSystem}\n"
         "columns:\n  - {display_name: CPU, attribute: cpu|usage_average}\n",
         encoding="utf-8",
     )
     dash = tmp_path / "d.yaml"
-    dash.write_text("name: \"[VCF Content Factory] Row2 Garbage Mint Dash\"\nwidgets: []\n", encoding="utf-8")
+    dash.write_text("name: \"[VCF CF] Row2 Garbage Mint Dash\"\nwidgets: []\n", encoding="utf-8")
 
     def bad_minter(path):
         return garbage

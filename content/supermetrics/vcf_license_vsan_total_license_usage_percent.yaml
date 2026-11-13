@@ -1,5 +1,5 @@
 id: c99ede65-6c99-4419-9054-a0f26a788144
-name: "[VCF Content Factory] vSAN Total License Usage (%)"
+name: "[VCF CF] vSAN Total License Usage (%)"
 resource_kinds:
   - resource_kind_key: LICENSE_USAGE_WORLD
     adapter_kind_key: VMWARE_INFRA_HEALTH
@@ -9,9 +9,8 @@ description: >
   "License Usage") and computes usage / capacity * 100 by referencing
   the two sibling super metrics rather than re-summing the raw
   LicenseUsage keys, so the product-string where-clause filter lives
-  in one place: "[VCF Content Factory] vSAN Total License Usage
-  (TiB)" (numerator, sums Assets|TotalUsage) and "[VCF Content
-  Factory] vSAN Total License Capacity (TiB)" (denominator, sums
+  in one place: "[VCF CF] vSAN Total License Usage
+  (TiB)" (numerator, sums Assets|TotalUsage) and "[VCF CF] vSAN Total License Capacity (TiB)" (denominator, sums
   CostUnitAttributes|CostUnitLimit). Both siblings filter to
   ProductId startsWith "vSAN" and must be authored, imported, and
   policy-enabled on LICENSE_USAGE_WORLD before this super metric
@@ -37,5 +36,5 @@ description: >
   the License Overview scoreboard (vSAN License Usage %) and the VCF
   Licensing Overtime month table (unit percent).
 formula: |
-  (${this, metric=@supermetric:"[VCF Content Factory] vSAN Total License Usage (TiB)"}
-   / ${this, metric=@supermetric:"[VCF Content Factory] vSAN Total License Capacity (TiB)"}) * 100
+  (${this, metric=@supermetric:"[VCF CF] vSAN Total License Usage (TiB)"}
+   / ${this, metric=@supermetric:"[VCF CF] vSAN Total License Capacity (TiB)"}) * 100

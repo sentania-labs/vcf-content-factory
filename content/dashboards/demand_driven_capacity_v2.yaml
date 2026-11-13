@@ -27,7 +27,7 @@ interactions:
 - from: cluster_overview
   to: host_vsan
   type: resourceId
-name: '[VCF Content Factory] Demand-Driven Capacity Planning v2'
+name: '[VCF CF] Demand-Driven Capacity Planning v2'
 released: true
 widgets:
 - coords:
@@ -53,7 +53,7 @@ widgets:
   id: cluster_overview
   title: Cluster Demand & Capacity Overview
   type: View
-  view: '[VCF Content Factory] Cluster Demand & Capacity Overview v2'
+  view: '[VCF CF] Cluster Demand & Capacity Overview v2'
 - coords:
     h: 8
     w: 3
@@ -175,7 +175,7 @@ widgets:
   id: host_outliers
   title: Host Contention Outliers
   type: View
-  view: '[VCF Content Factory] Host Contention Outliers'
+  view: '[VCF CF] Host Contention Outliers'
 - coords:
     h: 7
     w: 6
@@ -184,7 +184,7 @@ widgets:
   id: vm_contention
   title: VM Contention
   type: View
-  view: '[VCF Content Factory] VM Contention v2'
+  view: '[VCF CF] VM Contention v2'
 - coords:
     h: 7
     w: 6
@@ -193,4 +193,4 @@ widgets:
   id: host_vsan
   title: Per-Host vSAN Contribution
   type: View
-  view: '[VCF Content Factory] Per-Host vSAN Contribution'
+  view: '[VCF CF] Per-Host vSAN Contribution'

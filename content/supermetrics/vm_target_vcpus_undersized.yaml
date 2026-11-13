@@ -1,5 +1,5 @@
 id: c89674b9-85c6-4eb2-a69f-f003563fb541
-name: "[VCF Content Factory] VM - Target vCPUs (undersized)"
+name: "[VCF CF] VM - Target vCPUs (undersized)"
 resource_kinds:
   - resource_kind_key: VirtualMachine
     adapter_kind_key: VMWARE

@@ -1,5 +1,5 @@
 id: bc4ac034-0b17-4c82-a573-bb2c1400b09f
-name: "[VCF Content Factory] VM - Target Memory GB (oversized)"
+name: "[VCF CF] VM - Target Memory GB (oversized)"
 resource_kinds:
   - resource_kind_key: VirtualMachine
     adapter_kind_key: VMWARE

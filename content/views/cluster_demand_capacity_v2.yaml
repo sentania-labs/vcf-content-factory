@@ -1,5 +1,5 @@
 id: 3a30b682-068e-423e-aadb-bebf6a9be4fe
-name: "[VCF Content Factory] Cluster Demand & Capacity Overview v2"
+name: "[VCF CF] Cluster Demand & Capacity Overview v2"
 description: >
   Per-cluster demand and capacity overview for v2 demand-driven capacity planning
   dashboard. Percentages first (demand %, contention % avg and P95), then

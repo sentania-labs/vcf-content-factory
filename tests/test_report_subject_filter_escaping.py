@@ -59,7 +59,7 @@ def _write_report(tmp_path: Path) -> Path:
     (tmp_path / "dashboards").mkdir(parents=True, exist_ok=True)
 
     data = {
-        "name": "[VCF Content Factory] Supervisor Cluster VOA",
+        "name": "[VCF CF] Supervisor Cluster VOA",
         "description": "Supervisor cluster VOA export with a subject filter.",
         "subject_types": [
             {
@@ -131,7 +131,7 @@ class TestReportSubjectFilterEscaping:
         (tmp_path / "dashboards").mkdir(parents=True, exist_ok=True)
 
         data = {
-            "name": "[VCF Content Factory] No Filter Report",
+            "name": "[VCF CF] No Filter Report",
             "description": "No subject filter here.",
             "subject_types": [
                 {

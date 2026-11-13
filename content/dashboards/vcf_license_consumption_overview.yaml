@@ -1,5 +1,5 @@
 id: 1b53e065-4319-4b09-8dd2-6da8b732f0e8
-name: "[VCF Content Factory] VCF License Consumption Overview"
+name: "[VCF CF] VCF License Consumption Overview"
 description: >
   One-screen license position for a VCF estate on VCF Operations 8.x: consumed vs owned
   VCF cores and vSAN TiB (from the platform's own license usage objects), plus how much
@@ -106,7 +106,7 @@ widgets:
     pin:
       adapter_kind: VMWARE_INFRA_HEALTH
       resource_kind: LICENSE_USAGE_WORLD
-    view: "[VCF Content Factory] VCF License Usage Trend"
+    view: "[VCF CF] VCF License Usage Trend"
     select_first_row: false
     chart_view_items: [legend]
 
@@ -120,7 +120,7 @@ widgets:
     pin:
       adapter_kind: VMWARE_INFRA_HEALTH
       resource_kind: LICENSE_USAGE_WORLD
-    view: "[VCF Content Factory] vSAN License Usage Trend"
+    view: "[VCF CF] vSAN License Usage Trend"
     select_first_row: false
     chart_view_items: [legend]
 
@@ -254,7 +254,7 @@ widgets:
     pin:
       adapter_kind: NSXTAdapter
       resource_kind: NSXT World
-    view: "[VCF Content Factory] NSX Consumption Trend"
+    view: "[VCF CF] NSX Consumption Trend"
     select_first_row: false
     chart_view_items: [legend]
 
@@ -268,7 +268,7 @@ widgets:
     pin:
       adapter_kind: CASAdapter
       resource_kind: CAS World
-    view: "[VCF Content Factory] Automation Consumption Trend"
+    view: "[VCF CF] Automation Consumption Trend"
     select_first_row: false
     chart_view_items: [legend]
 
@@ -282,7 +282,7 @@ widgets:
     pin:
       adapter_kind: VMWARE_INFRA_HEALTH
       resource_kind: LICENSE_USAGE_WORLD
-    view: "[VCF Content Factory] VCF Licensing by Month"
+    view: "[VCF CF] VCF Licensing by Month"
     select_first_row: false
 
   # ── W11 · View, NSX Consumption by Month  (x:5 y:25 w:4 h:6) ──────────────
@@ -295,7 +295,7 @@ widgets:
     pin:
       adapter_kind: NSXTAdapter
       resource_kind: NSXT World
-    view: "[VCF Content Factory] NSX Licensing by Month"
+    view: "[VCF CF] NSX Licensing by Month"
     select_first_row: false
 
   # ── W12 · View, Automation Consumption by Month  (x:9 y:25 w:4 h:6) ───────
@@ -308,7 +308,7 @@ widgets:
     pin:
       adapter_kind: CASAdapter
       resource_kind: CAS World
-    view: "[VCF Content Factory] Automation Licensing by Month"
+    view: "[VCF CF] Automation Licensing by Month"
     select_first_row: false
 
 interactions: []

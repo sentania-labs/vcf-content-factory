@@ -1,5 +1,5 @@
 id: 9d8d048c-6472-4175-ae90-71d36d8bc70b
-name: "[VCF Content Factory] Oversized VMs, Reclaimable"
+name: "[VCF CF] Oversized VMs, Reclaimable"
 description: >
   Per-VM reclaimable-resource list for oversized virtual machines. Shows the
   parent cluster, vCPUs to remove, and memory to reclaim (KB source, displayed
@@ -13,7 +13,7 @@ subject:
   adapter_kind: VMWARE
   resource_kind: VirtualMachine
 
-customgroup: "[VCF Content Factory] VMs - Oversized Only"
+customgroup: "[VCF CF] VMs - Oversized Only"
 
 summary: false
 

@@ -10,7 +10,7 @@ This file covers the two installers that did not run it:
   ``getDashboardList`` by the pak's own dashboard ids because a CUSTOM
   ``DASHBOARDS`` export does not carry pak-installed dashboards.
 
-The regression case is the 8.18.7 corpus dashboard "[VCF Content Factory]
+The regression case is the 8.18.7 corpus dashboard "[VCF CF]
 VCF License Consumption Overview", incomplete for 19 days with every adapter
 kind installed: it must be reported INCOMPLETE, never fine. No live instance:
 every read is faked.
@@ -258,7 +258,7 @@ def test_install_template_records_only_dashboards_the_import_changed(install_mod
         bundle_dir = tmp_path / "b"
         (bundle_dir / "content").mkdir(parents=True, exist_ok=True)
         (bundle_dir / "content" / "dashboard.json").write_text(json.dumps({"dashboards": [
-            {"id": "dash-1", "name": "VCF Content Factory/[VCF Content Factory] Cap",
+            {"id": "dash-1", "name": "VCF Content Factory/[VCF CF] Cap",
              "namePath": "VCF Content Factory"}]}))
 
         class _C:
@@ -274,7 +274,7 @@ def test_install_template_records_only_dashboards_the_import_changed(install_mod
     ok = _ctx({"state": "FINISHED", "operationSummaries": [
         {"contentType": "DASHBOARDS", "imported": 1, "skipped": 0}]})
     install_mod._install_dashboards(ok)
-    assert ok["imported_dashboards"] == [("dash-1", "[VCF Content Factory] Cap")]
+    assert ok["imported_dashboards"] == [("dash-1", "[VCF CF] Cap")]
     skipped = _ctx({"state": "FINISHED", "operationSummaries": [
         {"contentType": "DASHBOARDS", "imported": 0, "skipped": 1}]})
     install_mod._install_dashboards(skipped)
@@ -370,12 +370,12 @@ def _pak(tmp_path, extra=None, props=None) -> Path:
         z.writestr("content/dashboards/World/dashboard.json", json.dumps({
             "entries": PAK_ENTRIES,
             "dashboards": [{"id": ID_WORLD, "namePath": "VCF Content Factory",
-                            "name": "VCF Content Factory/[VCF Content Factory] World"}],
+                            "name": "VCF Content Factory/[VCF CF] World"}],
             "uuid": "u"}))
         z.writestr("content/dashboards/World/resources/resources.properties", "")
         z.writestr("content/dashboards/Hosts/dashboard.json", json.dumps({
             "entries": {"resourceKind": [_rk("HostSystem", "VMWARE", 0)]},
-            "dashboards": [{"id": ID_HOSTS.upper(), "name": "[VCF Content Factory] Hosts"}],
+            "dashboards": [{"id": ID_HOSTS.upper(), "name": "[VCF CF] Hosts"}],
             "uuid": "u"}))
         if props is not None:
             z.writestr("content/dashboards/dashboards.properties", props)
@@ -392,8 +392,8 @@ def test_read_pak_dashboards(tmp_path):
     })
     got = post_install.read_pak_dashboards(p, warn=warns.append)
     assert [(d.id, d.name, d.directory) for d in got] == [
-        (ID_HOSTS, "[VCF Content Factory] Hosts", "Hosts"),
-        (ID_WORLD, "[VCF Content Factory] World", "World"),
+        (ID_HOSTS, "[VCF CF] Hosts", "Hosts"),
+        (ID_WORLD, "[VCF CF] World", "World"),
     ]
     assert got[1].entries == PAK_ENTRIES
     assert len(warns) == 2
@@ -496,7 +496,7 @@ def test_pak_report_ok_and_stalled_exit_codes(tmp_path, capsys):
     ui = _FakeUI([_entry(ID_WORLD, False), _entry(ID_HOSTS, True)])
     assert _run_report(tmp_path, ui, kinds={"vcfcf_compliance"}) == post_install.POST_INSTALL_FAILED_RC
     err = capsys.readouterr().err
-    assert "WARNING: MATERIALIZATION STALLED: dashboard '[VCF Content Factory] Hosts'" in err
+    assert "WARNING: MATERIALIZATION STALLED: dashboard '[VCF CF] Hosts'" in err
 
 
 def test_pak_report_unreadable_list_is_unchecked_rc0(tmp_path, capsys):

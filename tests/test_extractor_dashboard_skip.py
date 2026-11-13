@@ -78,7 +78,7 @@ def stubbed(monkeypatch, tmp_path):
 def test_already_authored_dashboard_is_skipped_with_a_warn(stubbed, capsys):
     root, out, run = stubbed
     planted = root / "content" / "dashboards" / "already.yaml"
-    planted.write_text(f"id: {DASH_ID}\nname: \"[VCF Content Factory] Already\"\nwidgets: []\n", encoding="utf-8")
+    planted.write_text(f"id: {DASH_ID}\nname: \"[VCF CF] Already\"\nwidgets: []\n", encoding="utf-8")
 
     rc = run()
     captured = capsys.readouterr()

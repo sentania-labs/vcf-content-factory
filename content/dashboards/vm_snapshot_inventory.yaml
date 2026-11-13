@@ -12,7 +12,7 @@ description: 'Fleet-wide VM snapshot inventory. Row 1 answers "how bad is it?" w
 
   '
 id: 9c6a3e0a-2c1b-4d7e-9b0a-9f4b6a2e5d13
-name: '[VCF Content Factory] VM Snapshot Inventory'
+name: '[VCF CF] VM Snapshot Inventory'
 released: true
 version: 1.0.0
 widgets:
@@ -80,4 +80,4 @@ widgets:
   self_provider: true
   title: VM Snapshot Inventory
   type: View
-  view: '[VCF Content Factory] VM Snapshot Inventory'
+  view: '[VCF CF] VM Snapshot Inventory'

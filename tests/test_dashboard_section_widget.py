@@ -49,7 +49,7 @@ def _render(tmp_path: Path, dash: dict) -> dict:
 
 def _base(widgets: list, **extra) -> dict:
     return {
-        "name": "[VCF Content Factory] Section Test",
+        "name": "[VCF CF] Section Test",
         "description": "",
         "widgets": widgets,
         "interactions": [],
@@ -184,7 +184,7 @@ class TestSectionValidation:
     @pytest.mark.parametrize("bad_key,bad_val", [
         ("metrics", [{"adapter_kind": "VMWARE", "resource_kind": "VirtualMachine",
                       "metric_key": "cpu|usage_average"}]),
-        ("view", "[VCF Content Factory] Some View"),
+        ("view", "[VCF CF] Some View"),
         ("resource_kinds", [{"adapter_kind": "VMWARE", "resource_kind": "HostSystem"}]),
         ("pin", {"adapter_kind": "VMWARE", "resource_kind": "vSphere World"}),
         ("self_provider", True),

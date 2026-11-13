@@ -41,7 +41,7 @@ from vcfcf_core.symptoms.loader import (
 )
 
 _SYM_ID = "c8d1e671-d0ea-489f-acc4-46e34cc246b6"
-_SYM_NAME = "[VCF Content Factory] DT Test Symptom"
+_SYM_NAME = "[VCF CF] DT Test Symptom"
 
 
 def _parse(xml_text: str) -> ET.Element:
@@ -123,7 +123,7 @@ class TestDtConditionVendorForm:
 
         alert_yaml = textwrap.dedent(
             f"""\
-            name: "[VCF Content Factory] DT Test Alert"
+            name: "[VCF CF] DT Test Alert"
             description: "DT test alert"
             adapter_kind: synology_diskstation
             resource_kind: disk

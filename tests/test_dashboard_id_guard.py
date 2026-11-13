@@ -52,7 +52,7 @@ from vcfcf_dashboards.cli import main as dashboards_main
 
 OLD_ID = "11111111-2222-4333-8444-555555555555"
 NEW_ID = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
-NAME = "[VCF Content Factory] Guard Probe Dashboard"
+NAME = "[VCF CF] Guard Probe Dashboard"
 
 
 def _dashboard_yaml(dash_id: str, name: str) -> str:
@@ -143,7 +143,7 @@ def test_name_mutated_id_kept_passes(tmp_path, capsys):
 def test_new_dashboard_file_passes(tmp_path, capsys):
     repo = _make_repo(tmp_path)
     (repo / "content/dashboards/fresh.yaml").write_text(
-        _dashboard_yaml(NEW_ID, "[VCF Content Factory] Brand New Dashboard")
+        _dashboard_yaml(NEW_ID, "[VCF CF] Brand New Dashboard")
     )
     rc = _validate(repo)
     err = capsys.readouterr().err

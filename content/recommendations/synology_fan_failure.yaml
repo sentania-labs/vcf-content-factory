@@ -1,4 +1,4 @@
-name: "[VCF Content Factory] Synology Fan Failure Remediation"
+name: "[VCF CF] Synology Fan Failure Remediation"
 description: |
   Cooling is compromised. The system fan is not confirmed spinning normally
   (fan_status is not "yes"). Without adequate airflow, the NAS will

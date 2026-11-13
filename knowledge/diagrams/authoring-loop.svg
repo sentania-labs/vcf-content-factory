@@ -148,7 +148,7 @@
 <tspan x="906" dy="0">OUTPUT  ·  YAML SOURCE</tspan>
 </text>
 <text x="920" y="565" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="11" fill="#86efac" text-anchor="start" xml:space="preserve">
-<tspan x="920" dy="0">name: &quot;[VCF Content Factory] VM CPU Sustained High&quot;</tspan>
+<tspan x="920" dy="0">name: &quot;[VCF CF] VM CPU Sustained High&quot;</tspan>
 <tspan x="920" dy="13.75">resource_kinds: [{kind: VirtualMachine, adapter: VMWARE}]</tspan>
 <tspan x="920" dy="13.75">formula: |</tspan>
 <tspan x="920" dy="13.75">  avg(${this, metric=cpu|usage_average}) &gt; 90</tspan>

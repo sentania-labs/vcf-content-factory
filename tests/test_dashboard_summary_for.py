@@ -21,7 +21,7 @@ def _write(path: Path, data: dict) -> Path:
     return path
 
 
-def _summary_dash(name="[VCF Content Factory] Host Summary", summary_for="VMWARE:HostSystem",
+def _summary_dash(name="[VCF CF] Host Summary", summary_for="VMWARE:HostSystem",
                   widgets=None, dash_id="0f5a4b3c-2d1e-4f60-8a7b-9c8d7e6f5a4b") -> dict:
     return {
         "id": dash_id,
@@ -65,9 +65,9 @@ class TestSummaryForLoader:
     def test_duplicate_target_rejected_by_load_all(self, tmp_path):
         from vcfcf_dashboards.loader import DashboardValidationError, load_all
 
-        _write(tmp_path / "dashboards" / "a.yaml", _summary_dash(name="[VCF Content Factory] A"))
+        _write(tmp_path / "dashboards" / "a.yaml", _summary_dash(name="[VCF CF] A"))
         _write(tmp_path / "dashboards" / "b.yaml", _summary_dash(
-            name="[VCF Content Factory] B", summary_for="VMWARE : HostSystem",
+            name="[VCF CF] B", summary_for="VMWARE : HostSystem",
             dash_id="1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d"))
         (tmp_path / "views").mkdir()
         with pytest.raises(DashboardValidationError, match="claimed by both"):
@@ -76,9 +76,9 @@ class TestSummaryForLoader:
     def test_distinct_targets_load(self, tmp_path):
         from vcfcf_dashboards.loader import load_all
 
-        _write(tmp_path / "dashboards" / "a.yaml", _summary_dash(name="[VCF Content Factory] A"))
+        _write(tmp_path / "dashboards" / "a.yaml", _summary_dash(name="[VCF CF] A"))
         _write(tmp_path / "dashboards" / "b.yaml", _summary_dash(
-            name="[VCF Content Factory] B", summary_for="VMWARE:VirtualMachine",
+            name="[VCF CF] B", summary_for="VMWARE:VirtualMachine",
             dash_id="1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d"))
         (tmp_path / "views").mkdir()
         _views, dashboards = load_all(tmp_path / "views", tmp_path / "dashboards")
@@ -150,9 +150,9 @@ class TestSummaryForLoader:
         from vcfcf_dashboards.loader import DashboardValidationError, load_all
 
         _write(tmp_path / "dashboards" / "a.yaml", _summary_dash(
-            name="[VCF Content Factory] A", summary_for=list(self.THREE)))
+            name="[VCF CF] A", summary_for=list(self.THREE)))
         _write(tmp_path / "dashboards" / "b.yaml", _summary_dash(
-            name="[VCF Content Factory] B", summary_for="VMWARE:Datastore",
+            name="[VCF CF] B", summary_for="VMWARE:Datastore",
             dash_id="1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d"))
         (tmp_path / "views").mkdir()
         with pytest.raises(DashboardValidationError, match="'VMWARE:Datastore' is claimed by both"):
@@ -519,7 +519,7 @@ def _load(tmp_path, **kw):
 
 
 class TestBindFlow:
-    NAME = "[VCF Content Factory] Host Summary"
+    NAME = "[VCF CF] Host Summary"
     UUID = "12345678-1234-4123-8123-123456789abc"
     KEY = "resourceKind_002006VMWAREHostSystem"
 
@@ -648,7 +648,7 @@ class TestBindFlow:
     def test_not_installed_fails_without_writing(self, tmp_path):
         from vcfcf_dashboards.summary_bind import bind_summary
 
-        ui = FakeUI(installed={"[VCF Content Factory] Other": "x"})
+        ui = FakeUI(installed={"[VCF CF] Other": "x"})
         rc = bind_summary(ui, [_load(tmp_path)], out=lambda s: None)
         assert rc == 2
         assert not any(c[0] == "associate" for c in ui.calls)
@@ -684,7 +684,7 @@ class TestBindFlow:
 class TestBindFlowManyKinds:
     """One dashboard, three kinds: one association call carrying the whole
     map, one readback line per kind, unbind resets every kind."""
-    NAME = "[VCF Content Factory] Host Summary"
+    NAME = "[VCF CF] Host Summary"
     UUID = "12345678-1234-4123-8123-123456789abc"
     THREE = ["VMWARE:HostSystem", "VMWARE:VirtualMachine", "VMWARE:Datastore"]
     KEYS = ["resourceKind_002006VMWAREHostSystem", "resourceKind_002006VMWAREVirtualMachine",

@@ -251,7 +251,7 @@ def test_wait_matches_factory(tmp_path, monkeypatch):
 def test_dashboard_id_names_match_install_py(tmp_path, install_mod):
     docs = [
         json.dumps({"dashboards": [
-            {"id": "d1", "name": "VCF Content Factory/[VCF Content Factory] Cap",
+            {"id": "d1", "name": "VCF Content Factory/[VCF CF] Cap",
              "namePath": "VCF Content Factory", "owner": "PLACEHOLDER_USER_ID"},
             {"id": "d2"}, {"name": "no id"}, {"id": "d3", "name": "x" * 200}]}),
         json.dumps({"dashboards": [{"id": "only", "name": "One"}]}),
@@ -431,13 +431,13 @@ def test_download_failure_names_the_status_like_install_py(tmp_path):
 @pytest.mark.parametrize("import_result,recorded", [
     ({"state": "FINISHED", "operationSummaries": [
         {"contentType": "DASHBOARDS", "imported": 1, "skipped": 0}]},
-     [["dash-1", "[VCF Content Factory] Cap"]]),
+     [["dash-1", "[VCF CF] Cap"]]),
     ({"state": "FINISHED", "operationSummaries": [
         {"contentType": "DASHBOARDS", "imported": 0, "skipped": 1}]}, []),
 ])
 def test_install_dashboard_records_only_changed(tmp_path, import_result, recorded):
     dash_json = json.dumps({"dashboards": [
-        {"id": "dash-1", "name": "VCF Content Factory/[VCF Content Factory] Cap",
+        {"id": "dash-1", "name": "VCF Content Factory/[VCF CF] Cap",
          "namePath": "VCF Content Factory"}]})
     got, _ = _run(tmp_path, {"mode": "dashboard", "import_result": import_result,
                              "dash_json": dash_json})

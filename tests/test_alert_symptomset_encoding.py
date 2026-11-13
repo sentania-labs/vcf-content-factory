@@ -44,7 +44,7 @@ def _write(path: Path, content: str) -> None:
 
 _SYM_A = textwrap.dedent(
     """\
-    name: "[VCF Content Factory] Sym A"
+    name: "[VCF CF] Sym A"
     adapter_kind: VMWARE
     resource_kind: HostSystem
     severity: CRITICAL
@@ -85,7 +85,7 @@ def _load_alert(tmp_path: Path, alert_yaml: str):
 
 _MULTI_SET_ALERT_YAML = textwrap.dedent(
     """\
-    name: "[VCF Content Factory] Multi Tier Alert"
+    name: "[VCF CF] Multi Tier Alert"
     description: "Multi-tier test alert"
     adapter_kind: VMWARE
     resource_kind: HostSystem
@@ -102,18 +102,18 @@ _MULTI_SET_ALERT_YAML = textwrap.dedent(
         - defined_on: SELF
           operator: ALL
           symptoms:
-            - name: "[VCF Content Factory] Sym A"
+            - name: "[VCF CF] Sym A"
         - defined_on: SELF
           operator: ALL
           symptoms:
-            - name: "[VCF Content Factory] Sym B"
-            - name: "[VCF Content Factory] Sym C"
+            - name: "[VCF CF] Sym B"
+            - name: "[VCF CF] Sym C"
     """
 )
 
 _SINGLE_SET_ALERT_YAML = textwrap.dedent(
     """\
-    name: "[VCF Content Factory] Single Tier Alert"
+    name: "[VCF CF] Single Tier Alert"
     description: "Single-tier test alert"
     adapter_kind: VMWARE
     resource_kind: HostSystem
@@ -130,13 +130,13 @@ _SINGLE_SET_ALERT_YAML = textwrap.dedent(
         - defined_on: SELF
           operator: ALL
           symptoms:
-            - name: "[VCF Content Factory] Sym A"
+            - name: "[VCF CF] Sym A"
     """
 )
 
 _SINGLE_SET_MULTI_SYMPTOM_ALERT_YAML = textwrap.dedent(
     """\
-    name: "[VCF Content Factory] Single Tier AND Alert"
+    name: "[VCF CF] Single Tier AND Alert"
     description: "Single-tier, two-symptom AND test alert"
     adapter_kind: VMWARE
     resource_kind: HostSystem
@@ -153,8 +153,8 @@ _SINGLE_SET_MULTI_SYMPTOM_ALERT_YAML = textwrap.dedent(
         - defined_on: SELF
           operator: ALL
           symptoms:
-            - name: "[VCF Content Factory] Sym A"
-            - name: "[VCF Content Factory] Sym B"
+            - name: "[VCF CF] Sym A"
+            - name: "[VCF CF] Sym B"
     """
 )
 

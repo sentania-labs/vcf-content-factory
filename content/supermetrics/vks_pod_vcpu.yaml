@@ -1,5 +1,5 @@
 id: 46179895-f760-4472-960c-e368aa869bc7
-name: "[VCF Content Factory] Pod vCPU (count)"
+name: "[VCF CF] Pod vCPU (count)"
 resource_kinds:
   - resource_kind_key: ClusterComputeResource
     adapter_kind_key: VMWARE

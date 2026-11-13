@@ -75,7 +75,7 @@ Override to host-level if you want per-host comparison."
 3. **Validate before returning:**
    `python -m vcfcf_supermetrics validate content/supermetrics/<file>.yaml`
    (for a pak file, pass its path under `content/sdk-adapters/<name>/supermetrics/`;
-   this validator always enforces the `[VCF Content Factory]` prefix, so for
+   this validator always enforces the `[VCF CF]` prefix, so for
    a pak whose `adapter.yaml` declares `content_naming: unprefixed` use
    `python3 -m vcfcf_managementpacks validate-sdk content/sdk-adapters/<name>`
    once the file is listed in `adapter.yaml` `bundled_content`, and say in
@@ -90,13 +90,17 @@ Override to host-level if you want per-host comparison."
 
 ```yaml
 id: <uuid4>                          # set on first validate
-name: "[VCF Content Factory] <Scope> - <Human Name> (<unit>)"
+name: "[VCF CF] <Scope> - <Human Name> (<unit>)"
 # For an SDK-adapter pak the prefix follows the pak's `adapter.yaml`
-# `content_naming` field: `factory_prefixed` requires the `[VCF Content
-# Factory] ` prefix on every bundled name, `unprefixed` forbids it, and
+# `content_naming` field: `factory_prefixed` requires the `[VCF CF] `
+# prefix on every bundled name, `unprefixed` forbids it, and
 # `validate-sdk` and `build-sdk` fail on a mismatch when the field is
 # declared. When it is absent, match the pak's existing names: the tools
 # assume `factory_prefixed` and only warn (issue #229).
+# If the pak's existing names still carry `[VCF Content Factory]`, stop
+# and ask for the pak to be migrated first
+# (`knowledge/context/authoring/prefix_migration.md` §Pak repos): new
+# `[VCF CF]` names in it fail as mixed spellings.
 resource_kinds:
   - resource_kind_key: <ResourceKind>
     adapter_kind_key: VMWARE
