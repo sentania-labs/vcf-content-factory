@@ -2,7 +2,7 @@
   "format": "vcfcf-stock-ids/1",
   "about": "VCF Operations stock content ids (issue #345): ids only, with a display name for error messages and the product versions each id was seen in. Content that ships a DEFINITION under one of these ids overwrites the stock object on install and deletes it on uninstall; the factory's builds refuse it. References to these ids are fine.",
   "generated": "2026-11-12",
-  "regenerate": "python3 -m vcfcf_packaging stock-id-baseline --export <version>=<label>=<path> ... (knowledge/context/stock_id_guard.md)",
+  "regenerate": "python3 -m vcfcf_packaging stock-id-baseline --export <version>=<label>=<path> ... (the exact command for the committed file: knowledge/context/stock_id_guard.md, section 'The committed baseline')",
   "rule": {
     "doc": "src/vcfcf_core/stock_ids/generate.py module docstring",
     "exclude_name_markers": [
@@ -27,9 +27,6 @@
     "installed_threshold": 0.9,
     "factory_ids_considered": 201,
     "known_packages": [
-      "fork-cluster-perf-risk",
-      "fork-vcommunity",
-      "fork-vsanhostmetrics",
       "pak-VCFOperationsvCommunity_0.3.0-pr-fix-builtin-view-ids",
       "pak-VCFOperationsvCommunity_0.3.0-pr-fix-builtin-view-ids-releasedimage",
       "pak-VCFOperationsvCommunity_0.3.2-test-upgrade",
@@ -51,6 +48,11 @@
       "ref-vmbro_vcf_operations_hardware_vcommunity",
       "ref-vmbro_vcf_operations_vcommunity",
       "ref-vmware-vcf-operations-integration-sdk"
+    ],
+    "excluded_packages": [
+      "fork-cluster-perf-risk",
+      "fork-vcommunity",
+      "fork-vsanhostmetrics"
     ]
   },
   "sources": [
@@ -115,19 +117,6 @@
       "kind": "content export",
       "definitions": {
         "view": 787
-      }
-    },
-    {
-      "instance": "lab-c",
-      "version": "9.1.1",
-      "kind": "content export",
-      "definitions": {
-        "alert": 1319,
-        "dashboard": 180,
-        "report": 62,
-        "supermetric": 13,
-        "symptom": 2237,
-        "view": 855
       }
     },
     {
@@ -207,7 +196,7 @@
       "by_version": {
         "8.18.7": 704,
         "9.0.2": 768,
-        "9.1.1": 742
+        "9.1.1": 741
       }
     },
     "dashboard": {
@@ -260,10 +249,10 @@
     }
   },
   "candidates_not_included": {
-    "view": 176,
-    "dashboard": 61,
+    "view": 173,
+    "dashboard": 60,
     "report": 37,
-    "supermetric": 88,
+    "supermetric": 83,
     "symptom": 1189,
     "alert": 1182,
     "recommendation": 0
@@ -1001,7 +990,7 @@
       "f000010a-67e9-4201-a284-94491e70e3bb": {"name": "Configuration | Suboptimal | Small Cluster (cores)", "versions": ["8.18.7", "9.0.2", "9.1.1"]},
       "f129ab04-a919-4b80-b0ad-39783db28adf": {"name": "vSphere VM Network List", "versions": ["8.18.7", "9.0.2", "9.1.1"]},
       "f1474ada-0abe-4e6b-937a-ec4e7d82e420": {"name": "VMware Tools Version on VMs", "versions": ["8.18.7", "9.0.2", "9.1.1"]},
-      "f1aeaa58-ce9a-4456-878e-1d9582a66711": {"name": "vSphere Host Version", "versions": ["8.18.7", "9.0.2", "9.1.1"]},
+      "f1aeaa58-ce9a-4456-878e-1d9582a66711": {"name": "vSphere Host Version", "versions": ["8.18.7", "9.0.2"]},
       "f1cf3251-55be-4dd2-acaf-88b84f55b168": {"name": "Distributed Port Group Utilization Summary", "versions": ["8.18.7", "9.0.2", "9.1.1"]},
       "f274eae2-80ea-42e6-a912-59c2a7f3da32": {"name": "vCenter ESXi GPU", "versions": ["8.18.7", "9.0.2", "9.1.1"]},
       "f28ad55f-d291-4de4-9f9a-5827cdcec2cb": {"name": "Performance | ESXi Memory Contention", "versions": ["8.18.7", "9.0.2", "9.1.1"]},
@@ -2856,7 +2845,7 @@
       "SymptomDefinition-hcl.hclhostbadstate.Error": {"name": "Check if ESXi host has issues retrieving hardware info resulted in error.", "versions": ["8.18.7", "9.0.2", "9.1.1"]},
       "SymptomDefinition-hcl.hclhostbadstate.Warning": {"name": "Check if ESXi host has issues retrieving hardware info resulted in warning.", "versions": ["8.18.7", "9.0.2", "9.1.1"]},
       "SymptomDefinition-hcl.hostmemcheck.Error": {"name": "Host physical memory compliance check resulted in error.", "versions": ["8.18.7", "9.0.2", "9.1.1"]},
-      "SymptomDefinition-hcl.hostmemcheck.Warning": {"name": "Host physical memory compliance check resulted in warning.", "versions": ["8.18.7", "9.0.2", "9.1.1"]},
+      "SymptomDefinition-hcl.hostmemcheck.Warning": {"name": "Check if vSAN ESA Host physical memory is not smaller than 32 GB resulted in warning.", "versions": ["8.18.7", "9.0.2", "9.1.1"]},
       "SymptomDefinition-hcl.mixedmode.Error": {"name": "Check if controller with pass-through and RAID disks has issues resulted in error.", "versions": ["8.18.7", "9.0.2", "9.1.1"]},
       "SymptomDefinition-hcl.mixedmode.Warning": {"name": "Check if controller with pass-through and RAID disks has issues resulted in warning.", "versions": ["8.18.7", "9.0.2", "9.1.1"]},
       "SymptomDefinition-hcl.mixedmodeh730.Error": {"name": "Check if vSAN and VMFS datastores are on a same Dell H730 controller with the lsi_mr3driver resulted in error.", "versions": ["8.18.7", "9.0.2", "9.1.1"]},
@@ -2956,7 +2945,7 @@
       "SymptomDefinition-nsx_9_account_lockout_max_attempts_AuthPolicyCLIMaxAuthFailures": {"name": "nsx-9.account-lockout-max-attempts - The VMware Cloud Foundation NSX Manager must be configured to enforce the limit of three consecutive invalid logon attempts, after which time it must block any login attempt for 15 minutes (CLI Auth Failures)", "versions": ["9.1.1"]},
       "SymptomDefinition-nsx_9_account_lockout_max_attempts_AuthPolicyLockOutResetPeriod": {"name": "nsx-9.account-lockout-max-attempts - The VMware Cloud Foundation NSX Manager must be configured to enforce the limit of three consecutive invalid logon attempts, after which time it must block any login attempt for 15 min (API Lock Out Reset Period)", "versions": ["9.1.1"]},
       "SymptomDefinition-nsx_9_dhcp_disable": {"name": "nsx-9.dhcp-disable - NSX must not enable DHCP unless it is required", "versions": ["9.1.1"]},
-      "SymptomDefinition-nsx_9_log_level": {"name": "nsx-9.log-level - The VMware Cloud Foundation NSX Manager must configure logging levels  to ensure audit records are generated", "versions": ["9.1.1"]},
+      "SymptomDefinition-nsx_9_log_level": {"name": "nsx-9.log-level - The VMware Cloud Foundation NSX Manager must configure logging levels to ensure audit records are generated", "versions": ["9.1.1"]},
       "SymptomDefinition-nsx_9_login_message": {"name": "nsx-9.dhcp-disable - NSX must not enable DHCP unless it is required", "versions": ["9.1.1"]},
       "SymptomDefinition-nsx_9_multicast_disable": {"name": "nsx-9.multicast-disable - NSX must disable Protocol Independent Multicast where multicast is not required", "versions": ["9.1.1"]},
       "SymptomDefinition-nsx_9_ospf_encryption": {"name": "nsx-9.ospf-encryption - NSX must enable OSPF encryption", "versions": ["9.1.1"]},
