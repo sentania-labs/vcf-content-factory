@@ -13,7 +13,7 @@
 #   alertlist_07: vcommunity-vsphere/dashboards/VM Details.yaml
 #   alertlist_08: vcommunity-vsphere/dashboards/VM Performance 2.0.yaml
 id: 6f1d2c1e-0d2b-4b8e-9a51-2a7d4f0c9e10
-name: '[VCF Content Factory] AlertList Corpus Fixture'
+name: '[VCF CF] AlertList Corpus Fixture'
 description: AlertList widgets copied from the managed paks; render regression fixture.
 widgets:
 - id: alertlist_00

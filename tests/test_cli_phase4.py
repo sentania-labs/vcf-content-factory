@@ -199,7 +199,7 @@ class TestReleaseSmoke:
         factory = _make_factory_copy(tmp_path)
         monkeypatch.chdir(factory)
 
-        display_name = "[VCF Content Factory] Demand-Driven Capacity Planning v2"
+        display_name = "[VCF CF] Demand-Driven Capacity Planning v2"
         from vcfcf_packaging.cli import cmd_release
         args = _build_release_args(name=display_name, no_commit=True)
         rc = cmd_release(args)

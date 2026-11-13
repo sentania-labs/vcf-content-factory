@@ -93,7 +93,7 @@ def inst():
 
 def _alert(case_id, raw):
     a = {
-        "name": f"[VCF Content Factory] Subtype {case_id}",
+        "name": f"[VCF CF] Subtype {case_id}",
         "description": "",
         "adapter_kind": "VMWARE",
         "resource_kind": "HostSystem",
@@ -118,7 +118,7 @@ def _loader_verdict(raw):
     """What the core loader does with this raw YAML value: int or None (rejected)."""
     value = alert_loader._sub_type(None if raw is _ABSENT else raw)
     alert = alert_loader.AlertDef(
-        name="[VCF Content Factory] x", adapter_kind="VMWARE",
+        name="[VCF CF] x", adapter_kind="VMWARE",
         resource_kind="HostSystem", criticality="WARNING", impact_badge="HEALTH",
         symptom_sets=_alert("verdict", _ABSENT)["symptom_sets"], sub_type=value,
     )
@@ -213,8 +213,8 @@ def test_install_py_skips_out_of_enum_and_installs_the_rest(inst, tmp_path, caps
            "client": client, "warnings": []}
     inst._install_alerts(ctx)
     assert [(p["name"], p["subType"]) for p in client.posted] == [
-        ("[VCF Content Factory] Subtype absent", 19),
-        ("[VCF Content Factory] Subtype twentyone", 21),
+        ("[VCF CF] Subtype absent", 19),
+        ("[VCF CF] Subtype twentyone", 21),
     ]
     assert len(ctx["warnings"]) == 1
     assert "Subtype three" in ctx["warnings"][0]
@@ -249,7 +249,7 @@ def test_install_ps1_agrees_with_loader(tmp_path):
         else:
             assert got["ok"] is True, f"{cid}: install.ps1 rejected {raw!r}: {got.get('error')}"
             assert got["value"] == expected, cid
-            expected_posted.append((f"[VCF Content Factory] Subtype {cid}", expected))
+            expected_posted.append((f"[VCF CF] Subtype {cid}", expected))
 
     # Threshold shapes post (no StrictMode throw) with the same
     # base-symptom-set install.py builds.
@@ -262,7 +262,7 @@ def test_install_ps1_agrees_with_loader(tmp_path):
         py_base = inst._alert_to_wire(alert, {"Sym A": "sym-a"})["states"][0]["base-symptom-set"]
         ps_base = by_name[alert["name"]]["base"]
         assert ps_base == py_base, alert["name"]
-    assert "aggregation" not in by_name["[VCF Content Factory] Subtype child_no_threshold"]["base"]
+    assert "aggregation" not in by_name["[VCF CF] Subtype child_no_threshold"]["base"]
 
     rejected = [cid for cid, raw in CASES if _loader_verdict(raw) is None]
     assert len(out["warnings"]) == len(rejected)

@@ -1,5 +1,5 @@
 id: ca78bf94-3ea7-49b8-90fd-afd8b988bee7
-name: "[VCF Content Factory] NSX Licensed Cores"
+name: "[VCF CF] NSX Licensed Cores"
 resource_kinds:
   - resource_kind_key: NSXT World
     adapter_kind_key: NSXTAdapter
@@ -7,7 +7,7 @@ description: >
   Licensed cores across the vSphere hosts NSX knows about - the "how much
   of my VCF core count is NSX-bearing" figure. Assigned to the NSXT World
   rollup resource (1 live object, "NSX World", confirmed on ro818) and
-  sums the per-host "[VCF Content Factory] Host VCF Licensed Cores
+  sums the per-host "[VCF CF] Host VCF Licensed Cores
   (16-core minimum)" super metric over VMWARE/HostSystem objects reached
   from NSXT World at depth=10.
 
@@ -21,7 +21,7 @@ description: >
   relationship path is otherwise reproduced exactly - a single
   adaptertype=VMWARE, objecttype=HostSystem, depth=10 walk from the
   NSXT World assignment object, the same shape as the sibling
-  "[VCF Content Factory] vSphere World VCF Licensed Cores" SM's walk
+  "[VCF CF] vSphere World VCF Licensed Cores" SM's walk
   from vSphere World.
 
   Cross-adapter caveat: this depth=10 walk from NSXT World to
@@ -44,4 +44,4 @@ description: >
   Feeds NSX Usage Insights (NSX Licensed Cores), NSX Consumption Trend,
   and NSX Licensing Overtime.
 formula: |
-  sum(${adaptertype=VMWARE, objecttype=HostSystem, metric=@supermetric:"[VCF Content Factory] Host VCF Licensed Cores (16-core minimum)", depth=10})
+  sum(${adaptertype=VMWARE, objecttype=HostSystem, metric=@supermetric:"[VCF CF] Host VCF Licensed Cores (16-core minimum)", depth=10})

@@ -79,7 +79,7 @@ class _Stub:
 
 
 def _stub(monkeypatch, captured):
-    stub = _Stub("[VCF Content Factory] Stub")
+    stub = _Stub("[VCF CF] Stub")
     monkeypatch.setattr(dash_handler, "load_dashboard", lambda p: stub)
     monkeypatch.setattr(dash_handler, "load_view", lambda p: stub)
     monkeypatch.setattr(dash_handler, "get_current_user", lambda s: CURRENTUSER_BODY)
@@ -114,7 +114,7 @@ def test_standalone_sync_writes_the_session_user_name(monkeypatch, tmp_path):
     from vcfcf_dashboards import cli as dash_cli
 
     captured: list = []
-    stub = _Stub("[VCF Content Factory] Stub")
+    stub = _Stub("[VCF CF] Stub")
     monkeypatch.setattr(dash_cli, "_load", lambda args: ([], [stub]))
     monkeypatch.setattr(
         dash_cli.VCFOpsClient, "from_env", classmethod(lambda cls, **kw: object())

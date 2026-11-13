@@ -112,7 +112,7 @@ def test_loader_round_decimals_null_vs_absent(tmp_path):
 
     def _load(extra):
         p = tmp_path / f"{len(extra)}.yaml"
-        p.write_text(yaml.dump({"name": "[VCF Content Factory] RD", "widgets": [{
+        p.write_text(yaml.dump({"name": "[VCF CF] RD", "widgets": [{
             "id": "sb", "type": "Scoreboard", "title": "t", "coords": {"x": 1, "y": 1, "w": 4, "h": 4},
             "metrics": [{"adapter_kind": "VMWARE", "resource_kind": "vSphere World",
                          "metric_key": "cpu|usage_average", "metric_name": "cpu"}], **extra}]}))
@@ -127,7 +127,7 @@ def test_chart_view_items_rejected_off_view(tmp_path):
     from vcfcf_dashboards.loader import DashboardValidationError, load_dashboard
 
     p = tmp_path / "d.yaml"
-    p.write_text(yaml.dump({"name": "[VCF Content Factory] X", "widgets": [{
+    p.write_text(yaml.dump({"name": "[VCF CF] X", "widgets": [{
         "id": "t", "type": "TextDisplay", "title": "t", "coords": {"x": 1, "y": 1, "w": 4, "h": 4},
         "html": "<br>", "chart_view_items": ["legend"]}]}))
     with pytest.raises(DashboardValidationError, match="only valid on View widgets"):
@@ -191,7 +191,7 @@ def test_defaults_unchanged(tmp_path):
     from vcfcf_dashboards.render import _render_view_def_fragment
 
     p = tmp_path / "v.yaml"
-    p.write_text(yaml.dump({"name": "[VCF Content Factory] V", "data_type": "trend",
+    p.write_text(yaml.dump({"name": "[VCF CF] V", "data_type": "trend",
                             "subject": {"adapter_kind": "VMWARE", "resource_kind": "VirtualMachine"},
                             "columns": [{"attribute": "cpu|usage_average", "display_name": "c"}]}))
     frag = _render_view_def_fragment(load_view(p), {})

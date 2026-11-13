@@ -1,4 +1,4 @@
-name: "[VCF Content Factory] Synology System Temperature Critical"
+name: "[VCF CF] Synology System Temperature Critical"
 # TODO: verify resource kind prefix at install-verification time
 # (MPB may expose this as mpb_synology_dsm_synology_diskstation rather than synology_diskstation)
 adapter_kind: mpb_synology_dsm

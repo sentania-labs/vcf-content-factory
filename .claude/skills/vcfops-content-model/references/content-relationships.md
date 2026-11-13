@@ -11,9 +11,9 @@ Resolved at: `validate` (SM loader reads referenced SM YAML)
 Example:
 ```yaml
 formula: |
-  ${this, metric=Super Metric|@supermetric:"[VCF Content Factory] VKS VMOperator vCPU"}
+  ${this, metric=Super Metric|@supermetric:"[VCF CF] VKS VMOperator vCPU"}
   -
-  ${this, metric=Super Metric|@supermetric:"[VCF Content Factory] VKS Node Image vCPU"}
+  ${this, metric=Super Metric|@supermetric:"[VCF CF] VKS Node Image vCPU"}
 ```
 
 All referenced SMs must be assigned to the same resource kinds

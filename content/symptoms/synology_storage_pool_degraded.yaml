@@ -1,4 +1,4 @@
-name: "[VCF Content Factory] Synology Storage Pool Degraded"
+name: "[VCF CF] Synology Storage Pool Degraded"
 # TODO: verify resource kind prefix at install-verification time
 # (MPB may expose this as mpb_synology_dsm_storage_pool rather than storage_pool)
 adapter_kind: mpb_synology_dsm

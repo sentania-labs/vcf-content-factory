@@ -41,7 +41,7 @@ def _render(tmp_path: Path, widget: dict, stem: str) -> dict:
 
     p = tmp_path / f"{stem}.yaml"
     p.write_text(yaml.dump(
-        {"name": "[VCF Content Factory] Gauge Round Trip", "widgets": [widget]},
+        {"name": "[VCF CF] Gauge Round Trip", "widgets": [widget]},
         default_flow_style=False, sort_keys=False,
     ))
     d = load_dashboard(p)

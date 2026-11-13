@@ -1,5 +1,5 @@
 id: 7d1c5a2e-3b4f-4c6d-8e9f-0a1b2c3d4e5f
-name: "[VCF Content Factory] Gauge Fixture"
+name: "[VCF CF] Gauge Fixture"
 description: One gauge scoreboard (visual_theme 9) over public VMWARE kinds.
 widgets:
   - id: cpu_gauge

@@ -126,8 +126,8 @@ carry ids and are checked by id above.
 
 What guards it today:
 
-- Factory content carries the RULE-006 `[VCF Content Factory]` prefix,
-  which no stock name carries. The per-type `validate` and `sync` commands
+- Factory content carries the RULE-006 `[VCF CF]` prefix
+  (`[VCF Content Factory]` before 2026-11-12), which no stock name carries. The per-type `validate` and `sync` commands
   and the bundle-sync handlers load symptoms and alerts with the prefix
   rule on, so through them an unprefixed name never reaches the server.
 - Third-party (`factory_native: false`) bundle content is unprefixed by

@@ -1,5 +1,5 @@
 id: ae6bcf5e-da7a-401c-a042-d879118d2351
-name: "[VCF Content Factory] Cluster Storage Trend"
+name: "[VCF CF] Cluster Storage Trend"
 description: >
   Per-cluster storage utilization trend for quarterly executive capacity review. Columns
   cover current total capacity, current used space, disk usage percentage (super
@@ -31,7 +31,7 @@ columns:
     transformation: CURRENT
 
   # --- Utilisation % (super metric, thresholded) ---
-  - attribute: 'supermetric:"[VCF Content Factory] Cluster - Disk Usage % (percent)"'
+  - attribute: 'supermetric:"[VCF CF] Cluster - Disk Usage % (percent)"'
     display_name: "Disk Usage %"
     unit: percent
     transformation: CURRENT

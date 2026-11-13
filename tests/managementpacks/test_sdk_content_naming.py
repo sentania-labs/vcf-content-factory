@@ -2,7 +2,7 @@
 
 Contract:
   factory_prefixed (default)  every bundled content name starts with
-                              "[VCF Content Factory] ".
+                              "[VCF CF] ".
   unprefixed                  no bundled content name carries the prefix.
   key declared                a mismatch is a validate-sdk error and a
                               build-sdk failure (release CI runs build-sdk
@@ -25,7 +25,7 @@ from vcfcf_managementpacks.sdk_project import (
     load_sdk_project,
 )
 
-PREFIX = "[VCF Content Factory] "
+PREFIX = "[VCF CF] "
 
 _ADAPTER_YAML = """name: "VCF Content Factory Probe"
 version: "1.0.0"
@@ -127,7 +127,7 @@ def test_declared_unprefixed_passes_bare(tmp_path, monkeypatch):
     assert _validate(p, monkeypatch) == []
 
 
-@pytest.mark.parametrize("bad", [PREFIX + "Probe", "[VCF Content Factory]Probe"])
+@pytest.mark.parametrize("bad", [PREFIX + "Probe", "[VCF CF]Probe"])
 def test_declared_unprefixed_rejects_prefixed(tmp_path, monkeypatch, bad):
     p = _project(tmp_path, "content_naming: unprefixed\n", ["Bare", bad])
     errs = _validate(p, monkeypatch)

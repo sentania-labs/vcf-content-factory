@@ -33,7 +33,7 @@ def _write(path: Path, content: str) -> Path:
     return path
 
 
-def _minimal_dashboard_yaml(name: str = "[VCF Content Factory] Test Dashboard") -> str:
+def _minimal_dashboard_yaml(name: str = "[VCF CF] Test Dashboard") -> str:
     return yaml.dump({
         "name": name,
         "description": "A test dashboard.",
@@ -241,7 +241,7 @@ class TestReleaseManifestOutput:
         result = self._run_release(
             tmp_path, "dashboard", "my_dash",
             yaml.dump({
-                "name": "[VCF Content Factory] My Dash",
+                "name": "[VCF CF] My Dash",
                 "description": "A dashboard.",
                 "released": False,
                 "widgets": [],
@@ -260,7 +260,7 @@ class TestReleaseManifestOutput:
         result = self._run_release(
             tmp_path, "report", "weekly_cap",
             yaml.dump({
-                "name": "[VCF Content Factory] Weekly Cap",
+                "name": "[VCF CF] Weekly Cap",
                 "description": "A report.",
                 "released": False,
             }),
@@ -278,7 +278,7 @@ class TestReleaseManifestOutput:
         result = self._run_release(
             tmp_path, "dashboard", "my_dash",
             yaml.dump({
-                "name": "[VCF Content Factory] My Dash",
+                "name": "[VCF CF] My Dash",
                 "description": "A dashboard.",
                 "released": False,
                 "widgets": [],
@@ -301,7 +301,7 @@ class TestReleaseManifestOutput:
         result = self._run_release(
             tmp_path, "dashboard", "flip_test",
             yaml.dump({
-                "name": "[VCF Content Factory] Flip Test",
+                "name": "[VCF CF] Flip Test",
                 "description": "For flag flip test.",
                 "released": False,
                 "widgets": [],
@@ -717,7 +717,7 @@ class TestValidatorNamingConventionWarn:
         source = tmp_path / "content" / "dashboards" / "vks_core_consumption.yaml"
         source.parent.mkdir(parents=True, exist_ok=True)
         source.write_text(yaml.dump({
-            "name": "[VCF Content Factory] VKS Core Consumption",
+            "name": "[VCF CF] VKS Core Consumption",
             "description": "A dashboard.",
             "released": True,
             "widgets": [],

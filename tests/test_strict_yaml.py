@@ -65,7 +65,7 @@ def test_strict_load_accepts_valid_yaml():
 def _valid_view_yaml(view_id: str) -> str:
     return textwrap.dedent(f"""\
         id: {view_id}
-        name: "[VCF Content Factory] Test View"
+        name: "[VCF CF] Test View"
         description: "test"
         subject:
           adapter_kind: VMWARE
@@ -83,7 +83,7 @@ def test_view_loader_rejects_duplicate_id(tmp_path: Path):
     yaml_content = textwrap.dedent(f"""\
         id: {view_id}
         id: ""
-        name: "[VCF Content Factory] Bad View"
+        name: "[VCF CF] Bad View"
         description: "test"
         adapter_kind: VMWARE
         resource_kind: VirtualMachine
@@ -123,7 +123,7 @@ def test_dashboard_loader_rejects_duplicate_id(tmp_path: Path):
     yaml_content = textwrap.dedent(f"""\
         id: {dash_id}
         id: ""
-        name: "[VCF Content Factory] Bad Dashboard"
+        name: "[VCF CF] Bad Dashboard"
         widgets: []
     """)
     p = tmp_path / "bad_dashboard.yaml"
@@ -148,7 +148,7 @@ def test_supermetric_loader_rejects_duplicate_id(tmp_path: Path):
     yaml_content = textwrap.dedent(f"""\
         id: {sm_id}
         id: ""
-        name: "[VCF Content Factory] Bad SM"
+        name: "[VCF CF] Bad SM"
         formula: "avg(${{this, metric=cpu|usage_average}})"
         resource_kinds:
           - resourceKindKey: VirtualMachine
@@ -173,8 +173,8 @@ def test_customgroup_loader_rejects_duplicate_key(tmp_path: Path):
     from vcfcf_customgroups.loader import CustomGroupValidationError, load_file
 
     yaml_content = textwrap.dedent("""\
-        name: "[VCF Content Factory] Bad Group"
-        name: "[VCF Content Factory] Duplicate Name"
+        name: "[VCF CF] Bad Group"
+        name: "[VCF CF] Duplicate Name"
         rules:
           - resource_kind: VirtualMachine
             adapter_kind: VMWARE
@@ -198,8 +198,8 @@ def test_symptom_loader_rejects_duplicate_key(tmp_path: Path):
     from vcfcf_symptoms.loader import SymptomValidationError, load_file
 
     yaml_content = textwrap.dedent("""\
-        name: "[VCF Content Factory] Bad Symptom"
-        name: "[VCF Content Factory] Duplicate Symptom"
+        name: "[VCF CF] Bad Symptom"
+        name: "[VCF CF] Duplicate Symptom"
         adapter_kind: VMWARE
         resource_kind: VirtualMachine
         severity: CRITICAL
@@ -228,8 +228,8 @@ def test_alert_loader_rejects_duplicate_key(tmp_path: Path):
     from vcfcf_alerts.loader import AlertValidationError, load_file
 
     yaml_content = textwrap.dedent("""\
-        name: "[VCF Content Factory] Bad Alert"
-        name: "[VCF Content Factory] Duplicate Alert"
+        name: "[VCF CF] Bad Alert"
+        name: "[VCF CF] Duplicate Alert"
         description: "test"
         adapter_kind: VMWARE
         resource_kind: VirtualMachine
@@ -252,8 +252,8 @@ def test_recommendation_loader_rejects_duplicate_key(tmp_path: Path):
     from vcfcf_alerts.loader import AlertValidationError, load_recommendation_file
 
     yaml_content = textwrap.dedent("""\
-        name: "[VCF Content Factory] Bad Rec"
-        name: "[VCF Content Factory] Duplicate Rec"
+        name: "[VCF CF] Bad Rec"
+        name: "[VCF CF] Duplicate Rec"
         description: "test"
         type: OperatorAction
         impact: NONE
@@ -281,7 +281,7 @@ def test_report_loader_rejects_duplicate_id(tmp_path: Path):
     yaml_content = textwrap.dedent(f"""\
         id: {report_id}
         id: ""
-        name: "[VCF Content Factory] Bad Report"
+        name: "[VCF CF] Bad Report"
         description: "test"
         subject_types:
           - adapter_kind: VMWARE

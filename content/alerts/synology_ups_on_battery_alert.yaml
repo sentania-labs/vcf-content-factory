@@ -1,4 +1,4 @@
-name: "[VCF Content Factory] Synology UPS On Battery Alert"
+name: "[VCF CF] Synology UPS On Battery Alert"
 description: >
   Alerts when the NAS UPS transitions to battery power (NUT status "OB"),
   indicating a loss of mains power. This is a CRITICAL condition: if power
@@ -26,8 +26,8 @@ symptom_sets:
     - defined_on: SELF
       operator: ALL
       symptoms:
-        - name: "[VCF Content Factory] Synology UPS On Battery"
+        - name: "[VCF CF] Synology UPS On Battery"
 
 recommendations:
-  - name: "[VCF Content Factory] Synology UPS On Battery Remediation"
+  - name: "[VCF CF] Synology UPS On Battery Remediation"
     priority: 1

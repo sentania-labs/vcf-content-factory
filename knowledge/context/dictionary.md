@@ -246,14 +246,14 @@ older copy. Deciding factor 2026-04-27.
 Things authored *for* VCF Ops: super metrics, views, dashboards,
 custom groups, symptoms, alerts, reports, recommendations.
 Shipped via content-zip import. Display names carry the
-`[VCF Content Factory]` prefix.
+`[VCF CF]` prefix.
 
 ### Management Pack (MP)
 An adapter + object model shipped as a `.pak` file. *Extends*
 VCF Ops by adding new kinds of objects, metrics, and properties
 from external systems (e.g., a REST API). Lifecycle is distinct
 from Content: different build path (MPB), different install API,
-no `[VCF Content Factory]` prefix.
+no `[VCF CF]` prefix.
 
 *Distinct from:* Content.
 

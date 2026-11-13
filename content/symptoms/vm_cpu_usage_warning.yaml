@@ -1,4 +1,4 @@
-name: "[VCF Content Factory] VM CPU Usage Warning"
+name: "[VCF CF] VM CPU Usage Warning"
 adapter_kind: VMWARE
 resource_kind: VirtualMachine
 severity: WARNING

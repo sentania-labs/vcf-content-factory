@@ -1,5 +1,5 @@
 id: 6aae4ccd-754c-467c-96b5-2ac7e4a82025
-name: "[VCF Content Factory] Application VM Resources"
+name: "[VCF CF] Application VM Resources"
 description: >
   Pick an application group on the left to see its child VMs with CPU, memory
   and disk consumption versus allocation, with a summary row of totals.
@@ -18,7 +18,7 @@ widgets:
     type: View
     title: "VMs in Selected Application"
     coords: {x: 5, y: 1, w: 8, h: 9}
-    view: "[VCF Content Factory] Application VM Resources"
+    view: "[VCF CF] Application VM Resources"
 
 interactions:
   - from: app_picker

@@ -1,5 +1,5 @@
 id: 2e58f142-5a21-44c6-899f-a66f09fd3ad3
-name: "[VCF Content Factory] vSAN Cluster Health & Resync"
+name: "[VCF CF] vSAN Cluster Health & Resync"
 description: >
   vSAN cluster health and resync state detail view for demand-driven capacity
   planning dashboards. Shows 24-hour average and current health scores,

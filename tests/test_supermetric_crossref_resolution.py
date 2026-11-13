@@ -35,9 +35,9 @@ REF_UUID = "aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa"
 CONSUMER_UUID = "bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb"
 PLAIN_UUID = "cccccccc-3333-4333-8333-cccccccccccc"
 
-REF_NAME = "[VCF Content Factory] Ref SM"
-CONSUMER_NAME = "[VCF Content Factory] Consumer SM"
-PLAIN_NAME = "[VCF Content Factory] Plain SM"
+REF_NAME = "[VCF CF] Ref SM"
+CONSUMER_NAME = "[VCF CF] Consumer SM"
+PLAIN_NAME = "[VCF CF] Plain SM"
 
 PLAIN_FORMULA = "avg(${adaptertype=VMWARE, objecttype=HostSystem, metric=cpu|usage_average, depth=5})"
 CONSUMER_FORMULA = (
@@ -46,7 +46,7 @@ CONSUMER_FORMULA = (
 )
 MISSING_FORMULA = (
     'avg(${adaptertype=VMWARE, objecttype=HostSystem, '
-    'attribute=@supermetric:"[VCF Content Factory] Nowhere SM", depth=5})'
+    'attribute=@supermetric:"[VCF CF] Nowhere SM", depth=5})'
 )
 
 RESOLVED_TOKEN = f"Super Metric|sm_{REF_UUID}"
@@ -103,7 +103,7 @@ class TestSharedResolver:
             resolve_sm_formula(MISSING_FORMULA, CONSUMER_NAME, {})
         msg = str(exc.value)
         assert CONSUMER_NAME in msg, "message must name the SM with the bad formula"
-        assert "[VCF Content Factory] Nowhere SM" in msg, "message must name the missing SM"
+        assert "[VCF CF] Nowhere SM" in msg, "message must name the missing SM"
 
     def test_formula_without_token_unchanged(self):
         from vcfcf_supermetrics.crossref import resolve_sm_formula
@@ -300,7 +300,7 @@ class TestNativeBundleBuilder:
             _render_supermetrics_dict(self._bundle([sms["orphan"]]))
         msg = str(exc.value)
         assert CONSUMER_NAME in msg
-        assert "[VCF Content Factory] Nowhere SM" in msg
+        assert "[VCF CF] Nowhere SM" in msg
 
     def test_formula_without_token_unchanged(self, sms):
         from vcfcf_packaging.builder import _render_supermetrics_dict
@@ -328,7 +328,7 @@ class TestDiscreteBuilderCrossRefExpansion:
             _expand_sm_crossrefs([sms["orphan"]], [sms["orphan"]])
         msg = str(exc.value)
         assert CONSUMER_NAME in msg
-        assert "[VCF Content Factory] Nowhere SM" in msg
+        assert "[VCF CF] Nowhere SM" in msg
 
     def test_formula_without_token_is_a_noop(self, sms):
         from vcfcf_packaging.discrete_builder import _expand_sm_crossrefs
@@ -422,7 +422,7 @@ class TestLiveSyncPath:
             _run_import(client, [_wire(sms["orphan"])], monkeypatch)
         msg = str(exc.value)
         assert CONSUMER_NAME in msg
-        assert "[VCF Content Factory] Nowhere SM" in msg
+        assert "[VCF CF] Nowhere SM" in msg
 
     def test_formula_without_token_unchanged(self, sms, monkeypatch):
         client = _fake_client_cls()()
@@ -551,7 +551,7 @@ class TestTokenCaseInsensitivity:
 
         formula = (
             'avg(${adaptertype=VMWARE, objecttype=HostSystem, '
-            'metric=' + token + ':"[VCF Content Factory] Nowhere SM", depth=5})'
+            'metric=' + token + ':"[VCF CF] Nowhere SM", depth=5})'
         )
         with pytest.raises(SuperMetricCrossRefError):
             resolve_sm_formula(formula, CONSUMER_NAME, {REF_NAME: REF_UUID})

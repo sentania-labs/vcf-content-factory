@@ -1,5 +1,5 @@
 id: 3797d639-4623-486e-8633-1f7ce823c57c
-name: "[VCF Content Factory] Summary Widget Smoke (HostSystem)"
+name: "[VCF CF] Summary Widget Smoke (HostSystem)"
 description: >
   Framework smoke test for the summary-dashboard widget set added on
   this branch: Section, Alert Volume, gauge Scoreboard

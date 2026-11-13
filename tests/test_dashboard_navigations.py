@@ -17,8 +17,8 @@ import pytest
 import yaml
 
 OWNER = "00000000-0000-0000-0000-000000000001"
-SRC = "[VCF Content Factory] Nav Source"
-DST = "[VCF Content Factory] Nav Target"
+SRC = "[VCF CF] Nav Source"
+DST = "[VCF CF] Nav Target"
 SRC_ID = "11111111-1111-4111-8111-111111111111"
 DST_ID = "22222222-2222-4222-8222-222222222222"
 STOCK_ID = "533e14ed-2796-4ead-a644-468beb6396f8"  # vendor Cluster Performance
@@ -185,10 +185,10 @@ class TestCheck:
 
     def test_unresolved_name_names_dashboard_widget_and_reference(self, tmp_path):
         from vcfcf_core.dashboards.loader import check_dashboard_navigations
-        src, _ = self._pair(tmp_path, [{"dashboard": "[VCF Content Factory] Nope"}])
+        src, _ = self._pair(tmp_path, [{"dashboard": "[VCF CF] Nope"}])
         errs = check_dashboard_navigations([src])
         assert len(errs) == 1
-        assert SRC in errs[0] and "'src_list'" in errs[0] and "[VCF Content Factory] Nope" in errs[0]
+        assert SRC in errs[0] and "'src_list'" in errs[0] and "[VCF CF] Nope" in errs[0]
 
     def test_unknown_receiving_widget(self, tmp_path):
         from vcfcf_core.dashboards.loader import check_dashboard_navigations
@@ -874,7 +874,7 @@ def test_live_extract_names_repo_owned_target_and_passes_validate(tmp_path, caps
 # ---------------------------------------------------------------------------
 
 EXT_ID = "5f3f1c2a-7b1e-4c1d-9a2b-3c4d5e6f7a8b"
-U_NAME = "[VCF Content Factory] Nav Further"
+U_NAME = "[VCF CF] Nav Further"
 U_ID = "44444444-4444-4444-8444-444444444444"
 
 
@@ -906,7 +906,7 @@ def owned_extract(monkeypatch, tmp_path):
     _write(root / "content" / "dashboards" / "t.yaml", dst_doc)
     _write(root / "content" / "dashboards" / "u.yaml", _dash(U_NAME, U_ID, [_rl("u_list")]))
     _write(root / "content" / "dashboards" / "unrelated.yaml",
-           _dash("[VCF Content Factory] Unrelated", OTHER_ID, [_rl("x")]))
+           _dash("[VCF CF] Unrelated", OTHER_ID, [_rl("x")]))
     dst = _load(root / "content" / "dashboards" / "t.yaml")
     picker = next(w.widget_id for w in dst.widgets if w.local_id == "cluster_picker")
     live = {
@@ -1015,7 +1015,7 @@ class TestExtractManifestCarriesOwnedTargets:
 
 
 def _chain_repo(tmp_path: Path, n: int, cycle: bool = False) -> Path:
-    names = [f"[VCF Content Factory] Chain {i:02d}" for i in range(n)]
+    names = [f"[VCF CF] Chain {i:02d}" for i in range(n)]
     for i, name in enumerate(names):
         nxt = names[(i + 1) % n] if (i + 1 < n or cycle) else None
         navs = [{"dashboard": nxt}] if nxt else []
@@ -1054,8 +1054,8 @@ class TestComposerConvergence:
     def test_unresolved_target_fails_without_writing(self, tmp_path, capsys):
         repo = _chain_repo(tmp_path, 3)
         _write(repo / "content" / "dashboards" / "d02.yaml",
-               _dash("[VCF Content Factory] Chain 02", "00000002-0000-4000-8000-000000000000",
-                     [_rl("l", navigations=[{"dashboard": "[VCF Content Factory] Gone"}])]))
+               _dash("[VCF CF] Chain 02", "00000002-0000-4000-8000-000000000000",
+                     [_rl("l", navigations=[{"dashboard": "[VCF CF] Gone"}])]))
         assert _compose(repo, ["", "desc", "END", "d00", "y"]) == 1
-        assert "[VCF Content Factory] Gone" in capsys.readouterr().err
+        assert "[VCF CF] Gone" in capsys.readouterr().err
         assert not (repo / "bundles" / "nav-chain.yaml").exists()

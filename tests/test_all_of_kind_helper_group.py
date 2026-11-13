@@ -30,7 +30,7 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 OWNER = "00000000-0000-0000-0000-000000000001"
-GROUP = "[VCF Content Factory] All Applications"
+GROUP = "[VCF CF] All Applications"
 
 
 def _cg(tmp_path: Path, rule: dict):
@@ -147,12 +147,12 @@ def _dashboard(tmp_path: Path, widget_extra: dict):
 
     vp = tmp_path / "v.yaml"
     vp.write_text(yaml.safe_dump({
-        "name": "[VCF Content Factory] App Probe View",
+        "name": "[VCF CF] App Probe View",
         "subject": {"adapter_kind": "Container", "resource_kind": "(Custom) Application"},
         "columns": [{"attribute": "summary|total_number_vms", "display_name": "VMs"}]}))
     view = load_view(vp)
     dp = tmp_path / "d.yaml"
-    dp.write_text(yaml.safe_dump({"name": "[VCF Content Factory] App Probe", "widgets": [{
+    dp.write_text(yaml.safe_dump({"name": "[VCF CF] App Probe", "widgets": [{
         "id": "apps", "type": "View", "title": "Apps",
         "coords": {"x": 1, "y": 1, "w": 12, "h": 6},
         "view": view.name, "self_provider": True, **widget_extra}]}))

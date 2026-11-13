@@ -168,20 +168,20 @@ $junk = '{"operationSummaries":[{"contentType":"DASHBOARDS","imported":"x","skip
 Assert ((Get-AllSkippedSummaries -Result $junk -ContentTypes @("DASHBOARDS")).Count -eq 0) "non-numeric counts skipped without throwing"
 
 # --- name extraction -------------------------------------------------------
-$dashJson = '{"dashboards":[{"id":"abc","name":"[VCF Content Factory] My Dash","owner":"PLACEHOLDER_USER_ID"}]}'
+$dashJson = '{"dashboards":[{"id":"abc","name":"[VCF CF] My Dash","owner":"PLACEHOLDER_USER_ID"}]}'
 $n = Get-DashboardAdvisoryNames -DashJson $dashJson -OwnerId "u1"
-Assert ($n.Count -eq 1 -and $n[0] -eq "[VCF Content Factory] My Dash") "dashboard name extracted"
+Assert ($n.Count -eq 1 -and $n[0] -eq "[VCF CF] My Dash") "dashboard name extracted"
 Assert ((Get-DashboardAdvisoryNames -DashJson "not json" -OwnerId "u1").Count -eq 0) "malformed json degrades to no names"
 Assert ((Get-DashboardAdvisoryNames -DashJson '{"dashboards":"oops"}' -OwnerId "u1").Count -eq 0) "non-array dashboards value yields no names, matching install.py"
 Assert ((Get-DashboardAdvisoryNames -DashJson '{"dashboards":[{"id":"only-id"}]}' -OwnerId "u1")[0] -eq "only-id") "falls back to id"
 
 $viewsXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Content><Views>' +
-    '<ViewDef id="1"><Title>[VCF Content Factory] CPU &amp; Memory</Title></ViewDef>' +
+    '<ViewDef id="1"><Title>[VCF CF] CPU &amp; Memory</Title></ViewDef>' +
     '<ViewDef id="2" name="attr-fallback"><Description>no title</Description></ViewDef>' +
     '</Views></Content>'
 $v = Get-ViewAdvisoryNames -ViewsXml $viewsXml
 Assert ($v.Count -eq 2) "one name per ViewDef"
-Assert ($v[0] -eq "[VCF Content Factory] CPU & Memory") "entities decoded"
+Assert ($v[0] -eq "[VCF CF] CPU & Memory") "entities decoded"
 Assert ($v[1] -eq "attr-fallback") "name attribute fallback"
 Assert ((Get-ViewAdvisoryNames -ViewsXml "<Content><unclosed>").Count -eq 0) "malformed xml degrades to no names"
 Assert ((Get-ViewAdvisoryNames -ViewsXml "").Count -eq 0) "empty xml degrades to no names"
@@ -210,7 +210,7 @@ $ctx = New-Ctx
 Install-Dashboard $ctx
 Assert ($ctx.Advisories.Count -eq 2) "no-op import produces one advisory per content type"
 Assert ($ctx.Warnings.Count -eq 0) "advisories stay out of the exit-code warnings list"
-Assert ($ctx.Advisories[0].Contains("skipped=1): [VCF Content Factory] My Dash.")) "dashboard named in its advisory"
+Assert ($ctx.Advisories[0].Contains("skipped=1): [VCF CF] My Dash.")) "dashboard named in its advisory"
 Assert ($ctx.Advisories[1].Contains("CPU & Memory")) "views named in their advisory"
 # True for the force=true request this installer sends; no claim the
 # dashboard still exists (under the owner cause it was never created).
@@ -374,7 +374,7 @@ Assert ($f.Count -eq 1) "a group with no resourceKey is skipped rather than thro
 # because the stubbed POST also returned an error -- it was testing the stub.
 # It now asserts that ZERO mutating requests were sent, which is the property
 # that actually matters and which the buggy code could not satisfy.
-$payload = '{"resourceKey":{"name":"[VCF Content Factory] G"}}' | ConvertFrom-Json
+$payload = '{"resourceKey":{"name":"[VCF CF] G"}}' | ConvertFrom-Json
 Reset-Api @($errShape, ('{"ok":true}' | ConvertFrom-Json))
 $msg = Get-Thrown { Upsert-CustomGroup -Payload $payload }
 # NOTE: no [ ] in this pattern.  -like treats them as a character class, and a
@@ -387,12 +387,12 @@ Assert ($script:ApiLog.Count -eq 1) "and the run stops at the lookup itself"
 
 # Same shape via the 500-PUT verification path: "the group exists so the 500
 # was spurious" is a state claim that a failed verification lookup cannot make.
-Reset-Api @(('{"groups":[{"id":"gid","resourceKey":{"name":"[VCF Content Factory] G"}}]}' | ConvertFrom-Json), $errShape, $errShape)
+Reset-Api @(('{"groups":[{"id":"gid","resourceKey":{"name":"[VCF CF] G"}}]}' | ConvertFrom-Json), $errShape, $errShape)
 $msg = Get-Thrown { Upsert-CustomGroup -Payload $payload }
 Assert ($msg -like "*PUT verification lookup*failed (HTTP 500)*") "a failed verification lookup is not downgraded to 'PUT failed'"
 
 # Healthy paths still work, and still mutate exactly once.
-Reset-Api @(('{"groups":[{"id":"gid","resourceKey":{"name":"[VCF Content Factory] G"}}]}' | ConvertFrom-Json), ('{"ok":true}' | ConvertFrom-Json))
+Reset-Api @(('{"groups":[{"id":"gid","resourceKey":{"name":"[VCF CF] G"}}]}' | ConvertFrom-Json), ('{"ok":true}' | ConvertFrom-Json))
 Assert ($null -eq (Get-Thrown { Upsert-CustomGroup -Payload $payload })) "existing group takes the update branch cleanly"
 Assert ((Get-MutationCount) -eq 1 -and $script:ApiLog[1] -like "PUT *") "and updates rather than creating"
 Reset-Api @(('{"groups":[]}' | ConvertFrom-Json), ('{"ok":true}' | ConvertFrom-Json))
@@ -404,20 +404,20 @@ Assert ((Get-MutationCount) -eq 1 -and $script:ApiLog[1] -like "POST *") "and it
 # from a lookup that returned HTTP 500, it is a confident false statement that
 # lands in the advisory trailer.  All four uninstall paths must refuse instead.
 Reset-Api @($errShape)
-$ctx = @{ Names = @("[VCF Content Factory] A"); Warnings = [System.Collections.Generic.List[string]]::new() }
+$ctx = @{ Names = @("[VCF CF] A"); Warnings = [System.Collections.Generic.List[string]]::new() }
 $msg = Get-Thrown { $null = @(Uninstall-Alerts $ctx 6>&1 3>&1) }
 Assert ($msg -like "*Alert lookup (uninstall) failed (HTTP 500)*") "a failed uninstall lookup refuses"
 Assert ($ctx.Warnings.Count -eq 0) "and does NOT claim the alert was already removed"
 Assert ((Get-MutationCount) -eq 0) "and attempts no DELETE"
 
 Reset-Api @($errShape)
-$ctx = @{ Names = @("[VCF Content Factory] S"); Warnings = [System.Collections.Generic.List[string]]::new() }
+$ctx = @{ Names = @("[VCF CF] S"); Warnings = [System.Collections.Generic.List[string]]::new() }
 $msg = Get-Thrown { $null = @(Uninstall-Supermetrics $ctx 6>&1 3>&1) }
 Assert ($msg -like "*Super metric lookup failed (HTTP 500)*") "same for super metrics"
 Assert ($ctx.Warnings.Count -eq 0 -and (Get-MutationCount) -eq 0) "no false 'already removed', no DELETE"
 
 Reset-Api @($errShape)
-$ctx = @{ Names = @("[VCF Content Factory] G"); Warnings = [System.Collections.Generic.List[string]]::new() }
+$ctx = @{ Names = @("[VCF CF] G"); Warnings = [System.Collections.Generic.List[string]]::new() }
 $msg = Get-Thrown { $null = @(Uninstall-CustomGroups $ctx 6>&1 3>&1) }
 Assert ($msg -like "*Custom group lookup failed (HTTP 500)*") "same for custom groups"
 Assert ($ctx.Warnings.Count -eq 0 -and (Get-MutationCount) -eq 0) "no false 'already removed', no DELETE"
@@ -425,14 +425,14 @@ Assert ($ctx.Warnings.Count -eq 0 -and (Get-MutationCount) -eq 0) "no false 'alr
 # A genuine 200-with-no-match must STILL report not-found: the guard must not
 # have flattened the real not-found path into an error.
 Reset-Api @(('{"alertDefinitions":[],"pageInfo":{"totalCount":0}}' | ConvertFrom-Json))
-$ctx = @{ Names = @("[VCF Content Factory] A"); Warnings = [System.Collections.Generic.List[string]]::new() }
+$ctx = @{ Names = @("[VCF CF] A"); Warnings = [System.Collections.Generic.List[string]]::new() }
 $null = @(Uninstall-Alerts $ctx 6>&1 3>&1)
 Assert ($ctx.Warnings.Count -eq 1 -and $ctx.Warnings[0] -like "Alert not found*") "a real empty 200 still reports not-found"
 Assert ((Get-MutationCount) -eq 0) "and still attempts no DELETE"
 
 # Install-Symptoms: the create-on-failed-lookup shape on the symptom path.
 Reset-Api @($errShape, ('{"ok":true}' | ConvertFrom-Json))
-$script:StubSymptoms = @('{"name":"[VCF Content Factory] Sym"}' | ConvertFrom-Json)
+$script:StubSymptoms = @('{"name":"[VCF CF] Sym"}' | ConvertFrom-Json)
 function Load-JsonFile($Path) { return $script:StubSymptoms }
 $msg = Get-Thrown { $null = @(Install-Symptoms @{ BundleDir = "/b"; Manifest = ([pscustomobject]@{ content = [pscustomobject]@{ symptoms = [pscustomobject]@{ file = "/b/s.json" } } }) } 6>&1) }
 Assert ($msg -like "*Symptom lookup for*failed (HTTP 500)*") "a failed symptom lookup refuses"

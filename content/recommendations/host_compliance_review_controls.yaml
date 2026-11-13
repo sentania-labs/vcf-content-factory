@@ -1,4 +1,4 @@
-name: "[VCF Content Factory] Host Compliance Review Non-Compliant Controls"
+name: "[VCF CF] Host Compliance Review Non-Compliant Controls"
 description: |
   Review the VCF-CF Compliance properties on the affected host in VCF Operations.
   Navigate to the host resource and open the Metrics or Properties tab. Each

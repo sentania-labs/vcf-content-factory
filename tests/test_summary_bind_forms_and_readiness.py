@@ -28,7 +28,7 @@ if str(TESTS) not in sys.path:
 
 from test_dashboard_summary_for import FakeUI, _load  # noqa: E402
 
-NAME = "[VCF Content Factory] Host Summary"
+NAME = "[VCF CF] Host Summary"
 UUID = "12345678-1234-4123-8123-123456789abc"
 KEY = "resourceKind_002006VMWAREHostSystem"
 NEW = "aaaaaaaa-1111-4222-8333-444444444444"
@@ -454,7 +454,7 @@ def test_a_refused_dashboard_does_not_stop_the_run(tmp_path):
     from vcfcf_dashboards.ui_client import UIClientError
     from test_dashboard_summary_for import _summary_dash, _write
 
-    other = "[VCF Content Factory] VM Summary"
+    other = "[VCF CF] VM Summary"
     a = _load(tmp_path)
     b = load_dashboard(_write(tmp_path / "b.yaml", _summary_dash(
         name=other, summary_for="VMWARE:VirtualMachine",
@@ -511,7 +511,7 @@ def test_wait_budget_is_for_the_whole_run(tmp_path):
     from vcfcf_dashboards.summary_bind import bind_summary
     from test_dashboard_summary_for import _summary_dash, _write
 
-    other = "[VCF Content Factory] VM Summary"
+    other = "[VCF CF] VM Summary"
     b = load_dashboard(_write(tmp_path / "b.yaml", _summary_dash(
         name=other, summary_for="VMWARE:VirtualMachine",
         dash_id="1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d")))

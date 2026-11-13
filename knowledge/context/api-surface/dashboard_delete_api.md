@@ -393,7 +393,7 @@ role) cannot delete dashboards that are `locked: true` and
 
 The packager's `usermappings.json` with `userName: "admin"` is not
 the root cause of the ownership problem — the importer assigns
-admin ownership regardless. However, the `[VCF Content Factory]`
+admin ownership regardless. However, the `[VCF CF]`
 prefix on dashboard names makes them identifiable for manual cleanup.
 
 Future work: if the framework needs autonomous delete, it must

@@ -8,7 +8,7 @@ to resolve cross-references (e.g. symptomdef XML ``id="SymptomDefinition-<uuid>"
 
 YAML schema (see .claude/agents/symptom-author.md for the full spec):
 
-    name: "[VCF Content Factory] VM CPU Usage Critical"
+    name: "[VCF CF] VM CPU Usage Critical"
     adapter_kind: VMWARE
     resource_kind: VirtualMachine
     severity: CRITICAL          # CRITICAL, IMMEDIATE, WARNING, INFO
@@ -53,6 +53,8 @@ from typing import List, Optional
 import yaml
 import yaml.constructor
 import yaml.resolver
+
+from vcfcf_core.naming import framework_prefix_problem, has_factory_prefix
 
 
 def _strict_load(stream):
@@ -156,14 +158,9 @@ class SymptomDef:
     def validate(self, enforce_framework_prefix: bool = True) -> None:
         if not self.name or not self.name.strip():
             raise SymptomValidationError("name is required")
-        if enforce_framework_prefix and not self.name.startswith("[VCF Content Factory] "):
+        if enforce_framework_prefix and not has_factory_prefix(self.name):
             src = str(self.source_path) if self.source_path else self.name
-            raise SymptomValidationError(
-                f'{src}: name "{self.name}" missing framework prefix '
-                f'"[VCF Content Factory]". All factory-authored content must carry the literal '
-                f'"[VCF Content Factory]" prefix (see CLAUDE.md §Hard rules #5). For third-party '
-                f"bundle content, ensure the bundle manifest sets factory_native: false."
-            )
+            raise SymptomValidationError(framework_prefix_problem(self.name, src))
         if not self.adapter_kind:
             raise SymptomValidationError(f"{self.name}: adapter_kind is required")
         if not self.resource_kind:

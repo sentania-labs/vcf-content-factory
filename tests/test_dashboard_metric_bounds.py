@@ -132,7 +132,7 @@ def test_color_method_3_without_bounds_is_accepted(tmp_path):
 # fires for MetricChart and PropertyList exactly as for Scoreboard.
 # PropertyList nests its entries under property_list.properties.
 _OTHER_WIDGET_HEAD = """id: 7d1c5a2e-3b4f-4c6d-8e9f-0a1b2c3d4e60
-name: "[VCF Content Factory] {wtype} Bound Fixture"
+name: "[VCF CF] {wtype} Bound Fixture"
 description: One {wtype} widget over public VMWARE kinds.
 widgets:
   - id: other_widget

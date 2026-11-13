@@ -35,12 +35,12 @@ def _render(tmp_path, pin: dict, subject=("VMWARE", "vSphere World")):
     from vcfcf_dashboards.render import render_dashboards_bundle_json
 
     vp = tmp_path / "v.yaml"
-    vp.write_text(yaml.dump({"name": "[VCF Content Factory] Pin Probe View",
+    vp.write_text(yaml.dump({"name": "[VCF CF] Pin Probe View",
                              "subject": {"adapter_kind": subject[0], "resource_kind": subject[1]},
                              "columns": [{"attribute": "cpu|usage_average", "display_name": "x"}]}))
     view = load_view(vp)
     dp = tmp_path / "d.yaml"
-    dp.write_text(yaml.dump({"name": "[VCF Content Factory] Pin Probe", "widgets": [{
+    dp.write_text(yaml.dump({"name": "[VCF CF] Pin Probe", "widgets": [{
         "id": "v", "type": "View", "title": "V", "coords": {"x": 1, "y": 1, "w": 12, "h": 6},
         "view": view.name, "self_provider": True, "pin": pin}]}))
     out = json.loads(render_dashboards_bundle_json([load_dashboard(dp)], {view.name: view}, OWNER))
@@ -159,7 +159,7 @@ def test_kind_mode_resource_kind_name_uses_display_name(tmp_path):
 
     p = tmp_path / "kind_mode.yaml"
     p.write_text(yaml.dump({
-        "name": "[VCF Content Factory] Kind Mode Probe",
+        "name": "[VCF CF] Kind Mode Probe",
         "widgets": [{
             "id": "sb", "type": "Scoreboard", "title": "Probe",
             "coords": {"x": 1, "y": 1, "w": 6, "h": 5},

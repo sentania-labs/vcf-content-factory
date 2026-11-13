@@ -232,7 +232,7 @@ def test_scoreboard_resource_mode_on_sdk_adapter_kind(tmp_path):
     path = tmp_path / "dash.yaml"
     path.write_text(yaml.dump({
         "id": str(uuid.uuid4()),
-        "name": "[VCF Content Factory] Prefix Probe",
+        "name": "[VCF CF] Prefix Probe",
         "widgets": [{
             "id": "nas",
             "type": "Scoreboard",

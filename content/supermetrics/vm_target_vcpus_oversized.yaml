@@ -1,5 +1,5 @@
 id: 6dfea6a6-e633-4b32-b438-8975e3dc06fa
-name: "[VCF Content Factory] VM - Target vCPUs (oversized)"
+name: "[VCF CF] VM - Target vCPUs (oversized)"
 resource_kinds:
   - resource_kind_key: VirtualMachine
     adapter_kind_key: VMWARE

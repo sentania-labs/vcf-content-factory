@@ -6,7 +6,7 @@ assigns the id server-side on create.  Sync matches by name.  An optional
 
 YAML schema (see .claude/agents/alert-author.md for the full spec):
 
-    name: "[VCF Content Factory] VM CPU Critically High"
+    name: "[VCF CF] VM CPU Critically High"
     description: >
       Why this alert exists.
     adapter_kind: VMWARE
@@ -26,14 +26,14 @@ YAML schema (see .claude/agents/alert-author.md for the full spec):
         - defined_on: SELF  # SELF, PARENT, CHILD, DESCENDANT, ANCESTOR
           operator: ALL     # ALL or ANY within this set
           symptoms:
-            - name: "[VCF Content Factory] VM CPU Usage Critical"
-            - name: "[VCF Content Factory] VM CPU Ready High"
+            - name: "[VCF CF] VM CPU Usage Critical"
+            - name: "[VCF CF] VM CPU Ready High"
           # For non-SELF scoping, optional threshold:
           # threshold_type: COUNT   # COUNT, PERCENT, ANY, ALL
           # threshold_value: 3
 
     recommendations:
-      - name: "[VCF Content Factory] VM CPU Remediation"
+      - name: "[VCF CF] VM CPU Remediation"
         priority: 1
 
 The alert loader validates:
@@ -44,7 +44,7 @@ The alert loader validates:
   4. Symptom name uniqueness within a set (duplicate references are
      allowed by the API but are almost always a YAML authoring mistake).
   5. Recommendation references are grounded — all names with the
-     [VCF Content Factory] prefix must exist in the local
+     [VCF CF] prefix must exist in the local
      recommendations/ directory.
 """
 from __future__ import annotations
@@ -57,6 +57,14 @@ from typing import Dict, List, Optional, Tuple
 import yaml
 import yaml.constructor
 import yaml.resolver
+
+from vcfcf_core.naming import (
+    framework_prefix_problem,
+    has_factory_prefix,
+    is_factory_name,
+    legacy_reference_hint,
+    strip_factory_prefix,
+)
 
 
 def _strict_load(stream):
@@ -150,7 +158,7 @@ class Recommendation:
     """A standalone recommendation definition loaded from recommendations/*.yaml.
 
     YAML schema:
-        name: "[VCF Content Factory] VM CPU Remediation"
+        name: "[VCF CF] VM CPU Remediation"
         description: |
           Investigate the VM's CPU workload...
         adapter_kind: VMWARE
@@ -169,11 +177,11 @@ class Recommendation:
         """Deterministic ID matching AlertContent.xml ref= convention.
 
         Pattern: Recommendation-df-<adapter_kind>-<slug>
-        where <slug> is the name with [VCF Content Factory] stripped
-        and spaces/special chars replaced with underscores.
+        where <slug> is the name with the factory prefix stripped (either
+        spelling, so the id survives the 2026-11-12 prefix move) and
+        spaces/special chars replaced with underscores.
         """
-        # Strip the [VCF Content Factory] prefix
-        stripped = re.sub(r"^\[VCF Content Factory\]\s*", "", self.name)
+        stripped = strip_factory_prefix(self.name)
         # Replace characters outside [A-Za-z0-9_-] with underscore
         slug = re.sub(r"[^\w\-]", "_", stripped)
         # Collapse consecutive underscores
@@ -220,14 +228,9 @@ class AlertDef:
     def validate(self, enforce_framework_prefix: bool = True) -> None:
         if not self.name or not self.name.strip():
             raise AlertValidationError("name is required")
-        if enforce_framework_prefix and not self.name.startswith("[VCF Content Factory] "):
+        if enforce_framework_prefix and not has_factory_prefix(self.name):
             src = str(self.source_path) if self.source_path else self.name
-            raise AlertValidationError(
-                f'{src}: name "{self.name}" missing framework prefix '
-                f'"[VCF Content Factory]". All factory-authored content must carry the literal '
-                f'"[VCF Content Factory]" prefix (see CLAUDE.md §Hard rules #5). For third-party '
-                f"bundle content, ensure the bundle manifest sets factory_native: false."
-            )
+            raise AlertValidationError(framework_prefix_problem(self.name, src))
         if not self.adapter_kind:
             raise AlertValidationError(f"{self.name}: adapter_kind is required")
         if not self.resource_kind:
@@ -327,7 +330,7 @@ class AlertDef:
     def validate_symptom_refs(self, repo_symptom_names: set[str]) -> None:
         """Secondary validation: check that all referenced symptom names
         exist in the local symptoms/ directory.  Built-in symptoms (those
-        NOT prefixed with '[VCF Content Factory]') are exempt — the loader
+        NOT carrying the factory prefix) are exempt — the loader
         cannot enumerate built-ins without a live instance connection.
 
         Call this from the CLI after loading the full symptoms dir.
@@ -335,12 +338,13 @@ class AlertDef:
         for s in (self.symptom_sets.get("sets") or []):
             for sym in (s.get("symptoms") or []):
                 name = sym.get("name", "")
-                if name.startswith("[VCF Content Factory]"):
+                if is_factory_name(name):
                     if name not in repo_symptom_names:
                         raise AlertValidationError(
                             f"{self.name}: references symptom "
                             f"{name!r} which is not in symptoms/. "
                             f"Sync the symptom first, or check the name."
+                            f"{legacy_reference_hint(name)}"
                         )
 
     def validate_recommendation_refs(
@@ -348,7 +352,7 @@ class AlertDef:
     ) -> None:
         """Validate that all recommendation references resolve.
 
-        Only references with the [VCF Content Factory] prefix are checked —
+        Only references with the factory prefix (either spelling) are checked —
         built-in recommendation names are exempt (cannot enumerate without
         a live instance).
 
@@ -356,13 +360,14 @@ class AlertDef:
         recommendation name on failure.
         """
         for ref in self.recommendations:
-            if ref.name.startswith("[VCF Content Factory]"):
+            if is_factory_name(ref.name):
                 if ref.name not in recommendation_map:
                     src = f" ({self.source_path})" if self.source_path else ""
                     raise AlertValidationError(
                         f"{self.name}{src}: references recommendation "
                         f"{ref.name!r} which is not in recommendations/. "
                         f"Create the recommendation file first."
+                        f"{legacy_reference_hint(ref.name)}"
                     )
 
     def xml_symptom_set_problems(self) -> List[str]:
@@ -513,13 +518,8 @@ def load_recommendation_file(path: str | Path, enforce_framework_prefix: bool = 
     name = str(data.get("name", "")).strip()
     if not name:
         raise AlertValidationError(f"{path}: 'name' is required")
-    if enforce_framework_prefix and not name.startswith("[VCF Content Factory] "):
-        raise AlertValidationError(
-            f'{path}: name "{name}" missing framework prefix '
-            f'"[VCF Content Factory]". All factory-authored content must carry the literal '
-            f'"[VCF Content Factory]" prefix (see CLAUDE.md §Hard rules #5). For third-party '
-            f"bundle content, ensure the bundle manifest sets factory_native: false."
-        )
+    if enforce_framework_prefix and not has_factory_prefix(name):
+        raise AlertValidationError(framework_prefix_problem(name, str(path)))
     description = str(data.get("description", "") or "").strip()
     if not description:
         raise AlertValidationError(f"{path}: 'description' is required")
@@ -581,7 +581,7 @@ def resolve_alert_recommendations(
     """Resolve an alert's recommendation refs to (priority, Recommendation) pairs.
 
     Called at validate/render time.  Raises AlertValidationError for any
-    [VCF Content Factory] recommendation name that is not in the map.
+    factory-prefixed recommendation name that is not in the map.
 
     Returns:
         List of (priority, Recommendation) tuples, sorted by priority.
@@ -590,12 +590,13 @@ def resolve_alert_recommendations(
     for ref in alert.recommendations:
         rec = recommendation_map.get(ref.name)
         if rec is None:
-            if ref.name.startswith("[VCF Content Factory]"):
+            if is_factory_name(ref.name):
                 src = f" ({alert.source_path})" if alert.source_path else ""
                 raise AlertValidationError(
                     f"{alert.name}{src}: references recommendation "
                     f"{ref.name!r} which is not in recommendations/. "
                     f"Create the recommendation file first."
+                    f"{legacy_reference_hint(ref.name)}"
                 )
             # Non-VCF prefix: treat as built-in, skip resolution
             continue

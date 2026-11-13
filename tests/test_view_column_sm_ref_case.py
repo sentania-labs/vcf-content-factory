@@ -23,7 +23,7 @@ import pytest
 import yaml
 
 REF_UUID = "aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa"
-REF_NAME = "[VCF Content Factory] Ref SM"
+REF_NAME = "[VCF CF] Ref SM"
 RESOLVED_KEY = f"Super Metric|sm_{REF_UUID}"
 
 TOKEN_SPELLINGS = [
@@ -58,7 +58,7 @@ def _view(tmp_path: Path, attribute: str, stem: str = "view"):
     d.mkdir(parents=True, exist_ok=True)
     p = d / f"{stem}.yaml"
     p.write_text(yaml.dump({
-        "name": "[VCF Content Factory] SM Column Case Probe",
+        "name": "[VCF CF] SM Column Case Probe",
         "description": "probe",
         "subject": {"adapter_kind": "VMWARE", "resource_kind": "HostSystem"},
         "columns": [
@@ -100,7 +100,7 @@ class TestViewColumnTokenCaseInsensitivity:
     def test_mis_cased_token_unresolved_name_is_a_hard_error(self, tmp_path, token):
         ref = _sm_file(tmp_path, REF_UUID, REF_NAME)
         with pytest.raises(ValueError, match="Nowhere SM"):
-            _render(tmp_path, f'{token}:"[VCF Content Factory] Nowhere SM"', [ref])
+            _render(tmp_path, f'{token}:"[VCF CF] Nowhere SM"', [ref])
 
     @pytest.mark.parametrize("token", ["SuperMetric", "SUPERMETRIC"])
     def test_mis_cased_token_with_empty_scope_is_a_hard_error(self, tmp_path, token):

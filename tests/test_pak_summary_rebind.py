@@ -34,7 +34,7 @@ from vcfcf_managementpacks import post_install as pi  # noqa: E402
 
 ID_WORLD = "4e2c777e-9c6c-4c6a-bc16-ab55b6110f33"
 ID_OTHER = "0be1f00d-0000-4000-8000-000000000009"
-NAME = "[VCF Content Factory] Compliance World Summary"
+NAME = "[VCF CF] Compliance World Summary"
 RKID = "002016vcfcf_complianceComplianceWorld"
 OLD_CLONE = "1680c6bc-51da-4947-9aa8-7a00a25f558a"
 NEW_CLONE = "77777777-0000-4000-8000-000000000007"

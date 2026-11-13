@@ -1,4 +1,4 @@
-name: "[VCF Content Factory] Host Compliance Score Below 95%"
+name: "[VCF CF] Host Compliance Score Below 95%"
 adapter_kind: VMWARE
 resource_kind: HostSystem
 severity: WARNING

@@ -1,5 +1,5 @@
 id: 5c08ad62-03b1-48f7-9bb2-2514dbf61b1e
-name: "[VCF Content Factory] Automation Managed Host Count"
+name: "[VCF CF] Automation Managed Host Count"
 resource_kinds:
   - resource_kind_key: CAS World
     adapter_kind_key: CASAdapter

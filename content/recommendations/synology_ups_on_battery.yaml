@@ -1,4 +1,4 @@
-name: "[VCF Content Factory] Synology UPS On Battery Remediation"
+name: "[VCF CF] Synology UPS On Battery Remediation"
 description: |
   The NAS is running on UPS battery (NUT status OB). Mains power has been
   lost or is unstable. The NAS will continue operating until battery is

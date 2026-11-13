@@ -40,7 +40,7 @@ ID_RE = re.compile(r"^extModel(\d{1,5})-(\d+)$")
 
 def _scoreboard(widget_id: str = "cluster_headline") -> dict:
     return {
-        "name": "[VCF Content Factory] extModel Stability Probe",
+        "name": "[VCF CF] extModel Stability Probe",
         "widgets": [{
             "id": widget_id,
             "type": "Scoreboard",

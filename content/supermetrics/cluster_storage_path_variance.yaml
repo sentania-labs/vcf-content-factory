@@ -1,5 +1,5 @@
 id: b394eb82-d4d4-47d1-bd7e-0ef267457e52
-name: "[VCF Content Factory] Storage Path Variance (max-min)"
+name: "[VCF CF] Storage Path Variance (max-min)"
 resource_kinds:
   - resource_kind_key: ClusterComputeResource
     adapter_kind_key: VMWARE

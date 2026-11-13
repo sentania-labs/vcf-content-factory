@@ -64,7 +64,7 @@ class _StubDashboard:
     """Stands in for a loaded Dashboard (name + widgets is all the
     sync path touches before the import call)."""
 
-    def __init__(self, name: str = "[VCF Content Factory] Stub"):
+    def __init__(self, name: str = "[VCF CF] Stub"):
         self.name = name
         self.widgets: list = []
 
@@ -145,7 +145,7 @@ class TestDashboardsHandlerSync:
         assert [i.status for i in result.items] == ["ok"]
 
     def test_views_handler_also_warns(self, monkeypatch, tmp_path):
-        view = _StubDashboard(name="[VCF Content Factory] Stub View")
+        view = _StubDashboard(name="[VCF CF] Stub View")
         _stub_handler_io(
             monkeypatch, _result(0, 2, content_type="VIEW_DEFINITIONS"), view
         )
@@ -187,14 +187,14 @@ def _sync_args(tmp_path):
 
 class TestCmdSync:
     def test_all_skipped_import_warns_loudly(self, monkeypatch, tmp_path, capsys):
-        dash = _StubDashboard("[VCF Content Factory] Capacity")
+        dash = _StubDashboard("[VCF CF] Capacity")
         _stub_cli_io(monkeypatch, _result(0, 3), [dash])
         rc = dash_cli.cmd_sync(_sync_args(tmp_path))
         captured = capsys.readouterr()
         assert "WARNING" in captured.err
         assert "imported=0 skipped=3" in captured.err
         # The affected content is named, not just counted.
-        assert "[VCF Content Factory] Capacity" in captured.err
+        assert "[VCF CF] Capacity" in captured.err
         assert rc == 0  # dep walker still drives the exit code
 
     def test_clean_import_prints_no_warning(self, monkeypatch, tmp_path, capsys):
@@ -265,7 +265,7 @@ class TestInstallTemplateDashboards:
         out = capsys.readouterr().out
         assert "WARN" in out
         assert "Import changed no dashboards" in out
-        assert "[VCF Content Factory] Capacity" in out
+        assert "[VCF CF] Capacity" in out
         # W-1: this warning class must not flip the installer exit code.
         assert ctx["warnings"] == []
         # And the false-green line is NOT printed.
@@ -291,7 +291,7 @@ class TestInstallTemplateDashboards:
         dash_file.write_text(
             _json.dumps({
                 "dashboards": [
-                    {"id": "dash-1", "name": "[VCF Content Factory] Capacity"}
+                    {"id": "dash-1", "name": "[VCF CF] Capacity"}
                 ]
             })
         )
@@ -332,7 +332,7 @@ class TestMixedEnvelopeAttribution:
     def test_handler_does_not_blame_the_imported_dashboard(
         self, monkeypatch, tmp_path
     ):
-        dash = _StubDashboard("[VCF Content Factory] Capacity")
+        dash = _StubDashboard("[VCF CF] Capacity")
         _stub_handler_io(monkeypatch, _mixed_result(dash=(1, 0), views=(0, 2)), dash)
         result = dash_handler.DashboardsHandler().sync(
             [str(tmp_path / "dashboards" / "d.yaml")], session=object()
@@ -355,7 +355,7 @@ class TestMixedEnvelopeAttribution:
     def test_views_handler_speaks_only_for_view_definitions(
         self, monkeypatch, tmp_path
     ):
-        view = _StubDashboard(name="[VCF Content Factory] Stub View")
+        view = _StubDashboard(name="[VCF CF] Stub View")
         # Views imported fine; the dashboards in the same envelope did not.
         _stub_handler_io(monkeypatch, _mixed_result(dash=(0, 1), views=(2, 0)), view)
         result = dash_handler.ViewsHandler().sync(
@@ -366,7 +366,7 @@ class TestMixedEnvelopeAttribution:
     def test_cmd_sync_names_only_the_flagged_type(
         self, monkeypatch, tmp_path, capsys
     ):
-        dash = _StubDashboard("[VCF Content Factory] Capacity")
+        dash = _StubDashboard("[VCF CF] Capacity")
         _stub_cli_io(monkeypatch, _mixed_result(dash=(1, 0), views=(0, 2)), [dash])
         rc = dash_cli.cmd_sync(_sync_args(tmp_path))
         err = capsys.readouterr().err
@@ -376,7 +376,7 @@ class TestMixedEnvelopeAttribution:
         # affected, and must be reported as not affected.
         assert "affected DASHBOARDS content" not in err
         assert ("not affected (imported normally): "
-                "[VCF Content Factory] Capacity") in err
+                "[VCF CF] Capacity") in err
 
     def test_install_template_keeps_the_dashboard_success_line(
         self, install_mod, tmp_path, capsys
@@ -403,7 +403,7 @@ class TestMixedEnvelopeAttribution:
         install_mod._install_dashboards(ctx)
         out = capsys.readouterr().out
         assert "Import changed no dashboards" in out
-        assert "[VCF Content Factory] Capacity" in out
+        assert "[VCF CF] Capacity" in out
         assert "Imported 1 view(s)" in out
         assert ctx["warnings"] == []
 
@@ -605,15 +605,15 @@ def test_installer_view_warning_names_the_views(install_mod, tmp_path, capsys):
     # Give the staged views XML real titles.
     (ctx["bundle_dir"] / "content" / "views_content.xml").write_text(
         "<Content><Views>"
-        "<ViewDef id='v1'><Title>[VCF Content Factory] Alpha</Title></ViewDef>"
-        "<ViewDef id='v2'><Title>[VCF Content Factory] Beta</Title></ViewDef>"
+        "<ViewDef id='v1'><Title>[VCF CF] Alpha</Title></ViewDef>"
+        "<ViewDef id='v2'><Title>[VCF CF] Beta</Title></ViewDef>"
         "</Views></Content>"
     )
     install_mod._install_dashboards(ctx)
     out = capsys.readouterr().out
     assert "Import changed no views" in out
-    assert "[VCF Content Factory] Alpha" in out
-    assert "[VCF Content Factory] Beta" in out
+    assert "[VCF CF] Alpha" in out
+    assert "[VCF CF] Beta" in out
 
 
 def test_extract_view_names_degrades_on_garbage(install_mod):
@@ -633,9 +633,9 @@ def test_extract_view_names_degrades_on_garbage(install_mod):
 _FACTORY_XML = (
     '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
     "<Content><Views>"
-    '<ViewDef id="v1"><Title>[VCF Content Factory] Alpha</Title>'
+    '<ViewDef id="v1"><Title>[VCF CF] Alpha</Title>'
     '<Description>a</Description></ViewDef>'
-    '<ViewDef id="v2"><Title>[VCF Content Factory] Beta</Title>'
+    '<ViewDef id="v2"><Title>[VCF CF] Beta</Title>'
     '<Description>b</Description></ViewDef>'
     "</Views></Content>"
 )
@@ -644,8 +644,8 @@ _FACTORY_XML = (
 class TestExtractViewNames:
     def test_factory_shape_extracts_exactly_the_titles(self, install_mod):
         assert install_mod._extract_view_names(_FACTORY_XML) == [
-            "[VCF Content Factory] Alpha",
-            "[VCF Content Factory] Beta",
+            "[VCF CF] Alpha",
+            "[VCF CF] Beta",
         ]
 
     def test_pre_def018_localization_key_attribute_no_longer_defeats_it(
@@ -656,12 +656,12 @@ class TestExtractViewNames:
         xml_text = (
             "<Content><Views>"
             '<ViewDef id="v1">'
-            '<Title localizationKey="k1">[VCF Content Factory] Alpha</Title>'
+            '<Title localizationKey="k1">[VCF CF] Alpha</Title>'
             "</ViewDef>"
             "</Views></Content>"
         )
         assert install_mod._extract_view_names(xml_text) == [
-            "[VCF Content Factory] Alpha"
+            "[VCF CF] Alpha"
         ]
 
     def test_names_reach_the_operator_unescaped(self, install_mod):
@@ -766,8 +766,8 @@ class TestExtractViewNames:
         from vcfcf_dashboards.render import render_views_xml
 
         names = [
-            "[VCF Content Factory] VM Network Top Talkers",
-            "[VCF Content Factory] CPU & Memory <top>",
+            "[VCF CF] VM Network Top Talkers",
+            "[VCF CF] CPU & Memory <top>",
         ]
         views = []
         for i, name in enumerate(names):
@@ -809,12 +809,12 @@ class TestExtractViewNames:
 class TestExtractDashboardNames:
     def test_factory_shape_extracts_the_names(self, install_mod):
         payload = json.dumps({"dashboards": [
-            {"id": "d1", "name": "[VCF Content Factory] Alpha"},
-            {"id": "d2", "name": "[VCF Content Factory] Beta"},
+            {"id": "d1", "name": "[VCF CF] Alpha"},
+            {"id": "d2", "name": "[VCF CF] Beta"},
         ]})
         assert install_mod._extract_dashboard_names(payload) == [
-            "[VCF Content Factory] Alpha",
-            "[VCF Content Factory] Beta",
+            "[VCF CF] Alpha",
+            "[VCF CF] Beta",
         ]
 
     def test_falls_back_to_id_then_placeholder(self, install_mod):
@@ -1042,7 +1042,7 @@ class TestSkippedImportAdvice:
     def test_handler_view_warning(self, monkeypatch, tmp_path):
         _stub_handler_io(
             monkeypatch, _result(0, 1, content_type="VIEW_DEFINITIONS"),
-            _StubDashboard(name="[VCF Content Factory] Stub View"),
+            _StubDashboard(name="[VCF CF] Stub View"),
         )
         result = dash_handler.ViewsHandler().sync(
             [str(tmp_path / "views" / "v.yaml")], session=object()

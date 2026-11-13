@@ -23,6 +23,7 @@ Kit contents (assembled under a temp dir, then tarballed):
     alerts_render.py            : copy of vcfcf_core/alerts/render.py (imports patched)
     reports_loader.py          : copy of vcfcf_core/reports/loader.py
     reports_render.py          : copy of vcfcf_core/reports/render.py (imports patched)
+    naming.py                  : copy of vcfcf_core/naming.py (the content-name prefix)
     defect_gate.py             : vcfcf_packaging/defects.py verbatim behind a
                                  generated header; the standalone RULE-012 gate
                                  for pak CI (#226)
@@ -129,6 +130,7 @@ _FACTORY_SOURCES = {
     "reports_loader.py": _CORE_ROOT / "reports" / "loader.py",
     "reports_render.py": _CORE_ROOT / "reports" / "render.py",
     "docs_gen.py": _HERE / "docs_gen.py",
+    "naming.py": _CORE_ROOT / "naming.py",
     # Stock content id guard (#345). guard.py is self-contained and finds its
     # baseline beside itself (Path(__file__).with_name), so both ship flat,
     # byte for byte. No baseline in the kit fails every build (fail closed).
@@ -207,6 +209,11 @@ _IMPORT_REWRITES: dict[str, list[tuple[str, str]]] = {
         (
             r"from vcfcf_dashboards\.render import render_view_def_fragments",
             "from .dashboard_render import render_view_def_fragments",
+        ),
+        # from vcfcf_core.naming import ...  (the content-name prefix constants)
+        (
+            r"from vcfcf_core\.naming import",
+            "from .naming import",
         ),
         # from vcfcf_core.stock_ids import guard as _stock_ids  (module-level;
         # the stock content id guard, #345)
@@ -301,12 +308,18 @@ _IMPORT_REWRITES: dict[str, list[tuple[str, str]]] = {
         # project_dir directly.  Dead rewrites are removed rather than kept as
         # silent no-ops (see assertion in _apply_rewrites below).
     ],
-    # sm_loader.py (vcfcf_core copy since row 3) imports nothing outside the
-    # module; the pre-row-3 rule that redirected its vcfcf_common.provenance
-    # import to a kit-local provenance.py is gone with that import.
+    # sm_loader.py (vcfcf_core copy since row 3) imports only vcfcf_core.naming
+    # (rewritten below); the pre-row-3 rule that redirected its
+    # vcfcf_common.provenance import to a kit-local provenance.py is gone with
+    # that import.
     # dashboard_loader.py (vcfcf_core copy): rewrite the two relative imports
     # inside vcfcf_core.dashboards to the flat kit names.
     "dashboard_loader.py": [
+        # from vcfcf_core.naming import ...  (the content-name prefix constants)
+        (
+            r"from vcfcf_core\.naming import",
+            "from .naming import",
+        ),
         # from .yaml_utils import strict_load as _strict_load
         (
             r"from \.yaml_utils import strict_load as _strict_load",
@@ -369,6 +382,11 @@ _IMPORT_REWRITES: dict[str, list[tuple[str, str]]] = {
     # the source so they do not raise at import time, but the kit must still
     # provide the modules so that runtime calls work correctly.
     "alerts_render.py": [
+        # from vcfcf_core.naming import ...  (the content-name prefix constants)
+        (
+            r"from vcfcf_core\.naming import",
+            "from .naming import",
+        ),
         # from vcfcf_core.symptoms.loader import SymptomDef
         (
             r"from vcfcf_core\.symptoms\.loader import SymptomDef",
@@ -382,6 +400,34 @@ _IMPORT_REWRITES: dict[str, list[tuple[str, str]]] = {
     ],
     # reports_render.py (vcfcf_core copy since row 3): rewrite the relative
     # .loader import to the flat kit module name.
+    "sm_loader.py": [
+        # from vcfcf_core.naming import ...  (the content-name prefix constants)
+        (
+            r"from vcfcf_core\.naming import",
+            "from .naming import",
+        ),
+    ],
+    "symptoms_loader.py": [
+        # from vcfcf_core.naming import ...  (the content-name prefix constants)
+        (
+            r"from vcfcf_core\.naming import",
+            "from .naming import",
+        ),
+    ],
+    "alerts_loader.py": [
+        # from vcfcf_core.naming import ...  (the content-name prefix constants)
+        (
+            r"from vcfcf_core\.naming import",
+            "from .naming import",
+        ),
+    ],
+    "reports_loader.py": [
+        # from vcfcf_core.naming import ...  (the content-name prefix constants)
+        (
+            r"from vcfcf_core\.naming import",
+            "from .naming import",
+        ),
+    ],
     "reports_render.py": [
         # from .loader import ReportDef, Section, _STATIC_CONTENT_KEYS
         (

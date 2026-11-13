@@ -45,7 +45,7 @@ def _load(tmp_path: Path, widget: dict, name: str = "d"):
 
     return load_dashboard(_write(tmp_path / f"{name}.yaml", {
         "id": "11111111-2222-4333-8444-555555555555",
-        "name": "[VCF Content Factory] AlertList Mode Test",
+        "name": "[VCF CF] AlertList Mode Test",
         "description": "",
         "widgets": [widget],
     }))

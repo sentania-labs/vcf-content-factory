@@ -90,13 +90,13 @@ _SM_YAML = textwrap.dedent(
     """
 )
 
-# View name includes the [VCF Content Factory] prefix so load_view() passes
+# View name includes the [VCF CF] prefix so load_view() passes
 # without enforce_framework_prefix=False.  Column uses supermetric:"<name>"
 # syntax to test SM cross-reference resolution.
 _VIEW_YAML = textwrap.dedent(
     f"""\
     id: 11112222-3333-4444-5555-666677778888
-    name: "[VCF Content Factory] Test View With SM"
+    name: "[VCF CF] Test View With SM"
     description: "View that references the bundled SM"
     subject:
       adapter_kind: VMWARE
@@ -113,7 +113,7 @@ _VIEW_YAML = textwrap.dedent(
 _VIEW_YAML_NO_SM = textwrap.dedent(
     """\
     id: aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee
-    name: "[VCF Content Factory] Test View No SM"
+    name: "[VCF CF] Test View No SM"
     description: "View with plain metric only"
     subject:
       adapter_kind: VMWARE
@@ -1481,7 +1481,7 @@ class TestSmFormulaResolution:
 _REPORT_VIEW_YAML = textwrap.dedent(
     """\
     id: 33334444-5555-6666-7777-888899990000
-    name: "[VCF Content Factory] Test Report View"
+    name: "[VCF CF] Test Report View"
     description: "View embedded inside the report subdirectory"
     subject:
       adapter_kind: VMWARE
@@ -1498,7 +1498,7 @@ _REPORT_VIEW_YAML = textwrap.dedent(
 _REPORT_YAML = textwrap.dedent(
     """\
     id: 55556666-7777-8888-9999-aaaabbbbcccc
-    name: "[VCF Content Factory] Test Report"
+    name: "[VCF CF] Test Report"
     description: "Report that bundles the test view"
     subject_types:
       - adapter_kind: VMWARE
@@ -1506,7 +1506,7 @@ _REPORT_YAML = textwrap.dedent(
         type: self
     sections:
       - type: View
-        view: "[VCF Content Factory] Test Report View"
+        view: "[VCF CF] Test Report View"
         orientation: Landscape
         colorize: true
     settings:
@@ -1716,8 +1716,8 @@ class TestReportSubdirEmission:
         # Give the report the exact same name as its embedded view so both
         # sanitize to the identical slug.
         colliding_report_yaml = _REPORT_YAML.replace(
-            'name: "[VCF Content Factory] Test Report"',
-            'name: "[VCF Content Factory] Test Report View"',
+            'name: "[VCF CF] Test Report"',
+            'name: "[VCF CF] Test Report View"',
         )
         view_path = project_dir / "views" / "test_report_view.yaml"
         _write_yaml(view_path, _REPORT_VIEW_YAML)

@@ -38,10 +38,10 @@ UUID_A = "aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa"
 UUID_B = "bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb"
 UUID_C = "cccccccc-3333-4333-8333-cccccccccccc"
 
-NAME_A = "[VCF Content Factory] SM A"
-NAME_B = "[VCF Content Factory] SM B"
-NAME_C = "[VCF Content Factory] SM C"
-NAME_MISSING = "[VCF Content Factory] Nowhere SM"
+NAME_A = "[VCF CF] SM A"
+NAME_B = "[VCF CF] SM B"
+NAME_C = "[VCF CF] SM C"
+NAME_MISSING = "[VCF CF] Nowhere SM"
 
 RK = [{"resourceKindKey": "HostSystem", "adapterKindKey": "VMWARE"}]
 
@@ -60,7 +60,7 @@ def _dashboard_over(sm_uuid: str):
     """A dashboard whose single view has one column bound to sm_<uuid>."""
     view = ViewDef(
         id="00000000-0000-0000-0000-000000000001",
-        name="[VCF Content Factory] Crossref View",
+        name="[VCF CF] Crossref View",
         description="",
         adapter_kind="VMWARE",
         resource_kind="HostSystem",
@@ -72,11 +72,11 @@ def _dashboard_over(sm_uuid: str):
         title="t",
         coords={"x": 1, "y": 1, "w": 6, "h": 6},
         view_name=view.name,
-        dashboard_name="[VCF Content Factory] Crossref Dashboard",
+        dashboard_name="[VCF CF] Crossref Dashboard",
     )
     dash = Dashboard(
         id="00000000-0000-0000-0000-000000000002",
-        name="[VCF Content Factory] Crossref Dashboard",
+        name="[VCF CF] Crossref Dashboard",
         description="",
         widgets=[widget],
         interactions=[],
@@ -438,13 +438,13 @@ def test_build_discrete_dashboard_carries_sm_referents(tmp_path):
         "id": UUID_B, "name": NAME_B, "resource_kinds": rks,
         "formula": "${this, metric=cpu|usage_average}",
     }))
-    view_name = "[VCF Content Factory] Crossref E2E View"
+    view_name = "[VCF CF] Crossref E2E View"
     (view_dir / "v.yaml").write_text(yaml.dump({
         "name": view_name,
         "subject": {"adapter_kind": "VMWARE", "resource_kind": "HostSystem"},
         "columns": [{"attribute": f"Super Metric|sm_{UUID_A}", "display_name": "A"}],
     }))
-    dash_name = "[VCF Content Factory] Crossref E2E Dashboard"
+    dash_name = "[VCF CF] Crossref E2E Dashboard"
     (dash_dir / "d.yaml").write_text(yaml.dump({
         "name": dash_name,
         "widgets": [{

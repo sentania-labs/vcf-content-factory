@@ -1,7 +1,10 @@
-"""Dashboard names over the editor's 50-character limit warn at validate.
+"""Dashboard names over the editor's 50-character limit.
 
 Issue #198: the VCF Operations dashboard editor refuses to save a dashboard
 whose name exceeds 50 characters, while the content-import API accepts it.
+Since the 2026-11-12 prefix move a factory-prefixed name over the limit is a
+validate ERROR (the "[VCF CF] " prefix leaves 41 characters for the title);
+any other name (third-party, unprefixed paks) still only warns.
 """
 from __future__ import annotations
 
@@ -19,15 +22,21 @@ if str(SRC) not in sys.path:
 
 from vcfcf_core.dashboards.loader import (  # noqa: E402
     DASHBOARD_NAME_MAX_LEN,
+    DashboardValidationError,
     dashboard_name_length_problem,
     load_all,
 )
 
-PREFIX = "[VCF Content Factory] "
+PREFIX = "[VCF CF] "
 
 
 def _name(total_len: int) -> str:
     return PREFIX + "x" * (total_len - len(PREFIX))
+
+
+def _bare(total_len: int) -> str:
+    """An unprefixed (third-party style) name of *total_len* characters."""
+    return "Upstream " + "y" * (total_len - len("Upstream "))
 
 
 def _write_dash(tmp_path: Path, name: str) -> Path:
@@ -62,11 +71,32 @@ def test_over_limit_names_length_and_limit():
     assert msg is not None and "51 characters" in msg and "50" in msg
 
 
-def test_validate_warns_but_does_not_fail(tmp_path):
+def test_prefixed_message_states_the_title_budget():
+    msg = dashboard_name_length_problem(_name(51))
+    assert "41 characters" in msg and '"[VCF CF]"' in msg
+    assert "41 characters" not in dashboard_name_length_problem(_bare(51))
+
+
+def test_prefixed_over_limit_is_an_error(tmp_path):
     dash_dir = _write_dash(tmp_path, _name(53))
+    with pytest.raises(DashboardValidationError) as ei:
+        load_all(tmp_path / "views", dash_dir)
+    assert "d.yaml" in str(ei.value) and "53 characters" in str(ei.value)
+
+
+def test_prefixed_over_limit_is_an_error_without_prefix_enforcement(tmp_path):
+    """The SDK pak path loads with enforce_framework_prefix=False; a factory
+    name over the cap is still an error there."""
+    dash_dir = _write_dash(tmp_path, _name(51))
+    with pytest.raises(DashboardValidationError):
+        load_all(tmp_path / "views", dash_dir, enforce_framework_prefix=False)
+
+
+def test_unprefixed_over_limit_warns_but_does_not_fail(tmp_path):
+    dash_dir = _write_dash(tmp_path, _bare(72))
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
-        _, dashboards = load_all(tmp_path / "views", dash_dir)
+        _, dashboards = load_all(tmp_path / "views", dash_dir, enforce_framework_prefix=False)
     assert len(dashboards) == 1
     hits = _name_warnings(caught)
     assert len(hits) == 1
@@ -74,8 +104,7 @@ def test_validate_warns_but_does_not_fail(tmp_path):
     assert "d.yaml" in str(hits[0].message)
 
 
-def test_cli_validate_reports_warning_and_exits_zero(tmp_path):
-    """The vcfcf_dashboards CLI validate path surfaces the warning, rc 0."""
+def test_cli_validate_fails_on_prefixed_over_limit(tmp_path):
     import os
     import subprocess
 
@@ -88,16 +117,16 @@ def test_cli_validate_reports_warning_and_exits_zero(tmp_path):
          "--dashboards-dir", str(dash_dir), "validate"],
         capture_output=True, text=True, env=env, cwd=str(tmp_path), timeout=120,
     )
-    assert r.returncode == 0, r.stdout + r.stderr
-    assert "53 characters" in r.stderr and "issue #198" in r.stderr
+    assert r.returncode != 0, r.stdout + r.stderr
+    assert "53 characters" in r.stdout + r.stderr
 
 
 def test_sdk_bundled_dashboard_warns_once(tmp_path):
     """Reviewer N2: the SDK path validates each bundled dashboard twice; the
-    advisory warning must still print once."""
+    advisory warning must still print once (unprefixed pak names)."""
     import vcfcf_managementpacks.sdk_builder as sb
 
-    dash_dir = _write_dash(tmp_path, _name(53))
+    dash_dir = _write_dash(tmp_path, _bare(53))
     raw = {"bundled_content": {"dashboards": [str(dash_dir.relative_to(tmp_path) / "d.yaml")]}}
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")

@@ -1,5 +1,5 @@
 id: c43ec7e3-ae74-44ec-b4d6-a52f42e86a25
-name: "[VCF Content Factory] VCF Total License Usage (cores)"
+name: "[VCF CF] VCF Total License Usage (cores)"
 resource_kinds:
   - resource_kind_key: LICENSE_USAGE_WORLD
     adapter_kind_key: VMWARE_INFRA_HEALTH

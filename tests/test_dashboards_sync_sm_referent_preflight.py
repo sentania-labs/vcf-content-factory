@@ -27,7 +27,7 @@ from vcfcf_dashboards import cli as dash_cli  # noqa: E402
 from vcfcf_packaging.handler import SyncResult  # noqa: E402
 from vcfcf_packaging.syncer import sync_bundle  # noqa: E402
 
-P = "[VCF Content Factory] Referent Preflight"
+P = "[VCF CF] Referent Preflight"
 NAME_USED = f"{P} Used SM"
 NAME_MID = f"{P} Middle SM"
 NAME_MISSING = f"{P} Nowhere SM"

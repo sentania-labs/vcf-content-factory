@@ -7,7 +7,7 @@ description: 'Per-vCenter breakdown of VM vCPU by role: VKS guest nodes, Supervi
 
   '
 id: 62652554-b2a7-46ef-a7cd-8163ab3b59f1
-name: '[VCF Content Factory] VKS Core Consumption'
+name: '[VCF CF] VKS Core Consumption'
 released: true
 widgets:
 - coords:
@@ -22,4 +22,4 @@ widgets:
   self_provider: true
   title: VKS Core Consumption by vCenter
   type: View
-  view: '[VCF Content Factory] VKS Core Consumption by vCenter'
+  view: '[VCF CF] VKS Core Consumption by vCenter'

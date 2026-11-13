@@ -73,6 +73,7 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from typing import Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple
 
+from vcfcf_core.naming import FACTORY_PREFIX_LABEL, LEGACY_FACTORY_PREFIX_LABEL
 from .guard import (
     BASELINE_FORMAT,
     CONTENT_TYPES,
@@ -81,11 +82,14 @@ from .guard import (
     version_sort_key,
 )
 
-#: Name markers that are never stock: the factory prefix in both forms and
-#: the legacy one. Third-party markers are passed by the caller and
-#: recorded in the baseline's ``rule`` block.
+#: Name markers that are never stock: the factory prefix in both spellings
+#: (current ``[VCF CF]`` and retired ``[VCF Content Factory]``, from
+#: ``vcfcf_core.naming``), the prose form MP display names and the dashboard
+#: folder use, and the legacy ``[AI Content]`` tag. Third-party markers are
+#: passed by the caller and recorded in the baseline's ``rule`` block.
 DEFAULT_NAME_MARKERS: Tuple[str, ...] = (
-    "[VCF Content Factory]",
+    FACTORY_PREFIX_LABEL,
+    LEGACY_FACTORY_PREFIX_LABEL,
     "VCF Content Factory",
     "[AI Content]",
 )

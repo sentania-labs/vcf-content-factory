@@ -1,5 +1,5 @@
 id: a2b233be-ab55-46cc-816d-5ca5f10fc477
-name: "[VCF Content Factory] Supervisor Control Plane vCPU (count)"
+name: "[VCF CF] Supervisor Control Plane vCPU (count)"
 resource_kinds:
   - resource_kind_key: ClusterComputeResource
     adapter_kind_key: VMWARE

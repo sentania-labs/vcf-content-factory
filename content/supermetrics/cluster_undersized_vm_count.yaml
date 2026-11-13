@@ -1,5 +1,5 @@
 id: d463820e-403e-488e-974e-27b292a6a701
-name: "[VCF Content Factory] Cluster - Undersized VM Count"
+name: "[VCF CF] Cluster - Undersized VM Count"
 resource_kinds:
   - resource_kind_key: ClusterComputeResource
     adapter_kind_key: VMWARE

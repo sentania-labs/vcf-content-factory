@@ -25,6 +25,8 @@ from typing import Callable, Iterable, List, Optional, Union
 
 import yaml
 
+from vcfcf_core.naming import FACTORY_PREFIX, FACTORY_PREFIX_LABEL, framework_prefix_problem, has_factory_prefix, id_basis_name
+
 from .yaml_utils import strict_load as _strict_load
 
 # Stable namespace for derived UUIDs. Do NOT change once content has
@@ -747,14 +749,9 @@ class ViewDef:
         import warnings
         if not self.name.strip():
             raise DashboardValidationError("view: name is required")
-        if enforce_framework_prefix and not self.name.startswith("[VCF Content Factory] "):
+        if enforce_framework_prefix and not has_factory_prefix(self.name):
             src = str(self.source_path) if self.source_path else self.name
-            raise DashboardValidationError(
-                f'{src}: name "{self.name}" missing framework prefix '
-                f'"[VCF Content Factory]". All factory-authored content must carry the literal '
-                f'"[VCF Content Factory]" prefix (see CLAUDE.md §Hard rules #5). For third-party '
-                f"bundle content, ensure the bundle manifest sets factory_native: false."
-            )
+            raise DashboardValidationError(framework_prefix_problem(self.name, src))
         if len(self.description) > 1024:
             raise DashboardValidationError(
                 f"view {self.name}: description is {len(self.description)} characters, "
@@ -2639,7 +2636,9 @@ class Widget:
 
     @property
     def widget_id(self) -> str:
-        return stable_id("widget", f"{self.dashboard_name}::{self.local_id}")
+        # id_basis_name: the legacy spelling of a factory name, so widget
+        # UUIDs did not change when the prefix moved (2026-11-12).
+        return stable_id("widget", f"{id_basis_name(self.dashboard_name)}::{self.local_id}")
 
 
 @dataclass
@@ -2789,6 +2788,8 @@ class Dashboard:
         if _name_problem:
             import warnings
             src = str(self.source_path) if self.source_path else self.name
+            if has_factory_prefix(self.name):
+                raise DashboardValidationError(f"{src}: {_name_problem}")
             warnings.warn(f"{src}: {_name_problem}", UserWarning, stacklevel=2)
         if self.summary_for is not None:
             try:
@@ -2813,14 +2814,9 @@ class Dashboard:
                         f"dashboard guideline). Remove the pin and let the interaction "
                         f"wiring or the Summary page supply the resource."
                     )
-        if enforce_framework_prefix and not self.name.startswith("[VCF Content Factory] "):
+        if enforce_framework_prefix and not has_factory_prefix(self.name):
             src = str(self.source_path) if self.source_path else self.name
-            raise DashboardValidationError(
-                f'{src}: name "{self.name}" missing framework prefix '
-                f'"[VCF Content Factory]". All factory-authored content must carry the literal '
-                f'"[VCF Content Factory]" prefix (see CLAUDE.md §Hard rules #5). For third-party '
-                f"bundle content, ensure the bundle manifest sets factory_native: false."
-            )
+            raise DashboardValidationError(framework_prefix_problem(self.name, src))
         _supported_types = (
             "ResourceList", "View", "TextDisplay", "Scoreboard", "MetricChart",
             "HealthChart", "ParetoAnalysis", "AlertList", "ProblemAlertsList",
@@ -3046,27 +3042,32 @@ _UUID_RE = re.compile(
 #: (UI error "The maximum length for this field is 50").  The content-import
 #: API accepts longer names, so an over-length dashboard installs but no edit
 #: to it can be saved until it is renamed.  Seen on devel 2026-10-12 on the
-#: compliance Environment Overview; issue #198.  The 22-character framework
-#: prefix "[VCF Content Factory] " leaves 28 characters for the title.
+#: compliance Environment Overview; issue #198.  The 9-character framework
+#: prefix "[VCF CF] " leaves 41 characters for the title.
 DASHBOARD_NAME_MAX_LEN = 50
 
 
 def dashboard_name_length_problem(name: str) -> Optional[str]:
     """Return a message when *name* exceeds ``DASHBOARD_NAME_MAX_LEN``, else None.
 
-    Surfaced as a validate-time WARNING, not an error: dashboards already in
-    the repo and in shipped paks exceed the limit, and because dashboard
-    import identity is the name, renaming an installed one ships a second
-    dashboard beside the old.  Each rename is a per-pack decision (issue
-    #198), so a hard failure here would break validate and pak builds before
-    those decisions are made.
+    ``Dashboard.validate`` raises it as an ERROR for a factory-prefixed name
+    (the ``[VCF CF] `` prefix leaves a 41-character title budget, and no
+    factory or factory-pak dashboard needs more) and emits it as a WARNING
+    for any other name: third-party and ``content_naming: unprefixed``
+    content keeps its upstream names, some of them longer.
     """
     if len(name) <= DASHBOARD_NAME_MAX_LEN:
         return None
+    budget = ""
+    if has_factory_prefix(name):
+        budget = (
+            f' With the "{FACTORY_PREFIX_LABEL}" prefix the title may be at most '
+            f"{DASHBOARD_NAME_MAX_LEN - len(FACTORY_PREFIX)} characters."
+        )
     return (
         f'dashboard name "{name}" is {len(name)} characters; the VCF Operations '
         f"dashboard editor caps the name at {DASHBOARD_NAME_MAX_LEN} and refuses to "
-        f"save any edit until it is shortened (the import API still accepts it). "
+        f"save any edit until it is shortened (the import API still accepts it).{budget} "
         f"Shorten the name; renaming an installed dashboard ships a new one "
         f"beside the old (issue #198)."
     )

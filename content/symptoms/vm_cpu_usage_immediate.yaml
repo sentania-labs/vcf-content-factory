@@ -1,4 +1,4 @@
-name: "[VCF Content Factory] VM CPU Usage Immediate"
+name: "[VCF CF] VM CPU Usage Immediate"
 adapter_kind: VMWARE
 resource_kind: VirtualMachine
 severity: IMMEDIATE

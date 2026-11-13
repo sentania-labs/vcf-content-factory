@@ -26,6 +26,8 @@ import yaml
 import yaml.constructor
 import yaml.resolver
 
+from vcfcf_core.naming import framework_prefix_problem, has_factory_prefix
+
 
 def _strict_load(stream):
     """yaml.safe_load replacement that raises on duplicate mapping keys."""
@@ -83,14 +85,8 @@ class SuperMetricDef:
     def validate(self, enforce_framework_prefix: bool = True) -> None:
         if not self.name or not self.name.strip():
             raise SuperMetricValidationError("name is required")
-        if enforce_framework_prefix and not self.name.startswith("[VCF Content Factory] "):
-            src = f" ({self.source_path})" if self.source_path else ""
-            raise SuperMetricValidationError(
-                f'{self.source_path or self.name}: name "{self.name}" missing framework prefix '
-                f'"[VCF Content Factory]". All factory-authored content must carry the literal '
-                f'"[VCF Content Factory]" prefix (see CLAUDE.md §Hard rules #5). For third-party '
-                f"bundle content, ensure the bundle manifest sets factory_native: false."
-            )
+        if enforce_framework_prefix and not has_factory_prefix(self.name):
+            raise SuperMetricValidationError(framework_prefix_problem(self.name, str(self.source_path or self.name)))
         if not self.formula or not self.formula.strip():
             raise SuperMetricValidationError(f"{self.name}: formula is required")
         if not self.resource_kinds:
