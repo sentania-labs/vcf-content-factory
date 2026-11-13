@@ -174,14 +174,18 @@ alerts, reports, recommendations) (#229):
 
 | Value | Meaning |
 |---|---|
-| `factory_prefixed` (default) | Every name starts with `[VCF Content Factory] ` (RULE-006). |
-| `unprefixed` | No name carries `[VCF Content Factory]`. For a pak that keeps its upstream names (the vCommunity paks). |
+| `factory_prefixed` (default) | Every name starts with `[VCF CF] ` (RULE-006). |
+| `unprefixed` | No name carries `[VCF CF]` or the retired `[VCF Content Factory]`. For a pak that keeps its upstream names (the vCommunity paks). |
 
 Content authors read the field to choose the name form. `validate-sdk` and
 `build-sdk` enforce it: a declared contract fails on any mismatch; an
 undeclared one applies the default as a single warning, so a pak that
 predates the field keeps building until it declares. Any other value is an
-`adapter.yaml` schema error.
+`adapter.yaml` schema error. Since kit 1.0.29 (the 2026-11-12 prefix move)
+a `factory_prefixed` name in the retired `[VCF Content Factory] ` spelling
+is an error whether or not the key is declared, pointing at
+`python3 -m vcfcf_common migrate-prefix <pak dir>`
+(`authoring/prefix_migration.md`).
 
 ### Pak vendor, contact and EULA (`vendor`, `vendor_contact`, `eula_file`)
 
