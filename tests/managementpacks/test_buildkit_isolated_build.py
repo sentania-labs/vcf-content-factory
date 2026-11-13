@@ -68,7 +68,7 @@ _SM_UUID = "aaaabbbb-0001-0001-0001-000000000001"
 
 _SM_YAML = textwrap.dedent(f"""\
     id: {_SM_UUID}
-    name: "[VCF Content Factory] Kit Isolation Test SM"
+    name: "[VCF CF] Kit Isolation Test SM"
     formula: "${{this, metric=cpu|usage_average}}"
     description: "Minimal SM for kit isolation test."
     resource_kinds:
@@ -82,7 +82,7 @@ _SM_YAML = textwrap.dedent(f"""\
 _SYMPTOM_UUID = "ccccdddd-0002-0002-0002-000000000002"
 
 _SYMPTOM_YAML = textwrap.dedent(f"""\
-    name: "[VCF Content Factory] Kit Isolation Test Symptom"
+    name: "[VCF CF] Kit Isolation Test Symptom"
     adapter_kind: VMWARE
     resource_kind: HostSystem
     severity: CRITICAL
@@ -100,7 +100,7 @@ _SYMPTOM_YAML = textwrap.dedent(f"""\
 _ALERT_UUID = "eeeeffff-0003-0003-0003-000000000003"
 
 _ALERT_YAML = textwrap.dedent(f"""\
-    name: "[VCF Content Factory] Kit Isolation Test Alert"
+    name: "[VCF CF] Kit Isolation Test Alert"
     description: "Minimal alert for kit isolation test."
     adapter_kind: VMWARE
     resource_kind: HostSystem
@@ -117,14 +117,14 @@ _ALERT_YAML = textwrap.dedent(f"""\
         - defined_on: SELF
           operator: ANY
           symptoms:
-            - name: "[VCF Content Factory] Kit Isolation Test Symptom"
+            - name: "[VCF CF] Kit Isolation Test Symptom"
 """)
 
 _VIEW_UUID = "11112222-0004-0004-0004-000000000004"
 
 _VIEW_YAML = textwrap.dedent(f"""\
     id: {_VIEW_UUID}
-    name: "[VCF Content Factory] Kit Isolation Test View"
+    name: "[VCF CF] Kit Isolation Test View"
     description: "Minimal view for kit isolation test (embedded in the report below)."
     subject:
       adapter_kind: VMWARE
@@ -140,7 +140,7 @@ _REPORT_UUID = "33334444-0005-0005-0005-000000000005"
 
 _REPORT_YAML = textwrap.dedent(f"""\
     id: {_REPORT_UUID}
-    name: "[VCF Content Factory] Kit Isolation Test Report"
+    name: "[VCF CF] Kit Isolation Test Report"
     description: "Minimal report for kit isolation test — embeds the bundled view above so the co-bundled-reports path (render_view_def_fragments) fires."
     subject_types:
       - adapter_kind: VMWARE
@@ -148,7 +148,7 @@ _REPORT_YAML = textwrap.dedent(f"""\
         type: self
     sections:
       - type: View
-        view: "[VCF Content Factory] Kit Isolation Test View"
+        view: "[VCF CF] Kit Isolation Test View"
         orientation: Landscape
         colorize: true
     settings:
@@ -495,6 +495,10 @@ def test_kit_isolated_build_fails_without_sm_rewrite(tmp_path):
             continue
         source_text = src_path.read_text(encoding="utf-8")
         rules = _IMPORT_REWRITES.get(dest_name, [])
+        if dest_name == "sm_loader.py":
+            # The core copy's naming-import rule has nothing to match in the
+            # wrapper; the canary is about the wrapper's vcfcf_ imports.
+            rules = []
         if rules:
             patched_text = _apply_rewrites(source_text, rules)
             (pkg_dir / dest_name).write_text(patched_text, encoding="utf-8")
@@ -827,24 +831,24 @@ def test_kit_isolated_bundled_yaml_without_id_fails_the_build_and_writes_nothing
     (project_dir / kind).mkdir(parents=True)
     if kind == "views":
         body = (
-            "name: \"[VCF Content Factory] Kit No Id View\"\n"
+            "name: \"[VCF CF] Kit No Id View\"\n"
             "subject: {adapter_kind: VMWARE, resource_kind: HostSystem}\n"
             "columns:\n  - {display_name: CPU, attribute: cpu|usage_average}\n"
         )
     elif kind == "dashboards":
         body = (
-            "name: \"[VCF Content Factory] Kit No Id Dashboard\"\n"
+            "name: \"[VCF CF] Kit No Id Dashboard\"\n"
             "widgets: []\n"
         )
     elif kind == "supermetrics":
         body = (
-            "name: \"[VCF Content Factory] Kit No Id SM\"\n"
+            "name: \"[VCF CF] Kit No Id SM\"\n"
             "formula: \"avg(${this, metric=cpu|usage_average})\"\n"
             "resource_kinds:\n  - {adapter_kind_key: VMWARE, resource_kind_key: HostSystem}\n"
         )
     else:
         body = (
-            "name: \"[VCF Content Factory] Kit No Id Report\"\n"
+            "name: \"[VCF CF] Kit No Id Report\"\n"
             "subject_types:\n  - {adapter_kind: VMWARE, resource_kind: HostSystem, type: self}\n"
             "sections:\n  - type: CoverPage\n"
         )

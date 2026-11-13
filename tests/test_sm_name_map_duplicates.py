@@ -22,7 +22,7 @@ from vcfcf_core.supermetrics.crossref import (  # noqa: E402
     sm_name_to_uuid_map,
 )
 
-NAME = "[VCF Content Factory] Dup SM"
+NAME = "[VCF CF] Dup SM"
 UUID_1 = "11111111-1111-4111-8111-111111111111"
 UUID_2 = "22222222-2222-4222-8222-222222222222"
 

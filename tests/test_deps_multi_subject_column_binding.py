@@ -28,7 +28,7 @@ def _write_view(tmp_path: Path, data: dict) -> Path:
 
 def _multi_subject_view_data() -> dict:
     return {
-        "name": "[VCF Content Factory] Multi Subject Binding Audit Test",
+        "name": "[VCF CF] Multi Subject Binding Audit Test",
         "description": "",
         "subjects": [
             {"adapter_kind": "VMWARE", "resource_kind": "VirtualMachine"},

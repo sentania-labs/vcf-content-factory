@@ -80,6 +80,15 @@ except ImportError:
 # build-buildkit (_factory_source_commit), which runs with only PyYAML
 # installed, and the wrapper package's import chain reaches requests.
 from vcfcf_core.supermetrics import crossref as _crossref
+from vcfcf_core.naming import (
+    FACTORY_PREFIX,
+    FACTORY_PREFIX_LABEL,
+    LEGACY_FACTORY_PREFIX_LABEL,
+    MIGRATE_COMMAND,
+    has_factory_prefix,
+    has_legacy_prefix,
+    is_factory_name,
+)
 
 from .sdk_project import (
     CONTENT_NAMING_DEFAULT,
@@ -2948,9 +2957,9 @@ def _dashboard_short_name(dashboard_name: str, name_path: str) -> str:
     Otherwise strip any leading path segment.
 
     Example:
-        dashboard_name = "[VCF Content Factory] Compliance Fleet Overview"
+        dashboard_name = "[VCF CF] Compliance Fleet Overview"
         name_path      = "VCF Content Factory"
-        → "[VCF Content Factory] Compliance Fleet Overview"   (name_path not a prefix)
+        → "[VCF CF] Compliance Fleet Overview"   (name_path not a prefix)
 
     The namePath itself gets its own localization entry (folder label).
     """
@@ -3611,7 +3620,7 @@ def _write_outer_pak(
                             seen_sym_names.add(sym_name)
                 # Collect the recommendations referenced by this specific alert.
                 # The cross-ref validation above already guaranteed all
-                # [VCF Content Factory] names resolve; non-factory names are
+                # factory-prefixed names resolve; non-factory names are
                 # built-in refs that are not in our bundled list (skip them).
                 referenced_recs = []
                 seen_rec_names: set = set()
@@ -5128,9 +5137,6 @@ def _xml_local_name(tag) -> str:
     return tag.rsplit("}", 1)[-1]
 
 
-_FACTORY_CONTENT_PREFIX = "[VCF Content Factory] "
-
-
 def check_content_naming(
     project: SdkProjectDef, bundled: Tuple[list, ...]
 ) -> Tuple[List[str], List[str]]:
@@ -5139,15 +5145,19 @@ def check_content_naming(
     ``bundled`` is the tuple ``_load_bundled_content`` returns (views,
     dashboards, supermetrics, symptoms, alerts, reports, recommendations).
 
-    ``factory_prefixed``: every name must start with ``[VCF Content Factory] ``.
-    ``unprefixed``: no name may start with ``[VCF Content Factory]`` (with or
+    ``factory_prefixed``: every name must start with ``FACTORY_PREFIX``
+    (``[VCF CF] ``).
+    ``unprefixed``: no name may start with the factory label in either
+    spelling (``[VCF CF]`` or the retired ``[VCF Content Factory]``, with or
     without the trailing space, so a near-miss is caught too).
 
     Returns ``(errors, warnings)``. When adapter.yaml declares the key, each
     mismatch is an error. When the key is absent, the default
     (``factory_prefixed``) is applied but mismatches come back as one
     warning, so a pak that predates the key keeps validating until it
-    declares its contract.
+    declares its contract. A name in the retired spelling is an error either
+    way: it points at the migration command, and a pak that ships it would
+    split its by-name references across two spellings.
     """
     labels = ("view", "dashboard", "supermetric", "symptom", "alert",
               "report", "recommendation")
@@ -5156,36 +5166,50 @@ def check_content_naming(
     declared = bool(getattr(project, "content_naming_declared", False))
     unprefixed = content_naming == CONTENT_NAMING_UNPREFIXED
     mismatches: List[str] = []
+    legacy: List[str] = []
     for label, objs in zip(labels, bundled):
         for obj in objs or []:
             name = str(getattr(obj, "name", "") or "")
             if unprefixed:
-                bad = name.startswith(_FACTORY_CONTENT_PREFIX.rstrip())
+                bad = (name.startswith(FACTORY_PREFIX_LABEL)
+                       or has_legacy_prefix(name))
+            elif has_legacy_prefix(name):
+                legacy.append(f"{label} {name!r}")
+                continue
             else:
-                bad = not name.startswith(_FACTORY_CONTENT_PREFIX)
+                bad = not has_factory_prefix(name)
             if bad:
                 mismatches.append(f"{label} {name!r}")
 
+    legacy_errors = [
+        f"content_naming: {content_naming}: bundled {m} carries the retired "
+        f"'{LEGACY_FACTORY_PREFIX_LABEL}' prefix; factory content now starts "
+        f"with '{FACTORY_PREFIX}'. Run `{MIGRATE_COMMAND} <pak dir>` to rename "
+        f"the pak's content and its references."
+        for m in legacy
+    ]
+
     if not mismatches:
-        return [], []
+        return legacy_errors, []
 
     if unprefixed:
-        rule = "must not carry the '[VCF Content Factory]' prefix"
+        rule = (f"must not carry the '{FACTORY_PREFIX_LABEL}' or "
+                f"'{LEGACY_FACTORY_PREFIX_LABEL}' prefix")
     else:
-        rule = "must start with '[VCF Content Factory] '"
+        rule = f"must start with '{FACTORY_PREFIX}'"
 
     if declared:
-        return [
+        return legacy_errors + [
             f"content_naming: {content_naming}: bundled {m} {rule}"
             for m in mismatches
         ], []
 
     sample = ", ".join(mismatches[:3])
     more = f" and {len(mismatches) - 3} more" if len(mismatches) > 3 else ""
-    return [], [
+    return legacy_errors, [
         f"content_naming not declared in adapter.yaml, so the default "
         f"factory_prefixed applies, and {len(mismatches)} bundled name(s) "
-        f"lack the '[VCF Content Factory] ' prefix ({sample}{more}). "
+        f"lack the '{FACTORY_PREFIX}' prefix ({sample}{more}). "
         f"Declare 'content_naming: unprefixed' if this pak keeps its upstream "
         f"names, or rename the content. This becomes an error once declared."
     ]
@@ -5255,7 +5279,7 @@ def check_bundled_content_references(symptoms: list, alerts: list,
     """Return an error per alert reference the pak does not bundle.
 
     Every symptom an alert's symptom sets name must be in
-    ``bundled_content.symptoms``; every ``[VCF Content Factory]``
+    ``bundled_content.symptoms``; every factory-prefixed (either spelling)
     recommendation it names must be in ``bundled_content.recommendations``
     (other names are built-ins, the same policy as
     ``resolve_alert_recommendations`` in the alerts loader).  validate-sdk,
@@ -5288,7 +5312,7 @@ def check_bundled_content_references(symptoms: list, alerts: list,
                     )
         for rec_ref in (getattr(alert, "recommendations", None) or []):
             rec_name = rec_ref.name if hasattr(rec_ref, "name") else str(rec_ref)
-            if (rec_name.startswith("[VCF Content Factory]")
+            if (is_factory_name(rec_name)
                     and rec_name not in recommendation_names):
                 errors.append(
                     f"Alert '{alert.name}' ({_bundled_src(alert)}) references "

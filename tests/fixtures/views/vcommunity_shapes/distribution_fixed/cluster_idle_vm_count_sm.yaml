@@ -7,7 +7,7 @@ subject:
 data_type: distribution
 presentation: donut-chart
 columns:
-- attribute: supermetric:"[VCF Content Factory] Cluster - Idle VM Count"
+- attribute: supermetric:"[VCF CF] Cluster - Idle VM Count"
   display_name: Idle VMs
 time_window:
   unit: DAYS

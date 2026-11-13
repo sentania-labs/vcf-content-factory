@@ -45,9 +45,9 @@ class TestUnscoped:
         left, and a flat cwd map is what let a third-party column bind to a
         same-named factory SM."""
         _write(tmp_path / "content" / "supermetrics", "a.yaml",
-               _sm_yaml("[VCF Content Factory] Map Probe A", _A))
+               _sm_yaml("[VCF CF] Map Probe A", _A))
         _write(tmp_path / "supermetrics", "b.yaml",
-               _sm_yaml("[VCF Content Factory] Map Probe B", _B))
+               _sm_yaml("[VCF CF] Map Probe B", _B))
         monkeypatch.chdir(tmp_path)
         assert sm_id_map() == {}
         assert sm_id_map(None) == {}
@@ -57,7 +57,7 @@ class TestScoped:
     def test_exactly_the_listed_files(self, tmp_path, monkeypatch):
         # A cwd tree that the scoped mode must ignore.
         _write(tmp_path / "content" / "supermetrics", "a.yaml",
-               _sm_yaml("[VCF Content Factory] Map Probe A", _A))
+               _sm_yaml("[VCF CF] Map Probe A", _A))
         scoped = _write(tmp_path / "elsewhere", "b.yaml", _sm_yaml("Third Party Probe B", _B))
         monkeypatch.chdir(tmp_path)
         assert sm_id_map([scoped]) == {"Third Party Probe B": _B}

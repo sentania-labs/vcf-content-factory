@@ -36,7 +36,7 @@ def _write(tmp_path: Path, data: dict, name="v.yaml") -> Path:
 def _view(**over) -> dict:
     d = {
         "id": VIEW_ID,
-        "name": "[VCF Content Factory] Inventory",
+        "name": "[VCF CF] Inventory",
         "description": "d",
         "subject": {"adapter_kind": "VMWARE", "resource_kind": "Datacenter"},
         "columns": [{"attribute": "summary|total_number_hosts", "display_name": "Hosts"}],
@@ -173,7 +173,7 @@ class TestRejections:
         from vcfcf_dashboards.loader import (DashboardValidationError, ViewColumn, ViewDef,
                                               ViewSubject)
 
-        v = ViewDef(name="[VCF Content Factory] X", description="", adapter_kind="VMWARE",
+        v = ViewDef(name="[VCF CF] X", description="", adapter_kind="VMWARE",
                     resource_kind="HostSystem", id=VIEW_ID,
                     columns=[ViewColumn(attribute="a|b", display_name="A")],
                     subjects=[ViewSubject("VMWARE", "Datacenter")])
@@ -200,7 +200,7 @@ class TestDependencyAudit:
             ("VMWARE", "Datacenter", "summary|total_number_hosts"),
             ("VMWARE", "vSphere World", "summary|total_number_hosts"),
         ]
-        assert {r.source_desc for r in refs} == {"view '[VCF Content Factory] Inventory'"}
+        assert {r.source_desc for r in refs} == {"view '[VCF CF] Inventory'"}
 
     def test_subject_filter_keys_audited_per_kind(self, tmp_path):
         refs = self._refs(tmp_path, _view(

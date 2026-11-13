@@ -55,6 +55,7 @@ from vcfcf_alerts.loader import (
     AlertDef, load_dir as load_alert_dir,
     Recommendation, load_recommendations,
 )
+from vcfcf_core.naming import FACTORY_PREFIX, strip_factory_prefix
 from vcfcf_core.packaging.assembly import (
     _build_content_block,
     assemble_distribution_zip,
@@ -590,8 +591,9 @@ def build_discrete(
 
 def _item_slug(name: str) -> str:
     """Derive a filesystem-safe slug from a content item name."""
-    # Strip the [VCF Content Factory] prefix and lowercase
-    stripped = re.sub(r"^\[VCF Content Factory\]\s*", "", name)
+    # Strip the factory prefix (either spelling, so slugs survive the
+    # 2026-11-12 prefix move) and lowercase
+    stripped = strip_factory_prefix(name)
     slug = re.sub(r"[^\w\s-]", "", stripped).strip()
     slug = re.sub(r"[\s_]+", "-", slug).lower()
     return slug or "item"
@@ -721,8 +723,8 @@ def _assemble_zip(
     """Assemble the output zip from a synthetic Bundle, mirroring build_bundle
     (same ``vcfcf_core.packaging.assembly`` layout; only bundle.json,
     the README and the manifest fields are item-shaped)."""
-    # Zip filename follows the same [VCF Content Factory] prefix convention
-    out_path = output_dir / f"[VCF Content Factory] {display_name}.zip"
+    # Zip filename follows the same factory prefix convention
+    out_path = output_dir / f"{FACTORY_PREFIX}{display_name}.zip"
     slug = bundle.name
 
     # Static templates

@@ -35,7 +35,7 @@ if str(SRC) not in sys.path:
 
 def _view(**overrides) -> dict:
     d = {
-        "name": "[VCF Content Factory] Sort Probe",
+        "name": "[VCF CF] Sort Probe",
         "subject": {"adapter_kind": "VMWARE", "resource_kind": "HostSystem"},
         "columns": [
             {"attribute": "summary|parentCluster", "display_name": "Cluster",
@@ -181,9 +181,9 @@ def test_sort_on_instanced_group_column_rejected(tmp_path):
 def _dashboard(widget_extra: dict, widget_type: str = "View") -> dict:
     w = {"id": "w1", "type": widget_type, "title": "W", "coords": {"x": 1, "y": 1, "w": 6, "h": 4}}
     if widget_type == "View":
-        w["view"] = "[VCF Content Factory] Sort Probe"
+        w["view"] = "[VCF CF] Sort Probe"
     w.update(widget_extra)
-    return {"name": "[VCF Content Factory] Sort Probe Dashboard", "widgets": [w]}
+    return {"name": "[VCF CF] Sort Probe Dashboard", "widgets": [w]}
 
 
 @pytest.mark.parametrize(

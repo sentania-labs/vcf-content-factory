@@ -12,7 +12,7 @@ Public API::
         adapter_kind: str
         resource_kind: str
         metric_key: str
-        source_desc: str  # e.g. "SM '[VCF Content Factory] Foo Bar'"
+        source_desc: str  # e.g. "SM '[VCF CF] Foo Bar'"
 
     def extract_metric_references(bundle: Bundle) -> list[MetricReference]
 

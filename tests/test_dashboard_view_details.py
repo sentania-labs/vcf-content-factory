@@ -62,7 +62,7 @@ def _render_bytes(tmp_path: Path, name: str, widgets: list) -> str:
 
     d = load_dashboard(_write(tmp_path / f"{name}.yaml", {
         "id": "11111111-2222-4333-8444-555555555555",
-        "name": "[VCF Content Factory] View Details Test",
+        "name": "[VCF CF] View Details Test",
         "description": "",
         "widgets": widgets,
         "interactions": [{"from": "picker", "to": "kpi"}],
@@ -112,7 +112,7 @@ def test_unresolvable_forms_rejected(tmp_path, bad):
     from vcfcf_dashboards.loader import DashboardValidationError, load_dashboard
 
     path = _write(tmp_path / "bad_form.yaml", {
-        "name": "[VCF Content Factory] View Details Test",
+        "name": "[VCF CF] View Details Test",
         "widgets": _widgets({"kpi": bad}),
     })
     with pytest.raises(DashboardValidationError, match="view_details .* must start with one of"):
@@ -131,7 +131,7 @@ def test_non_string_rejected(tmp_path):
     ws = _widgets()
     ws[1]["view_details"] = 42
     path = _write(tmp_path / "e.yaml", {
-        "name": "[VCF Content Factory] View Details Test",
+        "name": "[VCF CF] View Details Test",
         "widgets": ws,
     })
     with pytest.raises(DashboardValidationError, match="view_details must be a string"):
@@ -142,7 +142,7 @@ def test_section_rejects_view_details(tmp_path):
     from vcfcf_dashboards.loader import DashboardValidationError, load_dashboard
 
     path = _write(tmp_path / "f.yaml", {
-        "name": "[VCF Content Factory] View Details Test",
+        "name": "[VCF CF] View Details Test",
         "widgets": [
             {"id": "s", "type": "Section", "title": "S", "coords": {"x": 1, "y": 1},
              "view_details": "https://example.invalid/nope"},

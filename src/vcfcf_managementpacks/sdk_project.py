@@ -24,10 +24,11 @@ Schema (all fields):
     content_naming: str  (optional) naming contract for the pak's
                            bundled_content (#229). One of:
                              factory_prefixed  every bundled content name starts
-                                               with "[VCF Content Factory] "
+                                               with "[VCF CF] "
                                                (RULE-006). The default.
                              unprefixed        no bundled content name carries
-                                               the "[VCF Content Factory]"
+                                               the "[VCF CF]" (or retired
+                                               "[VCF Content Factory]")
                                                prefix (a pak that keeps its
                                                upstream names, e.g. vCommunity).
                            validate-sdk enforces it: an error when the key is

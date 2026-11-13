@@ -24,7 +24,7 @@ from vcfcf_dashboards import cli as dash_cli
 from vcfcf_dashboards import handler as dash_handler
 
 _SM_ID = str(uuid.uuid4())
-_SM_NAME = "[VCF Content Factory] Standalone Wiring Probe SM"
+_SM_NAME = "[VCF CF] Standalone Wiring Probe SM"
 _VIEW_ID = str(uuid.uuid4())
 
 
@@ -44,7 +44,7 @@ def _write_tree(root: Path) -> Path:
     view = views_dir / "probe.yaml"
     view.write_text(
         f"id: {_VIEW_ID}\n"
-        "name: \"[VCF Content Factory] Standalone Wiring Probe View\"\n"
+        "name: \"[VCF CF] Standalone Wiring Probe View\"\n"
         "description: probe\n"
         "subject: {adapter_kind: VMWARE, resource_kind: HostSystem}\n"
         "columns:\n"

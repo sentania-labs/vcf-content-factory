@@ -523,7 +523,7 @@ class TestStaleZipSweep:
         # corresponding release manifest.
         dashboards_dir = dist / "dashboards"
         dashboards_dir.mkdir(parents=True, exist_ok=True)
-        legacy_zip = dashboards_dir / "[VCF Content Factory] VM Performance.zip"
+        legacy_zip = dashboards_dir / "[VCF CF] VM Performance.zip"
         legacy_zip.write_bytes(b"fake legacy zip content")
 
         # Stage + commit so dist repo stays clean for the check.

@@ -444,7 +444,7 @@ def build_bundle(
     else:
         display_name = _slug_to_display_name(slug)
     # Zip filename: use the bundle slug as the filesystem identity.
-    # The [VCF Content Factory] prefix exists for display-name identity inside
+    # The [VCF CF] prefix exists for display-name identity inside
     # VCF Ops, not for filesystem identity.  Filesystem identity is the slug.
     out_path = output_dir / f"{slug}.zip"
     bundle_prefix = f"bundles/{slug}/"

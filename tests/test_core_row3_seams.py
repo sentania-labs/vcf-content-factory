@@ -113,7 +113,7 @@ class TestSuperMetricLoader:
     def test_core_refuses_to_mint_and_writes_nothing(self, tmp_path):
         import vcfcf_core.supermetrics.loader as core
         f = tmp_path / "sm.yaml"
-        f.write_text(_sm_yaml("[VCF Content Factory] Row3 SM"), encoding="utf-8")
+        f.write_text(_sm_yaml("[VCF CF] Row3 SM"), encoding="utf-8")
         before = f.read_text(encoding="utf-8")
         with pytest.raises(core.SuperMetricValidationError, match="missing id .* on_missing_id"):
             core.load_file(f)
@@ -127,7 +127,7 @@ class TestSuperMetricLoader:
     def test_core_validates_the_callback_return(self, tmp_path, garbage):
         import vcfcf_core.supermetrics.loader as core
         f = tmp_path / "sm.yaml"
-        f.write_text(_sm_yaml("[VCF Content Factory] Row3 SM"), encoding="utf-8")
+        f.write_text(_sm_yaml("[VCF CF] Row3 SM"), encoding="utf-8")
 
         def bad(path):
             return garbage
@@ -140,7 +140,7 @@ class TestSuperMetricLoader:
         import vcfcf_supermetrics.loader as old
         f = tmp_path / "content" / "supermetrics" / "sm.yaml"
         f.parent.mkdir(parents=True)
-        f.write_text(_sm_yaml("[VCF Content Factory] Row3 SM"), encoding="utf-8")
+        f.write_text(_sm_yaml("[VCF CF] Row3 SM"), encoding="utf-8")
         loaded = old.load_file(f)
         assert f.read_text(encoding="utf-8").startswith(f"id: {loaded.id}\n")
         assert core._UUID_RE.match(loaded.id)
@@ -162,11 +162,11 @@ class TestSmIdMap:
         import vcfcf_core.supermetrics.loader as core
         d = tmp_path / "content" / "supermetrics"
         d.mkdir(parents=True)
-        (d / "a.yaml").write_text(_sm_yaml("[VCF Content Factory] Map A", _SM_UUID), encoding="utf-8")
+        (d / "a.yaml").write_text(_sm_yaml("[VCF CF] Map A", _SM_UUID), encoding="utf-8")
         monkeypatch.chdir(tmp_path)
         assert core.sm_id_map(None) == {}
         assert core.sm_id_map([]) == {}
-        assert core.sm_id_map([d / "a.yaml"]) == {"[VCF Content Factory] Map A": _SM_UUID}
+        assert core.sm_id_map([d / "a.yaml"]) == {"[VCF CF] Map A": _SM_UUID}
 
     def test_core_scoped_load_failure_names_the_bundle(self, tmp_path):
         import vcfcf_core.supermetrics.loader as core
@@ -190,7 +190,7 @@ class TestSmIdMap:
         import vcfcf_supermetrics.loader as old
         d = tmp_path / "content" / "supermetrics"
         d.mkdir(parents=True)
-        (d / "a.yaml").write_text(_sm_yaml("[VCF Content Factory] Map A", _SM_UUID), encoding="utf-8")
+        (d / "a.yaml").write_text(_sm_yaml("[VCF CF] Map A", _SM_UUID), encoding="utf-8")
         monkeypatch.chdir(tmp_path)
         assert old.sm_id_map() == {}
         assert old.sm_id_map(None) == {}
@@ -200,7 +200,7 @@ class TestCustomGroupLoader:
     def test_core_provenance_is_a_callback(self, tmp_path):
         import vcfcf_core.customgroups.loader as core
         f = tmp_path / "cg.yaml"
-        f.write_text(_cg_yaml("[VCF Content Factory] Row3 CG"), encoding="utf-8")
+        f.write_text(_cg_yaml("[VCF CF] Row3 CG"), encoding="utf-8")
         assert core.load_file(f).provenance == ""
         assert core.load_file(f, provenance_of=lambda p: "acme").provenance == "acme"
         with pytest.raises(TypeError):
@@ -210,17 +210,17 @@ class TestCustomGroupLoader:
         import vcfcf_customgroups.loader as old
         f = tmp_path / "content" / "customgroups" / "cg.yaml"
         f.parent.mkdir(parents=True)
-        f.write_text(_cg_yaml("[VCF Content Factory] Row3 CG"), encoding="utf-8")
+        f.write_text(_cg_yaml("[VCF CF] Row3 CG"), encoding="utf-8")
         assert old.load_file(f).provenance == "factory"
         assert old.load_dir.__defaults__[0] == "customgroups"
-        assert [c.name for c in old.load_dir(f.parent)] == ["[VCF Content Factory] Row3 CG"]
+        assert [c.name for c in old.load_dir(f.parent)] == ["[VCF CF] Row3 CG"]
 
 
 class TestReportLoader:
     def test_core_requires_dirs_and_refuses_to_mint(self, tmp_path):
         import vcfcf_core.reports.loader as core
         f = tmp_path / "r.yaml"
-        f.write_text(_report_yaml("[VCF Content Factory] Row3 Report"), encoding="utf-8")
+        f.write_text(_report_yaml("[VCF CF] Row3 Report"), encoding="utf-8")
         before = f.read_text(encoding="utf-8")
         with pytest.raises(TypeError):
             core.load_file(f)  # type: ignore[call-arg]
@@ -237,7 +237,7 @@ class TestReportLoader:
     def test_wrapper_mints_and_keeps_the_content_defaults(self, tmp_path):
         import vcfcf_reports.loader as old
         f = tmp_path / "r.yaml"
-        f.write_text(_report_yaml("[VCF Content Factory] Row3 Report"), encoding="utf-8")
+        f.write_text(_report_yaml("[VCF CF] Row3 Report"), encoding="utf-8")
         loaded = old.load_file(f)
         assert f.read_text(encoding="utf-8").startswith(f"id: {loaded.id}\n")
         assert old.load_file.__defaults__ == ("content/views", "content/dashboards", True)
@@ -248,12 +248,12 @@ class TestReportLoader:
         views = tmp_path / "myviews"
         views.mkdir()
         vid = str(uuid.uuid4())
-        (views / "v.yaml").write_text(f"id: {vid}\nname: \"[VCF Content Factory] Row3 View\"\n", encoding="utf-8")
+        (views / "v.yaml").write_text(f"id: {vid}\nname: \"[VCF CF] Row3 View\"\n", encoding="utf-8")
         f = tmp_path / "r.yaml"
         f.write_text(
-            f"id: {uuid.uuid4()}\nname: \"[VCF Content Factory] Row3 Report\"\n"
+            f"id: {uuid.uuid4()}\nname: \"[VCF CF] Row3 Report\"\n"
             "subject_types:\n  - {adapter_kind: VMWARE, resource_kind: HostSystem, type: self}\n"
-            "sections:\n  - {type: View, view: \"[VCF Content Factory] Row3 View\"}\n",
+            "sections:\n  - {type: View, view: \"[VCF CF] Row3 View\"}\n",
             encoding="utf-8",
         )
         assert core.load_file(f, views, tmp_path / "d").sections[0].view_id == vid
@@ -268,7 +268,7 @@ class TestReportLoader:
 def _bundle_tree(root: Path, *, sm_id: str = _SM_UUID) -> Path:
     (root / "content" / "supermetrics").mkdir(parents=True)
     (root / "content" / "supermetrics" / "a.yaml").write_text(
-        _sm_yaml("[VCF Content Factory] Bundle SM", sm_id), encoding="utf-8")
+        _sm_yaml("[VCF CF] Bundle SM", sm_id), encoding="utf-8")
     (root / "bundles").mkdir()
     manifest = root / "bundles" / "probe.yaml"
     manifest.write_text(
@@ -281,7 +281,7 @@ class TestBundleLoader:
         import vcfcf_core.packaging.loader as core
         manifest = _bundle_tree(tmp_path)
         b = core.load_bundle(manifest, repo_root=tmp_path)
-        assert [sm.name for sm in b.supermetrics] == ["[VCF Content Factory] Bundle SM"]
+        assert [sm.name for sm in b.supermetrics] == ["[VCF CF] Bundle SM"]
         assert b.supermetrics[0].provenance == ""
         # No root: only manifest-relative references resolve, and the error
         # names the one candidate tried.
@@ -374,9 +374,9 @@ class TestDepWalkerSplit:
     def test_offline_walk_is_core_and_needs_no_client(self):
         import vcfcf_core.common.dep_walker as core
         from vcfcf_core.supermetrics.loader import SuperMetricDef
-        a = SuperMetricDef(name="[VCF Content Factory] A", formula='${this, attribute=@supermetric:"[VCF Content Factory] B"}',
+        a = SuperMetricDef(name="[VCF CF] A", formula='${this, attribute=@supermetric:"[VCF CF] B"}',
                            id=_SM_UUID, resource_kinds=[{"resourceKindKey": "HostSystem", "adapterKindKey": "VMWARE"}])
-        b = SuperMetricDef(name="[VCF Content Factory] B", formula="${this, metric=cpu|usage_average}",
+        b = SuperMetricDef(name="[VCF CF] B", formula="${this, metric=cpu|usage_average}",
                            id="bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb", resource_kinds=a.resource_kinds)
         sms, errors = core.expand_sm_crossrefs([a], [a, b])
         assert [s.name for s in sms] == [a.name, b.name] and errors == []
@@ -394,7 +394,7 @@ class TestDepWalkerSplit:
             def verify_supermetrics_enabled(self, policy_xml, uuids):
                 return {u: True for u in uuids}
 
-        sm = SuperMetricDef(name="[VCF Content Factory] A", formula="${this, metric=cpu|usage_average}",
+        sm = SuperMetricDef(name="[VCF CF] A", formula="${this, metric=cpu|usage_average}",
                             id=_SM_UUID, resource_kinds=[{"resourceKindKey": "HostSystem", "adapterKindKey": "VMWARE"}])
         res = old.walk_and_check(client=_Client(), supermetrics=[sm], views=[], dashboards=[],
                                  customgroups=[], skip_metric_check=True)
@@ -409,7 +409,7 @@ class TestDepWalkerSplit:
 def _bundle_obj(**over):
     from vcfcf_core.packaging.loader import Bundle
     from vcfcf_core.supermetrics.loader import SuperMetricDef
-    sm = SuperMetricDef(name="[VCF Content Factory] Asm SM", formula="${this, metric=cpu|usage_average}",
+    sm = SuperMetricDef(name="[VCF CF] Asm SM", formula="${this, metric=cpu|usage_average}",
                         id=_SM_UUID, resource_kinds=[{"resourceKindKey": "HostSystem", "adapterKindKey": "VMWARE"}])
     kw = dict(name="asm-probe", description="d", sync_enabled=True, supermetrics=[sm],
               views=[], dashboards=[], customgroups=[])
@@ -450,7 +450,7 @@ class TestAssembly:
         z = zipfile.ZipFile(io.BytesIO(blob))
         assert z.read("bundles/asm-probe/supermetric.json") == z.read("bundles/asm-probe/content/supermetrics.json")
         assert json.loads(z.read("bundles/asm-probe/bundle.json"))["content"]["supermetrics"]["items"] == [
-            {"uuid": _SM_UUID, "name": "[VCF Content Factory] Asm SM"}]
+            {"uuid": _SM_UUID, "name": "[VCF CF] Asm SM"}]
         # No LICENSE member when none is supplied.
         blob2 = assemble_distribution_zip(
             slug="asm-probe", payloads=payloads, bundle_json="{}", bundle_readme="", install_py="",
@@ -503,7 +503,11 @@ def test_buildkit_copies_the_core_loaders_not_the_wrappers():
     assert _FACTORY_SOURCES["reports_loader.py"] == core / "reports" / "loader.py"
     assert _FACTORY_SOURCES["reports_render.py"] == core / "reports" / "render.py"
     assert "provenance.py" not in _FACTORY_SOURCES
-    assert "sm_loader.py" not in _IMPORT_REWRITES
+    # The only sm_loader.py rewrite is the vcfcf_core.naming import (the
+    # content-name prefix, 2026-11-12); the pre-row-3 provenance rule is gone.
+    assert [pat for pat, _ in _IMPORT_REWRITES.get("sm_loader.py", [])] == [
+        r"from vcfcf_core\.naming import"
+    ]
     import re  # noqa: PLC0415
     for dest, src in _FACTORY_SOURCES.items():
         if dest.endswith("_loader.py") or dest.endswith("_render.py") or dest in ("sm_crossref.py", "dashboard_yaml_utils.py"):

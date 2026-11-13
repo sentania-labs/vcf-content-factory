@@ -1754,7 +1754,7 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "the slug (filename stem), display name, or path to the source YAML. "
             "Examples: demand_driven_capacity_v2 | "
-            "\"[VCF Content Factory] Demand-Driven Capacity Planning v2\" | "
+            "\"[VCF CF] Demand-Driven Capacity Planning v2\" | "
             "dashboards/demand_driven_capacity_v2.yaml"
         ),
     )

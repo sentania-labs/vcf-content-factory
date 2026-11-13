@@ -22,7 +22,7 @@ from vcfcf_packaging.syncer import _get_yaml_paths_for_type, sync_bundle
 SYNC_TYPES = ("supermetrics", "customgroups", "views", "dashboards",
               "symptoms", "alerts", "reports")
 
-P = "[VCF Content Factory] Sync Paths"
+P = "[VCF CF] Sync Paths"
 
 _FILES = {
     "supermetrics": ("content/supermetrics/sm.yaml", {

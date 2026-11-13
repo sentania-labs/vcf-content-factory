@@ -49,7 +49,7 @@ def _write_view(tmp_path: Path, data: dict, stem: str = "view") -> Path:
 
 def _base_view_data(subject_filter) -> dict:
     return {
-        "name": "[VCF Content Factory] VM Network Top Talkers",
+        "name": "[VCF CF] VM Network Top Talkers",
         "description": "List of VMs that use the most bandwidth.",
         "subject": {
             "adapter_kind": "VMWARE",

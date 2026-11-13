@@ -99,7 +99,7 @@ def test_owning_subjecttype_round_trips():
 
 def test_report_subjecttype_and_id_round_trip():
     rd = ReportDef(
-        name="[VCF Content Factory] Escape Probe",
+        name="[VCF CF] Escape Probe",
         description="d",
         subject_types=[SubjectType(adapter_kind=AK, resource_kind=RK, type=TYPE)],
         sections=[Section(type="CoverPage")],

@@ -16,7 +16,7 @@ YAML; sync matches by name.
 
 YAML schema (terse, expanded to wire JSON by `to_wire()`):
 
-    name: "[VCF Content Factory] vSAN Datastores"
+    name: "[VCF CF] vSAN Datastores"
     description: >
       Optional human description.
     type: Environment        # group type key, defaults to Environment
@@ -57,6 +57,8 @@ from typing import Any, Callable, List, Optional
 import yaml
 import yaml.constructor
 import yaml.resolver
+
+from vcfcf_core.naming import framework_prefix_problem, has_factory_prefix
 
 
 def _strict_load(stream):
@@ -149,14 +151,9 @@ class CustomGroupDef:
     def validate(self, enforce_framework_prefix: bool = True) -> None:
         if not self.name or not self.name.strip():
             raise CustomGroupValidationError("name is required")
-        if enforce_framework_prefix and not self.name.startswith("[VCF Content Factory] "):
+        if enforce_framework_prefix and not has_factory_prefix(self.name):
             src = str(self.source_path) if self.source_path else self.name
-            raise CustomGroupValidationError(
-                f'{src}: name "{self.name}" missing framework prefix '
-                f'"[VCF Content Factory]". All factory-authored content must carry the literal '
-                f'"[VCF Content Factory]" prefix (see CLAUDE.md §Hard rules #5). For third-party '
-                f"bundle content, ensure the bundle manifest sets factory_native: false."
-            )
+            raise CustomGroupValidationError(framework_prefix_problem(self.name, src))
         if not self.type_key or not self.type_key.strip():
             raise CustomGroupValidationError(
                 f"{self.name}: type is required (e.g. 'Environment')"

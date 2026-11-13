@@ -161,7 +161,7 @@ _VIEW_UUID = "11112222-3333-4444-5555-666677778888"
 _VIEW_YAML = textwrap.dedent(
     f"""\
     id: {_VIEW_UUID}
-    name: "[VCF Content Factory] Test View"
+    name: "[VCF CF] Test View"
     description: "View for coexistence test"
     subject:
       adapter_kind: VMWARE

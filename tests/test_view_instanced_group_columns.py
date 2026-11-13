@@ -35,7 +35,7 @@ def _write_view(tmp_path: Path, data: dict, stem: str = "view") -> Path:
 def _license_view_data() -> dict:
     """Mirrors ESXi Host License Information vCommunity.xml columns 1:1."""
     return {
-        "name": "[VCF Content Factory] ESXi Host License Information vCommunity",
+        "name": "[VCF CF] ESXi Host License Information vCommunity",
         "description": "ESXi Host License Information vCommunity",
         "subject": {"adapter_kind": "VMWARE", "resource_kind": "HostSystem"},
         "columns": [
@@ -290,7 +290,7 @@ class TestXmlEmission:
         from vcfcf_dashboards.render import render_views_xml
 
         data = {
-            "name": "[VCF Content Factory] ESXi Packages",
+            "name": "[VCF CF] ESXi Packages",
             "description": "",
             "subject": {"adapter_kind": "VMWARE", "resource_kind": "HostSystem"},
             "columns": [
@@ -363,7 +363,7 @@ class TestInstancedGroupMemberTransformEmission:
         from vcfcf_dashboards.render import render_views_xml
 
         data = {
-            "name": "[VCF Content Factory] Transform Test",
+            "name": "[VCF CF] Transform Test",
             "subject": {"adapter_kind": "VMWARE", "resource_kind": "VirtualMachine"},
             "columns": [_driver_column(), member],
         }
@@ -449,7 +449,7 @@ class TestInstancedGroupMemberUnitEmission:
         from vcfcf_dashboards.render import render_views_xml
 
         data = {
-            "name": "[VCF Content Factory] Unit Test",
+            "name": "[VCF CF] Unit Test",
             "subject": {"adapter_kind": "VMWARE", "resource_kind": "VirtualMachine"},
             "columns": [_driver_column(name="GROUP_diskspace"), member],
         }
@@ -541,7 +541,7 @@ class TestInstancedGroupMemberUnitEmission:
         from vcfcf_dashboards.render import render_views_xml
 
         data = {
-            "name": "[VCF Content Factory] Driver Unit Test",
+            "name": "[VCF CF] Driver Unit Test",
             "subject": {"adapter_kind": "VMWARE", "resource_kind": "VirtualMachine"},
             "columns": [
                 {
