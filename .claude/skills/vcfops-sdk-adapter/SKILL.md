@@ -252,7 +252,8 @@ side's token acquire and release). VMWARE objects match on vCenter UUID
 plus MOID, never on name. Use it for a port's parity check: it exits 0
 only when objects and keys were compared and nothing differs; 4 means
 nothing was compared (wrong scope or prefix, or everything stale), 5 means
-some objects could not be identified. Snapshot files carry object names
+some objects could not be identified. Numbers are compared exactly (no float
+rounding); 6 means an internal arithmetic error, never a match. Snapshot files carry object names
 and values from the instance, never credentials.
 
 ## Logging: what reaches the per-instance log
