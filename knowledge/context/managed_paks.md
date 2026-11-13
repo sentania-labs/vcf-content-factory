@@ -288,6 +288,33 @@ an `upstream` remote and fast-forward from it); do work on branches.
   calls per cycle, 0 ERROR). Upstream PR gillaspy/cluster-perf-risk#13 opened
   2026-10-29 on Scott's go.
 
+### vcommunity (fork of vmbro/VCF-Operations-vCommunity)
+
+- **Remote:** https://github.com/sentania-labs/VCF-Operations-vCommunity
+- **Target:** `content/sdk-adapters/vcommunity/`
+- **Upstream:** `https://github.com/vmbro/VCF-Operations-vCommunity.git`
+- **Release branch:** `main`
+- **Type:** Python Integration SDK container adapter (upstream's); the project
+  lives in the repo's `Management Pack/` directory, not the repo root
+- **Status:** forked 2026-11-12 on Scott's go, to prepare the fix for
+  vmbro/VCF-Operations-vCommunity#99 (the pak ships 117 views under built-in
+  view ids; install overwrites them, uninstall deletes them). Lesson:
+  `knowledge/lessons/pak-content-must-not-reuse-stock-ids.md`. Upstream PR
+  vmbro/VCF-Operations-vCommunity#100 opened 2026-11-12 on Scott's go
+  (branch `fix/builtin-view-ids`). Later releases of the pack are published
+  from the fork `e1-rahabok/VCF-vCommunity-Adapter` (same fork network; it
+  ships 120 such ids); the fix was ported and sent there the same day as issue
+  #91 and PR #92 (branch `fix/builtin-view-ids-e1`, pushed to this fork).
+  Measurements and upgrade behavior by product line:
+  `knowledge/context/investigations/2026-11-12-vcommunity-upstream-builtin-view-ids.md`.
+  Reviews in `reviews/python-packs/`.
+  Target path: the retired Java port (see Retired paks) used the same
+  target. Its clones were moved out on 2026-10-27, but a checkout that still
+  has one at this path must remove it before bootstrap, because bootstrap
+  does not compare an existing clone's origin with the registered Remote
+  and would report the wrong repo as current. The defect gate's name check
+  cannot tell the two `vcommunity` entries apart either.
+
 ## Retired paks
 
 Kept for the record. The bootstrap script and the Python registry reader
