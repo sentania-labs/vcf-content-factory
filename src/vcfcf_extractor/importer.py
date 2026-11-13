@@ -379,24 +379,40 @@ def _load_check(plan: Plan, layout: str, args) -> List[str]:
             f.write_text(e.text, encoding="utf-8")
         only = None
         removed: set = set()
+        removed_ids: set = set()
         while True:
             _, errors = _per_file_load(plan, tmp, layout, only)
             only = {"dashboard", "report", "alert"}
-            # A per-file load does not see every by-name reference (an
-            # alert's symptoms and recommendations, a navigation target), so
-            # an object naming one that was refused is refused too.
-            for e in plan.emitted:
-                if e.relpath in errors:
-                    continue
-                for t, n in _named_refs(e):
-                    if (t, n) in removed:
-                        errors[e.relpath] = f"names {t} {n!r}, which was refused (see its own failure)"
+            # A per-file load does not see every reference (an alert's
+            # symptoms and recommendations, a navigation target, every
+            # super metric reference), so an object naming one that was
+            # refused is refused too, to a fixed point.
+            grew = True
+            while grew:
+                grew = False
+                for e in plan.emitted:
+                    if e.relpath in errors:
+                        continue
+                    for t, n in _named_refs(e):
+                        if (t, n) in removed or (t, n) in {(x.type, x.name) for x in plan.emitted
+                                                           if x.relpath in errors}:
+                            errors[e.relpath] = f"names {t} {n!r}, which was refused (see its own failure)"
+                            grew = True
+                            break
+                    else:
+                        for t, i in _id_refs(e):
+                            if (t, i) in removed_ids or (t, i) in {(x.type, x.id.lower()) for x in plan.emitted
+                                                                   if x.relpath in errors}:
+                                errors[e.relpath] = f"references {t} {i}, which was refused (see its own failure)"
+                                grew = True
+                                break
             if not errors:
                 break
             keep = []
             for e in plan.emitted:
                 if e.relpath in errors:
                     removed.add((e.type, e.name))
+                    removed_ids.add((e.type, e.id.lower()))
                     reason = f"the written YAML does not load: {errors[e.relpath]}"
                     reason = reason.replace(str(tmp) + "/", "")
                     plan.failures.append(Failure(e.type, e.source_id, e.name, list(e.source.locations), reason))
@@ -411,10 +427,27 @@ def _load_check(plan: Plan, layout: str, args) -> List[str]:
     return lines
 
 
+_SM_NAME_REF = re.compile(r'@?supermetric:"([^"]+)"')
+_SM_ID_REF = re.compile(r"sm_(" + _UUID.pattern + ")")
+
+
+def _yaml_strings(node):
+    if isinstance(node, dict):
+        for v in node.values():
+            yield from _yaml_strings(v)
+    elif isinstance(node, list):
+        for v in node:
+            yield from _yaml_strings(v)
+    elif isinstance(node, str):
+        yield node
+
+
 def _named_refs(e) -> List[Tuple[str, str]]:
     """The (type, name) references in an emitted YAML that a per-file load
     does not resolve: alert symptoms and recommendations, navigation
-    targets."""
+    targets, and every super metric named by name (``@supermetric:"<name>"``
+    in a formula, ``supermetric:"<name>"`` in a view column). Views named by
+    dashboards and reports are checked by the per-file load itself."""
     y = e.yaml_tree
     out: List[Tuple[str, str]] = []
     if e.type == "alert":
@@ -424,7 +457,18 @@ def _named_refs(e) -> List[Tuple[str, str]]:
     elif e.type == "dashboard":
         for w in y.get("widgets") or []:
             out += [("dashboard", n.get("dashboard")) for n in w.get("navigations") or [] if n.get("dashboard")]
+    for s in _yaml_strings(y):
+        out += [("supermetric", m.group(1)) for m in _SM_NAME_REF.finditer(s) if m.group(1) != e.name]
     return out
+
+
+def _id_refs(e) -> List[Tuple[str, str]]:
+    """The (type, id) references a per-file load does not resolve: a super
+    metric key ``sm_<uuid>`` in any string (a symptom condition, a view
+    filter, a widget metric, HTML)."""
+    own = str(e.yaml_tree.get("id", "")).lower() if e.type == "supermetric" else None
+    return [("supermetric", m.group(1).lower()) for s in _yaml_strings(e.yaml_tree)
+            for m in _SM_ID_REF.finditer(s) if m.group(1).lower() != own]
 
 
 def _load_layout(plan: Plan, out: Path, layout: str) -> _Loaded:
@@ -512,6 +556,38 @@ def _classify(t: str, path: str, kind: str) -> str:
     return f"{t}: {generic(path)} [{kind}]"
 
 
+def _sm_context(sm):
+    """A super metric as context for rendering another one alone: its name
+    and id resolve references to it, its own formula is not rendered."""
+    c = copy.copy(sm)
+    c.formula = "0"
+    return c
+
+
+def _render_each(objs: list, render, key, context=None):
+    """``render(objs) -> {key(o): rendered}``, or, when the batch raises,
+    each object rendered on its own (with the others as ``context(o)`` where
+    a render needs the whole set): ``({key: rendered}, {key: exception})``."""
+    if not objs:
+        return {}, {}
+    try:
+        return render(list(objs)), {}
+    except Exception:
+        pass
+    out, errs = {}, {}
+    for o in objs:
+        k = key(o)
+        others = [context(x) for x in objs if x is not o] if context else []
+        try:
+            hit = render([o] + others).get(k)
+            if hit is None:
+                raise RuntimeError("not in the render")
+            out[k] = hit
+        except Exception as exc:
+            errs[k] = exc
+    return out, errs
+
+
 def _translate(mark: Mark, rewrites: Dict[str, str]) -> Mark:
     """A mark recorded on the source (old ids) as the expected side spells
     it (intended id rewrites applied, lower case)."""
@@ -519,17 +595,33 @@ def _translate(mark: Mark, rewrites: Dict[str, str]) -> Mark:
     return dataclasses.replace(mark, path=path) if path != mark.path else mark
 
 
+def _empty_verify() -> dict:
+    return {"objects": 0, "fields": 0, "identical": 0, "deviation_only": 0, "only_losses": 0, "differ": 0,
+            "per_type": defaultdict(Counter), "classes": Counter(), "class_objects": defaultdict(set),
+            "set_aside": Counter(), "deviations": Counter(), "loss_classes": Counter(),
+            "loss_class_objects": defaultdict(set), "objects_detail": [], "load_errors": [], "pak_problems": [],
+            "guard": []}
+
+
 def _verify(plan: Plan, out: Path, layout: str):
+    """Verify the staged tree (``_verify_tree``). Per-object render and
+    compare failures are that object's load error; anything else that
+    raises stops verification with a load error, never a traceback."""
+    try:
+        return _verify_tree(plan, out, layout)
+    except Exception as exc:
+        res = _empty_verify()
+        res["load_errors"].append(f"verification stopped: {type(exc).__name__}: {exc}")
+        return res
+
+
+def _verify_tree(plan: Plan, out: Path, layout: str):
     from vcfcf_core.alerts.render import render_alert_content_xml
     from vcfcf_core.dashboards.render import render_dashboards_bundle_json, render_views_xml
     from vcfcf_core.packaging.assembly import _render_supermetrics_dict
     from vcfcf_core.reports.render import render_report_xml
 
-    res = {"objects": 0, "fields": 0, "identical": 0, "deviation_only": 0, "only_losses": 0, "differ": 0,
-           "per_type": defaultdict(Counter), "classes": Counter(), "class_objects": defaultdict(set),
-           "set_aside": Counter(), "deviations": Counter(), "loss_classes": Counter(),
-           "loss_class_objects": defaultdict(set), "objects_detail": [], "load_errors": [], "pak_problems": [],
-           "guard": []}
+    res = _empty_verify()
     try:
         L = _load_layout(plan, out, layout)
     except Exception as exc:  # the real loader refused the written tree
@@ -556,18 +648,25 @@ def _verify(plan: Plan, out: Path, layout: str):
             if src:
                 by_path[str(Path(src).resolve())] = o
     views_by_name = {v.name: v for v in L.views}
-    if layout == "pak":
-        from vcfcf_supermetrics.loader import sm_id_map
-        sm_map = sm_id_map(L.sm_paths)
-        view_xml = render_views_xml(L.views, sm_map=sm_map, sm_scope_active=True) if L.views else None
-    else:
-        sm_map = {s.name: s.id for s in L.supermetrics}
-        view_xml = render_views_xml(L.views, sm_map=sm_map) if L.views else None
-    rendered_views = {}
-    if view_xml:
-        for vd in ET.fromstring(view_xml).iter("ViewDef"):
-            rendered_views[vd.get("id").lower()] = vd
-    sm_render = _render_supermetrics_dict(types.SimpleNamespace(supermetrics=L.supermetrics)) if L.supermetrics else {}
+    # The batch renders, each falling back to one object at a time so a
+    # renderer exception is that object's error, never a traceback.
+    try:
+        if layout == "pak":
+            from vcfcf_supermetrics.loader import sm_id_map
+            sm_map = sm_id_map(L.sm_paths)
+            view_kw = {"sm_map": sm_map, "sm_scope_active": True}
+        else:
+            view_kw = {"sm_map": {s.name: s.id for s in L.supermetrics}}
+    except Exception as exc:
+        res["load_errors"].append(f"super metric id map of the loaded tree: {type(exc).__name__}: {exc}")
+        return res
+    rendered_views, view_errors = _render_each(
+        L.views, lambda vs: {vd.get("id").lower(): vd
+                             for vd in ET.fromstring(render_views_xml(vs, **view_kw)).iter("ViewDef")},
+        key=lambda v: str(v.id).lower())
+    sm_render, sm_errors = _render_each(
+        L.supermetrics, lambda sms: _render_supermetrics_dict(types.SimpleNamespace(supermetrics=sms)),
+        key=lambda sm: sm.id, context=_sm_context)
     widget_ids: Dict[str, str] = {}
     for e in plan.emitted:
         if e.type != "dashboard":
@@ -589,7 +688,7 @@ def _verify(plan: Plan, out: Path, layout: str):
             if e.type == "view":
                 rv = rendered_views.get(e.id.lower())
                 if rv is None:
-                    raise RuntimeError("view not in the render")
+                    raise view_errors.get(e.id.lower()) or RuntimeError("view not in the render")
                 c = _cmp.compare_view(_expected_xml(e.source.payload, e, plan), rv)
             elif e.type == "dashboard":
                 buf = io.StringIO()
@@ -619,6 +718,8 @@ def _verify(plan: Plan, out: Path, layout: str):
                 exp["formula"] = re.sub(r"sm_(" + _UUID.pattern + ")",
                                         lambda m: "sm_" + rewrites.get(m.group(1).lower(), m.group(1)),
                                         str(exp.get("formula", "")))
+                if obj.id not in sm_render:
+                    raise sm_errors.get(obj.id) or RuntimeError("super metric not in the render")
                 got = dict(sm_render[obj.id])
                 if "id" in exp:
                     exp["id"] = e.id

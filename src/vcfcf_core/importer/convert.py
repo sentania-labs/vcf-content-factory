@@ -644,10 +644,33 @@ class _Planner:
             new_failures = False
             final_ids = {e.id.lower() for e in ok}
             for e in ok:
+                hit = self.failed_sm_reference(e, failed)
+                if hit:
+                    mark(e, hit)
+                    new_failures = True
+                    continue
                 self.rewrite_ids(e)
                 hit = self.surviving_old_id(e, final_ids)
                 if hit:
                     mark(e, hit)
+                    new_failures = True
+            # The ids that ship, after every rewrite: still one object per id
+            # and type, and each definition carries the id the plan and the
+            # id map report (a rewrite never touches a final definition id).
+            shipped: Dict[Tuple[str, str], List[Emitted]] = defaultdict(list)
+            for e in ok:
+                if (e.type, norm_id(e.type, e.source_id)) in failed:
+                    continue
+                if "id" in e.yaml_tree and e.yaml_tree["id"] != e.id:
+                    mark(e, f"internal: the written id {e.yaml_tree['id']} is not the planned id {e.id}")
+                    new_failures = True
+                    continue
+                shipped[(e.type, str(e.yaml_tree.get("id", e.id)).lower())].append(e)
+            for (t, i), es in shipped.items():
+                if len(es) > 1:
+                    for x in es:
+                        mark(x, f"{len(es)} {t}s would ship under the id {i} "
+                                f"({'; '.join(f'{y.source_id} ({y.name!r})' for y in es)}); fix the id map")
                     new_failures = True
             if not new_failures:
                 break
@@ -755,10 +778,25 @@ class _Planner:
         tree = copy.deepcopy(e.mapped_tree)
         return res(tree)[1]
 
+    def failed_sm_reference(self, e: Emitted, failed) -> Optional[str]:
+        """A ``sm_<uuid>`` key in ``e`` (a symptom condition, a view filter, a
+        widget metric, HTML) naming a super metric that did not convert: ``e``
+        fails with it, as a by-name reference does (``resolve``)."""
+        for path, key, s in _walk_strings(e.yaml_tree):
+            for m in _SM_TOKEN.finditer(s):
+                k = ("supermetric", m.group(1).lower())
+                if k in failed and not (e.type == "supermetric" and norm_id(e.type, e.source_id) == k[1]):
+                    return f"references super metric {m.group(1)}, which did not convert (see its own failure)"
+        return None
+
     # id rewrites in strings (every type) ---------------------------------
     def rewrite_ids(self, e: Emitted) -> None:
         """Every string of every object: an old id (any letter case) of a
-        re-identified object in the set becomes its new id. A super metric
+        re-identified object in the set becomes its new id, in one
+        simultaneous substitution over the source tree (a substituted id is
+        never substituted again, so a chained or swapped --id-map holds).
+        The object's own definition id is already final and is not
+        touched. A super metric
         key ``sm_<uuid>`` / ``Super Metric|sm_<uuid>`` takes the name form
         where the schema has one (view columns, formulas: set as references
         in ``resolve``) and the new id here everywhere else (symptom
@@ -776,9 +814,11 @@ class _Planner:
                 return s
             return _UUID_IN.sub(lambda m: rw.get(m.group(0).lower(), m.group(0)), s)
 
-        def walk(node):
+        def walk(node, top=False):
             if isinstance(node, dict):
                 for k, v in list(node.items()):
+                    if top and k == "id":
+                        continue  # the definition's final id (set in run)
                     node[k] = walk(v)
                 return node
             if isinstance(node, list):
@@ -786,7 +826,7 @@ class _Planner:
             if isinstance(node, str):
                 return sub_str(node)
             return node
-        walk(e.yaml_tree)
+        walk(e.yaml_tree, top=True)
         if e.type != "supermetric":  # a formula's own note is set in resolve
             for sid in sorted(missing_sm):
                 e.notes.append(f"references super metric {sid}, which is not in the input (kept as its wire key; "

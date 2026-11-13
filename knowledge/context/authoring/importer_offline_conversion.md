@@ -136,7 +136,11 @@ One of these is required:
   `id_map.tsv` records old to new and, in its first line, the namespace.
 - `--id-map TSV` (repeatable): `old_id<TAB>new_id` rows (a header row and
   extra columns are allowed) for some objects; the rest keep their ids. An
-  entry that matches nothing is a warning.
+  entry that matches nothing is a warning. A destination may be another
+  object's source id (a chain `A -> B, B -> C` or a swap `A <-> B`): the
+  rewrite is one simultaneous substitution over source ids and never
+  touches a definition's own final id, and the collision check runs on the
+  ids that ship, so two objects ending on one id both fail.
 
 With `mint` or a map, every reference follows: by name inside the set
 (below), and in every string of every type the old id of a re-identified
@@ -294,7 +298,15 @@ reported as usual.
 
 A written YAML a loader refuses is not written: each object is staged and
 loaded with the layout's loader first; one it refuses fails with the
-loader's message, and so does every object that names it. A reference to an
+loader's message, and so does every object that names it, to a fixed point:
+by name (a dashboard's views and navigation targets, a template's views and
+dashboards, an alert's symptoms and recommendations, a super metric named
+`@supermetric:"<name>"` in a formula or `supermetric:"<name>"` in a view
+column) or by key (a `sm_<uuid>` in a symptom condition, a view filter, a
+widget metric). The same holds for a super metric that fails to map: a
+`sm_<uuid>` key naming it fails the object that carries it. A render or
+compare exception during verification is that object's `LOAD ERROR`, never
+a traceback. A reference to an
 object that failed fails the referencing object (named as a cascade, never
 downgraded to a raw id).
 

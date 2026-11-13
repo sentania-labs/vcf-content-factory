@@ -1125,3 +1125,159 @@ def test_w3_discrete_and_release_builders_report_external_views(tmp_path, monkey
                                         "artifacts": [{"source": str(d.resolve()), "headline": True}]}))
     build_release(manifest, tmp_path / "rel", skip_audit=True)
     _assert_w3(capsys.readouterr().err)
+
+
+# ================================================== PR 358 Codex findings
+# 1. An --id-map destination that is also another source id (a chain or a
+#    swap): the rewrite is one simultaneous substitution over source ids and
+#    never touches a definition's final id; the collision check sees final ids.
+NEW_SM = "5f000000-0000-4000-8000-0000000000d1"
+NEW_V = "7b000000-0000-4000-8000-0000000000d1"
+ID_MAPS = {
+    "swap": {SM1: SM2, SM2: SM1, V_HOST: V_DIST, V_DIST: V_HOST},
+    "chain": {SM1: SM2, SM2: NEW_SM, V_HOST: V_DIST, V_DIST: NEW_V},
+}
+
+
+@pytest.mark.parametrize("verify", ["verify", "no-verify"])
+@pytest.mark.parametrize("shape", sorted(ID_MAPS))
+def test_chained_and_swapped_id_maps_end_with_the_mapped_ids(tmp_path, capsys, shape, verify):
+    src = _sm_everywhere_source(tmp_path)
+    m = ID_MAPS[shape]
+    mp = tmp_path / "map.tsv"
+    mp.write_text("".join(f"{k}\t{v}\n" for k, v in m.items()))
+    out = tmp_path / "out"
+    extra = ["--no-verify"] if verify == "no-verify" else []
+    rc, text = _run(src, out, capsys, "--layout", "third-party", "--id-map", mp, "--naming", "unprefixed", *extra)
+    assert rc == 0, text
+    # definitions: exactly the mapped ids, all distinct
+    defs = {"supermetrics/probe-sm-one.yaml": m[SM1], "supermetrics/probe-sm-two.yaml": m[SM2],
+            "views/probe-host-list.yaml": m[V_HOST], "views/probe-distribution.yaml": m[V_DIST]}
+    for rel, want in defs.items():
+        assert _yaml(out, rel)["id"] == want, rel
+    ids = [_yaml(out, str(p.relative_to(out)))["id"] for p in out.rglob("*.yaml")
+           if p.parent.name in ("views", "supermetrics") and "id" in _yaml(out, str(p.relative_to(out)))]
+    assert len(ids) == len(set(ids)), ids
+    # the id map says the same
+    rows = {r.split("\t")[1]: r.split("\t")[2] for r in (out / "import-report" / "id_map.tsv").read_text().splitlines()
+            if r and not r.startswith(("#", "type\t"))}
+    for old, new in m.items():
+        assert rows[old] == new, (old, rows[old], new)
+    # references in dependents: symptom condition, dashboard widget metric,
+    # view filter (id form); view column and formula (name form)
+    sm1 = f"Super Metric|sm_{m[SM1]}"
+    assert _yaml(out, "symptoms/probe-sm-symptom.yaml")["condition"]["key"] == sm1
+    assert _yaml(out, "dashboards/probe-dashboard-a.yaml")["widgets"][1]["metrics"][0]["metric_key"] == sm1
+    assert _yaml(out, "dashboards/probe-pareto.yaml")["widgets"][0]["additional_columns"][0]["metric_key"] == sm1
+    assert _yaml(out, "views/probe-host-list.yaml")["subject"]["filter"][0][0]["metric_key"] == sm1
+    assert _yaml(out, "views/probe-host-list.yaml")["columns"][2]["attribute"] == 'supermetric:"Probe SM One"'
+    assert '@supermetric:"Probe SM One"' in _yaml(out, "supermetrics/probe-sm-two.yaml")["formula"]
+    assert _yaml(out, "dashboards/probe-dashboard-a.yaml")["widgets"][0]["view"] == "Probe Host List"
+    if verify == "verify":
+        assert re.search(r"; 0 differ$", text, re.M), text
+
+
+def test_two_objects_mapped_to_one_id_still_collide(tmp_path, capsys):
+    src = _sm_everywhere_source(tmp_path)
+    mp = tmp_path / "map.tsv"
+    mp.write_text(f"{SM1}\t{NEW_SM}\n{SM2}\t{NEW_SM}\n")
+    rc, text = _run(src, tmp_path / "o", capsys, "--layout", "third-party", "--id-map", mp, "--naming", "unprefixed",
+                    "--allow-partial")
+    assert f"2 supermetrics would ship under the id {NEW_SM}" in text
+
+
+# 2. A super metric the staged loader refuses cascades to everything that
+#    references it (formulas, view columns and filters, widget metrics,
+#    symptom conditions), and nothing in verification escapes as a traceback.
+SM_ONE_EMPTY = "5e000000-0000-4000-8000-0000000000e1"
+SM_TWO_ON_ONE = "5e000000-0000-4000-8000-0000000000e2"
+SM_ALONE = "5e000000-0000-4000-8000-0000000000e3"
+
+
+def _refused_sm_source(tmp_path: Path) -> Path:
+    src = tmp_path / "src"
+    (src / "supermetrics").mkdir(parents=True)
+    rk = [{"resourceKindKey": "HostSystem", "adapterKindKey": "VMWARE"}]
+    sms = {
+        SM_ONE_EMPTY: {"name": "Probe SM Empty Kinds", "formula": "avg(${this, metric=cpu|usage_average})",
+                       "description": "", "unitId": "", "resourceKinds": []},
+        SM_TWO_ON_ONE: {"name": "Probe SM On Empty", "formula": f"${{this, metric=Super Metric|sm_{SM_ONE_EMPTY}}} * 2",
+                        "description": "", "unitId": "", "resourceKinds": rk},
+        SM_ALONE: {"name": "Probe SM Alone", "formula": "avg(${this, metric=mem|usage_average})",
+                   "description": "", "unitId": "", "resourceKinds": rk},
+    }
+    (src / "supermetrics" / "SMs.json").write_text(json.dumps(sms, indent=2))
+    # a view column and a symptom condition on the refused metric
+    v = _lossy_view_xml("Probe View On Empty", "7a000000-0000-4000-8000-0000000000e1").replace(
+        'value="cpu|y"', f'value="Super Metric|sm_{SM_ONE_EMPTY}"')
+    (src / "v.xml").write_text(v)
+    y = _load_yaml(f"""
+        id: 3c000000-0000-4000-8000-0000000000e1
+        name: Probe Symptom On Empty
+        adapter_kind: VMWARE
+        resource_kind: HostSystem
+        severity: WARNING
+        wait_cycles: 1
+        cancel_cycles: 1
+        condition: {{type: metric_static, key: "Super Metric|sm_{SM_ONE_EMPTY}", operator: GT, value: 5, instanced: false}}
+    """, tmp_path, "sym.yaml")
+    (src / "Sym.xml").write_text(render_alert_content_xml([load_sym(y, enforce_framework_prefix=False)], [], []))
+    return src
+
+
+@pytest.mark.parametrize("mode", ["verify", "no-verify"])
+def test_a_refused_super_metric_cascades_to_its_dependents(tmp_path, capsys, mode):
+    src = _refused_sm_source(tmp_path)
+    out = tmp_path / "out"
+    extra = ["--no-verify"] if mode == "no-verify" else []
+    rc, text = _run(src, out, capsys, "--layout", "third-party", "--ids", "keep", "--naming", "unprefixed",
+                    "--allow-partial", *extra)
+    assert "Traceback" not in text and "BundleValidationError" not in text.split("FAILED supermetric")[0]
+    assert rc == 0, text
+    assert re.search(rf"FAILED supermetric {SM_ONE_EMPTY} .*does not load", text), text
+    for kind, oid in (("supermetric", SM_TWO_ON_ONE), ("view", "7a000000-0000-4000-8000-0000000000e1"),
+                      ("symptom", "3c000000-0000-4000-8000-0000000000e1")):
+        assert re.search(rf"FAILED {kind} \S*{oid} .*refused", text), (kind, text)
+    written = {p.name for p in out.rglob("*.yaml")}
+    assert "probe-sm-alone.yaml" in written
+    assert not {"probe-sm-empty-kinds.yaml", "probe-sm-on-empty.yaml", "probe-view-on-empty.yaml",
+                "probe-symptom-on-empty.yaml"} & written
+    if mode == "verify":
+        assert "supermetric      1 of 1 identical" in text, text
+
+
+def test_a_render_failure_in_verification_is_that_objects_error(source, tmp_path, capsys, monkeypatch):
+    """A renderer exception on one super metric or view during verification
+    is reported against that object, never as a traceback."""
+    from vcfcf_core.packaging import assembly
+    real = assembly._render_supermetrics_dict
+
+    def boom(bundle):
+        # Probe SM One fails to render (as context for another, its formula is not rendered)
+        if any(s.name == "Probe SM One" and s.formula != "0" for s in bundle.supermetrics):
+            raise assembly.BundleValidationError("probe render failure")
+        return real(bundle)
+    monkeypatch.setattr(assembly, "_render_supermetrics_dict", boom)
+    rc, text = _run(source, tmp_path / "o", capsys, "--layout", "third-party", "--ids", "keep", "--naming",
+                    "unprefixed")
+    assert "Traceback" not in text
+    assert rc != 0
+    assert re.search(r"supermetrics/probe-sm-one\.yaml: render or compare failed: BundleValidationError: "
+                     r"probe render failure", text), text
+    assert "supermetrics/probe-sm-two.yaml: render or compare failed" not in text
+
+
+def test_a_view_render_failure_in_verification_is_that_views_error(source, tmp_path, capsys, monkeypatch):
+    from vcfcf_core.dashboards import render
+    real = render.render_views_xml
+
+    def boom(views, **kw):
+        if any(v.name == "Probe Trend" for v in views):
+            raise ValueError("probe view render failure")
+        return real(views, **kw)
+    monkeypatch.setattr(render, "render_views_xml", boom)
+    rc, text = _run(source, tmp_path / "o", capsys, "--layout", "third-party", "--ids", "keep", "--naming",
+                    "unprefixed")
+    assert "Traceback" not in text and rc != 0
+    assert "views/probe-trend.yaml: render or compare failed: ValueError: probe view render failure" in text, text
+    assert "views/probe-host-list.yaml: render or compare failed" not in text
