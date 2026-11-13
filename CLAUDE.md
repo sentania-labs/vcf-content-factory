@@ -157,7 +157,10 @@ without a decision.
    (`knowledge/designs/dashboards/<slug>.html`) with its wireframe
    table committed to `knowledge/designs/dashboards/<slug>.md`, before
    `dashboard-author` spawns. See
-   `knowledge/rules/wireframe-before-dashboard.md`.
+   `knowledge/rules/wireframe-before-dashboard.md`, which also carries
+   the exemptions: one is the faithful port of an existing dashboard,
+   where a committed source reference and widget-by-widget comparison
+   table replace the wireframe.
 
 4. **Pass filenames, not file contents.** Agents read the filesystem
    themselves. Every authoring brief includes the design-file path

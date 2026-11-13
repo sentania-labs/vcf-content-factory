@@ -27,14 +27,24 @@ Counted from the repository tags and, for 0.1.4, 0.1.5, 0.2.8 and 0.3.1,
 from the released paks. The released 0.1.5 pak ships views its repository
 tag does not, so the tag is not evidence for early versions.
 
-The ids prove the origin: a built-in view edited in place keeps its id
-(the Clone action would have assigned a new one), and the edited copies
-were then exported into the pack. Of the 117: 8 are identical to the
-built-in view, 11 differ only in title or description, 98 carry real
-changes (62 structural, 36 presentation only).
+The matching ids show where these views came from: they are the product's
+own views, not look-alikes (random UUIDs do not collide). Most likely each
+was edited in place on an instance, which keeps the id where the Clone
+action would have assigned a new one, and then exported into the pack;
+editing an exported file by hand would give the same result. Of the 117: 8
+are identical to the built-in view, 11 differ only in title or description
+(three of those also set one explicit default, `isSum=false`), and 98
+carry real changes to columns, filters or presentation. The factory's own
+classification of those 98 during the fix, which is not in any upstream
+text, was 62 with structural changes and 36 with presentation changes
+only.
 
-No other content type collides: the packs' dashboards, super metrics,
-report templates, symptoms and alerts use ids of their own.
+No collision was found in the other content types, within what was
+checked. `python3 -m vcfcf_packaging stock-id-check` on the released 0.8.1
+pak reports 0 hits among its dashboards, report templates, symptoms and
+alerts, and 120 among its views. Super metrics are not covered by that
+check (the stock-id baseline holds no super metric ids); the packs' super
+metric ids were compared with a 9.1.1 export only.
 
 ## Measured behavior, by product line
 
@@ -50,13 +60,16 @@ before and after each step, plus the audit log.
 | Uninstall of the corrected build | exactly the 160 it added are deleted | same | same |
 | Upgrade 0.3.1 to the corrected build | nothing deleted; the old copies stay under the built-in ids; 75 new views get " 1" appended to their titles | all 117 built-in views deleted about a minute after the import | all 117 deleted |
 | Uninstall after that upgrade | 249 views deleted (the 160 new ones and 89 under built-in ids) | only the pak's views | only the 160 |
-| Restore by importing the views from a clean export of the same version | works | works | works |
+| Restore by importing the views from a clean export of the same version | works (run after the uninstall, and after the upgrade, where it overwrites the lingering copies) | works (after the uninstall and after the upgrade) | works (after the uninstall and after the upgrade) |
 
 The upgrade row is the one to plan for. On 9.x the platform removes
 content that the new version of a pak no longer ships, so the release that
 stops shipping the built-in ids deletes those built-in views at upgrade
-time. On 8.18.7 it does not, and the old copies linger with duplicate
-titles until an uninstall removes them. Either way the built-in views have
+time. On 8.18.7 it does not: the old copies stay under the built-in ids,
+so the built-in views stay replaced, with duplicate titles beside the new
+views. Uninstalling is not a way to clear them, because that uninstall
+deletes the views under 89 built-in ids. Why 89 and not all 117 on 8.18.7
+is not explained (the install had changed 90 there). Either way the built-in views have
 to be re-imported once from a clean export of the same product version. An
 export taken from the affected instance does not help: it contains the
 pack's copies.
@@ -72,25 +85,32 @@ same 170 deleted on uninstall, instance back at baseline. The upgrade path
 was not run for that line; its documentation carries the 0.3.1
 measurements and says so.
 
-Also seen, and not caused by the fix (identical with the released pak on
-9.0.2): only 1 of 9 symptoms imports (`duplicate key value violates unique
-constraint "kv_symptomproblemdefinition_pkey"`) and one alert fails with
-"Invalid format of the imported file".
-
 Undetermined:
 
 - On 9.0.2 one of two upgrade runs never reported completion (the
   `SOLUTION_INSTALL` task stayed RUNNING; the pak manager marked it failed
   after 3600 s; the last log entry was the 117-view delete). A repeat on
   the same instance completed in under five minutes. Hypothesis only: the
-  first run upgraded while the previous version's dashboards were still
-  importing.
+  run that hung upgraded while the previous version's dashboards were
+  still importing.
 - On a first fresh install of the corrected 0.3.x build on 8.18.7 and on
   9.0.2, 45 of 46 dashboards were present, a different one missing each
-  time. Later work on the pack's content found two dashboards that use the
-  `Section` widget, which aborts a dashboard import silently before 9.1.1
-  (lesson `unknown-widget-type-aborts-pak-dashboard-import.md`); that may
-  be the cause and has not been confirmed.
+  time; all 46 were present on later installs. The `Section` widget, which
+  aborts a dashboard import before 9.1.1
+  (`knowledge/lessons/unknown-widget-type-aborts-pak-dashboard-import.md`),
+  is ruled out here: the 0.3.x content has no Section widget, and that
+  failure would drop the same dashboards every time. The cause is unknown.
+- Whether views restored on 8.18.7 after an upgrade are deleted again by a
+  later uninstall of the pack. After an 8.18.7 upgrade the pak still owns
+  those ids, so a re-import after any later uninstall may be needed.
+- That a 9.1.1 upgrade from an `e1-rahabok` version (0.4.2 to 0.8.1) to a
+  corrected one also deletes the three VCF Management Services built-in
+  views. It follows from the same platform behavior and was not measured.
+- On 9.0.2 only 1 of 9 symptoms imports (`duplicate key value violates
+  unique constraint "kv_symptomproblemdefinition_pkey"`) and one alert
+  fails with "Invalid format of the imported file". This happens
+  identically with the released 0.3.1 pak, so the fix does not cause it;
+  what the duplicate key collides with was not established.
 - No browser check was made and no test ran with adapter accounts
   configured.
 
@@ -105,7 +125,10 @@ The fix in both: the 19 views that are identical to or only renamed from a
 built-in view are no longer shipped and are referenced in place; the other
 views get ids of their own and every dashboard reference is repointed.
 Reviews: `knowledge/context/reviews/python-packs/vcommunity-fix-builtin-view-ids.md`
-and `vcommunity-fix-builtin-view-ids-e1.md`.
+and
+`knowledge/context/reviews/python-packs/vcommunity-fix-builtin-view-ids-e1.md`.
+Both reviews were of earlier commits; every finding in them was addressed
+on the branches before the pull requests opened.
 
 ## What the factory changed because of it
 
@@ -116,4 +139,5 @@ and `vcommunity-fix-builtin-view-ids-e1.md`.
   0.1.5.
 - An instance that runs an affected version must not be uninstalled or
   upgraded without a view export from a clean instance of the same product
-  version at hand.
+  version at hand. On 8.18.7, keep that export: a later uninstall of the
+  pack may delete the restored views again (untested, see above).

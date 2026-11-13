@@ -1,5 +1,10 @@
 # vcommunity fix/builtin-view-ids review, 2026-11-12
 
+> Editor's note (committer, 2026-11-12): paths such as `scratchpad/...`, `venv2`,
+> build log names and `~/.docker/config.json` refer to the reviewer's session
+> scratch and local machine and are not in this repository. Every finding below
+> was addressed on the branch before the upstream pull request was opened.
+
 - **Fork:** `content/sdk-adapters/vcommunity/` (sentania-labs/VCF-Operations-vCommunity, fork of vmbro/VCF-Operations-vCommunity)
 - **Branch:** `fix/builtin-view-ids` at `5d2edd4`, two commits on `main` `9e27d7d` (= upstream/main, and `Management Pack/` is identical to tag `v0.3.1`)
 - **Scope reviewed:** upstream issue vmbro/VCF-Operations-vCommunity#99. Drop 19 ViewDefs, re-id 98, repoint dashboards, align the two copies of old `9a77a4b5`, README note. Content only.

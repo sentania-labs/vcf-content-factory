@@ -1,5 +1,10 @@
 # vcommunity fix/builtin-view-ids-e1 review, 2026-11-12
 
+> Editor's note (committer, 2026-11-12): paths such as `scratchpad/...`, `venv2`,
+> build log names and `~/.docker/config.json` refer to the reviewer's session
+> scratch and local machine and are not in this repository. Every finding below
+> was addressed on the branch before the upstream pull request was opened.
+
 - **Fork:** `content/sdk-adapters/vcommunity/` (clone with remote `rahabok` = e1-rahabok/VCF-vCommunity-Adapter)
 - **Branch:** `fix/builtin-view-ids-e1` at `ad6752e`, three commits (`65701c8`, `ec64110`, `ad6752e`) on `rahabok/main` `0ef8586` (0.8.1)
 - **Scope reviewed:** e1-rahabok/VCF-vCommunity-Adapter#91. Drop 19 ViewDefs that copy built-ins, re-id 98 (same ids as the reviewed 0.3.x branch `fix/builtin-view-ids` `91169cf`) plus the 3 VCF Management Services views, repoint references, reconcile the two copies of old `9a77a4b5`, test, docs. Content only, no code, no version bump. Draft PR body: scratchpad `e1_port/PR_BODY.md`.
@@ -41,7 +46,7 @@ run on `git archive` copies of `rahabok/main` and the branch, kept in
 | Pak = branch | Unzipped `vCommunity_0.8.1-fix-builtin-view-ids-e1.pak`, sha256 of every file | 78/78 content files match a branch file byte for byte; only the 14 empty `.gitkeep` files are absent. `manifest.txt`, `eula.txt`, `resources.properties` identical. Build workspace = branch plus `config.json`/`connections.json` (no secrets) and logs |
 | `-releasedimage` pak | Full compare with the built pak and with the released `vCommunity_0.8.1.pak` | Only `vCommunity.conf` differs: REGISTRY/REPOSITORY/DIGEST point at the released `ghcr.io/e1-rahabok/vcf-operations-vcommunity@sha256:78fee0d0...`, equal to the 0.8.1 release apart from line endings. Resource model in `describe.xml` equals the 0.8.1 release (326/326) |
 | `mp-build` | Not rerun (registry start was denied on the sibling review; not retried) | Not reproduced. Log shows `Build Succeeded` against `127.0.0.1:5000` |
-| Secrets, hosts, em-dashes | Diff, commit messages, PR body, build logs | 0 em/en dashes. No secret. One private IP address shows in `+` lines, but it is pre-existing upstream content moved by the diff (N7) |
+| Secrets, hosts, em-dashes | Diff, commit messages, PR body, build logs | 0 em/en dashes. No secret. One private IP address [address removed by the committer, 2026-11-12] shows in `+` lines, but it is pre-existing upstream content moved by the diff (N7) |
 
 ## BLOCKING
 
@@ -121,7 +126,7 @@ test over an installed 0.8.1 needs a bumped test manifest, as
 - **N4.** `installation.md:77` is garbled: "were added in this repository, and are not among the 117, with the ids of views that are built into VCF Operations 9.1.1". Suggested: "This repository added three more views ... under ids of views built into 9.1.1; they are not among the 117."
 - **N5.** `Management Pack/tests/test_view_ids.py:20-142`: the items are not indented inside the inner `(`, and `frozenset((...))` could be `frozenset({...})`. `ruff check` is clean and the repo is not `ruff format`ed (37 files), so this is cosmetic.
 - **N6.** The test does not protect the drop. A later edit could re-add a `ViewDef` for one of the 19, or repoint a widget to an id that no longer exists, and nothing would fail. Consider asserting that every `viewDefinitionId` resolves to a shipped `ViewDef` or to the 25 known built-ins.
-- **N7.** Pre-existing, out of scope, raise separately: `View - Set 3.xml` (5) and `vSphere Network Configuration 2.0.json` (1) hard-code a private IP address in `host:<ip>|...` attribute keys. Also, 6 dashboard navigation targets in Critical Business Applications and vSphere Cluster Performance 2.0 are neither shipped dashboards nor 9.1.1 built-ins. Both are the same on base.
+- **N7.** Pre-existing, out of scope, raise separately: `View - Set 3.xml` (5) and `vSphere Network Configuration 2.0.json` (1) hard-code a private IP address in `host:<ip>|...` attribute keys [address removed by the committer, 2026-11-12]. Also, 6 dashboard navigation targets in Critical Business Applications and vSphere Cluster Performance 2.0 are neither shipped dashboards nor 9.1.1 built-ins. Both are the same on base.
 
 ## If shipped as-is
 

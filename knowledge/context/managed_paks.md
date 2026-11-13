@@ -301,13 +301,19 @@ an `upstream` remote and fast-forward from it); do work on branches.
   view ids; install overwrites them, uninstall deletes them). Lesson:
   `knowledge/lessons/pak-content-must-not-reuse-stock-ids.md`. Upstream PR
   vmbro/VCF-Operations-vCommunity#100 opened 2026-11-12 on Scott's go
-  (branch `fix/builtin-view-ids`). Active development of the pack moved to
-  the fork `e1-rahabok/VCF-vCommunity-Adapter` (same fork network, 0.4.2 to
-  0.8.1, 120 ids); the fix was ported and sent there the same day as issue
+  (branch `fix/builtin-view-ids`). Later releases of the pack are published
+  from the fork `e1-rahabok/VCF-vCommunity-Adapter` (same fork network; it
+  ships 120 such ids); the fix was ported and sent there the same day as issue
   #91 and PR #92 (branch `fix/builtin-view-ids-e1`, pushed to this fork).
   Measurements and upgrade behavior by product line:
   `knowledge/context/investigations/2026-11-12-vcommunity-upstream-builtin-view-ids.md`.
   Reviews in `reviews/python-packs/`.
+  Target path: the retired Java port (see Retired paks) used the same
+  target. Its clones were moved out on 2026-10-27, but a checkout that still
+  has one at this path must remove it before bootstrap, because bootstrap
+  does not compare an existing clone's origin with the registered Remote
+  and would report the wrong repo as current. The defect gate's name check
+  cannot tell the two `vcommunity` entries apart either.
 
 ## Retired paks
 
