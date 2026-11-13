@@ -29,7 +29,7 @@ interactions:
 - from: vm_count_view
   to: demand_chart
   type: resourceId
-name: '[VCF Content Factory] Quarterly Capacity Review'
+name: '[VCF CF] Quarterly Capacity Review'
 released: true
 widgets:
 - coords:
@@ -68,7 +68,7 @@ widgets:
   id: scope_vm_count
   title: Scope VM Count Overview
   type: View
-  view: '[VCF Content Factory] Cluster VM Count Overview'
+  view: '[VCF CF] Cluster VM Count Overview'
 - coords:
     h: 6
     w: 4
@@ -77,7 +77,7 @@ widgets:
   id: cpu_memory_view
   title: Cluster Quarterly CPU & Memory Demand
   type: View
-  view: '[VCF Content Factory] Cluster Quarterly CPU & Memory Demand'
+  view: '[VCF CF] Cluster Quarterly CPU & Memory Demand'
 - coords:
     h: 6
     w: 4
@@ -86,7 +86,7 @@ widgets:
   id: storage_view
   title: Cluster Storage Trend
   type: View
-  view: '[VCF Content Factory] Cluster Storage Trend'
+  view: '[VCF CF] Cluster Storage Trend'
 - coords:
     h: 6
     w: 3
@@ -95,7 +95,7 @@ widgets:
   id: vm_count_view
   title: Cluster VM Count Overview
   type: View
-  view: '[VCF Content Factory] Cluster VM Count Overview'
+  view: '[VCF CF] Cluster VM Count Overview'
 - coords:
     h: 7
     w: 12

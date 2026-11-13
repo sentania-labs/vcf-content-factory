@@ -84,7 +84,7 @@ class TestRefsFromViewsXml:
         """Factory XML carries the view title in <Title>, not a name attr;
         source_desc must not degrade to "view 'unknown view'" (review N2)."""
         for r in self._refs():
-            assert r.source_desc == "view '[VCF Content Factory] VM Snapshot Inventory'"
+            assert r.source_desc == "view '[VCF CF] VM Snapshot Inventory'"
 
 
 # ---------------------------------------------------------------------------

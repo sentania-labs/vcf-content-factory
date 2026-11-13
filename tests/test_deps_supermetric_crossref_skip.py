@@ -9,7 +9,7 @@ dropped from the content (the correct authoring form), the auditor treated
 ``@supermetric`` as a built-in metric key and failed:
 
     AUDIT FAILED: VMWARE/HostSystem @supermetric
-      (referenced by SM '[VCF Content Factory] Automation Licensed Cores')
+      (referenced by SM '[VCF CF] Automation Licensed Cores')
 
 forcing ``--skip-audit`` on an otherwise clean build.
 """
@@ -24,7 +24,7 @@ SRC = Path(__file__).resolve().parents[1] / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-REF_NAME = "[VCF Content Factory] Host Licensed Cores"
+REF_NAME = "[VCF CF] Host Licensed Cores"
 
 
 def _formula(metric_expr: str) -> str:

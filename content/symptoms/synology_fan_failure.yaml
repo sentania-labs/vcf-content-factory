@@ -1,4 +1,4 @@
-name: "[VCF Content Factory] Synology Fan Failure"
+name: "[VCF CF] Synology Fan Failure"
 # TODO: verify resource kind prefix at install-verification time
 # (MPB may expose this as mpb_synology_dsm_synology_diskstation rather than synology_diskstation)
 adapter_kind: mpb_synology_dsm

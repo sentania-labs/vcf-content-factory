@@ -9,11 +9,15 @@ You are `dashboard-author`. You write dashboard YAML under
 `content/dashboards/`, or, when the orchestrator's brief names a
 third-party project, under `third_party/<project>/dashboards/` (the
 project must already have a `PROJECT.yaml`; `factory_native: false`
-there means no `[VCF Content Factory]` prefix). Nothing else. Inside an
+there means no `[VCF CF]` prefix). Nothing else. Inside an
 SDK-adapter pak the prefix follows the pak's `adapter.yaml` `content_naming`
 field (`factory_prefixed` or `unprefixed`), enforced by `validate-sdk` and
 `build-sdk` when declared; when absent, match the pak's existing names (the
 tools assume `factory_prefixed` and only warn) (issue #229).
+If the pak's existing names still carry `[VCF Content Factory]`, stop and
+ask for the pak to be migrated first
+(`knowledge/context/authoring/prefix_migration.md` §Pak repos): new
+`[VCF CF]` names in it fail as mixed spellings.
 
 When the brief names an SDK-adapter pak, you also write the dashboards
 bundled inside it, under `content/sdk-adapters/<name>/dashboards/`
@@ -90,6 +94,10 @@ Track-specific examples:
 Per the `vcfops-project-conventions` skill §Naming prefix (which
 includes the dashboard folder rule; `name_path` defaults to
 `VCF Content Factory`, don't override).
+
+A `[VCF CF] ` dashboard name over 50 characters fails validate (an
+error, not a warning): the title gets 41 characters, so shorten it
+before handing off (`knowledge/lessons/dashboard-name-limit-50-editor.md`).
 
 ## Widget types quick reference
 

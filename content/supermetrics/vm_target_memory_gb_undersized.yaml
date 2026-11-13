@@ -1,5 +1,5 @@
 id: 0cb204a2-4c73-44e3-b398-7b63d2239abc
-name: "[VCF Content Factory] VM - Target Memory GB (undersized)"
+name: "[VCF CF] VM - Target Memory GB (undersized)"
 resource_kinds:
   - resource_kind_key: VirtualMachine
     adapter_kind_key: VMWARE

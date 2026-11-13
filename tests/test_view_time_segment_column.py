@@ -58,7 +58,7 @@ def _evidence_item0() -> str:
 
 def _base_view(**overrides) -> dict:
     d = {
-        "name": "[VCF Content Factory] Segment Probe",
+        "name": "[VCF CF] Segment Probe",
         "subject": {"adapter_kind": "VMWARE_INFRA_HEALTH", "resource_kind": "LICENSE_USAGE_WORLD"},
         "time_window": {"unit": "YEARS", "count": 1},
         "columns": [

@@ -66,7 +66,7 @@ def _write_sm_yaml(sm_dir: Path, stem: str) -> Path:
     p = sm_dir / f"{stem}.yaml"
     sm_dir.mkdir(parents=True, exist_ok=True)
     p.write_text(yaml.dump({
-        "name": f"[VCF Content Factory] SM {stem}",
+        "name": f"[VCF CF] SM {stem}",
         "formula": "${this, metric=cpu|usage_average}",
         "resource_kinds": [{"resource_kind_key": "VirtualMachine", "adapter_kind_key": "VMWARE"}],
     }, default_flow_style=False))
@@ -558,7 +558,7 @@ class TestProjectMembership:
         tp = tmp_path / "third_party"
 
         sm = self._make_minimal_sm(tmp_path / "content" / "supermetrics", "factory_sm",
-                                   "[VCF Content Factory] Factory SM")
+                                   "[VCF CF] Factory SM")
         view = self._make_minimal_view(
             tmp_path / "content" / "views", "factory_view", sm.id, sm.name
         )
@@ -612,7 +612,7 @@ class TestProjectMembership:
         # SM and view live in factory-native content/
         sm = self._make_minimal_sm(
             tmp_path / "content" / "supermetrics", "factory_sm",
-            "[VCF Content Factory] Factory SM"
+            "[VCF CF] Factory SM"
         )
         # View references the factory SM but lives in factory content/
         view = self._make_minimal_view(

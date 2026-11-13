@@ -44,7 +44,7 @@ def _write(tmp_path: Path, widgets) -> Path:
     d.mkdir()
     (d / "d.yaml").write_text(yaml.safe_dump({
         "id": "0f5a4b3c-2d1e-4f60-8a7b-9c8d7e6f5a4b",
-        "name": "[VCF Content Factory] Probe",
+        "name": "[VCF CF] Probe",
         "description": "",
         "widgets": widgets,
     }, sort_keys=False))
@@ -147,7 +147,8 @@ def _kit_dashboard_package(tmp_path: Path, pkg: str) -> Path:
     root.mkdir()
     (root / "__init__.py").write_text("", encoding="utf-8")
     for dest, src in _FACTORY_SOURCES.items():
-        if not dest.startswith("dashboard_"):
+        # naming.py: the content-name prefix module dashboard_loader imports.
+        if not dest.startswith("dashboard_") and dest != "naming.py":
             continue
         text = src.read_text(encoding="utf-8")
         if dest in _IMPORT_REWRITES:

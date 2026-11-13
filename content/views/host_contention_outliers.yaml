@@ -1,5 +1,5 @@
 id: 6460fcfc-faed-4a0b-90d8-1c1fee71de48
-name: "[VCF Content Factory] Host Contention Outliers"
+name: "[VCF CF] Host Contention Outliers"
 description: >
   Per-host CPU and memory contention outlier view for demand-driven capacity
   planning dashboards. Subject is HostSystem; intended to receive a

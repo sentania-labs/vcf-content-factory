@@ -1,4 +1,4 @@
-name: "[VCF Content Factory] Synology Disk Health Remediation"
+name: "[VCF CF] Synology Disk Health Remediation"
 description: |
   A SMART failure (smart_status = "failing") indicates imminent hardware
   failure and requires immediate action. Replace the failing disk before

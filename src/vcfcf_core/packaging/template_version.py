@@ -17,6 +17,11 @@ This list is the same one CLAUDE.md carries under "After tooling changes";
 keep the two in step.
 
 History (most recent first):
+  2026-11-12-1  content prefix moved to [VCF CF] (from [VCF Content Factory]);
+                zips built before carry the legacy names, and re-running one
+                reverts the rename (UUID-keyed objects rename back in place,
+                name-keyed ones get legacy twins). Bumped so check-staleness
+                reports them stale. No template or wire-format change
   2026-11-11-1  install.py / install.ps1: the advisory for a skipped dashboard
                 or view import no longer asserts the existing object was not
                 updated. It says the import sent force=true, so the
@@ -54,4 +59,4 @@ History (most recent first):
   2026-08-24-2  install.ps1: uninstall residual-else sites warn and continue
 """
 
-CURRENT_TEMPLATE_VERSION = "2026-11-11-1"
+CURRENT_TEMPLATE_VERSION = "2026-11-12-1"

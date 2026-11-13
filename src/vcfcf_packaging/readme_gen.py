@@ -49,6 +49,8 @@ import re
 from pathlib import Path
 from typing import Optional
 
+from vcfcf_core.naming import FACTORY_PREFIX
+
 _REPO_ROOT = Path(__file__).parent.parent.parent
 
 # Marker pattern: <!-- AUTO:START <section> --> ... <!-- AUTO:END -->
@@ -77,7 +79,7 @@ def _collect_bundles(repo_root: Path) -> list[dict]:
         if b.released and b.factory_native:
             display = b.display_name or _slug_to_display_name(b.name)
             items.append({
-                "name": f"[VCF Content Factory] {display}",
+                "name": f"{FACTORY_PREFIX}{display}",
                 "version": b.version or "1.0.0",
                 "description": (b.description or "").splitlines()[0].strip() if b.description else "",
             })

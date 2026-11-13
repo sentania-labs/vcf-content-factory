@@ -34,10 +34,52 @@ Portable Tier 2 SDK adapter build toolchain (jar-free).
   `stock_ids_baseline.json`.
 - Adoption: a pak whose bundled content carries a stock id fails its next
   build; mint new ids for that content. A pak with no such content builds
-  as before, and pak bytes do not change. Repos on the floating
+  as before, and the guard changes no pak bytes (the prefix rename below
+  does). Repos on the floating
   `sdk-buildkit-v1` tag get the guard on their next CI run (the six
   registered paks pass it); repos pinned to an exact `sdk-buildkit-v1.0.x`
   tag must bump their pin to `sdk-buildkit-v1.0.29` to get it.
+- The factory content-name prefix is `[VCF CF] ` (it was
+  `[VCF Content Factory] `). For a pak whose `adapter.yaml` declares
+  `content_naming: factory_prefixed`, or declares nothing, `validate-sdk`
+  and `build-sdk` apply a transition rule, so a pak repo can move at its
+  own pace:
+  - every prefixed bundled name in the old spelling: accepted, with one
+    warning per pak that names the migration command and says a later kit
+    makes the old spelling an error;
+  - the two spellings mixed in one pak: an error per old-spelled name,
+    since the pak's by-name references would split;
+  - every name in the new spelling: passes, nothing printed.
+- `content_naming: unprefixed` paks now reject a bundled name that starts
+  with either spelling, `[VCF CF]` as well as `[VCF Content Factory]`
+  (before, only the old one).
+- To move a pak: from a factory clone run
+  `python3 -m vcfcf_common migrate-prefix <pak dir>` (the kit does not ship
+  the command), and in the same commit bump `BUILDKIT_TAG` and its
+  `SHA256SUMS` to this kit or later.
+- What the rename changes in a built pak: display names, and the
+  localization strings that carry them (including the `resources.properties`
+  keys of a dashboard, which are its escaped name). What it does not change:
+  ids derived from names (alert definitions, symptoms without an `id:`,
+  recommendation keys, dashboard widget ids), the in-pak paths
+  (`content/dashboards/<dir>/`, `content/reports/<dir>/`, and the
+  `content/supermetrics/`, `content/symptomdefs/` and `content/alertdefs/`
+  file names) and the `content/dashboards/dashboards.properties` Summary
+  binding key. All of them are computed from the old spelling on purpose.
+- A factory-prefixed dashboard name over 50 characters is now a build
+  error (41 characters remain for the title). Other dashboard names still
+  get a warning.
+- On an instance that already has the pak, an upgrade is expected to
+  rename super metrics, views and reports (keyed by their YAML id) and
+  symptoms, alerts and recommendations (keyed by ids that do not change)
+  in place. That is expected, not yet observed on an upgrade. Dashboards
+  are matched by name on import, so an old-named copy may remain beside
+  the new one; the factory's `python3 -m vcfcf_common cleanup-legacy-prefix`
+  lists exact old-name twins and removes the ones it can prove are
+  leftovers (dry run by default; see the factory's
+  `knowledge/context/authoring/prefix_migration.md`).
+- Kit contents: `naming.py` (the factory's `vcfcf_core/naming.py`, the one
+  definition of the prefix).
 
 ## Behavior since 1.0.28
 

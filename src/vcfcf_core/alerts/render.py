@@ -64,6 +64,8 @@ import re
 import xml.etree.ElementTree as ET
 from typing import List, Optional
 
+from vcfcf_core.naming import id_basis_name
+
 # Type imports — kept lightweight; no dependency on the full loader pipeline
 # so this module can be tested in isolation.
 try:
@@ -80,8 +82,12 @@ except ImportError:  # pragma: no cover — allows isolated testing
 # ---------------------------------------------------------------------------
 
 def _slug(name: str) -> str:
-    """Deterministic slug from a display name for use in id/key attrs."""
-    slug = re.sub(r"[^\w\-]", "_", name)
+    """Deterministic slug from a display name for use in id/key attrs.
+
+    Slugs the legacy spelling of a factory name (``id_basis_name``), so an
+    id minted before the 2026-11-12 prefix move stays the same after it.
+    """
+    slug = re.sub(r"[^\w\-]", "_", id_basis_name(name))
     slug = re.sub(r"_+", "_", slug).strip("_")
     return slug
 
@@ -454,7 +460,7 @@ def _render_alert_definition(
         if rec_obj is not None:
             resolved_recs.append((rec_priority, rec_obj.id))
         # Unresolved recommendations are silently skipped in render
-        # (validation already caught missing [VCF Content Factory] refs)
+        # (validation already caught missing factory-prefixed refs)
     if resolved_recs:
         recs_elem = ET.SubElement(state_elem, "Recommendations")
         for priority, rec_key in sorted(resolved_recs, key=lambda t: t[0]):

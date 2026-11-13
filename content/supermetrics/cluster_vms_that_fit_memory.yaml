@@ -1,5 +1,5 @@
 id: d79cbd0b-ba28-4268-8919-74e14a14b3b4
-name: "[VCF Content Factory] Cluster - VMs That Fit (Memory, allocation-based)"
+name: "[VCF CF] Cluster - VMs That Fit (Memory, allocation-based)"
 resource_kinds:
   - resource_kind_key: ClusterComputeResource
     adapter_kind_key: VMWARE

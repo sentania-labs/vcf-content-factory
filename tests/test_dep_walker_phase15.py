@@ -66,7 +66,7 @@ class TestCapacityAssessment:
     def test_customgroup_present(self, dep_graph):
         """The motivating test: vms_rightsizing_candidates group must be in the graph."""
         cg_names = [cg.name for cg in dep_graph.customgroups]
-        assert "[VCF Content Factory] VMs - Right-Sizing Candidates" in cg_names, (
+        assert "[VCF CF] VMs - Right-Sizing Candidates" in cg_names, (
             f"Expected custom group not found. Got: {cg_names}"
         )
 
@@ -74,8 +74,8 @@ class TestCapacityAssessment:
         """Both views listed in the bundle manifest must be in the dep graph."""
         view_names = {v.name for v in dep_graph.views}
         expected = {
-            "[VCF Content Factory] Cluster Capacity Overview",
-            "[VCF Content Factory] VM Right-Sizing Candidates",
+            "[VCF CF] Cluster Capacity Overview",
+            "[VCF CF] VM Right-Sizing Candidates",
         }
         missing = expected - view_names
         assert not missing, (
@@ -102,17 +102,17 @@ class TestCapacityAssessment:
         )
         # All 11 bundle-manifest SMs must be present
         bundle_sms = {
-            "[VCF Content Factory] Cluster - CPU Free % After HA",
-            "[VCF Content Factory] Cluster - Memory Free % After HA",
-            "[VCF Content Factory] Cluster - VMs That Fit (CPU, demand-based)",
-            "[VCF Content Factory] Cluster - VMs That Fit (Memory, allocation-based)",
-            "[VCF Content Factory] Cluster - Oversized VM Count",
-            "[VCF Content Factory] Cluster - Undersized VM Count",
-            "[VCF Content Factory] Cluster - Idle VM Count",
-            "[VCF Content Factory] VM - Target vCPUs (oversized)",
-            "[VCF Content Factory] VM - Target Memory GB (oversized)",
-            "[VCF Content Factory] VM - Target vCPUs (undersized)",
-            "[VCF Content Factory] VM - Target Memory GB (undersized)",
+            "[VCF CF] Cluster - CPU Free % After HA",
+            "[VCF CF] Cluster - Memory Free % After HA",
+            "[VCF CF] Cluster - VMs That Fit (CPU, demand-based)",
+            "[VCF CF] Cluster - VMs That Fit (Memory, allocation-based)",
+            "[VCF CF] Cluster - Oversized VM Count",
+            "[VCF CF] Cluster - Undersized VM Count",
+            "[VCF CF] Cluster - Idle VM Count",
+            "[VCF CF] VM - Target vCPUs (oversized)",
+            "[VCF CF] VM - Target Memory GB (oversized)",
+            "[VCF CF] VM - Target vCPUs (undersized)",
+            "[VCF CF] VM - Target Memory GB (undersized)",
         }
         missing = bundle_sms - sm_names
         assert not missing, (
@@ -125,9 +125,9 @@ class TestCapacityAssessment:
         # These 4 SMs are referenced by the capacity overview view columns
         # and/or right-sizing view columns.
         for expected in (
-            "[VCF Content Factory] Cluster - CPU Free % After HA",
-            "[VCF Content Factory] VM - Target vCPUs (oversized)",
-            "[VCF Content Factory] VM - Target Memory GB (oversized)",
+            "[VCF CF] Cluster - CPU Free % After HA",
+            "[VCF CF] VM - Target vCPUs (oversized)",
+            "[VCF CF] VM - Target Memory GB (oversized)",
         ):
             assert expected in sm_names, (
                 f"Expected SM '{expected}' not found. Got: {sm_names}"
@@ -190,12 +190,12 @@ def test_missing_customgroup_error():
     # Build a view that references a group not present in the corpus
     view = ViewDef(
         id="00000000-0000-0000-0000-000000000001",
-        name="[VCF Content Factory] Test View",
+        name="[VCF CF] Test View",
         description="Test",
         adapter_kind="VMWARE",
         resource_kind="VirtualMachine",
         columns=[ViewColumn(attribute="cpu|usage_average", display_name="CPU")],
-        customgroups=["[VCF Content Factory] Nonexistent Group"],
+        customgroups=["[VCF CF] Nonexistent Group"],
     )
 
     widget = Widget(
@@ -203,12 +203,12 @@ def test_missing_customgroup_error():
         type="View",
         title="Test",
         coords={"x": 1, "y": 1, "w": 6, "h": 6},
-        view_name="[VCF Content Factory] Test View",
-        dashboard_name="[VCF Content Factory] Test Dashboard",
+        view_name="[VCF CF] Test View",
+        dashboard_name="[VCF CF] Test Dashboard",
     )
     dashboard = Dashboard(
         id="00000000-0000-0000-0000-000000000002",
-        name="[VCF Content Factory] Test Dashboard",
+        name="[VCF CF] Test Dashboard",
         description="Test",
         widgets=[widget],
         interactions=[],
@@ -235,21 +235,21 @@ def test_customgroup_recursion_guard():
     from vcfcf_dashboards.loader import ViewDef, ViewColumn
     view = ViewDef(
         id="00000000-0000-0000-0000-000000000010",
-        name="[VCF Content Factory] Recursive Test View",
+        name="[VCF CF] Recursive Test View",
         description="",
         adapter_kind="VMWARE",
         resource_kind="VirtualMachine",
         columns=[ViewColumn(attribute="cpu|usage_average", display_name="CPU")],
-        customgroups=["[VCF Content Factory] Group A"],
+        customgroups=["[VCF CF] Group A"],
     )
 
     # Build a customgroup that has a relationship rule referencing itself (pathological)
     cg_a = CustomGroupDef(
-        name="[VCF Content Factory] Group A",
+        name="[VCF CF] Group A",
         rules=[{
             "resource_kind": "VirtualMachine",
             "adapter_kind": "VMWARE",
-            "relationship": [{"relation": "DESCENDANT", "name": "[VCF Content Factory] Group A", "op": "EQ"}],
+            "relationship": [{"relation": "DESCENDANT", "name": "[VCF CF] Group A", "op": "EQ"}],
         }],
     )
 
@@ -258,12 +258,12 @@ def test_customgroup_recursion_guard():
         type="View",
         title="Test",
         coords={"x": 1, "y": 1, "w": 6, "h": 6},
-        view_name="[VCF Content Factory] Recursive Test View",
-        dashboard_name="[VCF Content Factory] Recursive Test Dashboard",
+        view_name="[VCF CF] Recursive Test View",
+        dashboard_name="[VCF CF] Recursive Test Dashboard",
     )
     dashboard = Dashboard(
         id="00000000-0000-0000-0000-000000000011",
-        name="[VCF Content Factory] Recursive Test Dashboard",
+        name="[VCF CF] Recursive Test Dashboard",
         description="",
         widgets=[widget],
         interactions=[],
@@ -273,4 +273,4 @@ def test_customgroup_recursion_guard():
     graph = collect_deps([dashboard], [view], [], [cg_a])
     assert not graph.errors, f"Unexpected errors: {graph.errors}"
     assert len(graph.customgroups) == 1
-    assert graph.customgroups[0].name == "[VCF Content Factory] Group A"
+    assert graph.customgroups[0].name == "[VCF CF] Group A"

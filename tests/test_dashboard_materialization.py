@@ -3,7 +3,7 @@
 A content import reports FINISHED after phase 1 only. A dashboard whose
 entryKeys name an adapter kind the target lacks never completes phase 2
 (STALLED). A dashboard can also stay incomplete with every adapter
-installed: the 8.18.7 corpus export has "[VCF Content Factory] VCF License
+installed: the 8.18.7 corpus export has "[VCF CF] VCF License
 Consumption Overview" incomplete for 19 days, pending CASAdapter /
 NSXTAdapter / VMWARE / VMWARE_INFRA_HEALTH and the resources "License
 Usage", "NSX World", "Automation World". So a dashboard still building

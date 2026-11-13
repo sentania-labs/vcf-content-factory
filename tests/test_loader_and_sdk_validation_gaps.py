@@ -31,7 +31,7 @@ if str(SRC) not in sys.path:
 def _view(tmp_path: Path, hide_object_name) -> Path:
     data = {
         "id": "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
-        "name": "[VCF Content Factory] Probe View",
+        "name": "[VCF CF] Probe View",
         "subject": {"adapter_kind": "VMWARE", "resource_kind": "HostSystem"},
         "columns": [{"attribute": "cpu|usage_average", "display_name": "CPU"}],
     }

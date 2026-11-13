@@ -390,15 +390,18 @@ The VCF Ops dashboard editor caps the Name field at 50 characters
 and pak install accept longer names, so the dashboard installs, but
 the editor refuses to save any edit until the name is shortened. Seen
 on devel 2026-10-12 on the compliance Environment Overview (issue
-#198). The `[VCF Content Factory] ` prefix is 22 characters, leaving
-28 for the title.
+#198). The `[VCF CF] ` prefix is 9 characters, leaving 41 for the
+title (the old `[VCF Content Factory] ` prefix left 28; the prefix
+moved on 2026-11-12, `authoring/prefix_migration.md`).
 
-`vcfcf_core.dashboards.loader.DASHBOARD_NAME_MAX_LEN` holds the limit;
-`Dashboard.validate()` emits a WARNING (not an error) on every
-validate and SDK pak build, because existing repo and pak dashboards
-exceed it and dashboard identity is the name: a rename on an installed
-pack ships a new dashboard beside the old, so each rename is a
-per-pack decision. Flip it to an error once those renames land.
+`vcfcf_core.dashboards.loader.DASHBOARD_NAME_MAX_LEN` holds the limit.
+`Dashboard.validate()` raises an ERROR for a factory-prefixed name over
+it, on validate and on SDK pak builds (whose bundled content loads with
+prefix enforcement off: the decision is made on the name itself), and
+emits a WARNING for any other name, because third-party and
+`content_naming: unprefixed` content keeps upstream names up to 72
+characters. Every factory and factory-pak dashboard fits after the
+prefix move.
 
 ## Summary dashboards: no Suite API, no pak binding, UI layer only
 

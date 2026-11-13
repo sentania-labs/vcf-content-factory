@@ -23,7 +23,7 @@ def _write(path: Path, data: dict) -> Path:
 
 def _dash(widgets: list, interactions: list | None = None) -> dict:
     return {
-        "name": "[VCF Content Factory] Alert Volume Test",
+        "name": "[VCF CF] Alert Volume Test",
         "description": "",
         "widgets": widgets,
         "interactions": interactions or [],

@@ -81,14 +81,18 @@ Track-specific examples:
 ## Alert YAML schema
 
 For an SDK-adapter pak the prefix follows the pak's `adapter.yaml`
-`content_naming` field: `factory_prefixed` requires the `[VCF Content
-Factory] ` prefix on every bundled name, `unprefixed` forbids it, and
+`content_naming` field: `factory_prefixed` requires the `[VCF CF] `
+prefix on every bundled name, `unprefixed` forbids it, and
 `validate-sdk` and `build-sdk` fail on a mismatch when the field is
 declared. When it is absent, match the pak's existing names: the tools
 assume `factory_prefixed` and only warn (issue #229). The same rule covers recommendations.
+If the pak's existing names still carry `[VCF Content Factory]`, stop and
+ask for the pak to be migrated first
+(`knowledge/context/authoring/prefix_migration.md` §Pak repos): new
+`[VCF CF]` names in it fail as mixed spellings.
 
 ```yaml
-name: "[VCF Content Factory] <Human Name>"
+name: "[VCF CF] <Human Name>"
 description: >
   One-paragraph description of what the alert detects and when
   it fires.
@@ -107,9 +111,9 @@ symptom_sets:
     - defined_on: SELF
       operator: ALL
       symptoms:
-        - name: "[VCF Content Factory] VM CPU Usage Critical"
+        - name: "[VCF CF] VM CPU Usage Critical"
 recommendations:
-  - name: "[VCF Content Factory] VM CPU Remediation"
+  - name: "[VCF CF] VM CPU Remediation"
     priority: 1       # 1 = primary, 2+ = alternatives
 ```
 
@@ -134,7 +138,7 @@ alerts (e.g. a "check host CPU contention" recommendation applies
 to several VM and host alerts).
 
 ```yaml
-name: "[VCF Content Factory] <Human Name>"
+name: "[VCF CF] <Human Name>"
 description: |
   Multi-line remediation text. Explain what to check, in what
   order, and what actions to take. Prefer concrete steps over
@@ -150,7 +154,7 @@ adapter_kind: VMWARE
 Required fields: `name`, `description`, `adapter_kind`. The
 `adapter_kind` is used to derive the deterministic recommendation
 ID at load time (`Recommendation-df-<adapter_kind>-<slug>` where
-slug is the name with the `[VCF Content Factory]` prefix stripped
+slug is the name with the `[VCF CF]` prefix stripped
 and whitespace/punctuation normalized to underscores).
 
 No `id:`, `key:`, or `priority:` fields on the recommendation

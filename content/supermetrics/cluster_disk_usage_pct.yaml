@@ -1,5 +1,5 @@
 id: ed7f2861-7814-4d68-87ab-584de31fc4e7
-name: "[VCF Content Factory] Cluster - Disk Usage % (percent)"
+name: "[VCF CF] Cluster - Disk Usage % (percent)"
 resource_kinds:
   - resource_kind_key: ClusterComputeResource
     adapter_kind_key: VMWARE

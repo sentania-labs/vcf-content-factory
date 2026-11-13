@@ -1,4 +1,4 @@
-name: "[VCF Content Factory] Host Compliance Score Degraded"
+name: "[VCF CF] Host Compliance Score Degraded"
 description: >
   Alerts when a VMWARE HostSystem's VCF-CF compliance score drops below a
   hardened-baseline threshold. Uses a tiered severity model: WARNING triggers
@@ -33,17 +33,17 @@ symptom_sets:
     - defined_on: SELF
       operator: ALL
       symptoms:
-        - name: "[VCF Content Factory] Host Compliance Score Below 95%"
+        - name: "[VCF CF] Host Compliance Score Below 95%"
 
     - defined_on: SELF
       operator: ALL
       symptoms:
-        - name: "[VCF Content Factory] Host Compliance Score Below 80%"
+        - name: "[VCF CF] Host Compliance Score Below 80%"
 
 recommendations:
-  - name: "[VCF Content Factory] Host Compliance Review Non-Compliant Controls"
+  - name: "[VCF CF] Host Compliance Review Non-Compliant Controls"
     priority: 1
-  - name: "[VCF Content Factory] Host Compliance Remediate via SCG or CIS Benchmark"
+  - name: "[VCF CF] Host Compliance Remediate via SCG or CIS Benchmark"
     priority: 2
-  - name: "[VCF Content Factory] Host Compliance Verify Score Recovery"
+  - name: "[VCF CF] Host Compliance Verify Score Recovery"
     priority: 3

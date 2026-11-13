@@ -1,5 +1,5 @@
 id: 8dd89969-0ad1-4c48-b03b-f2095c424c97
-name: "[VCF Content Factory] Host VCF Licensed Cores (16-core minimum)"
+name: "[VCF CF] Host VCF Licensed Cores (16-core minimum)"
 resource_kinds:
   - resource_kind_key: HostSystem
     adapter_kind_key: VMWARE

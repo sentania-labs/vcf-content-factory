@@ -1,5 +1,5 @@
 id: 72517e70-514a-4efe-955b-a14d5a3c2697
-name: "[VCF Content Factory] vSAN Total License Capacity (TiB)"
+name: "[VCF CF] vSAN Total License Capacity (TiB)"
 resource_kinds:
   - resource_kind_key: LICENSE_USAGE_WORLD
     adapter_kind_key: VMWARE_INFRA_HEALTH

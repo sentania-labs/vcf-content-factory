@@ -1,5 +1,5 @@
 id: 0a1c11af-222b-41e0-af4c-dd324d7dacc0
-name: "[VCF Content Factory] Cluster Capacity Breakdown"
+name: "[VCF CF] Cluster Capacity Breakdown"
 description: >
   Per-cluster CPU, memory, and storage capacity breakdown using the demand
   model (OnlineCapacityAnalytics). One row per ClusterComputeResource, sorted

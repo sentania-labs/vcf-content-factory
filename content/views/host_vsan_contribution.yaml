@@ -1,5 +1,5 @@
 id: e39d5114-8bcf-40a2-98bd-f868c112bd8e
-name: "[VCF Content Factory] Per-Host vSAN Contribution"
+name: "[VCF CF] Per-Host vSAN Contribution"
 description: >
   Per-host vSAN client-side performance detail view for demand-driven capacity
   planning dashboards. Subject is HostSystem (VMWARE adapter); metrics come from

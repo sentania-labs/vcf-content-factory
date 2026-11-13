@@ -57,7 +57,7 @@ source:         dict (optional) -- provenance block:
                                captured_from_host: str -- source instance hostname
 factory_native: bool (optional, default true)
                                False = extracted/third-party content; skips
-                               [VCF Content Factory] prefix enforcement and
+                               [VCF CF] prefix enforcement and
                                uses display_name for the zip filename.
 display_name:   str  (optional) -- explicit display name for README and zip
                                filename when factory_native is False.
@@ -402,7 +402,7 @@ def load_bundle(
 
     # Load and validate each content object.
     # For third-party (factory_native=False) bundles, SM names are not required
-    # to carry the "[VCF Content Factory]" prefix, they use the original author's
+    # to carry the "[VCF CF]" prefix, they use the original author's
     # naming convention.  Skip prefix enforcement for those bundles.
     try:
         supermetrics = [

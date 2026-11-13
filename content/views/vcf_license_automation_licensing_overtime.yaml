@@ -1,5 +1,5 @@
 id: 7ec2d398-7bfa-4e3b-a4a8-084f7685dbea
-name: "[VCF Content Factory] Automation Licensing by Month"
+name: "[VCF CF] Automation Licensing by Month"
 description: >
   Month-by-month Automation-managed host count and licensed cores, one row per month over
   the trailing year. Targets VCF Operations 8.x (validated against Aria Operations 8.18.7
@@ -25,10 +25,10 @@ columns:
       starting_on_unit: WEEKS
       starting_on_count: 1
 
-  - attribute: 'supermetric:"[VCF Content Factory] Automation Managed Host Count"'
+  - attribute: 'supermetric:"[VCF CF] Automation Managed Host Count"'
     display_name: "Automation Host Count"
     transformation: CURRENT
 
-  - attribute: 'supermetric:"[VCF Content Factory] Automation Licensed Cores"'
+  - attribute: 'supermetric:"[VCF CF] Automation Licensed Cores"'
     display_name: "Automation License Consumption"
     transformation: CURRENT

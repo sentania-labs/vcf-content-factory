@@ -55,6 +55,7 @@ from vcfcf_alerts.loader import (
     AlertDef, load_dir as load_alert_dir,
     Recommendation, load_recommendations,
 )
+from vcfcf_core.naming import FACTORY_PREFIX, strip_factory_prefix
 from vcfcf_core.packaging.assembly import (
     _build_content_block,
     assemble_distribution_zip,
@@ -619,8 +620,9 @@ def build_discrete(
 
 def _item_slug(name: str) -> str:
     """Derive a filesystem-safe slug from a content item name."""
-    # Strip the [VCF Content Factory] prefix and lowercase
-    stripped = re.sub(r"^\[VCF Content Factory\]\s*", "", name)
+    # Strip the factory prefix (either spelling, so slugs survive the
+    # 2026-11-12 prefix move) and lowercase
+    stripped = strip_factory_prefix(name)
     slug = re.sub(r"[^\w\s-]", "", stripped).strip()
     slug = re.sub(r"[\s_]+", "-", slug).lower()
     return slug or "item"
@@ -755,8 +757,10 @@ def _assemble_zip(
     ``stock_id_project_dirs``: third-party project roots the item was found
     in; each one's ``PROJECT.yaml`` ``stock_id_allowlist`` covers the
     definitions under that root and nothing else (#345)."""
-    # Zip filename follows the same [VCF Content Factory] prefix convention
-    out_path = output_dir / f"[VCF Content Factory] {display_name}.zip"
+    # Zip filename: "[VCF CF] <title>.zip". The display name usually carries
+    # the prefix already, so strip it (either spelling) before prepending,
+    # or the name doubles it. Release builds rename this to the release slug.
+    out_path = output_dir / f"{FACTORY_PREFIX}{strip_factory_prefix(display_name)}.zip"
     slug = bundle.name
 
     # Static templates

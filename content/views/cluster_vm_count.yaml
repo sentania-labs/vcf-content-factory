@@ -1,5 +1,5 @@
 id: bd5d803b-25c3-4823-8997-2cba6c00f317
-name: "[VCF Content Factory] Cluster VM Count Overview"
+name: "[VCF CF] Cluster VM Count Overview"
 description: >
   Per-cluster VM count statistics over a 90-day rolling window for quarterly
   executive capacity review. Columns show current running and total VM counts, plus

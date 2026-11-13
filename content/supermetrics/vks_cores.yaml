@@ -1,5 +1,5 @@
 id: 73f9b9d7-1801-4e6d-bdd0-c3f3203d7bcc
-name: "[VCF Content Factory] VKS Cores (count)"
+name: "[VCF CF] VKS Cores (count)"
 resource_kinds:
   - resource_kind_key: ClusterComputeResource
     adapter_kind_key: VMWARE
@@ -15,8 +15,8 @@ description: >
   in normalised core units, not just the worker portion.
 
   References two other SMs in this bundle:
-    - [VCF Content Factory] VKS Node Image vCPU (count)  -> sm_dd8a6df8-7454-4b8e-a6fe-65a662f9cbd4
-    - [VCF Content Factory] Global vCPU-to-pCore Ratio   -> sm_ff235a3b-ed97-46b6-8f9d-7b52e55c9e6e
+    - [VCF CF] VKS Node Image vCPU (count)  -> sm_dd8a6df8-7454-4b8e-a6fe-65a662f9cbd4
+    - [VCF CF] Global vCPU-to-pCore Ratio   -> sm_ff235a3b-ed97-46b6-8f9d-7b52e55c9e6e
 
   Both referenced SMs must be installed and enabled in policy for this SM to
   produce data. If the ratio SM is zero (no hosts/vCPUs), this formula returns

@@ -1,5 +1,5 @@
 id: 2bc368ff-5e1b-4aaf-be31-39d0054c7917
-name: "[VCF Content Factory] VM Right-Sizing Candidates"
+name: "[VCF CF] VM Right-Sizing Candidates"
 description: >
   Per-VM right-sizing candidate list, shows VCF Ops's oversized/undersized/idle
   flags, current vCPU + memory allocations, recommended target sizes (from
@@ -7,12 +7,12 @@ description: >
   justification columns for the resize decision. Oversized/undersized/idle flags
   are colored red when set (value=1). CPU Demand P95 and Mem Usage P95 are
   colored green <50% / yellow 50-60% / orange 60-90% / red >90%, using a
-  1-month lookback window. Use with the '[VCF Content Factory] VMs - Right-Sizing
+  1-month lookback window. Use with the '[VCF CF] VMs - Right-Sizing
   Candidates' dynamic custom group as the widget scope to filter down to flagged
   VMs only. Drives the right-sizing section of the Capacity Assessment &
   Right-Sizing dashboard.
 
-customgroup: "[VCF Content Factory] VMs - Right-Sizing Candidates"
+customgroup: "[VCF CF] VMs - Right-Sizing Candidates"
 
 subject:
   adapter_kind: VMWARE

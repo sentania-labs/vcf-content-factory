@@ -1,4 +1,4 @@
-name: "[VCF Content Factory] Cluster Storage Paths Inconsistent"
+name: "[VCF CF] Cluster Storage Paths Inconsistent"
 adapter_kind: VMWARE
 resource_kind: ClusterComputeResource
 severity: WARNING
@@ -22,4 +22,4 @@ description: >
   or PDL, which are covered by the built-in StorageRedundancyLostAlert and
   StorageConnectivityLostAlert. Environment-agnostic, works regardless of the
   expected path count per cluster. Intended to feed into the alert
-  "[VCF Content Factory] Storage Path Inconsistency in Cluster".
+  "[VCF CF] Storage Path Inconsistency in Cluster".

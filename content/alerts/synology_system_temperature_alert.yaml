@@ -1,4 +1,4 @@
-name: "[VCF Content Factory] Synology System Temperature Alert"
+name: "[VCF CF] Synology System Temperature Alert"
 description: >
   Alerts when the DiskStation system temperature is elevated or critical.
   Uses a two-tier model: Temperature Elevated fires above 60C (WARNING)
@@ -26,13 +26,13 @@ symptom_sets:
     - defined_on: SELF
       operator: ALL
       symptoms:
-        - name: "[VCF Content Factory] Synology System Temperature Elevated"
+        - name: "[VCF CF] Synology System Temperature Elevated"
 
     - defined_on: SELF
       operator: ALL
       symptoms:
-        - name: "[VCF Content Factory] Synology System Temperature Critical"
+        - name: "[VCF CF] Synology System Temperature Critical"
 
 recommendations:
-  - name: "[VCF Content Factory] Synology System Temperature Remediation"
+  - name: "[VCF CF] Synology System Temperature Remediation"
     priority: 1

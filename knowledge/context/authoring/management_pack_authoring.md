@@ -93,7 +93,7 @@ content:                         # optional bundled content (dashboards/views)
 
 | Field | Required | Notes |
 |---|---|---|
-| `name` | yes | Human-readable MP display name. No `[VCF Content Factory]` prefix — MPs extend VCF Ops; prefix is for content authored *inside* Ops. |
+| `name` | yes | Human-readable MP display name. No `[VCF CF]` prefix — MPs extend VCF Ops; prefix is for content authored *inside* Ops. |
 | `version` | yes | Semver string. Bumped by author for design changes. |
 | `build_number` | no (default `1`) | Integer. MPB UI shows it next to version. |
 | `author` | no | Free text. |
@@ -674,7 +674,7 @@ content:
 ```
 
 Typical workflow: leave this empty and ship dashboards as factory content
-bundles (subject to the `[VCF Content Factory]` prefix convention). MP-
+bundles (subject to the `[VCF CF]` prefix convention). MP-
 bundled content is for MP-specific views that should travel with the MP
 .pak even outside the factory content flow.
 

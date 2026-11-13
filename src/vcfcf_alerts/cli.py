@@ -89,8 +89,8 @@ def cmd_validate(args) -> int:
             # without a live instance. The sync command fails hard on
             # unresolvable symptoms.
 
-    # Recommendation cross-ref validation is fatal — if a [VCF Content
-    # Factory] recommendation name doesn't exist in recommendations/,
+    # Recommendation cross-ref validation is fatal — if a factory-prefixed
+    # recommendation name doesn't exist in recommendations/,
     # the AlertContent.xml would have a dangling ref.
     for d in defs:
         try:

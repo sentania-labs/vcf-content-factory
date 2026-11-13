@@ -69,9 +69,9 @@ what's on the horizon. Updated as capabilities land.
       bundle root in the filenames community admins recognize from
       reference packages. Admins who don't trust the installer can
       drag these directly into the VCF Ops UI import dialogs.
-- [x] **Branded zip filenames** — `[VCF Content Factory] <Display Name>.zip`
+- [x] **Branded zip filenames** — `[VCF CF] <Display Name>.zip`
       auto-derived from the bundle slug via title-case + acronym set.
-      Matches the `[VCF Content Factory]` content-naming convention
+      Matches the `[VCF CF]` content-naming convention
       applied inside the zip.
 - [x] **Python `install.py` installer** — bootstrap venv for
       `requests`, discover instance marker, authenticate, import
@@ -189,7 +189,7 @@ logic already handles arbitrary policy XML.
 - `sync --dry-run` — show what would change on the instance without
   importing. Compare repo YAML to instance state.
 - `orphan` command — list content on the instance with the
-  `[VCF Content Factory]` prefix that has no corresponding YAML in
+  `[VCF CF]` prefix that has no corresponding YAML in
   the repo. Helps catch stale content after renames or deletions.
 
 ## Future

@@ -76,7 +76,7 @@ i.e. "every PhysicalServer", which the view then lists as descendants.
   `reference/docs/vcf9/views-reports.md` ~552: "The subject you specify
   determines where the view is applicable."
 - Live (`/internal/views/8580e840-.../data/export?resourceId=`), view
-  `[VCF Content Factory] Application Allocation Summary`:
+  `[VCF CF] Application Allocation Summary`:
 
 | Source object | Result |
 |---|---|
@@ -161,13 +161,13 @@ stuck-deferred.
   pin:
     adapter_kind: Container
     resource_kind: Environment          # the helper group's type
-    name: "[VCF Content Factory] All Applications"
-  view: "[VCF Content Factory] Application Allocation Summary"
+    name: "[VCF CF] All Applications"
+  view: "[VCF CF] Application Allocation Summary"
 ```
 
 Rendered in scratch (`load_dashboard` + `render_dashboards_bundle_json`):
 `entries.resource[0]` = `{resourceKindKey: Environment, adapterKindKey:
-Container, name: "[VCF Content Factory] All Applications", internalId:
+Container, name: "[VCF CF] All Applications", internalId:
 resource:id:0_::_}` and `config.resource.resourceKindId:
 "002009ContainerEnvironment"`, `traversalSpecId: ""`, `selfProvider: true`.
 Matches the Dell vendor bytes field for field (vendor has

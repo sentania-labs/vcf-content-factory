@@ -34,6 +34,6 @@ made, so these fixtures carry shapes and vendor metric keys only.
 ## Keeping them honest
 
 The super metric column names a real factory super metric
-(`[VCF Content Factory] Cluster - Idle VM Count`), so the render test
+(`[VCF CF] Cluster - Idle VM Count`), so the render test
 resolves it against `content/supermetrics/` in scoped mode. Renaming that
 super metric means updating the two files that reference it.

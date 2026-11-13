@@ -1,5 +1,5 @@
 id: ff235a3b-ed97-46b6-8f9d-7b52e55c9e6e
-name: "[VCF Content Factory] Global vCPU-to-pCore Ratio"
+name: "[VCF CF] Global vCPU-to-pCore Ratio"
 resource_kinds:
   - resource_kind_key: ClusterComputeResource
     adapter_kind_key: VMWARE
@@ -17,7 +17,7 @@ description: >
   on the lab at all three resource kinds.
 
   A value of 4.0 means four vCPUs are allocated per physical core. This is the
-  global (all-VM-type) ratio; see [VCF Content Factory] VKS Cores (count) for the
+  global (all-VM-type) ratio; see [VCF CF] VKS Cores (count) for the
   VKS-specific core-equivalent calculation.
 formula: |
   ${this, metric=cpu|vcpus_allocated_on_all_vms}

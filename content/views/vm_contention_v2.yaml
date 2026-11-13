@@ -1,5 +1,5 @@
 id: 8de65b84-2ead-4068-969c-97ab09837ffd
-name: "[VCF Content Factory] VM Contention v2"
+name: "[VCF CF] VM Contention v2"
 description: >
   Per-VM CPU and memory contention with storage latency for v2 demand-driven
   capacity planning dashboard. Replaces v1's balloon/swap columns with read/write

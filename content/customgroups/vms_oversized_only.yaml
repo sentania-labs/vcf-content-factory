@@ -1,4 +1,4 @@
-name: "[VCF Content Factory] VMs - Oversized Only"
+name: "[VCF CF] VMs - Oversized Only"
 description: >
   Dynamic group of VMs currently flagged oversized by VCF Ops right-sizing
   analysis (built-in metric summary|oversized == 1). Exists to scope the

@@ -112,6 +112,7 @@ before authoring or reviewing a Python pack (the third-party forks in
 | `guide_visual_verification.md` | Shared Playwright browser-pass procedure (qa-tester, content-installer) |
 | `mp_authoring_design_principles.md` | MP design principles (codified lessons) |
 | `uuids_and_cross_references.md` | UUIDs, cross-references, rename safety |
+| `prefix_migration.md` | The `[VCF CF] ` prefix move (2026-11-12): the load error, `migrate-prefix`, import identity per type, `cleanup-legacy-prefix` |
 | `guide_content_authoring.md` | Interview discipline, infer-not-interview |
 | `guide_delegation.md` | Orchestrator delegation discipline |
 | `guide_codification.md` | How to turn corrections into framework knowledge |

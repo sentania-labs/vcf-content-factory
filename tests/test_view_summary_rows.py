@@ -44,7 +44,7 @@ VENDOR_TWO_ROWS = (
 
 def _view(summary) -> dict:
     d = {
-        "name": "[VCF Content Factory] Summary Probe",
+        "name": "[VCF CF] Summary Probe",
         "subject": {"adapter_kind": "VMWARE", "resource_kind": "VirtualMachine"},
         "columns": [
             {"attribute": "cpu|usage_average", "display_name": "CPU"},

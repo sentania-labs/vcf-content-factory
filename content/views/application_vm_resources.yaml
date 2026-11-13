@@ -1,5 +1,5 @@
 id: bd114a78-276f-46d2-a0cd-91e7b797c637
-name: "[VCF Content Factory] Application VM Resources"
+name: "[VCF CF] Application VM Resources"
 description: >
   Per-VM CPU, memory and disk allocation and consumption for the VMs in a
   selected application group. Meant to be embedded in a dashboard and fed a

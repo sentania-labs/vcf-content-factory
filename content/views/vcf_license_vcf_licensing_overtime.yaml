@@ -1,5 +1,5 @@
 id: 838427bb-84c4-49f9-ac25-9bdfe2491389
-name: "[VCF Content Factory] VCF Licensing by Month"
+name: "[VCF CF] VCF Licensing by Month"
 description: >
   Month-by-month VCF and vSAN license usage vs capacity, one row per month over the
   trailing year, for reconciling license position with Broadcom. Targets VCF Operations
@@ -24,28 +24,28 @@ columns:
       starting_on_unit: WEEKS
       starting_on_count: 1
 
-  - attribute: 'supermetric:"[VCF Content Factory] VCF Total License Usage (cores)"'
+  - attribute: 'supermetric:"[VCF CF] VCF Total License Usage (cores)"'
     display_name: "VCF License Usage"
     transformation: CURRENT
 
-  - attribute: 'supermetric:"[VCF Content Factory] VCF Total License Usage (%)"'
+  - attribute: 'supermetric:"[VCF CF] VCF Total License Usage (%)"'
     display_name: "VCF License Usage Percent"
     unit: percent
     transformation: CURRENT
 
-  - attribute: 'supermetric:"[VCF Content Factory] VCF Total License Capacity (cores)"'
+  - attribute: 'supermetric:"[VCF CF] VCF Total License Capacity (cores)"'
     display_name: "VCF License Capacity"
     transformation: CURRENT
 
-  - attribute: 'supermetric:"[VCF Content Factory] vSAN Total License Usage (TiB)"'
+  - attribute: 'supermetric:"[VCF CF] vSAN Total License Usage (TiB)"'
     display_name: "vSAN Total License Usage"
     transformation: CURRENT
 
-  - attribute: 'supermetric:"[VCF Content Factory] vSAN Total License Usage (%)"'
+  - attribute: 'supermetric:"[VCF CF] vSAN Total License Usage (%)"'
     display_name: "vSAN License Usage Percent"
     unit: percent
     transformation: CURRENT
 
-  - attribute: 'supermetric:"[VCF Content Factory] vSAN Total License Capacity (TiB)"'
+  - attribute: 'supermetric:"[VCF CF] vSAN Total License Capacity (TiB)"'
     display_name: "vSAN License Capacity"
     transformation: CURRENT

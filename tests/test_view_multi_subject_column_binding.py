@@ -46,7 +46,7 @@ def _write(tmp_path: Path, data: dict, name="v.yaml") -> Path:
 def _view(**over) -> dict:
     d = {
         "id": VIEW_ID,
-        "name": "[VCF Content Factory] Inventory",
+        "name": "[VCF CF] Inventory",
         "description": "d",
         "subject": {"adapter_kind": "VMWARE", "resource_kind": "Datacenter"},
         "columns": [
@@ -366,7 +366,7 @@ def _viewdef_xml(subjects: list[tuple[str, str]], columns: list[tuple[str, tuple
             '</Value></Item>'
         )
     return (
-        f'<ViewDef id="{VIEW_ID}"><Title>[VCF Content Factory] Inventory</Title>'
+        f'<ViewDef id="{VIEW_ID}"><Title>[VCF CF] Inventory</Title>'
         f'<Description>d</Description>{st}'
         '<Controls><Control type="attributes-selector"><Property name="attributeInfos"><List>'
         + "".join(items) +

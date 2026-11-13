@@ -3,7 +3,7 @@
 Authors write SM-to-SM references in a formula by *name*, never by raw UUID
 (the ``vcfops-project-conventions`` skill, "Cross-reference syntax"):
 
-    ${this, metric=cpu|demandmhz} / ${this, attribute=@supermetric:"[VCF Content Factory] Cluster Capacity"}
+    ${this, metric=cpu|demandmhz} / ${this, attribute=@supermetric:"[VCF CF] Cluster Capacity"}
 
 VCF Ops cannot parse ``@supermetric:``.  The wire form is
 ``Super Metric|sm_<uuid>``, confirmed against the vCommunity source pak whose

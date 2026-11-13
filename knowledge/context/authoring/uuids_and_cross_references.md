@@ -93,7 +93,7 @@ forever.
 
 ```yaml
 id: 76801377-1807-4a46-93d4-9b9dc0f0c54b   # generated once, never touched
-name: [VCF Content Factory] Cluster - Avg Powered-On VM CPU Usage (%)
+name: [VCF CF] Cluster - Avg Powered-On VM CPU Usage (%)
 ```
 
 - The loader generates a `uuid4()` and writes it back on first

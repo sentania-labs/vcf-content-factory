@@ -1,4 +1,4 @@
-name: "[VCF Content Factory] Synology Disk Health Alert"
+name: "[VCF CF] Synology Disk Health Alert"
 description: >
   Alerts when one or more disks in a Synology DiskStation NAS show signs of
   hardware failure or accelerated wear. Combines three severity tiers into a
@@ -31,18 +31,18 @@ symptom_sets:
     - defined_on: SELF
       operator: ALL
       symptoms:
-        - name: "[VCF Content Factory] Synology Disk SMART Failure"
+        - name: "[VCF CF] Synology Disk SMART Failure"
 
     - defined_on: SELF
       operator: ALL
       symptoms:
-        - name: "[VCF Content Factory] Synology Disk Uncorrectable Sectors"
+        - name: "[VCF CF] Synology Disk Uncorrectable Sectors"
 
     - defined_on: SELF
       operator: ALL
       symptoms:
-        - name: "[VCF Content Factory] Synology SSD Remaining Life Low"
+        - name: "[VCF CF] Synology SSD Remaining Life Low"
 
 recommendations:
-  - name: "[VCF Content Factory] Synology Disk Health Remediation"
+  - name: "[VCF CF] Synology Disk Health Remediation"
     priority: 1

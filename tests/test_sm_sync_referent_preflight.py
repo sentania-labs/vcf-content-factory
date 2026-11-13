@@ -25,10 +25,10 @@ RK = [{"resourceKindKey": "HostSystem", "adapterKindKey": "VMWARE"}]
 UUID_A = "aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa"
 UUID_B = "bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb"
 UUID_REMOTE = "eeeeeeee-5555-4555-8555-eeeeeeeeeeee"
-NAME_A = "[VCF Content Factory] SM A"
-NAME_B = "[VCF Content Factory] SM B"
-NAME_MISSING = "[VCF Content Factory] Nowhere SM"
-NAME_REMOTE = "[VCF Content Factory] Already Installed SM"
+NAME_A = "[VCF CF] SM A"
+NAME_B = "[VCF CF] SM B"
+NAME_MISSING = "[VCF CF] Nowhere SM"
+NAME_REMOTE = "[VCF CF] Already Installed SM"
 
 
 def _sm(sm_id, name, ref=None):

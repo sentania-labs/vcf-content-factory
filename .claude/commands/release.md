@@ -27,7 +27,7 @@ if anything below is ambiguous.
   `report`, `bundle`. (Symptoms and alerts are not standalone-releasable in v1
   — they ride inside bundles. The CLI will error clearly if the user tries.)
 - `<name>` (required): may be a filename stem (`demand_driven_capacity_v2`),
-  a display name (`"[VCF Content Factory] Demand-Driven Capacity Planning v2"`),
+  a display name (`"[VCF CF] Demand-Driven Capacity Planning v2"`),
   or a path (`dashboards/demand_driven_capacity_v2.yaml`). The CLI resolves
   in that order.
 - `--version X.Y` (optional): explicit version for the release. If absent and

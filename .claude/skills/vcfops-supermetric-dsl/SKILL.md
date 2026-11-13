@@ -174,8 +174,8 @@ to `Super Metric|sm_<uuid>`, so do NOT write the `Super Metric|` prefix
 yourself:
 
 ```
-metric=@supermetric:"[VCF Content Factory] Host Licensed Cores"      # correct
-attribute=@supermetric:"[VCF Content Factory] Host Licensed Cores"   # correct
+metric=@supermetric:"[VCF CF] Host Licensed Cores"      # correct
+attribute=@supermetric:"[VCF CF] Host Licensed Cores"   # correct
 
 metric=Super Metric|@supermetric:"..."                               # WRONG
 ```

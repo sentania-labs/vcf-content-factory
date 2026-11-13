@@ -19,7 +19,7 @@ SRC = REPO_ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-P = "[VCF Content Factory] "
+P = "[VCF CF] "
 
 _DESCRIBE = """\
 <?xml version="1.0" encoding="UTF-8"?>

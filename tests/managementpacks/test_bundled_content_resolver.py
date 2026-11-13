@@ -24,13 +24,13 @@ from vcfcf_managementpacks.sdk_builder import _load_bundled_content, SdkBuildErr
 # ---------------------------------------------------------------------------
 # Minimal view YAML that passes load_view() without enforce_framework_prefix
 # blocking (we pass enforce_framework_prefix=False via the loader's defaults
-# being overridden).  We use a name that starts with "[VCF Content Factory] "
+# being overridden).  We use a name that starts with "[VCF CF] "
 # so the default enforce check passes too.
 # ---------------------------------------------------------------------------
 
 _MINIMAL_VIEW_YAML = textwrap.dedent("""\
     id: aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee
-    name: "[VCF Content Factory] Bundled Test View"
+    name: "[VCF CF] Bundled Test View"
     description: "A minimal test view for bundled_content resolver tests."
     subject:
       adapter_kind: VMWARE
@@ -43,7 +43,7 @@ _MINIMAL_VIEW_YAML = textwrap.dedent("""\
         transformation: AVG
 """)
 
-# A view with a BARE name (no "[VCF Content Factory] " prefix) — mirrors
+# A view with a BARE name (no "[VCF CF] " prefix) — mirrors
 # third-party ported content such as "ESXi Host Details vCommunity".
 _BARE_NAME_VIEW_YAML = textwrap.dedent("""\
     id: bbbbbbbb-cccc-dddd-eeee-ffffffffffff
@@ -160,7 +160,7 @@ class TestViewResolvesRelativeToProjectDir:
         views, dashboards, *_ = _load_bundled_content(raw, project_dir, project_dir)
         assert len(views) == 1
         assert dashboards == []
-        assert views[0].name == "[VCF Content Factory] Bundled Test View"
+        assert views[0].name == "[VCF CF] Bundled Test View"
 
     def test_view_only_at_unrelated_root_is_not_found(self, tmp_path: Path) -> None:
         """A view that exists at a sibling 'repo root' but NOT inside the adapter
@@ -272,7 +272,7 @@ class TestBareNamePrefixEnforcement:
 
     Fixes the vCommunity port gap: third-party ported views keep their
     original names (e.g. "ESXi Host Details vCommunity") inside an SDK pak;
-    the "[VCF Content Factory] " prefix convention only applies to factory
+    the "[VCF CF] " prefix convention only applies to factory
     content-import-zip content.
     """
 
@@ -314,7 +314,7 @@ class TestBareNamePrefixEnforcement:
         }
         views, dashboards, *_ = _load_bundled_content(raw, project_dir, project_dir)
         assert len(views) == 1
-        assert views[0].name == "[VCF Content Factory] Bundled Test View"
+        assert views[0].name == "[VCF CF] Bundled Test View"
 
     def test_bare_named_view_rejected_by_standard_load_view(self) -> None:
         """load_view() with its default (enforce_framework_prefix=True) must
@@ -330,7 +330,7 @@ class TestBareNamePrefixEnforcement:
             bare_path = Path(fh.name)
 
         try:
-            with pytest.raises(Exception, match=r"\[VCF Content Factory\]"):
+            with pytest.raises(Exception, match=r"\[VCF CF\]"):
                 load_view(bare_path)  # enforce_framework_prefix=True by default
         finally:
             bare_path.unlink(missing_ok=True)

@@ -116,7 +116,7 @@ What you get:
 | Reports | Yes, cover, TOC, view + dashboard sections |
 | **Management packs (Tier 1, REST adapters via MPB)** | Yes, author a YAML, get a `.pak` |
 | **Management packs (Tier 2, native Java SDK adapters)** | Phase 1 complete, framework + builder work, first real adapter in progress |
-| Distribution bundles | Yes, `[VCF Content Factory] <Name>.zip` for any admin on any instance |
+| Distribution bundles | Yes, `<bundle-slug>.zip` (e.g. `vks-core-consumption-bundle.zip`) for any admin on any instance |
 
 All content lands via the UUID-preserving content-import path where it
 matters (super metrics, views, dashboards, reports), so cross-references
@@ -155,7 +155,8 @@ Two paths:
 distribution catalog,
 [vcf-content-factory-bundles](https://github.com/sentania-labs/vcf-content-factory-bundles).
 For dashboards and content bundles, grab the zip (or use any
-`[VCF Content Factory] <Name>.zip` you were handed), extract it, run
+distribution zip you were handed, named for its bundle, e.g.
+`vks-core-consumption-bundle.zip`), extract it, run
 `python3 install.py` (or `.\install.ps1`), answer the prompts, drop
 multiple zips in one directory and the installer multi-selects across
 them. For management packs, follow the catalog's link to the pak's
@@ -202,7 +203,7 @@ over and over until they decided to teach an AI to do it instead. The
 framework's author maintains
 [sentania-labs/AriaOperationsContent](https://github.com/sentania-labs/AriaOperationsContent)
 as the proving ground; every design decision in this framework
-(UUID stability, content-zip install, `[VCF Content Factory]`
+(UUID stability, content-zip install, `[VCF CF]`
 naming, recon-before-author) comes from a real-world failure that
 shipped to production once and isn't going to ship again.
 

@@ -478,7 +478,7 @@ class TestThisRefResolution:
 class TestKnownDataPointStorageActivePathCount:
 
     def test_storage_active_path_count_survives_offline_audit(self, tmp_path):
-        """[VCF Content Factory] Storage Active Path Count uses
+        """[VCF CF] Storage Active Path Count uses
         ${this, metric=config|storageDevice|multipathInfo|numberofActivePath}
         on VMWARE/HostSystem; the key is present in the committed cache with
         default_monitored=true, so the newly-active this-ref check must pass
@@ -487,7 +487,7 @@ class TestKnownDataPointStorageActivePathCount:
 
         zip_path = build_discrete(
             content_type="supermetric",
-            item_name="[VCF Content Factory] Storage Active Path Count",
+            item_name="[VCF CF] Storage Active Path Count",
             output_dir=tmp_path / "out",
             skip_audit=False,
             live_describe=False,

@@ -1,5 +1,5 @@
 id: 66cfa55c-dd8c-4cb4-a10c-ee2b4d2fb16e
-name: "[VCF Content Factory] Cluster - Memory Free % After HA"
+name: "[VCF CF] Cluster - Memory Free % After HA"
 resource_kinds:
   - resource_kind_key: ClusterComputeResource
     adapter_kind_key: VMWARE

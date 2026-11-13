@@ -1,7 +1,7 @@
 id: 66ec0811-6053-44c8-b515-0af47e7f1cc7
-name: "[VCF Content Factory] vSAN Cluster Health"
+name: "[VCF CF] vSAN Cluster Health"
 description: >
-  vSAN-focused companion to [VCF Content Factory] Demand-Driven Capacity
+  vSAN-focused companion to [VCF CF] Demand-Driven Capacity
   Planning. vSAN cluster metrics live on VirtualSANDCCluster
   (VirtualAndPhysicalSANAdapter), a parallel object hierarchy to
   ClusterComputeResource, so cross-kind filtering from the main dashboard
@@ -26,13 +26,13 @@ widgets:
     type: View
     title: "vSAN Cluster Performance"
     coords: {x: 1, y: 4, w: 6, h: 9}
-    view: "[VCF Content Factory] vSAN Cluster Performance"
+    view: "[VCF CF] vSAN Cluster Performance"
 
   - id: vsan_health
     type: View
     title: "vSAN Cluster Health & Resync"
     coords: {x: 7, y: 4, w: 6, h: 9}
-    view: "[VCF Content Factory] vSAN Cluster Health & Resync"
+    view: "[VCF CF] vSAN Cluster Health & Resync"
 
 interactions:
   - from: vsan_picker

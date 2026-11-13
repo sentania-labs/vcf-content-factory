@@ -22,7 +22,7 @@ recon, doc lookup, or sensible default can resolve it.**
 
 ### What you do NOT ask the user about
 
-- **Naming.** Every authored object is `[VCF Content Factory] <Name>`
+- **Naming.** Every authored object is `[VCF CF] <Name>`
   (MPs use the prose prefix without brackets). No questions.
 - **File placement and folder.** Loaders handle the directory; the
   `name_path` convention puts dashboards in `VCF Content Factory`.

@@ -53,7 +53,7 @@ def _source_widget() -> dict:
 def _dash(tmp_path: Path, widget: dict) -> Path:
     p = tmp_path / "dash.yaml"
     p.write_text(yaml.dump({
-        "name": "[VCF Content Factory] Resource Mode Probe",
+        "name": "[VCF CF] Resource Mode Probe",
         "widgets": [widget],
     }, default_flow_style=False))
     return p
@@ -155,14 +155,14 @@ def test_render_resource_mode_shares_slot_by_display_name_not_kind(tmp_path):
 
     vp = tmp_path / "view.yaml"
     vp.write_text(yaml.dump({
-        "name": "[VCF Content Factory] Probe View",
+        "name": "[VCF CF] Probe View",
         "subject": {"adapter_kind": "VMWARE_INFRA_HEALTH", "resource_kind": "LICENSE_USAGE_WORLD"},
         "columns": [{"attribute": "cpu|usage_average", "display_name": "x"}],
     }))
     view = load_view(vp)
     dp = tmp_path / "dash.yaml"
     dp.write_text(yaml.dump({
-        "name": "[VCF Content Factory] Two Pins",
+        "name": "[VCF CF] Two Pins",
         "widgets": [
             _resource_widget(),
             {"id": "v", "type": "View", "title": "V", "coords": {"x": 7, "y": 1, "w": 6, "h": 5},
