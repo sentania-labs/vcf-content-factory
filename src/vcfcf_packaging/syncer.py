@@ -283,7 +283,7 @@ def sync_bundle(
             # Every content import it makes is owned by this bundle: only
             # this manifest's stock_id_allowlist applies to it (#345).
             sync_loaded = getattr(handler, "sync_loaded", None)
-            with import_allowlist(str(bundle.source_path or bundle_path),
+            with import_allowlist(str(getattr(bundle, "source_path", None) or bundle_path),
                                   getattr(bundle, "stock_id_allowlist", None) or []):
                 if callable(sync_loaded):
                     result = sync_loaded(
