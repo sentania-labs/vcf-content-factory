@@ -112,6 +112,14 @@ third-party templates). An absent or null `subject_types` is still the
   templates; the factory's reports zip ships none, and a dangling
   `localizationKey` fails import on 8.18 (DEF-018). With these two
   attributes set aside, all 62 built-in 9.1.1 templates round-trip.
+- Leading or trailing whitespace on the `Description` (11 vCommunity
+  templates): the report loader strips it. `import-local` records it as a
+  loss, accepted only where the render is the source stripped; interior
+  whitespace is carried.
+
+CoverPage and TableOfContents `ContentKey` is the renderer's constant
+(`COVER_PAGE`, `TABLE_OF_CONTENTS`; `reports.loader._STATIC_CONTENT_KEYS`);
+`import-local` stops a template carrying another value with a TOOLSET GAP.
 
 ## Round trip
 

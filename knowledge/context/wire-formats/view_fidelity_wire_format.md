@@ -394,6 +394,15 @@ sample: the vendor majority carries it (22 vCommunity columns and 59
 9.1.1 built-in columns with, 2 and 3 without). `false` is not accepted on
 such a column, no export carries it.
 
+A bound on a **string** attribute column (`isStringAttribute="true"`) is
+matched as a string, but the loader reads every numeric-looking bound
+through `float` (`_maybe_float`), so `"0"` / `"1"` render as `"0.0"` /
+`"1.0"` (4 vCommunity columns, VLAN ids and flags, mixed with a string
+`redBound="none"`). Not modeled: `import-local` stops such a view with a
+TOOLSET GAP (before 2026-11-13 its comparison treated the two spellings as
+one number). A numeric column's bounds are numbers: `70` and `70.0` are the
+same bound.
+
 ## SDK pak owning SubjectType (not changed)
 
 `render_view_def_fragments(owning_adapter_kind=..., owning_resource_kind=...)`
@@ -430,6 +439,46 @@ exactly this one SubjectType.
 - Per-column transformations on a trend view: trend columns still take
   the view-level `transformations:` list (all vCommunity trend columns
   carry `[NONE]`, which `transformations: [NONE]` expresses).
+- `localizationKey` on a column or summary-row `displayName` Property (545
+  of the 756 9.1.1 built-in views that convert, 9 vCommunity views): the renderer deliberately
+  writes none (`render.py`, the displayName note: keys collide between
+  transformed columns, and no localization bundle ships;
+  `tests/test_renderer_regression_phase16.py` B). An additional column's
+  `displayName` is not covered.
+- A second `displayName` Property in one column (one view, "Windows Network
+  Adapter", in both vCommunity and the 9.1.1 built-ins: the two carry the
+  same value, the second with a `localizationKey`). The first is rendered
+  and the second dropped; which one the product shows when they differ is
+  not known. A repeat of any other Property, or in a summary row, is not
+  covered.
+- Leading or trailing whitespace on the `Description` (54 vCommunity views,
+  22 of the converted 9.1.1 built-in views): the view loader strips it.
+  Interior whitespace is carried.
+- Leading or trailing whitespace on the column labels the loader strips: a
+  column's `displayName`, `instanceGroupName` and
+  `localizedMetricToRelateWith`, an additional column's `displayName` and
+  `localizedAttributeName`, a summary row's `displayName` (none seen in
+  either source). Keys the loader strips (`attributeKey`, kinds,
+  `metricToRelateWith`, `transformExpression`, unit ids, string bounds)
+  are not covered and stay a difference.
+
+`import-local` records each as a loss at its exact path: the whitespace one
+only where the render is the source stripped, nothing else
+(`importer/accounting.py` `STRIPPED_TEXT` lists the keys).
+
+## Found by `import-local` (2026-11-13)
+
+The offline converter classifies every ViewDef attribute and text
+(`authoring/importer_offline_conversion.md`). It found three classes with no
+YAML form: a column or summary-row `displayName` `localizationKey`, a
+second column `displayName` and Description surrounding whitespace. They
+stopped views as TOOLSET GAPs until they were ruled not modeled
+(2026-11-13, §Not modeled). The Title gets the same strip, which the
+converter records as a rename.
+
+Control `visible` is a renderer constant per control type (`false` on the
+time selector, attributes selector, buckets and metadata controls, `true` on
+pagination); any other value is a GAP.
 
 ## Round-trip result (vCommunity 0.8.1, 189 unique ViewDefs)
 

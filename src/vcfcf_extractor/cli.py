@@ -3,6 +3,8 @@
 Subcommands:
   extract dashboard  -- walk a dashboard and its deps, emit YAML + manifest
   list-dashboards    -- list dashboards available on the lab instance
+  reverse-local      -- one dashboard JSON + its views to YAML (offline)
+  import-local       -- a whole content tree (every type) to YAML (offline)
 
 No interactive prompts anywhere in this module.  All missing required flags
 produce a clear error message and a non-zero exit code.  The /extract slash
@@ -198,6 +200,13 @@ def _build_parser() -> argparse.ArgumentParser:
         "--dry-run", action="store_true",
         help="Parse and plan without writing any files.",
     )
+
+    # --- import-local ------------------------------------------------------
+    # The offline converter for whole content trees (every type, every
+    # fidelity field). A sibling, not an extension of reverse-local: that
+    # command keeps its one-dashboard contract and output for its users.
+    from .importer import add_parser as _add_import_local
+    _add_import_local(sub)
 
     # --- list-dashboards ---------------------------------------------------
     list_p = sub.add_parser(
@@ -486,6 +495,9 @@ def main() -> None:
         sys.exit(cmd_list_dashboards(args))
     elif args.subcommand == "reverse-local":
         sys.exit(cmd_reverse_local(args))
+    elif args.subcommand == "import-local":
+        from .importer import run as _run_import_local
+        sys.exit(_run_import_local(args))
     elif args.subcommand == "extract":
         if args.extract_type == "dashboard":
             sys.exit(cmd_extract_dashboard(args))

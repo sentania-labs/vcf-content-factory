@@ -90,6 +90,10 @@ the same). A source file that carries several dashboards (the third-party
 dashboard; each renders alone, and the shared `entries` table is rebuilt per
 dashboard with only the kinds it uses.
 
+Not modeled: leading or trailing whitespace on the dashboard `description`
+(the loader strips it); `import-local` records it as a loss, accepted only
+where the render is the source stripped.
+
 Not modeled: `adapterName`. Exports write the owning solution's name
 (`VMware vSphere` on 84 built-ins; our own compliance pak, built with
 `adapterName: vcfcf_compliance`, comes back as `VCF Content Factory
@@ -106,6 +110,33 @@ YAML cannot claim it.
 | `collapsed: true` | widget `collapsed` | TextDisplay, View, MetricChart, Scoreboard, ResourceList, AlertList (the types an export carries it on); Section keeps its own |
 | `view_details: ""` | `config.viewDetails: ""` | the empty string every 9.x export writes is accepted |
 | `omit:` | drops a default key | per type, see below |
+
+Not modeled: leading or trailing whitespace on the display strings the
+dashboard loader strips. `import-local` records each as a loss at its key,
+accepted only where the render is exactly the source stripped (an interior
+change is a difference), in three classes: the widget `title` (and
+`config.title`, which is the title); labels, meaning a Scoreboard,
+MetricChart or PropertyList metric entry's `label`, `metricName` and `unit`
+(11 Scoreboard labels on 2 third-party dashboards, `"Read Latency "`; 9
+9.1.1 built-ins carry some, 7 labels on the 2 of them that convert), a HealthChart `metricName` / `metricFullName`, a
+ParetoAnalysis `metricName` / `metric.name`, and a Heatmap tab's
+`colorBy.value`, `sizeBy.value` and `groupBy.text` / `originalText`; and the
+TextDisplay HTML (`config.editorData`). `labelLocalized`, `labelOrig`,
+`description` and `titleLocalized` are kept verbatim by the loader. Strings
+the loader strips that are keys or references (metric keys, kinds, a pinned
+resource's name, a view name, `viewDetails` routes, enumerations) are not
+covered: stripping one changes what it names, so it stays a difference.
+
+Not modeled: a `config.widgetId` that names no widget of its own dashboard
+(23 widgets on 3 third-party dashboards, none of the 179 9.1.1 built-ins,
+which write the widget's own id on 123 widgets and nothing else). 22 of the
+23 ids are on no dashboard of the pack and one is a widget of a sibling
+dashboard the page was copied from; none is referenced anywhere else in its
+dashboard (no interaction, navigation or state), so it is clone residue
+with no effect. `ui.widget_id: true` renders the widget's own id instead.
+`import-local` records it as a loss at that key only when the id is none of
+the dashboard's widget ids; one naming another widget of the same dashboard
+stays a TOOLSET GAP (no export shows one).
 
 ### `ui:` (UI persistence the product writes)
 
@@ -216,6 +247,10 @@ tab's `extModel` id), `tag_filter:` (or null), `filter_mode: customFilter`,
 `custom_filter:` (or null), `group_by.parent_text:` (historically the
 adapter kind key; exports carry `vCenter` or `vCenter Adapter`), and
 `omit: [tag_filter, custom_filter, group_by_kind_keys, color_min_value]`.
+Not modeled: leading or trailing whitespace on a tab `name` (one
+third-party tab, `"CPU "`): the dashboard loader strips it. `import-local`
+records it as a loss, accepted only where the render is the source name
+stripped.
 
 ```yaml
 custom_filter:
@@ -338,6 +373,44 @@ the baseline shows absent on a supported line is also a warning naming
 the lines. Check: `Dashboard.external_view_references()` and
 `stock_ids.guard.reference_warnings`. Navigation `dashboard_id:` targets
 are raw dashboard ids too and are still unchecked.
+
+The dependency walker `common/dep_walker.collect_deps` (the third-party
+project-boundary check in `vcfcf_dashboards validate`, discrete builds, the
+bundle composer, navigation targets) records such an id as external
+(`DepGraph.external_views`, `(content_type, id, where)`): nothing to bundle
+and no error. Before 2026-11-13 it reported it as an unknown view name, so a
+third-party project could not use the passthrough at all (found running the
+validation chain on `import-local` output). A raw id that is one of the
+corpus's own views is an error there: reference it by name so it is bundled.
+Every caller that builds something deliverable (the bundle builder, the
+discrete builder and so the release builder, the composer, the navigation
+closure) prints a `PREREQUISITE:` line per external view and runs the same
+stock-id baseline check as validate and the report `view_id` check
+(`vcfcf_packaging.navigation.print_external_view_prerequisites`): a warning
+when the id is not a known product view, or is absent on a supported line.
+
+## Shapes found by `import-local` (2026-11-13)
+
+Read off the 9.1.1 built-in export and the 52 third-party dashboards with the
+offline converter's source accounting (`authoring/importer_offline_conversion.md`);
+none has a YAML form today, so a dashboard carrying one stops with a TOOLSET
+GAP rather than converting changed:
+
+- AlertList `config.alertDefinitions` as bare id strings
+  (`["AlertDefinition-..."]`, "License Server Health", "vSAN Snapshots and
+  Replica"); the renderer writes `[{"id": ...}]` objects.
+- MetricChart `config.relationshipMode.relationshipMode` as a list
+  (`[1, -1, 0]`, "vSAN Performance"); the renderer writes a scalar.
+- Values other than the renderer's constants: `refreshContent: true` on 18
+  View widgets and on AlertLists, a HealthChart `metricUnit` other than
+  `{-1, "Default Unit"}`, `relationshipMode` other than 0 on a Scoreboard, a
+  ParetoAnalysis pinned through `config.resource[]`, a `config.widgetId`
+  naming another widget of the same dashboard (none seen; one naming no
+  widget of the dashboard is a recorded loss, §Widget fields common to
+  every type).
+- A `namePath` with leading or trailing whitespace: the loader strips it.
+  It is the dashboard's folder (a name, not display text), and it is not
+  recorded as a rename, so it stays a GAP (none seen).
 
 ## Keys an older loader ignored
 

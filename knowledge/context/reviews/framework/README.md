@@ -22,3 +22,4 @@ Started 2026-11-12; earlier reports are in this directory by filename only.
 |---|---|---|
 | `stock-id-guard-2026-11-12.md` | `tooling/stock-id-guard`: stock content id guard and baseline (#345) | APPROVE (0 B / 9 W / 7 N) |
 | `stitch-post-events-numeric-keydiff-2026-11-12.md` | `tooling/stitcher-post-events-numeric`: stitcher `post`, `pushEvents`, numeric properties, icon hints, `keydiff` | CHANGES REQUESTED (3 B / 6 W / 5 N); all fixed in one pass |
+| `extractor-import-local-2026-11-13.md` | `tooling/importer-fidelity`: offline converter `import-local`, bundle-loader report dirs for `PROJECT.yaml`, dep-walker external views | CHANGES REQUESTED (6 B / 11 W / 10 N) |

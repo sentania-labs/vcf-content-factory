@@ -219,8 +219,13 @@ def _check_deps(
     picked_sms: List[ComponentEntry],
     picked_cgs: List[ComponentEntry],
     repo_root: Path,
+    external_views: Optional[list] = None,
 ) -> List[str]:
     """Run the dep walker on picked dashboards, return list of missing-dep warnings.
+
+    ``external_views``, when given, receives the walker's external view
+    references (View widgets naming a view by raw id the bundle does not
+    ship); they are not missing deps.
 
     Cross-provenance composition is explicitly allowed here (bundles are the
     legitimate place to compose across project boundaries), we pass
@@ -279,6 +284,8 @@ def _check_deps(
             all_customgroups=cgs,
             project_scope=None,
         )
+        if external_views is not None:
+            external_views[:] = list(graph.external_views)
 
         # Dashboard Navigation targets: a bundle must carry every named
         # target (carry-or-fail at build). Worded so _auto_add_deps can
@@ -456,13 +463,21 @@ def compose_bundle(
     # ------------------------------------------------------------------ #
     # Step 4: Dependency consistency check                                 #
     # ------------------------------------------------------------------ #
+    external_views: list = []
     dep_warnings = _check_deps(
         picked_dashboards=picks.get("dashboards", []),
         picked_views=picks.get("views", []),
         picked_sms=picks.get("supermetrics", []),
         picked_cgs=picks.get("customgroups", []),
         repo_root=repo_root,
+        external_views=external_views,
     )
+    if external_views:
+        from .navigation import print_external_view_prerequisites
+        _out("\nViews referenced by raw id (not in the bundle; they must exist on the target):")
+        for _ctype, oid, where in external_views:
+            _out(f"  NOTE: {where}: {oid}")
+        print_external_view_prerequisites(external_views, "the composed bundle")
 
     if dep_warnings:
         _out("\nDependency warnings (dashboard deps not included in bundle):")

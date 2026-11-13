@@ -205,6 +205,22 @@ mistakes but cannot certify semantic correctness. Treat a successful
 `validate` as necessary but not sufficient; reread the formula
 yourself before proposing to install it.
 
+## Formula whitespace
+
+The bundle renderer collapses every whitespace run in a formula to one
+space (`" ".join(formula.split())`, `packaging.assembly._render_supermetrics_dict`),
+so line breaks, tabs and repeated spaces in the YAML are formatting and do
+not reach the instance. Inside a quoted literal (a `where="..."` value) the
+same collapse changes the value: keep literals free of repeated or
+non-space whitespace. `import-local` records a source formula whose
+whitespace differs only outside its quoted literals as a loss (accepted
+only where the render is exactly the collapsed source), and stops one where
+the collapse would change a literal, or where the literals cannot be
+delimited (an unbalanced quote, a backslash), with a TOOLSET GAP. The
+loader also strips the `description`; `import-local` records surrounding
+whitespace there as a loss, accepted only where the render is the source
+stripped.
+
 ## 4. Validate locally
 
 ```bash
