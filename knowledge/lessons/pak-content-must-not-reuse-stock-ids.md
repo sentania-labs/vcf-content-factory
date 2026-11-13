@@ -32,6 +32,10 @@ dangling View widgets (29 dashboards on devel reference the 64 views). Evidence:
 lab export (`/api/content/operations/export`, scope `ALL`). For an installed
 third-party pak, check its content the same way before anyone uninstalls it:
 prod's upstream vCommunity carries the same 64 ids.
+(Correction 2026-11-12: 64 is what the factory's own port carried. The
+upstream packs carry more: 117 in 0.1.6 to 0.3.1, 41 in the released
+0.1.5, 120 in the e1-rahabok line; see
+`knowledge/context/investigations/2026-11-12-vcommunity-upstream-builtin-view-ids.md`.)
 
 **Enforced since issue #345 (build time and content import).** The
 stock-id guard (`knowledge/context/stock_id_guard.md`) refuses any

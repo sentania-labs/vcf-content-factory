@@ -71,6 +71,37 @@ This rule does NOT apply to:
   metric, swapping a metric key, tightening a threshold, fixing a typo
   — these don't need a re-wireframe. Anything that adds, removes,
   moves, resizes, or changes the *purpose* of a widget does need one.
+- **Faithful port of an existing dashboard**: a conversion whose goal is
+  to reproduce a source dashboard that already exists, for example the
+  dashboards of a pack being ported. The source dashboard is the approved
+  layout, so there is nothing to wireframe; a match test replaces the
+  approval. Owner, 2026-11-12, on the 52 dashboards of the vCommunity
+  Java port begun that day (a new effort, not the ports retired in
+  October): "I'm not going to approve 52 dashboards - we have a clear
+  criteria for acceptance... do they match?" (verbatim, his ellipsis).
+  The exemption holds only when all of these are true:
+  1. The design note for the dashboard
+     (`knowledge/designs/dashboards/<slug>.md`, or one note for a batch
+     from the same source) names the source: the file or instance it
+     came from, its id, and the product or pack version.
+  2. A comparison table is committed in that note: one row per widget
+     with type, grid placement, title, bound view or metrics,
+     interactions, pins and time range, each marked identical or
+     different, plus the dashboard-level settings. It is generated from
+     the converted YAML and the source, not written from memory.
+  3. Every difference in grid placement, widget type, widget count,
+     interaction wiring or the resource-kind subject of a widget is
+     either removed or has the owner's sign-off recorded in the note
+     with the date. That includes differences the conversion is forced
+     into, such as replacing a widget type an older product version
+     cannot import. Without the sign-off, that dashboard goes back
+     through the wireframe gate. Other differences are listed in the
+     table.
+  4. The converted dashboard is seen rendering on every product line
+     the content targets, and the note says on which instances and when.
+  A dashboard that is new, or a conversion that changes the layout by
+  choice, is new design and needs the wireframe. `/extract` is not
+  covered by this exemption: it has no comparison step.
 
 It DOES apply to dashboards specifically because a wireframe is the
 cheapest correction loop — re-arranging a wireframe takes seconds; a

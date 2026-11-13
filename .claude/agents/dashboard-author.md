@@ -158,7 +158,15 @@ DASHBOARD AUTHORING BLOCKED
    `<slug>.html` beside it.** If the design file lacks a wireframe or
    the mock is missing, BLOCK and tell the orchestrator — do not infer
    layout from prose alone. Build from the table; open the mock only to
-   resolve an ambiguity in the table.
+   resolve an ambiguity in the table. **Exception, a faithful port
+   (RULE-011 exemption):** when the brief says the dashboard reproduces
+   an existing source dashboard and the design file names that source
+   (file or instance, id, version), build from the source and the
+   converted YAML instead of a wireframe, and return the widget-by-widget
+   comparison table the rule requires. If the design file names no
+   source, BLOCK as above. Never change grid placement, widget type,
+   widget count, interactions or a widget's subject in a port unless the
+   design file records the owner's sign-off for that difference.
 2. Confirm referenced view YAMLs exist.
 3. Draft YAML under `content/dashboards/<short_snake_case>.yaml`, faithfully
    reproducing the approved wireframe's widget placement and wiring.

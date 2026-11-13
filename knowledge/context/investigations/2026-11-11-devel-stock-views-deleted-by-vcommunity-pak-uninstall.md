@@ -248,6 +248,9 @@ Yes, by the same path, and it is not limited to devel:
   those 64 stock views there too (inferred, same mechanism). Its install will
   also have replaced the stock definitions with vCommunity's until the next
   upgrade.
+  (Correction 2026-11-12: the upstream pack carries 117 built-in view
+  ids, not 64; 64 is the subset the factory's port shipped. See
+  `2026-11-12-vcommunity-upstream-builtin-view-ids.md`.)
 - **Name-based factory deletes (latent, not involved here).**
   `_uninstall_views` (`templates/install.py`), `ViewsHandler.delete`
   (`vcfcf_dashboards/handler.py`) and `cmd_delete_view` resolve by display
