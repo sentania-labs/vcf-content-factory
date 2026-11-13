@@ -73,6 +73,13 @@ is rounded through a binary float on its way to a verdict or to the output:
     to tell it from an identical value.
   * ``delta`` is B minus A, exact. ``value_a`` and ``value_b`` are the values
     as read, never re-rendered through a float.
+  * Exact means no rounding anywhere: ``--tolerance`` and ``--rel-tolerance``
+    are read as ``Decimal`` from their text; magnitudes use the context-free
+    ``copy_abs``; subtraction and the relative-tolerance product run in one
+    local context whose precision is computed from the operands, with the
+    ``Inexact`` and ``Rounded`` traps on, so a rounding there raises (exit 6)
+    instead of changing a verdict. Comparisons and ``max`` order Decimals
+    exactly at any precision.
 
 Every run reports what it compared: objects on each side and on both, keys
 on each side and on both (and how many of those were stale), and objects not
@@ -92,6 +99,8 @@ Exit status, checked in this order:
      one identity.
   0  objects and keys were compared, nothing differs, and every object was
      compared. Stale rows do not count as differences.
+  6  internal error: an exact numeric comparison could not be completed (a
+     rounding trap fired). Never reported as a match.
 
 Snapshot files (``--snapshot-out``) hold what the instance returned for the
 objects in scope: object names, resource ids, keys and their values (guest
@@ -108,7 +117,8 @@ import re
 import sys
 import time
 import unicodedata
-from decimal import Decimal, localcontext
+from decimal import (MAX_EMAX, MIN_EMIN, Context, Decimal, DecimalException, Inexact,
+                     InvalidOperation, Rounded, localcontext)
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
 SNAPSHOT_FORMAT = "vcfcf-keydiff-snapshot/1"
@@ -129,6 +139,7 @@ EXIT_USAGE = 2
 EXIT_FETCH = 3
 EXIT_NOTHING_COMPARED = 4
 EXIT_NOT_COMPARED = 5
+EXIT_INTERNAL = 6
 
 CATEGORIES = ("object_only_a", "object_only_b", "only_a", "only_b", "differ",
               "stale", "match")
@@ -397,34 +408,50 @@ def _as_decimal(v: Any) -> Optional[Decimal]:
     return None
 
 
-def _exact_context_prec(*values: Decimal) -> int:
-    """Digits enough for a sum or difference of ``values`` to be exact."""
-    finite = [v for v in values if v]
-    if not finite:
-        return 28
-    top = max(v.adjusted() for v in finite)
-    bottom = min(v.as_tuple().exponent for v in finite)
-    return max(28, top - bottom + 3)
+def _digits(v: Decimal) -> int:
+    return len(v.as_tuple().digits)
+
+
+def _exact_context(a: Decimal, b: Decimal, rel: Optional[Decimal] = None) -> Context:
+    """A context in which ``b - a`` and ``rel * max(|a|, |b|)`` are exact.
+
+    A difference needs every digit from the highest place of either operand to
+    the lowest, plus one for a carry; a product needs at most the digits of
+    both factors. The exponent range is the widest there is, and ``Inexact``
+    and ``Rounded`` are trapped (with the default traps), so if a precision
+    here is ever too small the operation raises rather than rounds."""
+    prec = 1
+    nonzero = [v for v in (a, b) if v]
+    if nonzero:
+        top = max(v.adjusted() for v in nonzero)
+        bottom = min(v.as_tuple().exponent for v in (a, b))
+        prec = top - bottom + 2
+    if rel is not None:
+        prec = max(prec, _digits(rel) + max(_digits(a), _digits(b)) + 1)
+    ctx = Context(prec=max(prec, 1), Emax=MAX_EMAX, Emin=MIN_EMIN)
+    ctx.traps[Inexact] = True
+    ctx.traps[Rounded] = True
+    return ctx
 
 
 def _delta(a: Decimal, b: Decimal) -> Decimal:
-    """``b - a``, exact (the context is widened to every digit involved)."""
-    with localcontext() as ctx:
-        ctx.prec = _exact_context_prec(a, b)
+    """``b - a``, exact (module docstring, "How values compare")."""
+    with localcontext(_exact_context(a, b)):
         return b - a
 
 
 def _within(a: Decimal, b: Decimal, tol: Decimal, rel: Decimal) -> bool:
-    """``|b - a| <= max(tol, rel * max(|a|, |b|))``, computed exactly."""
+    """``|b - a| <= max(tol, rel * max(|a|, |b|))``, computed exactly.
+
+    ``copy_abs`` is context-free; the subtraction and the product run in one
+    exact, trapping context. ``==``, ``<=`` and ``max`` never round."""
     if a == b:
         return True
-    diff = abs(_delta(a, b))
-    big = max(abs(a), abs(b))
-    with localcontext() as ctx:
-        # A product needs at most the digits of both factors to be exact.
-        ctx.prec = len(rel.as_tuple().digits) + len(big.as_tuple().digits) + 2
+    with localcontext(_exact_context(a, b, rel)):
+        diff = (b - a).copy_abs()
+        big = max(a.copy_abs(), b.copy_abs())
         allowed = max(tol, rel * big)
-    return diff <= allowed
+        return diff <= allowed
 
 
 def _same_raw(va: Any, vb: Any) -> bool:
@@ -440,7 +467,7 @@ def _same_raw(va: Any, vb: Any) -> bool:
 
 def _tol_decimal(v: Any) -> Decimal:
     d = _as_decimal(v) if not isinstance(v, Decimal) else v
-    if d is None:
+    if d is None or not d.is_finite():
         raise ValueError(f"tolerance must be a finite number, not {v!r}")
     return d
 
@@ -702,6 +729,14 @@ class _SideAction(argparse.Action):
         namespace.sides = sides
 
 
+def _decimal_arg(text: str) -> Decimal:
+    """A tolerance option, read as ``Decimal`` from its text (never a float)."""
+    try:
+        return Decimal(text.strip())
+    except InvalidOperation:
+        raise argparse.ArgumentTypeError(f"not a number: {text!r}") from None
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="python -m vcfcf_common keydiff",
@@ -720,6 +755,8 @@ def build_parser() -> argparse.ArgumentParser:
                 "  5  no difference, but some objects were not compared (a VMWARE object\n"
                 "     without VMEntityVCID and VMEntityObjectID, or a shared identity)\n"
                 "  0  objects and keys compared, nothing differs, every object compared\n"
+                "  6  internal error: an exact numeric comparison could not complete\n"
+                "     (never reported as a match)\n"
                 "\n"
                 "Every run prints what it compared (objects and keys on each side and on\n"
                 "both); with --format tsv that summary goes to stderr.\n"
@@ -754,10 +791,10 @@ def build_parser() -> argparse.ArgumentParser:
                    help="scope: an object name (repeatable), exact match")
     p.add_argument("--key-prefix", action="append", default=[], metavar="PREFIX",
                    help="only keys starting with PREFIX (repeatable), e.g. 'vCommunity|'")
-    p.add_argument("--tolerance", type=float, default=0.0,
+    p.add_argument("--tolerance", type=_decimal_arg, default=Decimal(0),
                    help="absolute tolerance for numeric stats only (default 0). Never"
                         " applies to properties")
-    p.add_argument("--rel-tolerance", type=float, default=0.0,
+    p.add_argument("--rel-tolerance", type=_decimal_arg, default=Decimal(0),
                    help="relative tolerance for numeric stats only, of the larger"
                         " magnitude (default 0). Never applies to properties")
     p.add_argument("--stale-hours", type=float, default=None,
@@ -850,7 +887,7 @@ def main(argv: Optional[Sequence[str]] = None,
                      " or --name (optionally narrowed by kind)")
     for opt in ("tolerance", "rel_tolerance"):
         v = getattr(args, opt)
-        if not math.isfinite(v) or v < 0:
+        if not v.is_finite() or v < 0:
             return usage(f"--{opt.replace('_', '-')} must be a finite number >= 0")
     if args.stale_hours is not None and (not math.isfinite(args.stale_hours)
                                          or args.stale_hours <= 0):
@@ -885,9 +922,14 @@ def main(argv: Optional[Sequence[str]] = None,
               f" {args.snapshot_out}")
         return EXIT_OK
 
-    result = compare(docs[0], docs[1], tolerance=args.tolerance,
-                     rel_tolerance=args.rel_tolerance, stale_hours=args.stale_hours,
-                     key_prefixes=args.key_prefix)
+    try:
+        result = compare(docs[0], docs[1], tolerance=args.tolerance,
+                         rel_tolerance=args.rel_tolerance, stale_hours=args.stale_hours,
+                         key_prefixes=args.key_prefix)
+    except DecimalException as e:  # a rounding trap: never let it become a verdict
+        print(f"keydiff: internal error: exact comparison failed"
+              f" ({type(e).__name__}); no result", file=sys.stderr)
+        return EXIT_INTERNAL
     if args.tsv_out:
         with open(args.tsv_out, "w", encoding="utf-8") as fh:
             fh.write(to_tsv(result))

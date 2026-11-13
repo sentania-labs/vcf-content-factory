@@ -287,6 +287,112 @@ def test_stat_tolerance_at_large_magnitude():
     assert _stat_row(2.0 ** 53, 2.0 ** 53 + 2)[0]["category"] == "differ"
 
 
+# --- no rounding anywhere (Codex PR 355: abs() and * rounded at 28 digits) --
+
+def _snapshots(tmp_path, va, vb, tag=""):
+    sa, sb = tmp_path / f"a{tag}.json", tmp_path / f"b{tag}.json"
+    keydiff.write_snapshot(_doc(stats={"s": va}), str(sa))
+    keydiff.write_snapshot(_doc(stats={"s": vb}), str(sb))
+    return ["--snapshot-in", str(sa), "--snapshot-in", str(sb)]
+
+
+def test_reviewer_example_tiny_negative_against_one_differs(tmp_path, capsys):
+    # |1.0 - -1e-30| = 1.000000000000000000000000000001 > 1: abs() in the
+    # default 28-digit context rounded it to 1 and called it a match.
+    row, code = _stat_row(-1e-30, 1.0, tolerance=1)
+    assert row["category"] == "differ" and code == keydiff.EXIT_DIFFER == 1
+    assert keydiff._cell(row["delta"]) == "1.000000000000000000000000000001"
+    argv = _snapshots(tmp_path, -1e-30, 1.0)
+    assert keydiff.main(argv + ["--tolerance", "1", "--format", "tsv"]) == 1
+    (r,) = _rows(capsys.readouterr().out)
+    assert (r["category"], r["delta"]) == ("differ", "1.000000000000000000000000000001")
+
+
+def test_mirrored_case_just_inside_tolerance_matches(tmp_path, capsys):
+    # |1.0 - 1e-30| = 0.999999999999999999999999999999 <= 1.
+    row, code = _stat_row(1e-30, 1.0, tolerance=1)
+    assert row["category"] == "match" and code == 0
+    assert keydiff._cell(row["delta"]) == "0.999999999999999999999999999999"
+    assert keydiff.main(_snapshots(tmp_path, 1e-30, 1.0) + ["--tolerance", "1"]) == 0
+    capsys.readouterr()
+
+
+def test_tolerance_options_parse_as_decimal_from_text(tmp_path, capsys):
+    # 1e-30 against 1.0 differs by 0.(30 nines). A tolerance one unit below
+    # that in the 31st place is 1.0 as a float (a match) but not as text.
+    delta = "0." + "9" * 30
+    below = "0." + "9" * 29 + "89"
+    assert float(below) == 1.0
+    argv = _snapshots(tmp_path, 1e-30, 1.0)
+    assert keydiff.main(argv + ["--tolerance", delta]) == 0
+    assert keydiff.main(argv + ["--tolerance", below]) == 1
+    args = keydiff.build_parser().parse_args(argv + ["--rel-tolerance", "1e-40"])
+    assert args.rel_tolerance == Decimal("1E-40") and isinstance(args.tolerance, Decimal)
+    for bad in ("nan", "inf", "-0.5", "abc"):
+        assert keydiff.main(argv + ["--tolerance", bad]) == 2
+        assert keydiff.main(argv + ["--rel-tolerance", bad]) == 2
+    capsys.readouterr()
+
+
+def test_relative_tolerance_past_28_significant_digits():
+    # a and b carry 31 significant digits; rel * max(|a|, |b|) is exact.
+    a = "-1000000000000000000000000000000"         # -1e30, 31 digits
+    b = "-1000000000000000000000000000010"         # delta -10
+    rel = Decimal("1E-29")                         # allows exactly 10.0000000000000000000000000001
+    assert _prop_row(a, b)[0]["category"] == "differ"
+    row, code = _stat_row(int(a), int(b), rel_tolerance=rel)
+    assert row["category"] == "match" and code == 0 and row["delta"] == -10
+    row, code = _stat_row(int(a), int(a) - 11, rel_tolerance=rel)
+    assert row["category"] == "differ" and code == 1
+    # Fractional operands with 32 significant digits, relative 0.5 of the
+    # larger: the 28-digit context rounded diff and allowed both to 1 (a match).
+    a = "1.0000000000000000000000000000009"
+    out = "2.0000000000000000000000000000019"  # diff ...0010 > allowed ...00095
+    inside = "2.0000000000000000000000000000017"  # diff ...0008 <= allowed ...00085
+    row, code = _stat_row(a, out, rel_tolerance=Decimal("0.5"))
+    assert row["category"] == "differ" and code == 1
+    assert keydiff._cell(row["delta"]) == "1.0000000000000000000000000000010"
+    row, code = _stat_row(a, inside, rel_tolerance=Decimal("0.5"))
+    assert row["category"] == "match" and code == 0
+    # Mirrored in sign: magnitudes come from copy_abs, never a rounding abs().
+    neg = lambda v: "-" + v  # noqa: E731
+    assert _stat_row(neg(a), neg(out), rel_tolerance=Decimal("0.5"))[0]["category"] == "differ"
+    assert _stat_row(neg(a), neg(inside), rel_tolerance=Decimal("0.5"))[0]["category"] == "match"
+
+
+def test_sixty_digit_pair():
+    a = "1" + "0" * 58 + "1"     # 60 digits
+    b = "1" + "0" * 58 + "2"
+    assert len(a) == len(b) == 60
+    row, code = _prop_row(a, b)
+    assert row["category"] == "differ" and code == 1 and row["delta"] == 1
+    assert _stat_row(int(a), int(b), tolerance=1)[0]["category"] == "match"
+    assert _stat_row(int(a), int(b), tolerance=Decimal("0.999999"))[0]["category"] == "differ"
+    fa, fb = "0." + "0" * 59 + "1", "0." + "0" * 59 + "2"
+    row, _ = _stat_row(fa, fb, tolerance=Decimal("1E-60"))  # string stats: plain decimals
+    assert row["category"] == "match" and keydiff._cell(row["delta"]) == fa
+    row, _ = _stat_row(fa, fb, tolerance=Decimal("9E-61"))
+    assert row["category"] == "differ"
+
+
+def test_the_local_context_is_what_makes_it_exact(monkeypatch, tmp_path, capsys):
+    from decimal import Context, Inexact, Rounded
+    a, b = Decimal("-1E-30"), Decimal("1.0")
+    tiny = Context(prec=3, traps=[Inexact, Rounded])
+    # The same operations at a too-small precision raise instead of rounding...
+    monkeypatch.setattr(keydiff, "_exact_context", lambda *v: tiny)
+    with pytest.raises((Inexact, Rounded)):
+        keydiff._within(a, b, Decimal(1), Decimal(0))
+    with pytest.raises((Inexact, Rounded)):
+        keydiff._delta(a, b)
+    # ...and the CLI reports that as an internal error, never as a match.
+    assert keydiff.main(_snapshots(tmp_path, -1e-30, 1.0, "t") + ["--tolerance", "1"]) \
+        == keydiff.EXIT_INTERNAL == 6
+    assert "internal error" in capsys.readouterr().err
+    monkeypatch.undo()
+    assert keydiff._within(a, b, Decimal(1), Decimal(0)) is False
+
+
 def test_tolerance_never_applies_to_properties():
     assert _prop_row("100", "100.5", tolerance=1)[0]["category"] == "differ"
     assert _prop_row("100", "101", rel_tolerance=0.5)[0]["category"] == "differ"
@@ -536,7 +642,7 @@ def test_help_states_requests_and_exit_codes(capsys):
     assert "POST /api/auth/token/acquire" in text and "POST /api/auth/token/release" in text
     for line in ("2 usage error", "3 a fetch or snapshot read failed", "4 nothing compared",
                  "1 a difference was found", "5 no difference, but some objects were not",
-                 "0 objects and keys compared"):
+                 "0 objects and keys compared", "6 internal error"):
         assert line in text
     assert "no credentials or token" in text  # --snapshot-out help
     assert "--timeout" in text
