@@ -47,6 +47,210 @@ def all_skipped_content_types(result: dict, content_types=None) -> dict:
     return flagged
 
 
+#: Severity of a counter shortfall per content type. Only DASHBOARDS is an
+#: error: it is the measured type (the 2026-11-13 note's FINISHED envelopes
+#: with ``imported=skipped=failed=0`` of ``total``, and its healthy controls
+#: adding up:
+#: ``knowledge/context/investigations/2026-11-13-section-widget-on-8x-and-90.md``).
+#: For every other type no healthy import result with a
+#: ``total`` has been checked against what was sent, so a shortfall is a
+#: loud warning that changes no exit code or item status. Promoting a type
+#: is one line here once its ``total`` is verified (and the same line in
+#: install.py ``_SHORTFALL_SEVERITY`` and install.ps1 ``$script:ShortfallSeverity``).
+SHORTFALL_SEVERITY = {"DASHBOARDS": "error"}
+
+
+def _whole(value):
+    """A JSON counter as an int: an int (not bool) or a string of ASCII
+    digits; ``None`` (absent) is 0; anything else is not a count (returns
+    the sentinel ``False``). install.py and install.ps1 apply the same rule."""
+    if value is None:
+        return 0
+    if isinstance(value, bool):
+        return False
+    if isinstance(value, int):
+        return value if value >= 0 else False
+    if isinstance(value, str) and value and all("0" <= c <= "9" for c in value):
+        return int(value)
+    return False
+
+
+def import_count_findings(result: dict, content_types=None) -> list:
+    """``[(severity, contentType, message), ...]`` for a content import result.
+
+    Only a FINISHED task is checked (a FAILED one reports its own failure).
+    Per summary that carries ``total``:
+
+    - ``imported + skipped + failed < total``: objects the importer neither
+      imported, skipped nor failed. On 8.18.7 and 9.0.2 a dashboard with a
+      widget type the build does not know aborts the whole dashboards batch,
+      and the task still reports FINISHED with ``imported=0 skipped=0
+      failed=0`` and no message; this is the only signature. Severity from
+      ``SHORTFALL_SEVERITY`` (default warning).
+    - a counter that is not a whole number: a warning that the envelope
+      cannot be read.
+
+    The one definition of the check: every factory reader of a content
+    import result calls it; the installer templates carry a pinned copy.
+    Sorted by content type.
+    """
+    if not isinstance(result, dict) or result.get("state") != "FINISHED":
+        return []
+    wanted = tuple(content_types) if content_types else None
+    found: dict = {}
+    for s in result.get("operationSummaries") or []:
+        if not isinstance(s, dict):
+            continue
+        ct = s.get("contentType") or "?"
+        if not isinstance(ct, str):
+            ct = "?"
+        if wanted is not None and ct not in wanted:
+            continue
+        if s.get("total") is None:
+            continue
+        counts = [_whole(s.get(k)) for k in ("total", "imported", "skipped", "failed")]
+        if any(c is False for c in counts):
+            found[ct] = ("warning", import_uninterpretable_message(ct))
+            continue
+        total, imported, skipped, failed = counts
+        if imported + skipped + failed < total:
+            severity = SHORTFALL_SEVERITY.get(ct, "warning")
+            found[ct] = (severity, import_shortfall_message(ct, tuple(counts)))
+    return [(sev, ct, msg) for ct, (sev, msg) in sorted(found.items())]
+
+
+def import_shortfalls(result: dict, content_types=None) -> dict:
+    """``{contentType: (total, imported, skipped, failed)}`` for the
+    summaries of a FINISHED result whose whole-number counters fall short of
+    ``total`` (the counts behind :func:`import_count_findings`)."""
+    if not isinstance(result, dict) or result.get("state") != "FINISHED":
+        return {}
+    wanted = tuple(content_types) if content_types else None
+    short: dict = {}
+    for s in result.get("operationSummaries") or []:
+        if not isinstance(s, dict) or s.get("total") is None:
+            continue
+        ct = s.get("contentType") or "?"
+        if not isinstance(ct, str):
+            ct = "?"
+        if wanted is not None and ct not in wanted:
+            continue
+        counts = [_whole(s.get(k)) for k in ("total", "imported", "skipped", "failed")]
+        if any(c is False for c in counts):
+            continue
+        if counts[1] + counts[2] + counts[3] < counts[0]:
+            short[ct] = tuple(counts)
+    return short
+
+
+def import_shortfall_message(content_type: str, counts) -> str:
+    """The text for one shortfall. The installer templates carry the same
+    text verbatim (pinned by a test)."""
+    total, imported, skipped, failed = counts
+    missing = total - imported - skipped - failed
+    head = (
+        f"{content_type}: the import accounted for {total - missing} of "
+        f"{total} (imported={imported} skipped={skipped} failed={failed}); "
+        f"{missing} were neither imported, skipped nor failed, and the task "
+        f"still reported FINISHED."
+    )
+    if content_type == "DASHBOARDS":
+        return head + (
+            " The likely cause is a widget type this instance's version "
+            "cannot import (for example Section, measured failing on 8.18.7 "
+            "and 9.0.2): one such dashboard makes the importer discard every "
+            "dashboard in the same import, and view-bridge.log shows "
+            "'restoreData failed to import Dashboards'. Check which dashboards "
+            "exist on the instance."
+        )
+    return head + (
+        f" What total counts for {content_type} has not been verified (no "
+        f"healthy {content_type} import result with a total is recorded), so "
+        f"this is a warning, not a failure. Check on the instance which "
+        f"objects exist, and report it with the import envelope."
+    )
+
+
+def import_uninterpretable_message(content_type: str) -> str:
+    """The text for a summary whose counters are not whole numbers."""
+    return (
+        f"{content_type}: the import result carries a total but its counters "
+        f"are not all whole numbers, so whether everything imported cannot be "
+        f"told from it. Check on the instance which objects exist, and report "
+        f"it with the import envelope."
+    )
+
+
+def import_shortfall_errors(result: dict, content_types=None) -> list:
+    """The error-severity messages of :func:`import_count_findings`."""
+    return [m for sev, _ct, m in import_count_findings(result, content_types) if sev == "error"]
+
+
+def import_shortfall_warnings(result: dict, content_types=None) -> list:
+    """The warning-severity messages of :func:`import_count_findings`."""
+    return [m for sev, _ct, m in import_count_findings(result, content_types) if sev == "warning"]
+
+
+def print_import_count_warnings(result: dict, content_types=None) -> int:
+    """Print every warning-severity finding (``WARNING: IMPORT SHORTFALL:``,
+    stderr) and return how many. Warnings change no exit code or status."""
+    import sys
+    warns = import_shortfall_warnings(result, content_types)
+    for msg in warns:
+        print(f"WARNING: IMPORT SHORTFALL: {msg}", file=sys.stderr)
+    return len(warns)
+
+
+def get_ops_version(client: VCFOpsClient):
+    """The instance's product version from ``GET /api/versions/current``
+    ``releaseName`` (an int tuple), or None when it cannot be read."""
+    from vcfcf_core.dashboards.widget_versions import parse_release_name
+    try:
+        r = client._request("GET", "/api/versions/current")
+        if r.status_code != 200:
+            return None
+        return parse_release_name((r.json() or {}).get("releaseName"))
+    except Exception:  # noqa: BLE001  unreadable is reported by the caller
+        return None
+
+
+def widget_import_refusal(client: VCFOpsClient, dashboards) -> "tuple":
+    """``(refusal, note)`` for a content import of ``dashboards`` on ``client``.
+
+    ``refusal``: the instance is below a widget type's measured-failing
+    version (``widget_versions.import_check``); the caller must not import.
+    ``note``: a WARNING, and the import goes ahead with the import result
+    check as the backstop, when the version is unmeasured for a type (9.1.0
+    for Section) or could not be read. Both None when no dashboard carries a
+    floored type (no request is made) or every type is proven there.
+    """
+    from vcfcf_core.dashboards.widget_versions import (
+        WIDGET_TYPE_MIN_OPS_VERSION,
+        import_check,
+    )
+    pairs = [
+        (d.name, [(w.local_id, w.type) for w in d.widgets]) for d in dashboards
+    ]
+    if not any(
+        WIDGET_TYPE_MIN_OPS_VERSION.get(t) is not None
+        for _n, ws in pairs for _i, t in ws
+    ):
+        return None, None
+    version = get_ops_version(client)
+    if version is None:
+        return None, VERSION_UNREADABLE_NOTE
+    return import_check(pairs, version)
+
+
+#: Same text in install.py and install.ps1.
+VERSION_UNREADABLE_NOTE = (
+    "could not read the instance version (GET /api/versions/current), "
+    "so the widget-type floors were not checked before import; a "
+    "dashboard with a widget type this build cannot import loses every "
+    "dashboard in the import, which the import result check reports."
+)
+
+
 def skipped_import_advice(content_type: str) -> str:
     """What an ``imported=0 / skipped=N`` result for ``content_type`` means
     for the request every factory import sends, ``force=true``

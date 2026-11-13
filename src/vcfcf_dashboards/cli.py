@@ -20,7 +20,11 @@ from .client import (
     discover_marker_filename,
     get_current_user,
     import_content_zip,
+    import_shortfall_errors,
+    import_shortfalls,
+    print_import_count_warnings,
     skipped_import_advice,
+    widget_import_refusal,
 )
 from .id_guard import check_dashboard_id_stability
 from .loader import (
@@ -540,6 +544,16 @@ def cmd_sync(args) -> int:
     ):
         return 1
 
+    # Widget types the instance's version cannot import (issue #199): one
+    # such dashboard loses every dashboard in this import, so the whole
+    # import is refused, before anything is sent.
+    refusal, note = widget_import_refusal(client, dashboards)
+    if note:
+        print(f"WARNING: {note}", file=sys.stderr)
+    if refusal:
+        print(f"REFUSED: {refusal}", file=sys.stderr)
+        return 1
+
     try:
         user = get_current_user(client)
         marker = discover_marker_filename(client)
@@ -559,12 +573,30 @@ def cmd_sync(args) -> int:
             f"imported={s.get('imported',0)} "
             f"skipped={s.get('skipped',0)} "
             f"failed={s.get('failed',0)} "
+            f"total={s.get('total','?')} "
             f"state={s.get('state','?')}"
         )
         for msg in s.get("errorMessages", []) or []:
             print(f"    ERROR: {msg}")
     if result.get("state") != "FINISHED":
         return 1
+
+    # Counters that do not add up to total are objects the importer dropped
+    # without a word (a FINISHED task with imported=skipped=failed=0 on 8.18.7
+    # and 9.0.2 when a dashboard carries an unknown widget type). An error.
+    # Error severity only for DASHBOARDS (the measured type); the rest warn.
+    shortfalls = import_shortfalls(result)
+    short_errors = import_shortfall_errors(result)
+    short_rc = 1 if short_errors else 0
+    for msg in short_errors:
+        print(f"ERROR: IMPORT SHORTFALL: {msg}", file=sys.stderr)
+    print_import_count_warnings(result)
+    if "DASHBOARDS" in shortfalls and dashboards:
+        print(
+            "ERROR: IMPORT SHORTFALL: dashboards in this import: "
+            + ", ".join(d.name for d in dashboards),
+            file=sys.stderr,
+        )
 
     # A FINISHED import that imported nothing and skipped everything is
     # not a successful sync: this run's content is not on the instance
@@ -620,10 +652,12 @@ def cmd_sync(args) -> int:
     # Skipped when this import changed no dashboard (all skipped): what is on
     # the instance is not what this run imported, so a pre-existing stuck
     # dashboard must not fail this sync. The bundle-sync handler does the same.
+    # A DASHBOARDS shortfall still runs it: it is the by-id existence check
+    # that names which dashboards are absent.
     mat_rc = 0
     if getattr(args, "skip_materialization_check", False):
         pass
-    elif "DASHBOARDS" in flagged:
+    elif "DASHBOARDS" in flagged and "DASHBOARDS" not in shortfalls:
         if dashboards:
             print("MATERIALIZATION SKIPPED: the import changed no dashboards")
     else:
@@ -642,7 +676,7 @@ def cmd_sync(args) -> int:
         skip_metric_check=getattr(args, "skip_metric_check", False),
         corpus=corpus,
     )
-    return dep_rc or mat_rc
+    return dep_rc or mat_rc or short_rc
 
 
 def _report_materialization(client, dashboards: list, recheck_wait_s=None) -> int:

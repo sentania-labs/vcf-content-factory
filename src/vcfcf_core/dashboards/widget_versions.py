@@ -1,21 +1,25 @@
 """Minimum VCF Operations version per dashboard widget type (issue #199).
 
 A dashboard carrying a widget type the target Ops build does not know is
-not skipped widget by widget: on 9.0.2 (Build 25137845) ``WidgetType.fromKey``
+not skipped widget by widget: on 8.18.7 and 9.0.2 ``WidgetType.fromKey``
 returns null, ``ImportExportManager.importDashboard`` then tries to log a skip
 message with ``getString("Title")`` / ``getString("Type")`` (capital letters
-the dashboard JSON does not carry), the ``JSONException`` aborts the WHOLE
-dashboard, and on the pak path the ``dashboards.properties`` Summary binding
-never runs.  Install still reports FINISHED.  Evidence:
+the dashboard JSON does not carry), and the ``JSONException`` aborts the
+import call. In a content import (``/api/content/operations/import``) that
+call is the owner's whole dashboards batch, so EVERY dashboard in the same
+import is lost and the task still reports FINISHED with
+``imported + skipped + failed < total``; in a pak install it is the
+``content/dashboards/<dir>`` directory, and the ``dashboards.properties``
+Summary binding never runs. Nothing reports a failure on either path.
+Evidence: ``knowledge/context/investigations/2026-11-13-section-widget-on-8x-and-90.md``,
 ``knowledge/context/api-surface/summary_dashboard_pak_binding.md`` §"Unknown
 widget type aborts the import" and §"9.0.2 WidgetType keys (complete list)",
-``knowledge/context/investigations/2026-10-12-compliance-pak-summary-binding.md``,
 lesson ``knowledge/lessons/unknown-widget-type-aborts-pak-dashboard-import.md``.
 
 The table is keyed by the factory YAML ``type`` (``AlertVolume`` renders as
 wire type ``IntSummaryAlertVolume``).  A value of ``None`` means no known
-floor: the wire type is in the 9.0.2 enum, the oldest build whose enum has
-been read, and nothing older has been checked.  A tuple is the lowest build
+floor: the wire type is in the 8.18.7 and 9.0.2 enums (the same 47 keys),
+8.18.7 being the oldest build whose enum has been read.  A tuple is the lowest build
 the type has been seen importing; ``Section`` is absent from the 9.0.2 enum
 and proven on 9.1.1 (devel, 2026-08) and 9.2 (qa); 9.1.0 has not been
 checked, so the floor is the lowest proven build, not necessarily the exact
@@ -25,19 +29,23 @@ Not gated: ``view_details`` is a widget config key (``config.viewDetails``),
 not a widget type, so ``WidgetType.fromKey`` never sees it; it is proven on
 9.1.1 and 9.2 only, and 9.0.x import behaviour for it is unverified.
 
-This module is pure (no I/O); ``Dashboard.validate()`` calls it.
+This module is pure (no I/O); ``Dashboard.validate()`` calls it, and the
+sync paths call ``import_check`` with the version they read from the
+instance.
 """
 from __future__ import annotations
 
+import re
 from typing import Dict, Iterable, List, Optional, Tuple
 
 OpsVersion = Tuple[int, ...]
 
-#: Oldest VCF Ops build whose WidgetType enum has been read.
-OLDEST_CHECKED_OPS_VERSION: OpsVersion = (9, 0, 2)
+#: Oldest VCF Ops build whose WidgetType enum has been read (8.18.7 and
+#: 9.0.2 carry the same 47 keys, 2026-11-13).
+OLDEST_CHECKED_OPS_VERSION: OpsVersion = (8, 18, 7)
 
 #: Factory widget type (YAML ``type``) -> lowest VCF Ops version known to
-#: import it, or None when no floor is known (present on 9.0.2).
+#: import it, or None when no floor is known (present on 8.18.7 and 9.0.2).
 WIDGET_TYPE_MIN_OPS_VERSION: Dict[str, Optional[OpsVersion]] = {
     "ResourceList": None,
     "View": None,
@@ -52,8 +60,31 @@ WIDGET_TYPE_MIN_OPS_VERSION: Dict[str, Optional[OpsVersion]] = {
     "PropertyList": None,
     "ResourceRelationshipAdvanced": None,
     "AlertVolume": None,  # wire IntSummaryAlertVolume, in the 9.0.2 enum
-    "Section": (9, 1, 1),  # absent from the 9.0.2 enum; 9.1.0 unchecked
+    "Section": (9, 1, 1),  # absent from the 8.18.7 and 9.0.2 enums; 9.1.0 unchecked
 }
+
+#: Factory widget type -> the version below which the type is MEASURED not to
+#: import (live, on both install paths). Section: failing on 8.18.7 and 9.0.2
+#: (knowledge/context/investigations/2026-11-13-section-widget-on-8x-and-90.md).
+#: Between this and ``WIDGET_TYPE_MIN_OPS_VERSION`` nothing is measured (9.1.0
+#: for Section): the live paths warn and import there, and the import result
+#: check is the backstop. A floored type with no entry here is never refused,
+#: only warned on.
+WIDGET_TYPE_REFUSE_BELOW_OPS_VERSION: Dict[str, OpsVersion] = {
+    "Section": (9, 1, 0),
+}
+
+#: What a dashboard with a type the target cannot import costs, per install
+#: path (2026-11-13 measurement on 8.18.7 and 9.0.2, one owner per import, as
+#: every factory import has). One sentence, shared by the validate warning,
+#: the pak build error and the sync refusal.
+IMPORT_LOSS_SENTENCE = (
+    "the importer then aborts on that dashboard: a content import (sync, "
+    "bundle install) loses EVERY dashboard in the same import (measured with "
+    "one owner, which every factory import has), a pak install every "
+    "dashboard in the same content/dashboards directory, and the task still "
+    "reports FINISHED with nothing failed"
+)
 
 
 def parse_ops_version(value) -> OpsVersion:
@@ -74,7 +105,10 @@ def parse_ops_version(value) -> OpsVersion:
 
 
 def format_ops_version(v: OpsVersion) -> str:
-    return ".".join(str(p) for p in v)
+    """``(9, 1)`` -> ``"9.1.0"``: at least three parts, so a trimmed version
+    reads as the product names it."""
+    parts = list(v) + [0] * (3 - len(v))
+    return ".".join(str(p) for p in parts)
 
 
 def widget_version_problems(
@@ -106,16 +140,114 @@ def widget_version_problems(
         scope = (
             f"the declared target VCF Ops {format_ops_version(target)}"
             if target is not None
-            else "any VCF Ops build below it (no target version is declared, "
-                 "so this cannot be gated)"
+            else "a VCF Ops build below it (no target version is declared, "
+                 "so this cannot be gated here; sync and bundle install refuse "
+                 "an instance measured not to import it and warn on an "
+                 "unmeasured one)"
         )
         problems.append(
-            f"widget type {wtype} (widget(s) {', '.join(ids)}) needs VCF Ops "
-            f"{floor_s} or later; on {scope} the importer aborts the WHOLE "
-            f"dashboard and any Summary binding on it, while install still "
-            f"reports success (issue #199)."
+            f"widget type {wtype} (widget(s) {', '.join(ids)}) is proven to "
+            f"import from VCF Ops {floor_s}; on {scope} {IMPORT_LOSS_SENTENCE}, "
+            f"and any Summary binding on it never runs (issue #199)."
         )
     return problems
+
+
+#: The product version in a ``releaseName``: the first dotted ASCII number
+#: after ``Operations`` and whitespace, ending at whitespace or the end.
+#: install.py and install.ps1 carry the same pattern (``\z`` there).
+RELEASE_NAME_VERSION_RE = re.compile(
+    r"Operations[ \t\r\n]+([0-9]+(?:\.[0-9]+)+)(?=[ \t\r\n]|\Z)"
+)
+
+
+def parse_release_name(release_name) -> Optional[OpsVersion]:
+    """The product version in a ``GET /api/versions/current`` ``releaseName``.
+
+    ``"VCF Operations 9.0.2.0"`` -> ``(9, 0, 2)``, ``"VMware Aria Operations
+    8.18.7"`` -> ``(8, 18, 7)``, ``"VCF Operations 9.1.1.0100"`` -> ``(9, 1,
+    1, 100)``. Only the name is read: the body's ``major`` / ``minor`` are the
+    API version on 8.18.7 and 9.0.2 (``1.77``, ``2.2``) but the product
+    version on 9.1 (``9``, ``1``), so only ``releaseName`` is consistent
+    across lines. The first dotted number after ``Operations`` wins, so a
+    later dotted token cannot be taken for the product. None when there is
+    none (never raises).
+    """
+    if not isinstance(release_name, str):
+        return None
+    m = RELEASE_NAME_VERSION_RE.search(release_name)
+    return parse_ops_version(m.group(1)) if m else None
+
+
+def import_check(dashboards, instance_version) -> Tuple[Optional[str], Optional[str]]:
+    """``(refusal, warning)`` for a content import of ``dashboards`` here.
+
+    *dashboards* is ``(name, [(local_id, type), ...])`` pairs; the caller
+    passes every dashboard the import would carry, because the loss is the
+    whole batch, not just the dashboards that carry the type.
+    *instance_version* is the instance's product version (a tuple or dotted
+    string).
+
+    ``refusal`` (the caller must not import) when a widget type is below its
+    ``WIDGET_TYPE_REFUSE_BELOW_OPS_VERSION`` (measured failing). Otherwise
+    ``warning`` (import, the import result check is the backstop) when a type
+    is below its proven floor on a build nobody measured. Both None when
+    every type is proven to import there.
+    """
+    have = parse_ops_version(instance_version)
+    refused: List[str] = []
+    unverified: List[str] = []
+    refused_types: Dict[str, Tuple[OpsVersion, OpsVersion]] = {}
+    unverified_types: Dict[str, Tuple[OpsVersion, OpsVersion]] = {}
+    for name, widgets in dashboards:
+        bad: List[str] = []
+        unsure: List[str] = []
+        for local_id, wtype in widgets:
+            floor = WIDGET_TYPE_MIN_OPS_VERSION.get(wtype)
+            if floor is None or have >= parse_ops_version(floor):
+                continue
+            floor = parse_ops_version(floor)
+            below = WIDGET_TYPE_REFUSE_BELOW_OPS_VERSION.get(wtype)
+            if below is not None and have < parse_ops_version(below):
+                refused_types[wtype] = (parse_ops_version(below), floor)
+                bad.append(f"{local_id} ({wtype})")
+            else:
+                unverified_types[wtype] = (parse_ops_version(below) if below else floor, floor)
+                unsure.append(f"{local_id} ({wtype})")
+        if bad:
+            refused.append(f"'{name}' (widget(s) {', '.join(bad)})")
+        if unsure:
+            unverified.append(f"'{name}' (widget(s) {', '.join(unsure)})")
+    have_s = format_ops_version(have)
+    if refused:
+        why = ", ".join(
+            f"{t} is measured not to import below {format_ops_version(b)} and "
+            f"proven to import from {format_ops_version(f)}"
+            for t, (b, f) in sorted(refused_types.items())
+        )
+        top = max(f for _b, f in refused_types.values())
+        return (
+            f"refused before import: this instance is VCF Operations {have_s}; "
+            f"{why}. Dashboards carrying it: {'; '.join(refused)}. On this "
+            f"build {IMPORT_LOSS_SENTENCE}, so the import was not sent. Remove "
+            f"those widgets or install on VCF Operations "
+            f"{format_ops_version(top)} or later (issue #199).",
+            None,
+        )
+    if unverified:
+        why = ", ".join(
+            f"{t} is proven to import from {format_ops_version(f)} and measured "
+            f"not to import below {format_ops_version(b)}"
+            for t, (b, f) in sorted(unverified_types.items())
+        )
+        return (
+            None,
+            f"this instance is VCF Operations {have_s}, which is unverified: "
+            f"{why}. Dashboards carrying it: {'; '.join(unverified)}. Importing "
+            f"anyway; if this build cannot import it, {IMPORT_LOSS_SENTENCE}, "
+            f"and the import result check reports the loss (issue #199).",
+        )
+    return None, None
 
 
 # ---------------------------------------------------------------------------

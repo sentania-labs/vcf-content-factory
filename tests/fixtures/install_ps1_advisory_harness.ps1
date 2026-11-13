@@ -35,6 +35,8 @@ $want = @("Write-Ok", "Write-Warn", "Get-PropValue", "Get-BoundedNames",
           "Get-OwnerId", "Get-CurrentUser", "Get-MarkerFilename",
           # issue #108 -- SM ghost-state retry
           "Get-SmGhostStateSkipCount", "Install-Supermetrics",
+          # issue #199 -- counters short of total are an error
+          "Get-ImportCountFindings", "ConvertTo-WholeCount", "Get-ImportShortfallMessage", "Get-ImportUninterpretableMessage", "Add-ImportShortfalls", "Get-LostImportLines",
           # issue #116 -- the Ext.Direct / dashboard.action envelope family
           "Get-ExtDirectResult", "Get-AllViews", "Get-AllReports",
           "Get-AllDashboards", "Remove-View", "Remove-Reports",
@@ -66,6 +68,9 @@ foreach ($a in $assignments) {
     }
 }
 if ($boundsFound -ne 2) { throw "expected 2 advisory bound assignments, found $boundsFound" }
+foreach ($a in $assignments) {
+    if ($a.Left.Extent.Text -like '$script:Shortfall*') { Invoke-Expression $a.Extent.Text }
+}
 
 # --- stubs for Install-Dashboard collaborators -----------------------------
 $script:StubImportResult = $null

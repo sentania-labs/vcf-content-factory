@@ -1,7 +1,8 @@
-# An unknown widget type aborts the whole pak dashboard import, silently
+# An unknown widget type silently loses dashboards, by pak install and by content import
 
 Date: 2026-10-12 and 2026-10-13. Compliance adapter builds 88 and 89, devel
-(VCF Operations 9.0.2.0 build 25137845). Factory issue #199.
+(VCF Operations 9.0.2.0 build 25137845). Factory issue #199. Extended
+2026-11-13 to 8.18.7 and the content-import path (below).
 
 ## What happened
 
@@ -21,13 +22,50 @@ had since been rebuilt at 9.0.2 and nobody re-read the version.
 
 Build 89 removed the Section row and the dashboard imported and bound.
 
+## Measured again on 2026-11-13: both versions, both paths
+
+`knowledge/context/investigations/2026-11-13-section-widget-on-8x-and-90.md`,
+on 8.18.7 (build 25423534) and 9.0.2 (build 25431135). The two builds have
+the same 47 widget types and the same importer bug; the Section dashboard is
+never created, not even partly, on either path.
+
+- **Content import** (`/api/content/operations/import`: `vcfcf_dashboards
+  sync`, bundle sync, bundle install): the importer handles the owner's
+  dashboards in one call, so one Section dashboard loses **every** dashboard
+  in the same import, whatever the order (one owner per import measured;
+  every factory import has one owner). The task reports FINISHED,
+  `errorCode: NONE`, DASHBOARDS `total N, imported 0, skipped 0, failed 0`,
+  no message. The factory's old "imported nothing" check needed
+  `skipped > 0` and did not fire.
+- **Pak install**: the installer imports each `content/dashboards/<dir>`
+  separately, so the loss is the directory holding the Section dashboard;
+  the rest of the pak installs, and the install still reports FINISHED and
+  verified. Every repeat install gives the same result.
+- **FINISHED is unreliable on both paths.** The only trace is
+  `JSONObject["Title"] not found` in `vcops-bridge.log` (and, for a content
+  import, `restoreData failed to import Dashboards` in `view-bridge.log`).
+  In the import envelope the one signature is that the three counters do
+  not add up to `total`.
+
 ## Lesson
 
-- A pak dashboard must use only widget types the **oldest targeted Ops
-  version** can import. The complete 9.0.2 list is in
+- A dashboard (pak or content bundle) must use only widget types the
+  **oldest targeted Ops version** can import. The complete list, the same
+  on 8.18.7 and 9.0.2, is in
   `knowledge/context/api-surface/summary_dashboard_pak_binding.md`;
-  `Section` is the only renderer type missing from it. Adding a type to a
-  pak needs proof on that oldest version, not on the newest.
+  `Section` is the only renderer type missing from it. Adding a type needs
+  proof on that oldest version, not on the newest.
+- Never put a dashboard that may meet an older build in the same content
+  import as dashboards that must land: it takes them all with it.
+- Read the import envelope's counters, not just its state: on a FINISHED
+  task, `imported + skipped + failed < total` for DASHBOARDS is a failure.
+  For other types `total` has not been checked against a healthy import,
+  so the factory only warns there. The check runs on every content-import
+  path (`vcfcf_dashboards.client.import_count_findings`, pinned copies in
+  both installer templates).
+- Measured vs unmeasured: Section fails on 8.18.7 and 9.0.2 (measured) and
+  imports on 9.1.1 and 9.2 (proven); 9.1.0 is unmeasured. So the factory
+  refuses below 9.1.0 and only warns on 9.1.0.
 - After every pak install, count the pak's dashboards on the instance
   (same discipline as `new-metric-alerts-need-two-samples.md`) and, for a
   bound Summary dashboard, read `getSummaryTabId` for the kind and then
@@ -39,6 +77,11 @@ Build 89 removed the Section row and the dashboard imported and bound.
 - Re-read the target's build number at the start of a session that
   installs content. Context notes about an instance's version go stale
   when the lab is rebuilt.
-- Guard: the compliance adapter's `tests/test_dashboard_widget_types.py`
-  allowlists the eight types in use; the factory validator guard is
-  issue #199.
+- Guards: the compliance adapter's `tests/test_dashboard_widget_types.py`
+  allowlists the eight types in use. In the factory, a Tier 2 pak build
+  fails on a Section dashboard below 9.1.1 (RULE-019's oldest line).
+  Content bundles declare no minimum version, so validate only warns; the
+  live paths (`vcfcf_dashboards sync`, the dashboards handler, bundle sync,
+  `install.py` and `install.ps1`) read the instance version and refuse
+  before importing below 9.1.0, or warn on 9.1.0, naming the dashboards;
+  every content-import reader fails on a DASHBOARDS count shortfall.

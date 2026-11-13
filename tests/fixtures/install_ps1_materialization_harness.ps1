@@ -59,7 +59,12 @@ $want = @(
     "Invoke-MaterializationCheck", "Invoke-MaterializationReport",
     "Write-MaterializationTrailer", "Write-AdvisoryTrailer",
     "Install-Dashboard", "Get-AllSkippedSummaries", "Get-DashboardAdvisoryNames",
-    "Get-BoundedNames", "Get-ViewAdvisoryNames", "Invoke-Install")
+    "Get-BoundedNames", "Get-ViewAdvisoryNames", "Invoke-Install",
+    # issue #199: the shortfall check and the widget-floor preflight
+    "Get-ImportCountFindings", "ConvertTo-WholeCount", "Get-ImportShortfallMessage", "Get-ImportUninterpretableMessage", "Add-ImportShortfalls", "Get-LostImportLines",
+    "Invoke-WidgetFloorPreflight", "Get-DashboardWidgetPairs", "Get-OpsVersion",
+    "ConvertFrom-ReleaseName", "ConvertTo-VersionTuple", "Compare-VersionTuple",
+    "Format-VersionTuple", "Get-ImportCheck")
 $found = New-Object System.Collections.Generic.List[string]
 $fns = $ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] }, $true)
 foreach ($f in $fns) {
@@ -80,7 +85,9 @@ $assignments = $ast.FindAll({
 $replayed = 0
 foreach ($a in $assignments) {
     $left = $a.Left.Extent.Text
-    if ($left -like '$script:Mat*' -or $left -like '$script:Advisory*') {
+    if ($left -like '$script:Mat*' -or $left -like '$script:Advisory*' -or
+        $left -like '$script:Shortfall*' -or $left -like '$script:WidgetType*' -or
+        $left -eq '$script:ImportLossSentence' -or $left -eq '$script:VersionUnreadableNote') {
         Invoke-Expression $a.Extent.Text
         $replayed++
     }

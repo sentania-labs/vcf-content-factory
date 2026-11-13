@@ -2835,7 +2835,9 @@ class Dashboard:
         # Issue #199: a widget type the target Ops build lacks aborts the whole
         # dashboard import. Content bundles declare no target VCF Ops
         # version, so this is a WARNING; the Tier 2 pak build gates it
-        # against RULE-019's oldest line (widget_version_problems()).
+        # against RULE-019's oldest line (widget_version_problems()), and
+        # sync and bundle install refuse an instance measured not to import
+        # it and warn on an unmeasured one (widget_versions.import_check).
         import warnings
         from .widget_versions import widget_version_problems
         for _problem in widget_version_problems(

@@ -37,7 +37,10 @@ from .client import (
     discover_marker_filename,
     get_current_user,
     import_content_zip,
+    import_shortfall_errors,
+    print_import_count_warnings,
     skipped_import_advice,
+    widget_import_refusal,
 )
 from .loader import DashboardValidationError, load_view, load_dashboard
 from .packager import build_import_zip
@@ -191,8 +194,15 @@ class ViewsHandler(ContentHandler):
 
         state = api_result.get("state", "")
         all_skipped = _all_skipped_message(api_result, "VIEW_DEFINITIONS")
+        shortfall = " ".join(import_shortfall_errors(api_result, ("VIEW_DEFINITIONS",)))
+        print_import_count_warnings(api_result, ("VIEW_DEFINITIONS",))
         for v in views:
-            if state == "FINISHED" and all_skipped:
+            if shortfall:
+                result.items.append(
+                    ItemResult(name=v.name, status="failed",
+                               message=f"IMPORT SHORTFALL: {shortfall}")
+                )
+            elif state == "FINISHED" and all_skipped:
                 result.items.append(
                     ItemResult(name=v.name, status="warn", message=all_skipped)
                 )
@@ -344,6 +354,19 @@ class DashboardsHandler(ContentHandler):
         if sm_resolver is None:
             return result
 
+        # Widget types this instance's version cannot import (issue #199):
+        # one such dashboard loses every dashboard in the import, so every
+        # dashboard is refused, before anything is sent.
+        refusal, note = widget_import_refusal(session, dashboards)
+        if note:
+            print(f"  WARN  {note}", file=sys.stderr)
+        if refusal:
+            for d in dashboards:
+                result.items.append(
+                    ItemResult(name=d.name, status="failed", message=f"REFUSED: {refusal}")
+                )
+            return result
+
         try:
             user = get_current_user(session)
             marker = discover_marker_filename(session)
@@ -369,11 +392,36 @@ class DashboardsHandler(ContentHandler):
 
         state = api_result.get("state", "")
         all_skipped = _all_skipped_message(api_result, "DASHBOARDS")
+        shortfall = " ".join(import_shortfall_errors(api_result, ("DASHBOARDS",)))
         materialization = {}
-        if state == "FINISHED" and not all_skipped:
+        if state == "FINISHED" and (shortfall or not all_skipped):
+            # After a shortfall this is the by-id existence check: it says
+            # which dashboards are absent.
             materialization = _materialization_by_id(session, dashboards)
+        # The views re-imported with these dashboards speak through this
+        # handler only when they fell short (the views handler reports the
+        # rest of their outcome).
+        print_import_count_warnings(api_result)
+        view_shortfall = " ".join(
+            import_shortfall_errors(api_result, ("VIEW_DEFINITIONS",)))
+        if view_shortfall:
+            for name in sorted(views_by_name):
+                result.items.append(ItemResult(
+                    name=name, status="failed",
+                    message=f"IMPORT SHORTFALL (re-imported with the dashboards): {view_shortfall}",
+                ))
         for d in dashboards:
-            if state == "FINISHED" and all_skipped:
+            if shortfall:
+                st = materialization.get(str(getattr(d, "id", "") or "").lower())
+                on_instance = (
+                    f" On the instance: MATERIALIZATION {st.state.upper()}."
+                    if st is not None and "__error__" not in materialization else ""
+                )
+                result.items.append(ItemResult(
+                    name=d.name, status="failed",
+                    message=f"IMPORT SHORTFALL: {shortfall}{on_instance}",
+                ))
+            elif state == "FINISHED" and all_skipped:
                 result.items.append(
                     ItemResult(name=d.name, status="warn", message=all_skipped)
                 )
