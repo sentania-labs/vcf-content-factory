@@ -733,3 +733,12 @@ def test_discrete_zip_name_carries_the_prefix_once(tmp_path):
                          output_dir=tmp_path / "out", extra_search_dirs=[tmp_path / "proj"],
                          skip_audit=True)
     assert out.name == NEW + "Discrete Zip Name.zip"
+
+
+def test_pak_legacy_warning_names_the_pak_and_its_directory(tmp_path):
+    from vcfcf_managementpacks.sdk_builder import check_content_naming
+    proj = SimpleNamespace(content_naming="factory_prefixed", content_naming_declared=True,
+                           adapter_kind="unifi_controller", source_path=tmp_path / "unifi" / "adapter.yaml")
+    _, warnings_ = check_content_naming(proj, _bundled(OLD + "V"))
+    assert "pak 'unifi_controller'" in warnings_[0]
+    assert f"migrate-prefix {tmp_path / 'unifi'}`" in warnings_[0]

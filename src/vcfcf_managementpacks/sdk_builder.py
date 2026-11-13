@@ -5222,13 +5222,18 @@ def check_content_naming(
             for m in legacy
         )
     elif legacy_pak:
+        # Name the pak: validate over many pak clones prints these in a row.
+        _kind = getattr(project, "adapter_kind", "") or ""
+        _src = getattr(project, "source_path", None)
+        _dir = str(Path(_src).parent) if _src else "<pak dir>"
         warnings.append(
-            f"content_naming: {content_naming}: all {len(legacy)} prefixed "
+            f"content_naming: {content_naming}: pak {_kind or _dir!r}: "
+            f"all {len(legacy)} prefixed "
             f"bundled name(s) carry the retired '{LEGACY_FACTORY_PREFIX_LABEL}' "
             f"prefix; factory content now starts with '{FACTORY_PREFIX}'. "
             f"Accepted for now, as a pak mid-transition; a later sdk-buildkit "
             f"makes the retired spelling an error. Run "
-            f"`{MIGRATE_COMMAND} <pak dir>` to rename the pak's content and "
+            f"`{MIGRATE_COMMAND} {_dir}` to rename the pak's content and "
             f"its references (knowledge/context/authoring/prefix_migration.md)."
         )
 
