@@ -58,7 +58,11 @@ Track-specific examples:
    once the file is listed in `adapter.yaml` `bundled_content`, and say in
    your report that it is unvalidated until then).
 4. **Write only under `content/symptoms/`, or under `content/sdk-adapters/<name>/symptoms/` when the brief names that pak.**
-5. **IDs are server-assigned.** No `id:` field in YAML.
+5. **IDs.** Leave `id:` out on new symptoms. `id:` (UUID) is for ported
+   content that must keep its source id. `disable_in_base_policy`,
+   `symptom_def_type` and `omit:` reproduce a source symptom on the
+   content-import XML path only; REST sync refuses the first two. Wire:
+   `knowledge/context/wire-formats/alert_fidelity_wire_format.md`.
 6. **Never install.** Never create alerts.
 
 ## YAML schema

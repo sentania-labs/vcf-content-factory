@@ -94,6 +94,10 @@ Key facts:
   only value observed). YAML: per-widget `navigations` with `dashboard`
   (by name) or `dashboard_id` (raw, external); see
   `knowledge/context/wire-formats/dashboard_navigations.md`.
+- Time range, widget descriptions, UI persistence (`ui:`) and per-type
+  product settings are expressible:
+  `knowledge/context/wire-formats/dashboard_fidelity_wire_format.md`.
+  `Section` needs 9.1.1+; Tier 2 pak builds refuse it.
 - No REST CRUD: delete only via UI action layer.
 
 ### Symptom definitions
@@ -107,6 +111,8 @@ Key facts:
 - Types: metric_static, metric_dynamic, property, message_event,
   fault_event, metric_event.
 - Hundreds of built-in symptoms ship with every adapter.
+- Optional `id:` and `disable_in_base_policy` (content-import XML
+  only): `knowledge/context/wire-formats/alert_fidelity_wire_format.md`.
 
 ### Alert definitions
 
@@ -119,6 +125,8 @@ Key facts:
 - References symptoms by name (resolved at sync time).
 - Has public enable/disable endpoint (unlike super metrics).
 - Impact badges: HEALTH, RISK, EFFICIENCY.
+- Optional `id:` and `disable_in_base_policy` (content-import XML
+  only): `knowledge/context/wire-formats/alert_fidelity_wire_format.md`.
 
 ### Report definitions
 
@@ -128,7 +136,9 @@ sections into a printable/exportable document.
 Key facts:
 - UUID is caller-owned.
 - Install path: content-zip (reports.zip containing content.xml).
-- References views and dashboards by name (resolved at validate).
+- References the project's views and dashboards by name; product-shipped
+  ones by `view_id:` / `dashboard_id:`
+  (`knowledge/context/wire-formats/template_fidelity_wire_format.md`).
 - No REST create — content-zip only.
 
 ## Cross-reference graph
@@ -158,7 +168,7 @@ Two schemes coexist:
 | Scheme | Content types | Authoring | Sync match |
 |---|---|---|---|
 | UUID-owned | SM, view, dashboard, report | Generate v4 on first validate, never change | Content-zip preserves UUID |
-| Name-owned | Custom group, symptom, alert | No `id` in YAML | REST match by `name` |
+| Name-owned | Custom group, symptom, alert | No `id` in YAML (optional `id:` keeps a ported content-import id) | REST match by `name` |
 
 For UUID-owned types, renaming is safe (UUID stays stable).
 For name-owned types, renaming creates a new object on sync.
@@ -179,6 +189,8 @@ Quick reference:
 | Alert → Symptom | `name: "<name>"` | symptom ID | sync |
 | Report → View | `view: "<name>"` | view UUID | validate |
 | Report → Dashboard | `dashboard: "<name>"` | dashboard UUID | validate |
+| Report → built-in View | `view_id: <uuid>` | verbatim | validate (own ids rejected) |
+| Report → built-in Dashboard | `dashboard_id: <uuid>` | verbatim | validate (own ids rejected) |
 
 ## Policy enablement
 

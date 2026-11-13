@@ -72,9 +72,14 @@ Track-specific examples:
 5. **Write only under `content/alerts/` and `content/recommendations/`, or the
    named pak's alerts and recommendations folders when the brief names that pak.**
    No other directories.
-6. **Alert IDs are server-assigned.** No `id:` field on alerts.
-   Recommendations also have no `id:` field — their ID is derived
-   at load time from `name` + `adapter_kind`.
+6. **IDs are derived.** Leave `id:` out on new content (alerts derive
+   `AlertDefinition-<adapter>-<slug>`, recommendations
+   `Recommendation-df-<adapter>-<slug>`). `id:` (a UUID on an alert, a
+   key on a recommendation) is only for ported content that must keep
+   its source id. `disable_in_base_policy: true` ships the alert
+   disabled in the default policy and renders only on the content-import
+   XML path (pak builds); REST sync and bundle installs refuse it. Wire:
+   `knowledge/context/wire-formats/alert_fidelity_wire_format.md`.
 7. **Never install.** Never create symptoms, views, dashboards, or
    any other content type.
 
@@ -153,8 +158,8 @@ ID at load time (`Recommendation-df-<adapter_kind>-<slug>` where
 slug is the name with the `[VCF Content Factory]` prefix stripped
 and whitespace/punctuation normalized to underscores).
 
-No `id:`, `key:`, or `priority:` fields on the recommendation
-itself — those are all either server-derived or alert-side.
+No `key:` or `priority:` on the recommendation itself (server-derived
+or alert-side); `id:` only as hard rule 6 says.
 
 ## Workflow
 

@@ -73,8 +73,11 @@ Track-specific examples:
 4. **Cross-references use names:** `view: "<exact view name>"`
 5. **Supported widget types:** `ResourceList`, `View`, `TextDisplay`,
    `Scoreboard`, `MetricChart`, `HealthChart`, `ParetoAnalysis`,
-   `Heatmap`, `AlertList`, `ProblemAlertsList`. Anything else →
-   TOOLSET GAP.
+   `Heatmap`, `AlertList`, `ProblemAlertsList`, `PropertyList`,
+   `ResourceRelationshipAdvanced`, `AlertVolume`, `Section`. Anything
+   else → TOOLSET GAP. `Section` needs Operations 9.1.1 or later: it
+   fails a Tier 2 pak build (paks support 8.18, RULE-019) and warns on
+   validate.
 6. **Validate:** `python -m vcfcf_dashboards validate`
    For a pak file, this default scan reads `content/` only and will not see
    your file (lesson `content-root-is-content-dir.md`). The pak check is
@@ -107,6 +110,14 @@ includes the dashboard folder rule; `name_path` defaults to
 Read existing `content/dashboards/*.yaml` and
 `knowledge/context/authoring/view_dashboard_design_guide.md`
 for YAML examples of each type.
+
+Default time range: `time_range: last7Days` (values in
+`knowledge/context/wire-formats/dashboard_fidelity_wire_format.md`).
+Re-expressing an existing dashboard at full fidelity (widget
+descriptions, Pareto bounds, units and additional columns, tag and
+custom filters, `ui:`, `omit:`): same file. Use `ui:` and `omit:` only
+to reproduce a source dashboard, never on a new one. SDK-adapter pak
+dashboards that use any fidelity field need a buildkit cut after 1.0.28.
 
 ## Interaction wiring
 
