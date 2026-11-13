@@ -331,7 +331,7 @@ on any instance without the framework:
 You: "package the VKS Core Consumption bundle as a distribution zip"
 Framework: → bundles every dependency (SMs + views + dashboard)
            → writes a self-contained installer (Python + PowerShell)
-           → produces dist/[VCF CF] VKS Core Consumption.zip
+           → produces dist/vks-core-consumption-bundle.zip
 ```
 
 Hand that to a colleague. They run `python3 install.py`, answer the

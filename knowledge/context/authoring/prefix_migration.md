@@ -19,19 +19,20 @@ prefix "[VCF Content Factory]"; factory content now uses "[VCF CF]". Run
 `python3 -m vcfcf_common migrate-prefix` ...
 ```
 
-Your clone has content written before the move. There is no period in which
-both spellings are accepted: by-name cross-references (a view column naming a
-super metric, a dashboard naming a view) would split across the two. Fix it
-in one step:
+Your clone has content written before the move. For factory content
+(`content/`, `third_party/`, `bundles/`) there is no period in which both
+spellings are accepted: by-name cross-references (a view column naming a
+super metric, a dashboard naming a view) would split across the two. Pak
+repos are the one exception, a transition (§Pak repos). Fix it in one step:
 
 1. Commit or stash your work (the command refuses a dirty tree unless
    `--force`, so the rename is its own reviewable diff).
 2. `python3 -m vcfcf_common migrate-prefix --dry-run` from the repo root:
    every line it would change.
 3. `python3 -m vcfcf_common migrate-prefix`, then the validation chain.
-4. Each pak repo is its own repo: `python3 -m vcfcf_common migrate-prefix
-   content/sdk-adapters/<name>` (or the path of a standalone pak checkout),
-   committed in that repo.
+4. Each pak repo is its own repo and moves on its own schedule (§Pak repos):
+   `python3 -m vcfcf_common migrate-prefix content/sdk-adapters/<name>` (or
+   the path of a standalone pak checkout), committed in that repo.
 5. Sync the renamed content, then clean up what the rename left on each
    instance (below).
 
@@ -46,7 +47,11 @@ text, so comments, quoting and key order stay as they were. It reads only:
 
 Nothing else is opened, so investigations, reviews, designs and recon logs
 keep their historical names even when the command runs at the repo root.
-`[VCF Content Factory](https://...)` Markdown links are kept. A label wrapped
+`[VCF Content Factory](https://...)` Markdown links are kept. The rule is
+lexical (the label directly followed by `(`), so it would also keep a *name*
+of that shape, such as `[VCF Content Factory](Beta) X`; its loader then
+rejects it with the retired-prefix error, and it is renamed by hand. No name
+in the corpus has that shape (2026-11-12). A label wrapped
 across two lines of a folded description is joined onto one. Every rewritten
 YAML file is re-parsed and must equal the original with only its strings
 rewritten; if not, nothing is written. A second run changes nothing.
@@ -68,14 +73,55 @@ Behaviour that depends on the prefix beyond a string literal:
 | AlertContent.xml / pak alert ids `AlertDefinition-<kind>-<slug(name)>`, slug-form symptom ids, `_rec_key` | `vcfcf_core/alerts/render.py` `_slug` | slugs `id_basis_name(name)` (the legacy spelling): ids unchanged |
 | Dashboard widget UUIDs `uuid5(widget::<dashboard name>::<local id>)` | `Widget.widget_id` | derived from `id_basis_name`: widget UUIDs unchanged |
 | Discrete release slugs | `discrete_builder._item_slug` | strip either spelling: unchanged |
-| Discrete zip file name `<prefix><display name>.zip` | `discrete_builder` | `[VCF CF] <name>.zip` |
+| Discrete zip file name | `discrete_builder._assemble_zip` | `[VCF CF] <title>.zip`, the prefix once (the display name's own prefix is stripped first; before, the name carried it twice). Release builds rename the zip to the release slug, so published names do not change |
 | Alert-to-symptom and alert-to-recommendation reference checks | alerts loader, `sdk_builder.check_bundled_content_references` | either spelling is checked (a legacy reference fails, with a migration hint) |
-| Pak `content_naming` | `sdk_builder.check_content_naming` | `factory_prefixed`: new prefix required, legacy an error even when the key is undeclared; `unprefixed`: neither spelling allowed |
+| Pak `content_naming` | `sdk_builder.check_content_naming` | `factory_prefixed` (declared or default): all names legacy, accepted with one warning per pak; the two spellings mixed, an error per legacy name; all new, silent (§Pak repos). `unprefixed`: neither spelling allowed (before, only the legacy one was checked) |
+| In-pak content paths: `content/dashboards/<dir>/`, `content/reports/<dir>/` (views and reports), `content/supermetrics/<name>.json`, `content/symptomdefs/<name>.xml`, `content/alertdefs/<name>.xml` | `sdk_builder._write_outer_pak`, `_view_slug` | slugged from `id_basis_name(name)` (the legacy spelling): paths unchanged |
+| Summary-tab binding key in `content/dashboards/dashboards.properties` (`<dir>=<AdapterKind>:<ResourceKind>`, the key the server-side installer binds by: `api-surface/summary_dashboard_pak_binding.md`) | `sdk_builder._write_outer_pak` | the dashboard directory above: key unchanged |
+| Dashboard `resources.properties` keys (the escaped dashboard name) | `sdk_builder._generate_dashboard_resources_properties` | new spelling: these are localization entries for the display name, consistent with `dashboard.json`; kept name-bearing by choice |
 | Dashboard name over 50 characters | `Dashboard.validate` | factory-prefixed: error stating the 41-character title budget; any other name: warning |
 | Distribution README bundle names | `readme_gen` | new prefix |
 
 So the rename changes display names and nothing that an installed object is
-keyed by, except where the platform keys by name.
+keyed by, except where the platform keys by name. For paks this is pinned by
+`tests/test_pak_render_prefix_stable.py`: a synthetic pak rendered with
+legacy names and with migrated names has the same file list and the same
+binding key, and its files differ by display strings only.
+
+## Pak repos
+
+Pak repos (`content/sdk-adapters/<name>/`, each its own repo) migrate at
+their own pace once an sdk-buildkit containing this change (1.0.29 or later)
+is released. A pak cannot move first: its release CI builds with the kit its
+`BUILDKIT_TAG` pins, and a kit before this change rejects the new prefix in
+a `factory_prefixed` pak. So for a transition, `check_content_naming`
+(`validate-sdk`, `build-sdk`, and `vcfcf_managementpacks validate` over the
+registered clones) treats a `factory_prefixed` pak, declared or default, as:
+
+| Pak's bundled names | Result |
+|---|---|
+| all prefixed names in the legacy spelling | accepted, one warning per pak naming `migrate-prefix` and saying a later kit makes the legacy spelling an error |
+| the two spellings mixed | an error per legacy name: the pak's by-name references would split |
+| all in the new spelling | passes, nothing printed |
+
+Factory content keeps the hard cut. The factory's CI, which clones the
+registered paks at their default branch, therefore stays green while they
+are unmigrated: each prints its warning.
+
+To migrate a pak:
+
+1. Wait for a released kit with this change (`sdk-buildkit-v1.0.29` or
+   later).
+2. From a factory clone, `python3 -m vcfcf_common migrate-prefix <pak dir>
+   --dry-run`, then without `--dry-run` (clean tree).
+3. In the same commit, bump the pak's `BUILDKIT_TAG` and its `SHA256SUMS` to
+   that kit.
+4. `validate-sdk` (the warning is gone), commit and PR in the pak repo.
+5. After the upgraded pak is installed, clean up on each instance
+   (§Removing the leftovers, run from the pak root).
+
+Do not author new-prefix content into an unmigrated pak: that makes it a
+mixed pak, which fails. Migrate it first.
 
 ## What an installed instance sees
 
@@ -104,21 +150,60 @@ so after an upgrade check for an old-named dashboard beside the new one.
 
 ## Removing the leftovers
 
-`python3 -m vcfcf_common cleanup-legacy-prefix [ROOT] [--profile NAME]
-[--types k1,k2] [--apply]`. `ROOT` is the factory checkout or pak repo whose
-content defines the names (for a pak, its `bundled_content`). Dry run by
-default; `--apply` deletes. An object is deleted only when all of these hold:
+```
+python3 -m vcfcf_common cleanup-legacy-prefix [ROOT] --profile NAME [--types k1,k2]
+python3 -m vcfcf_common cleanup-legacy-prefix [ROOT] --profile NAME --apply --plan-digest DIGEST
+```
+
+`ROOT` is the factory checkout or pak repo whose content defines the names
+(for a pak, its `bundled_content`). There is no default profile: pass
+`--profile`, or set `VCFOPS_PROFILE` (shell or `.env`); the first output line
+names the profile, its host and which of the two chose it. The default is a
+dry run. Flags are not abbreviated (`--appl` is an error, not `--apply`).
+
+An object is deleted only when all of these hold:
 
 1. its name is exactly `[VCF Content Factory] <title>` for a repo object
    named `[VCF CF] <title>` (no pattern or prefix match);
-2. the object named `[VCF CF] <title>` is installed;
-3. super metrics, views, dashboards, reports: that new-named twin carries the
-   repo UUID and the old-named object does not; anything else is a
-   CONFLICT, listed and left alone;
-4. custom groups, symptoms, alerts: the two are different objects.
+2. it is the same kind of object: symptoms and alerts match on name,
+   adapter kind and resource kind from the repo YAML, custom groups on name
+   and group type (`type:`, default `Environment`). A same-named object of
+   another kind is listed as SKIP and left alone. Example in the repo today:
+   the factory's MPB symptom `[VCF Content Factory] Synology UPS On Battery`
+   (`mpb_synology_dsm`/`ups`) and the synology pak's symptom of the same
+   name (`synology_diskstation`/`SynologyUps`); a run from either root
+   touches only its own;
+3. the object named `[VCF CF] <title>`, of the same kind, is installed;
+4. super metrics, views, reports: never deleted. Their rename lands in place
+   (same UUID), so a legacy-named one under another id is not a leftover of
+   this migration (a pak's object, a user's clone): CONFLICT. One under the
+   repo id is the repo object not yet synced: SKIP;
+5. dashboards: the new-named twin carries the repo UUID, the old-named one
+   does not, and the old one's owner (`getDashboardList` `owner`) is the
+   account the factory's dashboard sync imports as on this profile
+   (`/api/auth/currentuser`, the account `vcfcf_dashboards sync` stamps).
+   Anything else is CONFLICT. The listing shows each dashboard's owner and
+   the twin's id;
+6. custom groups, symptoms, alerts: the two are different objects.
 
-It deletes dependents first (dashboards, views, alerts, symptoms, custom
-groups, super metrics). Report definitions have no delete API: a report
-leftover is listed as MANUAL (Administration > Content > Reports).
+The dry run ends with what to back up: a content export of the profile
+(Administration > Content > Export, all content types) or a snapshot of the
+instance, and the list of objects to be deleted. It then prints a plan
+digest (over the profile, host and every listed verdict). `--apply` needs
+`--plan-digest` with that digest: it recomputes the plan and deletes nothing
+unless the digest matches, so it deletes exactly what was reviewed, on the
+instance it was reviewed on.
+
+Deletes run dependents first (dashboards, alerts, symptoms, custom groups)
+and stop at the first failure, listing what was deleted and what was not.
 Recommendations are not checked: their key does not change. Exit 0 clean,
-1 when a conflict was listed, 2 on a failed delete or bad arguments.
+1 when a conflict was listed, 2 on a refused apply, a failed delete or bad
+arguments.
+
+## The core wheel and the external migrator
+
+`vcfcf_core` gains `naming.py` and behavior (the dashboard name error, the
+widget-id basis). The external migrator imports only
+`extractor._*_from_export_zip` and `supermetrics.crossref.crossref_names`
+from it, both unchanged, so nothing there breaks. A `core-v*` tag is needed
+only when the migrator should pick this change up.
