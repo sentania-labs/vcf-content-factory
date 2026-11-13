@@ -94,6 +94,9 @@ _B1_BUNDLE = REPO_ROOT / "bundles" / "storage-path-monitoring.yaml"
 _B1_ALERT = "content/alerts/cluster_storage_path_inconsistency.yaml"
 _B1_SYMPTOM = "content/symptoms/cluster_storage_paths_inconsistent.yaml"
 _B1_REC = "content/recommendations/investigate_storage_path_degradation.yaml"
+# The factory name prefix as the repo's own content spells it, so these tests
+# hold on either side of a prefix migration.
+_PREFIX = yaml.safe_load((REPO_ROOT / _B1_ALERT).read_text(encoding="utf-8"))["name"].split("] ", 1)[0] + "] "
 
 
 def _b1_repo(tmp_path, *, alert_extra=None, symptom_extra=None, rec_extra=None) -> Path:
@@ -151,7 +154,7 @@ def test_discrete_build_refuses_xml_only_alert_fields(tmp_path, field):
     from vcfcf_packaging.discrete_builder import build_discrete
     proj = tmp_path / "third_party" / "probe"
     data = yaml.safe_load((REPO_ROOT / _B1_ALERT).read_text(encoding="utf-8"))
-    data["name"] = "[VCF Content Factory] B1 Discrete Probe Alert"
+    data["name"] = _PREFIX + "B1 Discrete Probe Alert"
     data[field] = True if field == "disable_in_base_policy" else ALERT_ID
     _write(proj / "alerts" / "probe.yaml", data)
     out = tmp_path / "discrete"
@@ -426,7 +429,7 @@ def test_reports_validate_warns_on_an_unknown_view_id(tmp_path, monkeypatch, cap
     from vcfcf_reports import cli as rcli
     (tmp_path / "v").mkdir()
     (tmp_path / "d").mkdir()
-    p = _write(tmp_path / "r.yaml", {"id": REPORT_ID, "name": "[VCF Content Factory] Ref Report",
+    p = _write(tmp_path / "r.yaml", {"id": REPORT_ID, "name": _PREFIX + "Ref Report",
                                      "description": "probe", "subject_types": [],
                                      "sections": [{"type": "View", "view_id": UNKNOWN_ID}]})
     monkeypatch.chdir(REPO_ROOT)
