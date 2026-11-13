@@ -108,6 +108,11 @@ PROPERTY_OPERATORS = {
 }
 DYNAMIC_DIRECTIONS = {"ABOVE", "BELOW", "ABNORMAL"}
 
+# symptomDefType values seen in product exports (built-ins: 161 / 37) and one
+# third-party pak (7 condition_self).
+SYMPTOM_DEF_TYPES = {"condition_self", "condition_population"}
+SYMPTOM_OMIT = {"wait_cycles", "cancel_cycles", "instanced"}
+
 
 _UUID_RE = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
@@ -128,6 +133,13 @@ class SymptomDef:
     source_path: Optional[Path] = None
     version: str = "1.0.0"  # internal semver (released not applicable to symptoms)
     id: Optional[str] = None  # UUID preserved from original for pak content-import
+    # Fidelity (alert_fidelity_wire_format.md), content-import XML only:
+    # disableInBasePolicy, symptomDefType (condition_self / condition_population,
+    # the alert editor's inline condition symptoms), and omit (YAML names of
+    # attributes the source leaves out: wait_cycles, cancel_cycles, instanced).
+    disable_in_base_policy: bool = False
+    symptom_def_type: Optional[str] = None
+    omit: List[str] = field(default_factory=list)
 
     def validate(self, enforce_framework_prefix: bool = True) -> None:
         if not self.name or not self.name.strip():
@@ -162,7 +174,36 @@ class SymptomDef:
             raise SymptomValidationError(
                 f"{self.name}: cancel_cycles must be >= 1"
             )
+        self._validate_fidelity()
         self._validate_condition(self.condition)
+
+    def _validate_fidelity(self) -> None:
+        src = f"{self.source_path}: " if self.source_path else ""
+        if self.symptom_def_type is not None and self.symptom_def_type not in SYMPTOM_DEF_TYPES:
+            raise SymptomValidationError(
+                f"{src}{self.name}: symptom_def_type must be one of {sorted(SYMPTOM_DEF_TYPES)}; "
+                f"got {self.symptom_def_type!r}"
+            )
+        bad = [o for o in self.omit if o not in SYMPTOM_OMIT]
+        if bad or len(set(self.omit)) != len(self.omit):
+            raise SymptomValidationError(
+                f"{src}{self.name}: omit accepts {sorted(SYMPTOM_OMIT)}, each once; got {self.omit!r}"
+            )
+        # An absent waitCycle / cancelCycle means 1 (alertDefinitionSchema.xsd),
+        # so only a value of 1 can be left out without changing the symptom.
+        for o, val in (("wait_cycles", self.wait_cycles), ("cancel_cycles", self.cancel_cycles)):
+            if o in self.omit and val != 1:
+                raise SymptomValidationError(
+                    f"{src}{self.name}: omit {o} needs {o}: 1 (an absent attribute means 1); got {val}"
+                )
+        if "instanced" in self.omit:
+            cond = self.condition if isinstance(self.condition, dict) else {}
+            if cond.get("instanced"):
+                raise SymptomValidationError(f"{src}{self.name}: omit instanced contradicts instanced: true")
+            if cond.get("type") not in ("metric_static", "property"):
+                raise SymptomValidationError(
+                    f"{src}{self.name}: omit instanced applies to metric_static and property conditions"
+                )
 
     def _validate_condition(self, cond: dict) -> None:
         tag = f"{self.name}: condition"
@@ -227,6 +268,15 @@ class SymptomDef:
 
     def to_wire(self) -> dict:
         """Serialize to the JSON body expected by POST /api/symptomdefinitions."""
+        xml_only = [k for k, v in (("disable_in_base_policy", self.disable_in_base_policy),
+                                   ("symptom_def_type", self.symptom_def_type)) if v]
+        if xml_only:
+            # The Suite API symptom-definition schema has neither field.
+            raise SymptomValidationError(
+                f"{self.source_path or self.name}: {', '.join(xml_only)} is only rendered on "
+                f"the content-import XML path (pak builds, AlertContent.xml); the REST "
+                f"symptom-definition body has no such field"
+            )
         return {
             "name": self.name,
             "description": self.description,
@@ -320,6 +370,16 @@ def load_file(path: str | Path, enforce_framework_prefix: bool = True) -> Sympto
     raw_id = data.get("id")
     sym_id: Optional[str] = str(raw_id).strip() if raw_id is not None else None
 
+    disable_raw = data.get("disable_in_base_policy", False)
+    if not isinstance(disable_raw, bool):
+        raise SymptomValidationError(f"{path}: disable_in_base_policy must be a bool")
+    sdt_raw = data.get("symptom_def_type")
+    if sdt_raw is not None and not isinstance(sdt_raw, str):
+        raise SymptomValidationError(f"{path}: symptom_def_type must be a string")
+    omit_raw = data.get("omit") or []
+    if not isinstance(omit_raw, list) or not all(isinstance(o, str) for o in omit_raw):
+        raise SymptomValidationError(f"{path}: omit must be a list of names")
+
     sd = SymptomDef(
         name=str(data.get("name", "")).strip(),
         adapter_kind=str(data.get("adapter_kind", "") or "").strip(),
@@ -332,6 +392,9 @@ def load_file(path: str | Path, enforce_framework_prefix: bool = True) -> Sympto
         source_path=path,
         version=version,
         id=sym_id,
+        disable_in_base_policy=disable_raw,
+        symptom_def_type=sdt_raw,
+        omit=list(omit_raw),
     )
     sd.validate(enforce_framework_prefix=enforce_framework_prefix)
     return sd

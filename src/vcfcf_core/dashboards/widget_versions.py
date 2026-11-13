@@ -83,11 +83,12 @@ def widget_version_problems(
 ) -> List[str]:
     """Return one message per widget type that may not import on the target.
 
-    *widgets* is ``(local_id, type)`` pairs.  With *target_version* set,
-    a type is reported when its floor is above the target.  With no target
-    (no bundle, release or adapter field declares one today), every type
-    that has a floor is reported, because the dashboard cannot install on
-    builds below that floor and nothing says those builds are out of scope.
+    *widgets* is ``(local_id, type)`` pairs.  With *target_version* set
+    (the Tier 2 pak build passes RULE-019's oldest supported line), a type
+    is reported when its floor is above the target.  With no target
+    (content bundles declare none), every type that has a floor is
+    reported, because the dashboard cannot install on builds below that
+    floor and nothing says those builds are out of scope.
     """
     target = parse_ops_version(target_version) if target_version is not None else None
     by_type: Dict[str, List[str]] = {}

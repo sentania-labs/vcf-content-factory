@@ -92,6 +92,7 @@ class ReportValidationError(ValueError):
 _UUID_RE = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
 )
+_HEX6_RE = re.compile(r"^[0-9A-Fa-f]{6}$")
 
 # Supported section types.
 SECTION_TYPES = {"CoverPage", "TableOfContents", "View", "Dashboard"}
@@ -125,6 +126,15 @@ class Section:
     # Dashboard sections
     dashboard_name: str = ""
     dashboard_id: str = ""
+    # Fidelity (wire-formats/template_fidelity_wire_format.md). external: the section names
+    # a product-shipped (or other-pak) view or dashboard by raw id
+    # (view_id: / dashboard_id:), never bundled. font_color / cover_colorize:
+    # CoverPage ContentFormatting. omit_formatting: a View section without
+    # ContentFormatting (most built-in View sections).
+    external: bool = False
+    font_color: Optional[str] = None
+    cover_colorize: Optional[bool] = None
+    omit_formatting: bool = False
 
 
 @dataclass
@@ -144,6 +154,9 @@ class ReportDef:
     source_path: Optional[Path] = None
     released: bool = False   # publish gate
     version: str = "1.0.0"  # internal semver
+    # `subject_types: []` written explicitly: a report with no SubjectType
+    # (five third-party templates). An absent key is still an error.
+    no_subject_types: bool = False
 
     def validate(self, enforce_framework_prefix: bool = True) -> None:
         if not self.name.strip():
@@ -156,9 +169,10 @@ class ReportDef:
                 f'"[VCF Content Factory]" prefix (see CLAUDE.md §Hard rules #5). For third-party '
                 f"bundle content, ensure the bundle manifest sets factory_native: false."
             )
-        if not self.subject_types:
+        if not self.subject_types and not self.no_subject_types:
             raise ReportValidationError(
-                f"{self.name}: at least one subject_type is required"
+                f"{self.name}: at least one subject_type is required "
+                f"(or subject_types: [] for a report with no SubjectType)"
             )
         for st in self.subject_types:
             if not st.adapter_kind:
@@ -184,8 +198,15 @@ class ReportDef:
                     f"{self.name}: section type must be one of "
                     f"{sorted(SECTION_TYPES)}; got {sec.type!r}"
                 )
+            if (sec.font_color is not None or sec.cover_colorize is not None) and sec.type != "CoverPage":
+                raise ReportValidationError(
+                    f"{self.name}: font_color and CoverPage colorize are only rendered "
+                    f"on a CoverPage section"
+                )
+            if sec.omit_formatting and sec.type != "View":
+                raise ReportValidationError(f"{self.name}: omit formatting applies to View sections only")
             if sec.type == "View":
-                if not sec.view_name:
+                if not sec.view_name and not sec.external:
                     raise ReportValidationError(
                         f"{self.name}: View section missing 'view' name"
                     )
@@ -200,7 +221,7 @@ class ReportDef:
                         f"{sorted(VALID_ORIENTATIONS)}; got {sec.orientation!r}"
                     )
             if sec.type == "Dashboard":
-                if not sec.dashboard_name:
+                if not sec.dashboard_name and not sec.external:
                     raise ReportValidationError(
                         f"{self.name}: Dashboard section missing 'dashboard' name"
                     )
@@ -347,36 +368,69 @@ def load_file(
 
     # sections
     sections: List[Section] = []
-    for raw_sec in (data.get("sections") or []):
+    for i, raw_sec in enumerate(data.get("sections") or []):
         sec_type = str(raw_sec.get("type", "")).strip()
+        where = f"{path}: sections[{i}]"
+        raw_omit = raw_sec.get("omit") or []
+        if raw_omit not in ([], ["formatting"]):
+            raise ReportValidationError(f"{where}: omit accepts only [formatting]; got {raw_omit!r}")
+        omit_formatting = raw_omit == ["formatting"]
 
         if sec_type in ("CoverPage", "TableOfContents"):
-            sections.append(Section(type=sec_type))
+            sec = Section(type=sec_type)
+            if "font_color" in raw_sec:
+                fc = raw_sec["font_color"]
+                if not isinstance(fc, str) or not _HEX6_RE.match(fc):
+                    raise ReportValidationError(f"{where}: font_color must be six hex digits, quoted; got {fc!r}")
+                sec.font_color = fc
+            if "colorize" in raw_sec:
+                if not isinstance(raw_sec["colorize"], bool):
+                    raise ReportValidationError(f"{where}: colorize must be a bool")
+                sec.cover_colorize = raw_sec["colorize"]
+            sec.omit_formatting = omit_formatting
+            sections.append(sec)
 
-        elif sec_type == "View":
-            view_name = str(raw_sec.get("view", "") or "").strip()
-            view_id = view_index.get(view_name, "")
+        elif sec_type in ("View", "Dashboard"):
+            key, id_key = ("view", "view_id") if sec_type == "View" else ("dashboard", "dashboard_id")
+            index = view_index if sec_type == "View" else dashboard_index
+            if key in raw_sec and id_key in raw_sec:
+                raise ReportValidationError(
+                    f"{where}: a {sec_type} section sets exactly one of '{key}' (the "
+                    f"project's own {key}, by exact name) or '{id_key}' (a product-shipped "
+                    f"or other-pak {key}, by raw id)"
+                )
             orientation = str(raw_sec.get("orientation", "Landscape") or "Landscape").strip()
-            colorize_raw = raw_sec.get("colorize", True)
-            colorize = bool(colorize_raw) if not isinstance(colorize_raw, bool) else colorize_raw
-            sections.append(Section(
-                type="View",
-                view_name=view_name,
-                view_id=view_id,
-                orientation=orientation,
-                colorize=colorize,
-            ))
-
-        elif sec_type == "Dashboard":
-            dashboard_name = str(raw_sec.get("dashboard", "") or "").strip()
-            dashboard_id = dashboard_index.get(dashboard_name, "")
-            orientation = str(raw_sec.get("orientation", "Landscape") or "Landscape").strip()
-            sections.append(Section(
-                type="Dashboard",
-                dashboard_name=dashboard_name,
-                dashboard_id=dashboard_id,
-                orientation=orientation,
-            ))
+            external = id_key in raw_sec
+            if external:
+                ref_name = ""
+                ref_id = str(raw_sec[id_key] or "").strip().lower()
+                if not _UUID_RE.match(ref_id):
+                    raise ReportValidationError(f"{where}: {id_key} must be a UUID; got {raw_sec[id_key]!r}")
+                own = [n for n, v in index.items() if v == ref_id]
+                if own:
+                    raise ReportValidationError(
+                        f"{where}: {id_key} {ref_id} is this project's own {key} {own[0]!r}; "
+                        f"reference it by name ({key}: \"{own[0]}\") so it is bundled"
+                    )
+            else:
+                ref_name = str(raw_sec.get(key, "") or "").strip()
+                ref_id = index.get(ref_name, "")
+            if sec_type == "View":
+                colorize_raw = raw_sec.get("colorize", True)
+                colorize = bool(colorize_raw) if not isinstance(colorize_raw, bool) else colorize_raw
+                if omit_formatting and "colorize" in raw_sec:
+                    raise ReportValidationError(f"{where}: omit formatting contradicts colorize")
+                sections.append(Section(
+                    type="View", view_name=ref_name, view_id=ref_id, orientation=orientation,
+                    colorize=colorize, external=external, omit_formatting=omit_formatting,
+                ))
+            else:
+                if "colorize" in raw_sec:
+                    raise ReportValidationError(f"{where}: colorize is not rendered on a Dashboard section")
+                sections.append(Section(
+                    type="Dashboard", dashboard_name=ref_name, dashboard_id=ref_id,
+                    orientation=orientation, external=external, omit_formatting=omit_formatting,
+                ))
 
         else:
             # Unknown section types are preserved so validate() can report them
@@ -396,7 +450,9 @@ def load_file(
     released = bool(released_raw) if isinstance(released_raw, bool) else False
     version = str(data.get("version", "1.0.0") or "1.0.0").strip() or "1.0.0"
 
+    raw_st = data.get("subject_types")
     rd = ReportDef(
+        no_subject_types=isinstance(raw_st, list) and raw_st == [],
         id=report_id,
         name=name,
         description=description,

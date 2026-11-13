@@ -317,9 +317,21 @@ def _render_symptom_definition(parent: ET.Element, sym, all_sym_names: set) -> N
         "resourceKind": resource_kind,
         "waitCycle": str(sym.wait_cycles),
     }
+    # Fidelity fields (alert_fidelity_wire_format.md), emitted only when set.
+    omit = getattr(sym, "omit", None) or []
+    if "wait_cycles" in omit:
+        del attribs["waitCycle"]
+    if "cancel_cycles" in omit:
+        del attribs["cancelCycle"]
+    if getattr(sym, "disable_in_base_policy", False):
+        attribs["disableInBasePolicy"] = "true"
+    if getattr(sym, "symptom_def_type", None):
+        attribs["symptomDefType"] = sym.symptom_def_type
     sd_elem = ET.SubElement(parent, "SymptomDefinition", attribs)
     state_elem = ET.SubElement(sd_elem, "State", {"severity": _xml_severity(sym.severity)})
     _add_condition_element(state_elem, sym.condition)
+    if "instanced" in omit:
+        state_elem.find("Condition").attrib.pop("instanced", None)
 
 
 # ---------------------------------------------------------------------------
@@ -354,7 +366,7 @@ def _render_alert_definition(
     adapter_kind = alert.adapter_kind
     resource_kind = alert.resource_kind
     name = alert.name
-    aid = _alert_id(adapter_kind, name)
+    aid = f"AlertDefinition-{alert.id}" if getattr(alert, "id", None) else _alert_id(adapter_kind, name)
 
     attribs = {
         "adapterKind": adapter_kind,
@@ -365,6 +377,15 @@ def _render_alert_definition(
         "subType": str(alert.sub_type),
         "type": str(alert.type),
     }
+    # waitCycle / cancelCycle default to 1 when absent (alertDefinitionSchema
+    # .xsd), so they are written only when they differ; every alert in the
+    # repo and the registered paks uses 1. disableInBasePolicy when set.
+    if getattr(alert, "wait_cycles", 1) != 1:
+        attribs["waitCycle"] = str(alert.wait_cycles)
+    if getattr(alert, "cancel_cycles", 1) != 1:
+        attribs["cancelCycle"] = str(alert.cancel_cycles)
+    if getattr(alert, "disable_in_base_policy", False):
+        attribs["disableInBasePolicy"] = "true"
     ad_elem = ET.SubElement(parent, "AlertDefinition", attribs)
 
     # Build severity for State — use the criticality from the alert (lowercased
@@ -452,7 +473,7 @@ def _render_alert_definition(
         rec_priority = ref.priority if hasattr(ref, "priority") else ref.get("priority", 1)
         rec_obj = rmap.get(rec_name)
         if rec_obj is not None:
-            resolved_recs.append((rec_priority, rec_obj.id))
+            resolved_recs.append((rec_priority, getattr(rec_obj, "explicit_id", None) or rec_obj.id))
         # Unresolved recommendations are silently skipped in render
         # (validation already caught missing [VCF Content Factory] refs)
     if resolved_recs:
@@ -525,7 +546,7 @@ def render_alert_content_xml(
         for rec in recommendations:
             if not hasattr(rec, "id"):
                 continue  # skip non-Recommendation objects (safety guard)
-            rec_elem = ET.SubElement(recs_elem, "Recommendation", {"key": rec.id})
+            rec_elem = ET.SubElement(recs_elem, "Recommendation", {"key": getattr(rec, "explicit_id", None) or rec.id})
             desc_elem = ET.SubElement(rec_elem, "Description")
             desc_elem.text = rec.description or ""
 

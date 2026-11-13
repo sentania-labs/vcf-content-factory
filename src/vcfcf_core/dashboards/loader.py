@@ -1756,6 +1756,20 @@ class MetricSpec:
     label: str = ""
     is_string_metric: bool = False
     max_value: float | None = None
+    # Fidelity (dashboard_fidelity_wire_format.md): emitted only when set.
+    link: Optional[str] = None             # entry link (default "")
+    label_localized: Optional[str] = None  # labelLocalized
+    label_orig: Optional[str] = None       # labelOrig
+    metric_unit: Optional[str] = None      # metricUnit (older editor's unit key)
+    def_unit: Optional[str] = None         # defUnit
+    omit: List[str] = field(default_factory=list)  # METRIC_OMIT_KEYS
+    # resourceKindName override: exports carry the kind's display name
+    # ("Cluster Compute Resource"); the renderer otherwise writes the kind
+    # key, or the world display name. Cosmetic, not a binding field.
+    resource_kind_name: Optional[str] = None
+    # `unit: ""` written explicitly renders unit "" (exports carry it) where
+    # an absent unit renders null.
+    unit_explicit_empty: bool = False
 
 
 @dataclass
@@ -1856,9 +1870,22 @@ class ScoreboardConfig:
     # existing output is byte-identical.
     show_dt: bool = False
     refresh_content: bool = True
+    # oldMetricValues: historically always true; the product's own exports
+    # carry false (every Scoreboard in the third-party corpus).
+    old_metric_values: bool = True
+    # ui.gauge_switches: true emits showRemaining / showPercentText /
+    # focusOnPercent on a non-gauge too (exports carry them on themes 4 and
+    # 8, where the component ignores them).
+    gauge_switches_explicit: bool = False
+    # pin_resource: render the widget pin as config.resource[] {name, id}
+    # (a third-party self-provider Scoreboard pinned to vSphere World). Off
+    # by default: resourceKind-mode Scoreboards in the repo carry a pin the
+    # renderer has never emitted, and their output must not move.
+    pin_resource: bool = False
 
 
-_VALID_SCOREBOARD_LAYOUT_MODES = frozenset({"fixedView", "floatingView"})
+# fixedSize: six third-party Scoreboards (themes 4 and 8).
+_VALID_SCOREBOARD_LAYOUT_MODES = frozenset({"fixedView", "floatingView", "fixedSize"})
 _VALID_SCOREBOARD_METRIC_MODES = frozenset({"resourceKind", "resource"})
 
 
@@ -1866,6 +1893,7 @@ _VALID_SCOREBOARD_METRIC_MODES = frozenset({"resourceKind", "resource"})
 class MetricChartConfig:
     """Type-specific config for a MetricChart widget."""
     metrics: List[MetricSpec] = field(default_factory=list)
+    refresh_content: bool = True
 
 
 @dataclass
@@ -1947,6 +1975,17 @@ class ParetoAnalysisConfig:
     depth: int = 10
     regeneration_time: int = 15
     round_decimals: float = 1
+    # Fidelity (dashboard_fidelity_wire_format.md §ParetoAnalysis).
+    refresh_content: bool = True
+    max_value_set: bool = False            # emit config.maxValue
+    max_value: Optional[float] = None
+    metric_label: Optional[str] = None     # config.metricName (default metric_name)
+    metric_unit: Optional[tuple] = None    # (metricUnitId, metricUnitName)
+    yellow_bound: Optional[float] = None
+    orange_bound: Optional[float] = None
+    red_bound: Optional[float] = None
+    percentile_value: Optional[float] = None
+    additional_columns: List["ParetoAdditionalColumn"] = field(default_factory=list)
 
 
 @dataclass
@@ -2075,6 +2114,16 @@ class HeatmapTab:
     color: HeatmapColorThreshold = field(default_factory=HeatmapColorThreshold)
     solid_coloring: bool = False
     focus_on_groups: bool = True
+    # Fidelity (dashboard_fidelity_wire_format.md §Heatmap).
+    name_localized: Optional[str] = None
+    name_orig: Optional[str] = None
+    model_id: bool = False                 # emit the tab's extModel id
+    tag_filter: Optional["TagFilterSpec"] = None
+    filter_mode: Optional[str] = None      # tagPicker (default) | customFilter
+    custom_filter: Optional[list] = None   # List[HeatmapFilterGroup]
+    custom_filter_null: bool = False
+    group_by_parent_text: Optional[str] = None
+    omit: List[str] = field(default_factory=list)
 
 
 @dataclass
@@ -2094,6 +2143,7 @@ class HeatmapConfig:
     tabs: List[HeatmapTab] = field(default_factory=list)
     mode: str = "all"
     depth: int = 10
+    selected_tab: int = 0                  # config.value
 
 
 @dataclass
@@ -2247,7 +2297,7 @@ _SUPPORTED_COLUMN_PRESETS = frozenset({"name-only"})
 
 # Keys a ``navigations:`` entry may carry. Anything else is a typo (for
 # example ``dashbaord:``) and is rejected rather than silently ignored.
-_NAVIGATION_KEYS = ("dashboard", "dashboard_id", "widgets", "label")
+_NAVIGATION_KEYS = ("dashboard", "dashboard_id", "widgets", "widget_ids", "label")
 
 
 @dataclass
@@ -2277,6 +2327,192 @@ class Navigation:
     dashboard_id: str = ""
     widgets: List[str] = field(default_factory=list)
     label: str = ""
+    # dashboard_id entries only: receiving widgets on the foreign target, by
+    # raw widget UUID (a product-shipped dashboard's widget ids are fixed
+    # content). 28 third-party navigations name one this way.
+    widget_ids: List[str] = field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Dashboard and widget fidelity (2026-11-12). Every field below is optional
+# and, when absent, renders exactly what the renderer emitted before. Wire
+# format, evidence and YAML forms:
+# knowledge/context/wire-formats/dashboard_fidelity_wire_format.md.
+# Evidence corpora: the 9.0.2, 8.18.7 and 9.1.1 built-in dashboard exports of
+# clean labs (180, 163 and 179 dashboards) and one third-party pak's 52
+# dashboards. Every closed vocabulary below holds only values seen there.
+# ---------------------------------------------------------------------------
+
+#: Dashboard time range (``states[]`` key ``permDashboardTime_dashboard_<id>``)
+#: -> the verbatim wire value the product writes for it. Seen in all four
+#: corpora; the absolute-date form and the UI's ``ext-element-<n>`` residue
+#: are not modeled.
+DASHBOARD_TIME_RANGES: dict[str, str] = {
+    "last10Minutes": "o%3AdateRange%3Ds%253Alast10Minutes%5EdateRangeText%3Ds%253A10M",
+    "lastHour": "o%3AdateRange%3Ds%253AlastHour%5EdateRangeText%3Ds%253A1H",
+    "last6Hour": "o%3AdateRange%3Ds%253Alast6Hour%5EdateRangeText%3Ds%253A6H",
+    "last12Hour": "o%3AdateRange%3Ds%253Alast12Hour%5EdateRangeText%3Ds%253ALast%252012%2520hours",
+    "last24Hour": "o%3AdateRange%3Ds%253Alast24Hour%5EdateRangeText%3Ds%253A24H",
+    "last7Days": "o%3AdateRange%3Ds%253Alast7Days%5EdateRangeText%3Ds%253A7D",
+    "last30Days": "o%3AdateRange%3Ds%253Alast30Days%5EdateRangeText%3Ds%253ALast%252030%2520days",
+    "last90Days": "o%3AdateRange%3Ds%253Alast90Days%5EdateRangeText%3Ds%253ALast%252090%2520days",
+    "currentMonth": "o%3AdateRange%3Ds%253AcurrentMonth%5EdateRangeText%3Ds%253ACurrent%2520month",
+}
+
+#: Widget ``states[]`` key prefixes per factory widget type. A key is always
+#: ``<prefix>widget_<dashboard id>_<widget id>`` (no exception in any
+#: corpus), so YAML names only the prefix and the renderer composes the rest.
+WIDGET_STATE_PREFIXES: dict[str, frozenset] = {
+    "AlertList": frozenset({
+        "permAlertGrid_perm_", "permAlertListDateRangePicked_", "permDateFilter_",
+        "permViewMode_", "perm_toolbarVisible_",
+    }),
+    "HealthChart": frozenset({"permDateRange_HealthChart_", "perm_toolbarVisible_"}),
+    "Heatmap": frozenset({
+        "permBtn_showTextBtn_perm_HeatMap_", "permBtn_zoomInBtn_HeatMap_",
+        "permBtn_zoomInBtn_perm_HeatMap_", "perm_HeatMap_", "perm_toolbarVisible_",
+    }),
+    "MetricChart": frozenset({
+        "permBtn_anomalies_permMetricChart_", "permBtn_dynamicThresholds_permMetricChart_",
+        "permBtn_navigator_permMetricChart_", "permBtn_pan_permMetricChart_",
+        "permBtn_realTime_permMetricChart_", "permBtn_showDataValues_permMetricChart_",
+        "permBtn_showEntireDT_permMetricChart_", "permBtn_splitGraphs_permMetricChart_",
+        "permBtn_stackedGraph_permMetricChart_", "permBtn_thresholds_permMetricChart_",
+        "permBtn_trendLine_permMetricChart_", "permBtn_zoomAllGraphs_permMetricChart_",
+        "permBtn_zoomTheView_permMetricChart_", "permChartHeight__permMetricChart_",
+        "permDateRange1_permMetricChart_", "permDateRange2_permMetricChart_",
+        "permDateRange3_permMetricChart_", "permMetricChart_", "perm_toolbarVisible_",
+    }),
+    "ParetoAnalysis": frozenset({"perm_toolbarVisible_"}),
+    "PropertyList": frozenset({"permMetricListDataGrid_metricGrid_", "perm_toolbarVisible_"}),
+    "ResourceList": frozenset({"permResGrid_", "perm_toolbarVisible_"}),
+    "ResourceRelationshipAdvanced": frozenset({
+        "perm_ResourceRelationshipTree_", "perm_ResourceRelationshipViewer_",
+        "perm_toolbarVisible_", "perm_viewerType_",
+    }),
+    "Scoreboard": frozenset({"perm_toolbarVisible_"}),
+    "View": frozenset({
+        "permPageSize_", "permSelectedDate_", "permTableView_", "perm_isDashboardTime_",
+        "perm_toolbarVisible_",
+    }),
+}
+
+# A widget state value is an ExtJS state-provider string, URL-encoded once
+# (b:, s:, o:, n:, a: after decoding) or, for the ResourceList grid, more
+# than once. Only that alphabet is accepted. A list view's table state embeds
+# the widget's own ``widget_<dashboard id>_<widget id>`` in its column ids;
+# YAML writes that as ``{self}`` and the renderer expands it, so the value
+# follows the widget's id.
+_WIDGET_STATE_VALUE_RE = re.compile(r"^(?:[bsona]%3A|o%25)[A-Za-z0-9%._~*'()!/-]*$")
+WIDGET_STATE_SELF_TOKEN = "{self}"
+
+#: Wire config keys a widget ``omit:`` entry removes, per widget type. Each
+#: is a key the renderer emits by default that some product export leaves out.
+WIDGET_OMIT_KEYS: dict[str, dict[str, tuple]] = {
+    "AlertList": {"alert_definitions": ("alertDefinitions",)},
+    "ResourceRelationshipAdvanced": {
+        "pagination_number": ("paginationNumber",),
+        "select_first_row": ("selectFirstRow",),
+    },
+    "Scoreboard": {"sub_mode": ("metric", "subMode")},
+    "MetricChart": {"sub_mode": ("metric", "subMode")},
+}
+
+#: Metric entry ``omit:`` (Scoreboard / MetricChart ``metrics:`` entries):
+#: entry keys some exports leave out. ``unit`` drops ``unit`` and
+#: ``metricUnitId`` together (they never appear apart in any corpus).
+METRIC_OMIT_KEYS: dict[str, tuple] = {
+    "label": ("label",),
+    "max_value": ("maxValue",),
+    "handle_old_coloring": ("handleOldColoring",),
+    "unit": ("unit", "metricUnitId"),
+    "link": ("link",),
+}
+
+#: Heatmap tab ``omit:`` entries.
+HEATMAP_TAB_OMIT = frozenset({"tag_filter", "group_by_kind_keys", "color_min_value", "custom_filter"})
+
+# Tag-picker filter values seen on the wire (``tagFilter.value.state`` and
+# ``.status``): a third-party HealthChart and six built-in ResourceLists.
+_TAG_FILTER_STATES = frozenset({"2"})
+_TAG_FILTER_STATUSES = frozenset({"4"})
+
+# Heatmap tab customFilter conditions seen on the wire.
+_HEATMAP_FILTER_TYPES = frozenset({"properties", "metrics"})
+_HEATMAP_FILTER_CONDITIONS = frozenset({"EQUALS", "GREATER_THAN"})
+
+# Dashboard-level legacy layout values seen on the wire.
+_COLUMN_PROPORTIONS = frozenset({"1", "1-1", "0.5", "0.5-0.5", "0.333-0.334-0.333", "0.95", "0"})
+_COLUMN_COUNTS = frozenset({-1, 0, 1, 2, 3})
+_DOC_CENTER_KEY_RE = re.compile(r"^vcom_\d+$")
+# folder_in_name: the name without its "<name_path>/" prefix while namePath
+# is still set (one third-party dashboard; such a dashboard does not land in
+# the folder, see render._build_dashboard_obj).
+DASHBOARD_OMIT_KEYS = frozenset({"temporary", "name_path", "folder_in_name", "widget_interactions"})
+# Widget types an export carries collapsed: true on (built-ins: TextDisplay,
+# View, MetricChart, Scoreboard, ResourceList, AlertList; Section has its own).
+_COLLAPSIBLE_TYPES = frozenset({"TextDisplay", "View", "MetricChart", "Scoreboard", "ResourceList", "AlertList"})
+
+
+@dataclass
+class TagFilterSpec:
+    """A widget's tag-picker filter (``config.tagFilter``), the same object
+    a ResourceList renders from ``resource_kinds``. ``null_filter`` renders
+    ``tagFilter: null`` explicitly (ResourceRelationshipAdvanced)."""
+    resource_kinds: List[WidgetResourceKindRef] = field(default_factory=list)
+    states: List[str] = field(default_factory=list)
+    statuses: List[str] = field(default_factory=list)
+    null_filter: bool = False
+
+
+@dataclass
+class HeatmapFilterCondition:
+    """One ``filterTypes[]`` entry of a Heatmap tab custom filter."""
+    filter_type: str
+    metric_key: str
+    metric_name: str
+    condition: str
+    value: object
+    string_metric: bool
+    metric_unit: Optional[str] = None
+
+
+@dataclass
+class HeatmapFilterGroup:
+    """One ``customFilter.filter[]`` entry: conditions on one resource kind."""
+    adapter_kind: str
+    resource_kind: str
+    conditions: List[HeatmapFilterCondition] = field(default_factory=list)
+
+
+@dataclass
+class ParetoAdditionalColumn:
+    """One ``additionalColumns[]`` entry of a ParetoAnalysis widget."""
+    metric_key: str
+    metric_name: str
+    label: str
+    adapter_kind: str
+    resource_kind: str
+
+
+@dataclass
+class WidgetUi:
+    """UI persistence the product's own exports carry on a widget. Reproduced
+    for fidelity; an author writing new content leaves this out. See
+    dashboard_fidelity_wire_format.md §ui."""
+    states: List[tuple] = field(default_factory=list)  # (prefix, wire value)
+    height: Optional[int] = None
+    state: Optional[str] = None
+    tab_id: bool = False
+    widget_id: bool = False
+    config_key: bool = False
+    legacy_xy: Optional[tuple] = None
+    view_type: Optional[str] = None
+    undefined: Optional[list] = None
+    custom_filter_mode: Optional[str] = None
+    blank_relationship_mode: bool = False
+    visual_theme_false: bool = False
+    empty_navigations: bool = False
 
 
 @dataclass
@@ -2379,6 +2615,27 @@ class Widget:
     # "vm_perf_view") generate identical widget UUIDs and their
     # interaction wiring collides in the rendered bundle.
     dashboard_name: str = ""
+    # --- Fidelity fields (dashboard_fidelity_wire_format.md). None / empty
+    # renders nothing new.
+    description: Optional[str] = None        # config.description
+    title_localized: Optional[str] = None    # config.titleLocalized
+    collapsed: Optional[bool] = None         # widget collapsed, non-Section
+    ui: Optional[WidgetUi] = None
+    omit: List[str] = field(default_factory=list)
+    # View: config.traversalSpecId (default null) and the pinned resource's
+    # nested traversalSpecId (default "").
+    traversal_spec_id: Optional[str] = None
+    traversal_spec_id_set: bool = False
+    pin_traversal_spec: Optional[str] = None
+    # HealthChart / ParetoAnalysis / Heatmap: scalar relationshipMode
+    # (-1 children); None keeps each type's historical value.
+    scalar_relationship_mode: Optional[int] = None
+    # HealthChart / Heatmap tab / ResourceRelationshipAdvanced tag filter.
+    tag_filter: Optional[TagFilterSpec] = None
+    # ui.empty_navigations: true renders {"<widget id>": []} (product exports
+    # carry empty navigation lists). `navigations: []` stays the same as no
+    # navigations, as it always rendered.
+    navigations_explicit_empty: bool = False
 
     @property
     def widget_id(self) -> str:
@@ -2446,6 +2703,15 @@ class Dashboard:
     # does not exist on one of the listed kinds is a hidden entry on that
     # kind's page (the server drops it), not a loader error.
     summary_for: Optional[list[str]] = None
+    # Fidelity (dashboard_fidelity_wire_format.md §Dashboard). None / False /
+    # empty renders the historical bytes.
+    time_range: Optional[str] = None       # DASHBOARD_TIME_RANGES key
+    disabled: bool = False
+    edit_allowed: Optional[bool] = None
+    doc_center_key: Optional[str] = None
+    column_proportion: Optional[str] = None
+    column_count: Optional[int] = None
+    omit: List[str] = field(default_factory=list)
 
     @property
     def summary_kinds(self) -> "list[tuple[str, str]]":
@@ -2454,6 +2720,16 @@ class Dashboard:
         if not self.summary_for:
             return []
         return [parse_summary_for(v) for v in self.summary_for]
+
+    def widget_version_problems(self, target_version) -> List[str]:
+        """Widget types this dashboard uses that ``target_version`` (the
+        oldest VCF Ops build the artifact declares) cannot import (issue
+        #199). The SDK pak build passes its oldest supported platform line
+        (RULE-019) and fails on any problem."""
+        from .widget_versions import widget_version_problems
+        return widget_version_problems(
+            ((w.local_id, w.type) for w in self.widgets), target_version
+        )
 
     def validate(
         self,
@@ -2513,15 +2789,16 @@ class Dashboard:
             "Section", "AlertVolume",
         )
         # Issue #199: a widget type the target Ops build lacks aborts the whole
-        # dashboard import. No bundle, release or adapter field declares a
-        # target VCF Ops version yet, so this is a WARNING with no gate.
+        # dashboard import. Content bundles declare no target VCF Ops
+        # version, so this is a WARNING; the Tier 2 pak build gates it
+        # against RULE-019's oldest line (widget_version_problems()).
         import warnings
         from .widget_versions import widget_version_problems
         for _problem in widget_version_problems(
             (w.local_id, w.type) for w in self.widgets
         ):
             src = str(self.source_path) if self.source_path else self.name
-            warnings.warn(f"{src}: {_problem}", UserWarning, stacklevel=2)
+            warnings.warn(f"{src}: dashboard {self.name!r}: {_problem}", UserWarning, stacklevel=2)
         seen: set[str] = set()
         for w in self.widgets:
             if w.local_id in seen:
@@ -2571,6 +2848,16 @@ class Dashboard:
                 # A view whose usage leaves out `dashboard` carries no
                 # <Usage>dashboard</Usage>; what the product does with a View
                 # widget on such a view is unverified, so it is an error.
+                # ui.view_type caches the view's presentation type (LIST,
+                # the only exported value, only ever beside a list view).
+                ref_view = known_views.get(w.view_name)
+                if (w.ui is not None and w.ui.view_type is not None and ref_view is not None
+                        and getattr(ref_view, "data_type", "list") != "list"):
+                    raise DashboardValidationError(
+                        f"dashboard {self.name}: widget {w.local_id}: ui.view_type LIST "
+                        f"names a {ref_view.data_type} view; product exports carry it only "
+                        f"beside list views"
+                    )
                 ref_usage = getattr(known_views.get(w.view_name), "usage", None)
                 if ref_usage is not None and "dashboard" not in ref_usage:
                     raise DashboardValidationError(
@@ -3088,11 +3375,27 @@ def _parse_navigations(w: dict) -> List["Navigation"]:
             raise DashboardValidationError(
                 f"{where}: label must be a string (documentation only); got {label_raw!r}"
             )
+        widget_ids: List[str] = []
+        if "widget_ids" in entry:
+            if not has_id:
+                raise DashboardValidationError(
+                    f"{where}: widget_ids (raw widget UUIDs) is only for a dashboard_id target; "
+                    f"a named target takes widgets (local ids)"
+                )
+            raw_ids = entry["widget_ids"]
+            if not isinstance(raw_ids, list) or not all(
+                isinstance(x, str) and _UUID_RE.match(x.strip().lower()) for x in raw_ids
+            ):
+                raise DashboardValidationError(f"{where}: widget_ids must be a list of widget UUIDs; got {raw_ids!r}")
+            widget_ids = [x.strip().lower() for x in raw_ids]
+            if len(set(widget_ids)) != len(widget_ids):
+                raise DashboardValidationError(f"{where}: widget_ids lists a widget twice")
         out.append(Navigation(
             dashboard=name,
             dashboard_id=dash_id,
             widgets=targets,
             label=(label_raw or "").strip(),
+            widget_ids=widget_ids,
         ))
     return out
 
@@ -3750,6 +4053,216 @@ def load_view(
     return v
 
 
+def _fid_err(wid, msg: str) -> DashboardValidationError:
+    return DashboardValidationError(f"widget {wid!r}: {msg}")
+
+
+def _opt_text(raw: dict, key: str, wid) -> Optional[str]:
+    """An optional string field kept verbatim (no strip: titles and
+    descriptions round-trip byte for byte)."""
+    if key not in raw:
+        return None
+    v = raw[key]
+    if not isinstance(v, str):
+        raise _fid_err(wid, f"{key} must be a string; got {type(v).__name__} {v!r}")
+    return v
+
+
+def _parse_omit_list(raw, allowed, ctx: str) -> List[str]:
+    if raw is None:
+        return []
+    if not isinstance(raw, list) or not all(isinstance(x, str) for x in raw):
+        raise DashboardValidationError(f"{ctx}: omit must be a list of names; got {raw!r}")
+    bad = [x for x in raw if x not in allowed]
+    if bad:
+        allowed_s = ", ".join(sorted(allowed)) if allowed else "nothing on this widget type"
+        raise DashboardValidationError(
+            f"{ctx}: omit {bad!r} is not supported here (allowed: {allowed_s})"
+        )
+    if len(set(raw)) != len(raw):
+        raise DashboardValidationError(f"{ctx}: omit lists a name twice: {raw!r}")
+    return list(raw)
+
+
+def _parse_tag_filter(raw, wid, allow_null: bool = False) -> TagFilterSpec:
+    """``tag_filter:`` -> TagFilterSpec. ``null`` is accepted only where a
+    product export carries ``tagFilter: null`` beside a default the
+    renderer would otherwise fill (``allow_null``)."""
+    if raw is None:
+        if not allow_null:
+            raise _fid_err(wid, "tag_filter: null is not supported on this widget type")
+        return TagFilterSpec(null_filter=True)
+    if not isinstance(raw, dict):
+        raise _fid_err(wid, f"tag_filter must be a mapping; got {raw!r}")
+    stray = sorted(set(raw) - {"resource_kinds", "states", "statuses"})
+    if stray:
+        raise _fid_err(wid, f"tag_filter: unknown key(s) {stray}; allowed resource_kinds, states, statuses")
+    kinds = []
+    for rk in raw.get("resource_kinds") or []:
+        if not isinstance(rk, dict) or not rk.get("adapter_kind") or not rk.get("resource_kind"):
+            raise _fid_err(wid, f"tag_filter.resource_kinds entries need adapter_kind and resource_kind; got {rk!r}")
+        kinds.append(WidgetResourceKindRef(str(rk["adapter_kind"]).strip(), str(rk["resource_kind"]).strip()))
+    out = {}
+    for key, vocab in (("states", _TAG_FILTER_STATES), ("statuses", _TAG_FILTER_STATUSES)):
+        vals = raw.get(key) or []
+        if not isinstance(vals, list):
+            raise _fid_err(wid, f"tag_filter.{key} must be a list")
+        vals = [str(v) for v in vals]
+        bad = [v for v in vals if v not in vocab]
+        if bad:
+            raise _fid_err(
+                wid, f"tag_filter.{key} {bad!r} not supported; only {sorted(vocab)} appear in "
+                f"product exports"
+            )
+        out[key] = vals
+    if not (kinds or out["states"] or out["statuses"]):
+        raise _fid_err(wid, "tag_filter needs at least one of resource_kinds, states, statuses")
+    return TagFilterSpec(resource_kinds=kinds, states=out["states"], statuses=out["statuses"])
+
+
+def _parse_widget_ui(raw, widget_type: str, wid) -> Optional[WidgetUi]:
+    """``ui:`` -> WidgetUi (UI persistence carried for fidelity)."""
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise _fid_err(wid, f"ui must be a mapping; got {raw!r}")
+    allowed = {"states", "height", "state", "tab_id", "widget_id", "config_key", "legacy_xy",
+               "custom_filter_mode"}
+    if widget_type != "Section":
+        allowed.add("empty_navigations")
+    if widget_type == "View":
+        allowed.add("view_type")
+    if widget_type == "HealthChart":
+        allowed.add("undefined")
+    if widget_type == "ResourceRelationshipAdvanced":
+        allowed |= {"blank_relationship_mode", "visual_theme_false"}
+    if widget_type == "Scoreboard":
+        allowed.add("gauge_switches")
+    stray = sorted(set(raw) - allowed)
+    if stray:
+        raise _fid_err(wid, f"ui: {stray} not supported on {widget_type} (allowed: {sorted(allowed)})")
+    ui = WidgetUi()
+    prefixes = WIDGET_STATE_PREFIXES.get(widget_type, frozenset())
+    for i, st in enumerate(raw.get("states") or []):
+        if not isinstance(st, dict) or set(st) != {"key", "value"}:
+            raise _fid_err(wid, f"ui.states[{i}] must be {{key, value}}; got {st!r}")
+        key, value = st["key"], st["value"]
+        if key not in prefixes:
+            raise _fid_err(
+                wid, f"ui.states[{i}].key {key!r} is not a {widget_type} state seen in product "
+                f"exports (allowed: {sorted(prefixes) or 'none'}); the key is the prefix before "
+                f"widget_<dashboard id>_<widget id>, which the renderer adds"
+            )
+        if not isinstance(value, str) or not _WIDGET_STATE_VALUE_RE.match(
+            value.replace(WIDGET_STATE_SELF_TOKEN, "widget_self")
+        ):
+            raise _fid_err(
+                wid, f"ui.states[{i}].value must be the URL-encoded ExtJS state string the "
+                f"product writes (starts b%3A, s%3A, o%3A, n%3A or a%3A); got {value!r}"
+            )
+        ui.states.append((key, value))
+    keys = [k for k, _ in ui.states]
+    if len(set(keys)) != len(keys):
+        raise _fid_err(wid, "ui.states lists a key twice")
+    if "height" in raw:
+        h = raw["height"]
+        if isinstance(h, bool) or not isinstance(h, int) or h < 0:
+            raise _fid_err(wid, f"ui.height must be an integer >= 0; got {h!r}")
+        ui.height = h
+    if "state" in raw:
+        if raw["state"] != "":
+            raise _fid_err(wid, "ui.state accepts only \"\" (the only value in product exports)")
+        ui.state = ""
+    for flag in ("tab_id", "widget_id", "config_key", "blank_relationship_mode", "visual_theme_false",
+                 "gauge_switches", "empty_navigations"):
+        if flag in raw:
+            if raw[flag] is not True:
+                raise _fid_err(wid, f"ui.{flag} accepts only true (omit it otherwise)")
+            if flag != "gauge_switches":   # carried on ScoreboardConfig
+                setattr(ui, flag, True)
+    if "legacy_xy" in raw:
+        xy = raw["legacy_xy"]
+        if (not isinstance(xy, dict) or set(xy) != {"x", "y"}
+                or not all(isinstance(xy[k], int) and not isinstance(xy[k], bool) for k in ("x", "y"))):
+            raise _fid_err(wid, f"ui.legacy_xy must be {{x: <int>, y: <int>}}; got {xy!r}")
+        ui.legacy_xy = (xy["x"], xy["y"])
+    if "view_type" in raw:
+        if raw["view_type"] != "LIST":
+            raise _fid_err(wid, "ui.view_type accepts only LIST (the only value in product exports)")
+        ui.view_type = "LIST"
+    if "undefined" in raw:
+        und = raw["undefined"]
+        if not isinstance(und, list) or not all(
+            isinstance(e, dict) and set(e) == {"id", "name"}
+            and all(isinstance(e[k], str) for k in ("id", "name")) for e in und
+        ):
+            raise _fid_err(wid, f"ui.undefined must be a list of {{id, name}} strings; got {und!r}")
+        ui.undefined = [dict(e) for e in und]
+    if "custom_filter_mode" in raw:
+        if raw["custom_filter_mode"] != "tagPicker":
+            raise _fid_err(wid, "ui.custom_filter_mode accepts only tagPicker")
+        if widget_type not in ("HealthChart", "ResourceRelationshipAdvanced", "AlertList"):
+            raise _fid_err(wid, f"ui.custom_filter_mode is not seen on {widget_type} widgets")
+        ui.custom_filter_mode = "tagPicker"
+    return ui
+
+
+def _parse_heatmap_custom_filter(raw, wid) -> list:
+    groups = []
+    if not isinstance(raw, list) or not raw:
+        raise _fid_err(wid, "Heatmap custom_filter must be a non-empty list (or null)")
+    for g in raw:
+        if not isinstance(g, dict) or set(g) - {"adapter_kind", "resource_kind", "conditions"}:
+            raise _fid_err(wid, f"custom_filter entry must be {{adapter_kind, resource_kind, conditions}}; got {g!r}")
+        conds = []
+        for c in g.get("conditions") or []:
+            allowed = {"filter_type", "metric_key", "metric_name", "condition", "value",
+                       "string_metric", "metric_unit"}
+            if not isinstance(c, dict) or set(c) - allowed:
+                raise _fid_err(wid, f"custom_filter condition keys must be within {sorted(allowed)}; got {c!r}")
+            ft, cond = c.get("filter_type"), c.get("condition")
+            if ft not in _HEATMAP_FILTER_TYPES:
+                raise _fid_err(wid, f"custom_filter filter_type must be one of {sorted(_HEATMAP_FILTER_TYPES)}; got {ft!r}")
+            if cond not in _HEATMAP_FILTER_CONDITIONS:
+                raise _fid_err(wid, f"custom_filter condition must be one of {sorted(_HEATMAP_FILTER_CONDITIONS)}; got {cond!r}")
+            if not c.get("metric_key") or "value" not in c or not isinstance(c.get("string_metric"), bool):
+                raise _fid_err(wid, "custom_filter condition needs metric_key, value and string_metric (bool)")
+            mu = c.get("metric_unit")
+            if mu is not None and not isinstance(mu, str):
+                raise _fid_err(wid, "custom_filter metric_unit must be a string or null")
+            conds.append(HeatmapFilterCondition(
+                filter_type=ft, metric_key=str(c["metric_key"]),
+                metric_name=str(c.get("metric_name", c["metric_key"])), condition=cond,
+                value=c["value"], string_metric=c["string_metric"], metric_unit=mu,
+            ))
+        if not conds or not g.get("adapter_kind") or not g.get("resource_kind"):
+            raise _fid_err(wid, "custom_filter entry needs adapter_kind, resource_kind and conditions")
+        groups.append(HeatmapFilterGroup(str(g["adapter_kind"]), str(g["resource_kind"]), conds))
+    return groups
+
+
+def widget_extra_metric_refs(w: "Widget") -> List[tuple]:
+    """Metric keys a widget names outside its main metric surface, as
+    ``(metric_key, adapter_kind, resource_kind, where)``: ParetoAnalysis
+    ``additional_columns`` and Heatmap tab ``custom_filter`` conditions.
+    Every dependency walker and audit that reads widget metric keys calls
+    this, so a super metric or a built-in key named only there is seen."""
+    out: List[tuple] = []
+    pa = w.pareto_analysis_config
+    if pa is not None:
+        for col in pa.additional_columns:
+            out.append((col.metric_key, col.adapter_kind, col.resource_kind,
+                        f"additional column {col.label!r}"))
+    hm = w.heatmap_config
+    if hm is not None:
+        for tab in hm.tabs:
+            for g in tab.custom_filter or []:
+                for c in g.conditions:
+                    out.append((c.metric_key, g.adapter_kind, g.resource_kind,
+                                f"Heatmap tab {tab.name!r} custom filter"))
+    return out
+
+
 def load_dashboard(
     path: Path,
     enforce_framework_prefix: bool = True,
@@ -3805,6 +4318,19 @@ def load_dashboard(
                 name=pin_name,
             )
         widget_type = str(w["type"]).strip()
+        _wid = w.get("id", "?")
+        # pin.traversal_spec: the pinned resource's nested traversalSpecId
+        # (default ""). Authored explicitly only; never inferred (see the
+        # NOTE above render._resolve_view_pin).
+        pin_traversal_spec = None
+        if pin_raw and "traversal_spec" in pin_raw:
+            pin_traversal_spec = pin_raw.get("traversal_spec")
+            if not isinstance(pin_traversal_spec, str) or not pin_traversal_spec.strip():
+                raise _fid_err(_wid, "pin.traversal_spec must be a non-empty string")
+            if widget_type != "View" or not bool(w.get("self_provider", False)):
+                raise _fid_err(
+                    _wid, "pin.traversal_spec is only rendered on a self_provider View widget"
+                )
 
         # Widget-level sort keys (issue #175). Only HealthChart has a sort
         # on the wire (sortByDir); a View widget carries none, its opening
@@ -3924,11 +4450,20 @@ def load_dashboard(
                     f"widget {w.get('id', '?')!r}: a Section is full width and starts at "
                     f"x: 1 (got x: {sec_x!r}); author only coords.y"
                 )
-        elif "collapsed" in w or "widgets" in w:
+        elif "widgets" in w or ("collapsed" in w and widget_type not in _COLLAPSIBLE_TYPES):
             raise DashboardValidationError(
                 f"widget {w.get('id', '?')!r}: collapsed / widgets are only "
-                f"supported on Section widgets, got type {widget_type!r}"
+                f"supported on Section widgets (collapsed also on "
+                f"{', '.join(sorted(_COLLAPSIBLE_TYPES))}), got type {widget_type!r}"
             )
+        widget_collapsed = None
+        if widget_type != "Section" and "collapsed" in w:
+            # Widget-level collapsed state; the renderer otherwise emits
+            # false. Accepted on the types product exports carry
+            # collapsed: true on.
+            if not isinstance(w["collapsed"], bool):
+                raise _fid_err(_wid, f"collapsed must be a bool; got {w['collapsed']!r}")
+            widget_collapsed = w["collapsed"]
 
         # --- Parse TextDisplay config ---
         text_display_config = None
@@ -3966,7 +4501,18 @@ def load_dashboard(
                             f"{', '.join(missing)}. A partial set renders "
                             f"the tile as '?' / Unknown on the server."
                         )
-                    if not missing:
+                    string_bounds = all(isinstance(v, str) for v in (yellow, orange, red))
+                    if not missing and string_bounds and not bool(m.get("is_string_metric", False)):
+                        raise _fid_err(
+                            _wid, f"metric {m.get('metric_key', '?')!r}: string bounds (property "
+                            f"match coloring) need is_string_metric: true"
+                        )
+                    if not missing and not string_bounds and any(isinstance(v, str) for v in (yellow, orange, red)):
+                        raise _fid_err(
+                            _wid, f"metric {m.get('metric_key', '?')!r}: bounds are all numbers "
+                            f"or all strings (string-property match coloring), not a mix"
+                        )
+                    if not missing and not string_bounds:
                         # Direction is bound order alone (issue #176):
                         # ascending = higher is worse, descending = lower
                         # is worse. A triple that is neither has no
@@ -4010,17 +4556,45 @@ def load_dashboard(
                             f"{m.get('metric_key', '?')!r}: max_value must be a number; "
                             f"got {type(max_value_raw).__name__} {max_value_raw!r}"
                         )
+                for _k in ("link", "label_localized", "label_orig", "metric_unit", "def_unit",
+                           "resource_kind_name"):
+                    if _k in m and not isinstance(m[_k], str):
+                        raise _fid_err(_wid, f"metric {m.get('metric_key', '?')!r}: {_k} must be a string")
+                m_omit = _parse_omit_list(
+                    m.get("omit"), METRIC_OMIT_KEYS,
+                    f"widget {_wid!r} metric {m.get('metric_key', '?')!r}",
+                )
+                if "link" in m_omit and "link" in m:
+                    raise _fid_err(_wid, f"metric {m.get('metric_key', '?')!r}: omit link contradicts link")
+                if "label" in m_omit and m.get("label"):
+                    raise _fid_err(_wid, f"metric {m.get('metric_key', '?')!r}: omit label contradicts label")
+                if "max_value" in m_omit and max_value_raw is not None:
+                    raise _fid_err(_wid, f"metric {m.get('metric_key', '?')!r}: omit max_value contradicts max_value")
+                if "unit" in m_omit and ("unit" in m or m.get("unit_id")):
+                    raise _fid_err(_wid, f"metric {m.get('metric_key', '?')!r}: omit unit contradicts unit / unit_id")
                 specs.append(MetricSpec(
+                    link=m.get("link"),
+                    label_localized=m.get("label_localized"),
+                    label_orig=m.get("label_orig"),
+                    metric_unit=m.get("metric_unit"),
+                    def_unit=m.get("def_unit"),
+                    resource_kind_name=m.get("resource_kind_name"),
+                    omit=m_omit,
                     adapter_kind=str(m.get("adapter_kind", "")).strip(),
                     resource_kind=str(m.get("resource_kind", "")).strip(),
                     metric_key=str(m.get("metric_key", "")).strip(),
                     metric_name=str(m.get("metric_name", m.get("metric_key", ""))).strip(),
-                    unit_id=str(m.get("unit_id", "") or "").strip(),
+                    # -1 (int) is the product's "Auto / default unit" id, kept
+                    # as the number it is on the wire.
+                    unit_id=(-1 if (m.get("unit_id") == -1 and not isinstance(m.get("unit_id"), bool))
+                             else str(m.get("unit_id", "") or "").strip()),
                     unit=str(m.get("unit", "") or "").strip(),
                     color_method=color_method,
-                    yellow_bound=float(yellow) if yellow is not None else None,
-                    orange_bound=float(orange) if orange is not None else None,
-                    red_bound=float(red) if red is not None else None,
+                    # String bounds (property match coloring) stay strings.
+                    yellow_bound=(yellow if isinstance(yellow, str) else float(yellow)) if yellow is not None else None,
+                    orange_bound=(orange if isinstance(orange, str) else float(orange)) if orange is not None else None,
+                    red_bound=(red if isinstance(red, str) else float(red)) if red is not None else None,
+                    unit_explicit_empty=("unit" in m and m["unit"] == ""),
                     label=str(m.get("label", "") or "").strip(),
                     is_string_metric=bool(m.get("is_string_metric", False)),
                     max_value=float(max_value_raw) if max_value_raw is not None else None,
@@ -4124,7 +4698,24 @@ def load_dashboard(
                 focus_on_percent=bool(w.get("focus_on_percent", False)),
                 show_dt=bool(w.get("show_dt", False)),
                 refresh_content=bool(w.get("refresh_content", True)),
+                old_metric_values=bool(w.get("old_metric_values", True)),
+                # Gauge switches on other themes are residue the component
+                # ignores: emitted only via ui.gauge_switches.
+                gauge_switches_explicit=bool((w.get("ui") or {}).get("gauge_switches", False))
+                if isinstance(w.get("ui"), dict) else False,
             )
+            if "old_metric_values" in w and not isinstance(w["old_metric_values"], bool):
+                raise _fid_err(_wid, "old_metric_values must be a bool")
+            if scoreboard_config.gauge_switches_explicit and scoreboard_config.visual_theme == 9:
+                raise _fid_err(_wid, "ui.gauge_switches is for non-gauge themes; a gauge always emits them")
+            if "pin_resource" in w:
+                if w["pin_resource"] is not True:
+                    raise _fid_err(_wid, "pin_resource accepts only true (omit it otherwise)")
+                if metric_mode != "resourceKind" or pin is None or not bool(w.get("self_provider", False)):
+                    raise _fid_err(
+                        _wid, "pin_resource needs metric_mode resourceKind, self_provider: true and a pin"
+                    )
+                scoreboard_config.pin_resource = True
             if not (1 <= scoreboard_config.visual_theme <= 9):
                 raise DashboardValidationError(
                     f"widget {w.get('id', '?')!r}: Scoreboard visual_theme must be 1..9 "
@@ -4141,16 +4732,32 @@ def load_dashboard(
         if widget_type == "MetricChart":
             raw_metrics = w.get("metrics") or []
             specs = _parse_metric_specs(raw_metrics)
-            metric_chart_config = MetricChartConfig(metrics=specs)
+            mc_rc = w.get("refresh_content", True)
+            if not isinstance(mc_rc, bool):
+                raise _fid_err(_wid, "refresh_content must be a bool")
+            metric_chart_config = MetricChartConfig(metrics=specs, refresh_content=mc_rc)
 
         # --- Parse relationship_mode (MetricChart scalar; AlertList's
         # array form is parsed with its config below) ---
         raw_rm = w.get("relationship_mode")
+        scalar_relationship_mode: Optional[int] = None
+        if raw_rm is not None and widget_type in ("HealthChart", "ParetoAnalysis", "Heatmap"):
+            # Scalar relationshipMode -1 (children), the only non-default
+            # value product exports carry on these three types.
+            if str(raw_rm).strip().lower() != "children":
+                raise _fid_err(
+                    _wid, f"relationship_mode on {widget_type} accepts only children "
+                    f"(relationshipMode -1, the only non-default value in product exports); "
+                    f"got {raw_rm!r}"
+                )
+            scalar_relationship_mode = -1
+            raw_rm = None
         if raw_rm is not None and widget_type != "AlertList":
             if widget_type != "MetricChart":
                 raise DashboardValidationError(
                     f"widget {w.get('id', '?')!r}: relationship_mode is only "
-                    f"supported on MetricChart and AlertList widgets, got type {widget_type!r}"
+                    f"supported on MetricChart and AlertList widgets (and children on "
+                    f"HealthChart, ParetoAnalysis, Heatmap), got type {widget_type!r}"
                 )
             rm_str = str(raw_rm).strip().lower()
             if rm_str not in ("children", "parents"):
@@ -4281,7 +4888,44 @@ def load_dashboard(
                     solid_coloring=bool(raw_tab.get("solid_coloring", raw_tab.get("solidColoring", False))),
                     focus_on_groups=bool(raw_tab.get("focus_on_groups", raw_tab.get("focusOnGroups", True))),
                 ))
+                _tab = tabs[-1]
+                _tctx = f"widget {_wid!r} Heatmap tab {_tab.name!r}"
+                _tab.name_localized = _opt_text(raw_tab, "name_localized", _wid)
+                _tab.name_orig = _opt_text(raw_tab, "name_orig", _wid)
+                _tab.group_by_parent_text = _opt_text(raw_gb, "parent_text", _wid)
+                if "model_id" in raw_tab:
+                    if raw_tab["model_id"] is not True:
+                        raise DashboardValidationError(f"{_tctx}: model_id accepts only true")
+                    _tab.model_id = True
+                if "tag_filter" in raw_tab:
+                    _tab.tag_filter = _parse_tag_filter(raw_tab["tag_filter"], _wid, allow_null=True)
+                if "filter_mode" in raw_tab:
+                    if raw_tab["filter_mode"] not in ("tagPicker", "customFilter"):
+                        raise DashboardValidationError(
+                            f"{_tctx}: filter_mode must be tagPicker or customFilter"
+                        )
+                    _tab.filter_mode = raw_tab["filter_mode"]
+                if "custom_filter" in raw_tab:
+                    if raw_tab["custom_filter"] is None:
+                        _tab.custom_filter_null = True
+                    else:
+                        _tab.custom_filter = _parse_heatmap_custom_filter(raw_tab["custom_filter"], _wid)
+                _tab.omit = _parse_omit_list(raw_tab.get("omit"), HEATMAP_TAB_OMIT, _tctx)
+                if "tag_filter" in _tab.omit and _tab.tag_filter is not None:
+                    raise DashboardValidationError(f"{_tctx}: omit tag_filter contradicts tag_filter")
+                if "custom_filter" in _tab.omit and "custom_filter" in raw_tab:
+                    raise DashboardValidationError(f"{_tctx}: omit custom_filter contradicts custom_filter")
+                if "group_by_kind_keys" in _tab.omit and not group_by_kind:
+                    raise DashboardValidationError(
+                        f"{_tctx}: omit group_by_kind_keys needs group_by.resource_kind (the "
+                        f"self-grouping block always carries both keys)"
+                    )
             heatmap_config = HeatmapConfig(tabs=tabs, mode=mode, depth=depth)
+            if "selected_tab" in w:
+                st_raw = w["selected_tab"]
+                if isinstance(st_raw, bool) or not isinstance(st_raw, int) or not 0 <= st_raw < max(len(tabs), 1):
+                    raise _fid_err(_wid, f"selected_tab must be a tab index (0..{len(tabs) - 1}); got {st_raw!r}")
+                heatmap_config.selected_tab = st_raw
 
         # --- Parse PropertyList config ---
         property_list_config = None
@@ -4342,9 +4986,107 @@ def load_dashboard(
                 regeneration_time=int(w.get("regeneration_time", 15)),
                 round_decimals=float(w.get("round_decimals", 1)),
             )
+            _pa = pareto_analysis_config
+            if "refresh_content" in w:
+                if not isinstance(w["refresh_content"], bool):
+                    raise _fid_err(_wid, "refresh_content must be a bool")
+                _pa.refresh_content = w["refresh_content"]
+            if "max_value" in w:
+                mv = w["max_value"]
+                if mv is not None and (isinstance(mv, bool) or not isinstance(mv, (int, float))):
+                    raise _fid_err(_wid, f"max_value must be a number or null; got {mv!r}")
+                _pa.max_value_set, _pa.max_value = True, mv
+            _pa.metric_label = _opt_text(w, "metric_label", _wid)
+            if "metric_unit" in w:
+                mu = w["metric_unit"]
+                if not isinstance(mu, dict) or set(mu) != {"id", "name"} or not isinstance(mu["name"], str) \
+                        or not (isinstance(mu["id"], str) or (isinstance(mu["id"], int) and not isinstance(mu["id"], bool))):
+                    raise _fid_err(_wid, f"metric_unit must be {{id: <unit id or -1>, name: <label>}}; got {mu!r}")
+                _pa.metric_unit = (mu["id"], mu["name"])
+            bounds = [w.get(k) for k in ("yellow_bound", "orange_bound", "red_bound")]
+            if any(b is not None for b in bounds):
+                if any(b is None or isinstance(b, bool) or not isinstance(b, (int, float)) for b in bounds):
+                    raise _fid_err(
+                        _wid, "ParetoAnalysis yellow_bound / orange_bound / red_bound are written "
+                        "all three together (as in every product export) and must be numbers"
+                    )
+                _pa.yellow_bound, _pa.orange_bound, _pa.red_bound = bounds
+            if "percentile_value" in w:
+                pv = w["percentile_value"]
+                if isinstance(pv, bool) or not isinstance(pv, (int, float)) or not 0 < pv <= 100:
+                    raise _fid_err(_wid, f"percentile_value must be a number in (0, 100]; got {pv!r}")
+                if _pa.top_option != "percentile":
+                    raise _fid_err(_wid, "percentile_value needs top_option: percentile")
+                _pa.percentile_value = pv
+            for i, col in enumerate(w.get("additional_columns") or []):
+                if not isinstance(col, dict) or set(col) - {"metric_key", "metric_name", "label",
+                                                             "adapter_kind", "resource_kind"} \
+                        or not col.get("metric_key"):
+                    raise _fid_err(
+                        _wid, f"additional_columns[{i}] must carry metric_key and may carry "
+                        f"metric_name, label, adapter_kind, resource_kind; got {col!r}"
+                    )
+                _pa.additional_columns.append(ParetoAdditionalColumn(
+                    metric_key=str(col["metric_key"]).strip(),
+                    metric_name=str(col.get("metric_name", col["metric_key"])),
+                    label=str(col.get("label", "")),
+                    adapter_kind=str(col.get("adapter_kind", ak)).strip(),
+                    resource_kind=str(col.get("resource_kind", rk)).strip(),
+                ))
+
+        # --- Fidelity fields common to every widget type ---
+        w_omit = _parse_omit_list(
+            w.get("omit"), WIDGET_OMIT_KEYS.get(widget_type, {}), f"widget {_wid!r}"
+        )
+        if "alert_definitions" in w_omit and w.get("alert_definitions"):
+            raise _fid_err(_wid, "omit alert_definitions contradicts alert_definitions")
+        if "select_first_row" in w_omit and "select_first_row" in w:
+            raise _fid_err(_wid, "omit select_first_row contradicts select_first_row")
+        if "pagination_number" in w_omit and "pagination_number" in (w.get("resource_relationship_advanced") or {}):
+            raise _fid_err(_wid, "omit pagination_number contradicts pagination_number")
+        traversal_spec_id = None
+        traversal_spec_id_set = False
+        if "traversal_spec_id" in w:
+            if widget_type != "View":
+                raise _fid_err(_wid, "traversal_spec_id is only rendered on View widgets")
+            traversal_spec_id = w["traversal_spec_id"]
+            if traversal_spec_id is not None and not isinstance(traversal_spec_id, str):
+                raise _fid_err(_wid, "traversal_spec_id must be a string or null")
+            traversal_spec_id_set = True
+        tag_filter = None
+        if "tag_filter" in w:
+            if widget_type == "HealthChart":
+                tag_filter = _parse_tag_filter(w["tag_filter"], _wid)
+            elif widget_type == "ResourceRelationshipAdvanced":
+                if w["tag_filter"] is not None:
+                    raise _fid_err(
+                        _wid, "on ResourceRelationshipAdvanced only tag_filter: null is accepted; "
+                        "the kind filter comes from resource_relationship_advanced.resource_kinds"
+                    )
+                if (resource_relationship_advanced_config or ResourceRelationshipAdvancedConfig()).resource_kinds:
+                    raise _fid_err(_wid, "tag_filter: null contradicts resource_kinds")
+                tag_filter = TagFilterSpec(null_filter=True)
+            else:
+                raise _fid_err(_wid, f"tag_filter is not supported on {widget_type} widgets")
+        widget_ui = _parse_widget_ui(w.get("ui"), widget_type, _wid)
+        if widget_ui is not None and widget_ui.empty_navigations and navigations:
+            raise _fid_err(_wid, "ui.empty_navigations contradicts navigations")
+        if (widget_ui is not None and widget_type == "ResourceList" and w.get("column_preset")
+                and any(k == "permResGrid_" for k, _ in widget_ui.states)):
+            raise _fid_err(_wid, "ui.states permResGrid_ contradicts column_preset (both set the grid state)")
 
         widgets.append(
             Widget(
+                description=_opt_text(w, "description", _wid),
+                title_localized=_opt_text(w, "title_localized", _wid),
+                collapsed=widget_collapsed,
+                ui=widget_ui,
+                omit=w_omit,
+                traversal_spec_id=traversal_spec_id,
+                traversal_spec_id_set=traversal_spec_id_set,
+                pin_traversal_spec=pin_traversal_spec,
+                scalar_relationship_mode=scalar_relationship_mode,
+                tag_filter=tag_filter,
                 local_id=str(w["id"]).strip(),
                 type=widget_type,
                 title=str(w.get("title", "")).strip(),
@@ -4358,6 +5100,7 @@ def load_dashboard(
                 section_config=section_config,
                 view_details=view_details_raw,
                 navigations=navigations,
+                navigations_explicit_empty=bool(widget_ui and widget_ui.empty_navigations),
                 resource_kinds=rks,
                 view_name=str(w.get("view", "") or "").strip(),
                 self_provider=bool(w.get("self_provider", False)),
@@ -4441,7 +5184,52 @@ def load_dashboard(
         except ValueError as exc:
             raise DashboardValidationError(f"{path}: {exc}") from None
 
+    # --- Dashboard-level fidelity fields ---
+    time_range = data.get("time_range")
+    if time_range is not None and time_range not in DASHBOARD_TIME_RANGES:
+        raise DashboardValidationError(
+            f"{path}: time_range {time_range!r} is not one the product writes; use one of "
+            f"{sorted(DASHBOARD_TIME_RANGES)}"
+        )
+    disabled_raw = data.get("disabled", False)
+    if not isinstance(disabled_raw, bool):
+        raise DashboardValidationError(f"{path}: disabled must be a bool")
+    edit_allowed = data.get("edit_allowed")
+    if edit_allowed is not None and edit_allowed is not True:
+        raise DashboardValidationError(f"{path}: edit_allowed accepts only true (the only exported value)")
+    doc_center_key = data.get("doc_center_key")
+    if doc_center_key is not None and (not isinstance(doc_center_key, str)
+                                       or not _DOC_CENTER_KEY_RE.match(doc_center_key)):
+        raise DashboardValidationError(f"{path}: doc_center_key must look like vcom_<digits>; got {doc_center_key!r}")
+    column_proportion = data.get("column_proportion")
+    if column_proportion is not None and column_proportion not in _COLUMN_PROPORTIONS:
+        raise DashboardValidationError(
+            f"{path}: column_proportion must be one of {sorted(_COLUMN_PROPORTIONS)} (quoted); got {column_proportion!r}"
+        )
+    column_count = data.get("column_count")
+    if column_count is not None and (isinstance(column_count, bool) or column_count not in _COLUMN_COUNTS):
+        raise DashboardValidationError(f"{path}: column_count must be one of {sorted(_COLUMN_COUNTS)}; got {column_count!r}")
+    dash_omit = _parse_omit_list(data.get("omit"), DASHBOARD_OMIT_KEYS, str(path))
+    if "folder_in_name" in dash_omit and not (name_path or default_name_path):
+        raise DashboardValidationError(f"{path}: omit folder_in_name needs a name_path")
+    if "widget_interactions" in dash_omit and interactions:
+        raise DashboardValidationError(f"{path}: omit widget_interactions contradicts interactions")
+    if "folder_in_name" in dash_omit and "name_path" in dash_omit:
+        raise DashboardValidationError(f"{path}: omit folder_in_name and name_path together is meaningless")
+    if "name_path" in dash_omit and (name_path or default_name_path):
+        raise DashboardValidationError(
+            f"{path}: omit name_path needs an empty folder (name_path: \"\"); the dashboard "
+            f"would otherwise be placed in {(name_path or default_name_path)!r}"
+        )
+
     return Dashboard(
+        time_range=time_range,
+        disabled=disabled_raw,
+        edit_allowed=edit_allowed,
+        doc_center_key=doc_center_key,
+        column_proportion=column_proportion,
+        column_count=column_count,
+        omit=dash_omit,
         id=dash_id,
         name=name,
         description=str(data.get("description", "") or "").strip(),

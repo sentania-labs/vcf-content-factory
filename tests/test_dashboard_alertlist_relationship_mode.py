@@ -186,17 +186,19 @@ def test_metric_chart_rejects_alertlist_forms(tmp_path, raw):
         _load(tmp_path, _metric_chart(relationship_mode=raw))
 
 
-@pytest.mark.parametrize("wtype, extra", [
-    ("TextDisplay", {"html": "x"}),
-    ("Heatmap", {}),
+@pytest.mark.parametrize("wtype, extra, match", [
+    ("TextDisplay", {"html": "x"}, "MetricChart and AlertList widgets"),
+    # Heatmap takes the scalar children form (dashboard fidelity, 2026-11-12);
+    # self is still rejected, naming the one accepted value.
+    ("Heatmap", {}, "relationship_mode on Heatmap accepts only children"),
 ])
-def test_other_types_reject_relationship_mode_by_type(tmp_path, wtype, extra):
-    """The type check comes first, so `self` on a Heatmap names the type."""
+def test_other_types_reject_relationship_mode_by_type(tmp_path, wtype, extra, match):
+    """The type check comes first, so `self` names the type's rule."""
     from vcfcf_core.dashboards.loader import DashboardValidationError
 
     w = {"id": "w", "type": wtype, "title": "t",
          "coords": {"x": 1, "y": 1, "w": 4, "h": 4}, "relationship_mode": "self", **extra}
-    with pytest.raises(DashboardValidationError, match="MetricChart and AlertList widgets"):
+    with pytest.raises(DashboardValidationError, match=match):
         _load(tmp_path, w)
 
 

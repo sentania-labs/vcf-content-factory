@@ -426,6 +426,17 @@ def _refs_from_widgets(dashboard) -> list[MetricReference]:
         # ResourceList, View, TextDisplay, AlertList, ProblemAlertsList:
         # no metric key references to extract.
 
+        # ParetoAnalysis additional columns, Heatmap tab custom filters.
+        from ..dashboards.loader import widget_extra_metric_refs
+        for key, ak, rk, where in widget_extra_metric_refs(w):
+            if key and not _is_sm_ref(key):
+                refs.append(MetricReference(
+                    adapter_kind=ak,
+                    resource_kind=rk,
+                    metric_key=_normalize_metric_key(key),
+                    source_desc=f"{wsrc} {where}",
+                ))
+
     return refs
 
 

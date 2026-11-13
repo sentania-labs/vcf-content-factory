@@ -247,8 +247,13 @@ class TestSectionValidation:
     def test_collapsed_only_on_section(self, tmp_path):
         from vcfcf_dashboards.loader import DashboardValidationError, load_dashboard
 
+        # Widget-level collapsed is accepted on the types product exports
+        # carry it on (dashboard fidelity, 2026-11-12: TextDisplay, View,
+        # MetricChart, Scoreboard, ResourceList, AlertList). Elsewhere it is
+        # still rejected.
         path = _write(tmp_path / "d.yaml", _base([
-            {**_rl("r", 1), "collapsed": True},
+            {"id": "p", "type": "ProblemAlertsList", "title": "P",
+             "coords": {"x": 1, "y": 1, "w": 6, "h": 4}, "collapsed": True},
         ]))
         with pytest.raises(DashboardValidationError, match="only supported on Section"):
             load_dashboard(path)

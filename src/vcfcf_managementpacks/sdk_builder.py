@@ -567,6 +567,15 @@ _SDK_COMPAT_LINES: Tuple[_CompatLine, ...] = (
     _CompatLine("9.1.1.0100", (_SDK_JAR_9_1_1_0100,), 25),
 )
 _PRIMARY_LINE_KEY = "9.0"
+
+
+def _oldest_supported_line() -> str:
+    """The oldest platform line a Tier 2 pak supports (RULE-019): the
+    lowest key of _SDK_COMPAT_LINES, as a dotted version ("8.18.7")."""
+    return min(
+        (line.key for line in _SDK_COMPAT_LINES),
+        key=lambda k: tuple(int(p) for p in k.split(".")),
+    )
 # The primary (shipped compile target) jar's name in adapter_runtime/.
 _SDK_PRIMARY_JAR_NAME = _SDK_JAR_9_0_2_0.file_name
 # 9.1.1.0100: Java 25 class files, JDK 25+ to read.
@@ -2329,6 +2338,19 @@ def _load_bundled_content(
                 f"bundled_content.dashboards: {path}: {exc} "
                 f"(list the referenced views under bundled_content.views)"
             ) from exc
+        # Issue #199: a Tier 2 pak targets every supported platform line
+        # (RULE-019, _SDK_COMPAT_LINES), so a widget type the oldest line
+        # cannot import aborts that dashboard (and its Summary binding) on
+        # install there. That is a build error, not a warning.
+        _version_problems = d.widget_version_problems(_oldest_supported_line())
+        if _version_problems:
+            raise SdkBuildError(
+                f"bundled_content.dashboards: {path}: dashboard {d.name!r}: "
+                + " ".join(_version_problems)
+                + f" Tier 2 paks support VCF Operations {_oldest_supported_line()} and "
+                f"later (RULE-019); remove the widget or move it to content that "
+                f"targets newer builds only."
+            )
         dashboards.append(d)
 
     # Validate every bundled dashboard against the bundled views, mirroring
