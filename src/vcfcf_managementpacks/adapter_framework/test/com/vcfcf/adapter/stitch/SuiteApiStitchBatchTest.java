@@ -89,6 +89,7 @@ public class SuiteApiStitchBatchTest {
         run("P6 fallback stop counts the rest skipped", SuiteApiStitchBatchTest::testP6FallbackTimeoutCounted);
         run("P7 interrupt mid-fallback counts the rest skipped", SuiteApiStitchBatchTest::testP7InterruptMidFallbackCounted);
         run("W6 one chunk at a time", SuiteApiStitchBatchTest::testStreamingSendsChunkBeforeSerializingNext);
+        run("golden String bodies (origin/main bytes)", SuiteApiStitchBatchTest::testGoldenStringBodies);
         report();
     }
 
@@ -768,6 +769,104 @@ public class SuiteApiStitchBatchTest {
     // -----------------------------------------------------------------------
     // Helpers
     // -----------------------------------------------------------------------
+
+    // -----------------------------------------------------------------------
+    // Golden bodies captured from origin/main (2026-11-12, before typed
+    // properties existed): the String pushes must keep sending exactly these
+    // bytes. Inputs carry "", control characters, a quote, a backslash, a
+    // non-BMP character, U+2028 and a key needing escapes. Regenerate only on
+    // a deliberate wire change.
+    // -----------------------------------------------------------------------
+
+    static Map<String, Map<String, String>> goldenProps() {
+        Map<String, Map<String, String>> in = new LinkedHashMap<>();
+        Map<String, String> a = new LinkedHashMap<>();
+        a.put("G|empty", "");
+        a.put("G|ctl", "a\u0001b\u001fc\td\r\ne\u007f");
+        a.put("G|quote", "say \"hi\"");
+        a.put("G|bs", "C:\\temp\\");
+        a.put("G|nonbmp", "\ud83d\ude00 x");
+        a.put("G|latin", "caf\u00e9 \u2028");
+        a.put("G|\"k\\", "v");
+        in.put(A.toUpperCase(), a);
+        Map<String, String> b = new LinkedHashMap<>();
+        b.put("G|x", "true");
+        in.put(B, b);
+        return in;
+    }
+
+    static Map<String, Map<String, Double>> goldenStats() {
+        Map<String, Map<String, Double>> in = new LinkedHashMap<>();
+        Map<String, Double> a = new LinkedHashMap<>();
+        a.put("G|a", 2.5);
+        a.put("G|neg0", -0.0);
+        a.put("G|tiny", 1e-7);
+        in.put(A, a);
+        Map<String, Double> b = new LinkedHashMap<>();
+        b.put("G|b", 48.0);
+        in.put(B, b);
+        return in;
+    }
+
+    static final String[] GOLDEN_PROPERTIES_BATCH = {
+            "POST /api/resources/properties",
+            "{\"values\":[{\"resourceId\":\"6baa06d3-0811-45a2-ba2a-c7b38f646ce9\",\"property-contents\":{\"property-content\":[{\"statKey\":\"G|empty\",\"timestamps\":[7],\"values\":[\"\"]},{\"statKey\":\"G|ctl\",\"timestamps\":[7],\"values\":[\"a\\u0001b\\u001fc\\td\\r\\ne\u007f\"]},{\"statKey\":\"G|quote\",\"timestamps\":[7],\"values\":[\"say \\\"hi\\\"\"]},{\"statKey\":\"G|bs\",\"timestamps\":[7],\"values\":[\"C:\\\\temp\\\\\"]},{\"statKey\":\"G|nonbmp\",\"timestamps\":[7],\"values\":[\"\ud83d\ude00 x\"]},{\"statKey\":\"G|latin\",\"timestamps\":[7],\"values\":[\"caf\u00e9 \u2028\"]},{\"statKey\":\"G|\\\"k\\\\\",\"timestamps\":[7],\"values\":[\"v\"]}]}},{\"resourceId\":\"1e9de40c-b045-4f9e-9b4f-be7d471773e6\",\"property-contents\":{\"property-content\":[{\"statKey\":\"G|x\",\"timestamps\":[7],\"values\":[\"true\"]}]}}]}",
+    };
+
+    static final String[] GOLDEN_PUSH_BATCH = {
+            "POST /api/resources/properties",
+            "{\"values\":[{\"resourceId\":\"6baa06d3-0811-45a2-ba2a-c7b38f646ce9\",\"property-contents\":{\"property-content\":[{\"statKey\":\"G|empty\",\"timestamps\":[7],\"values\":[\"\"]},{\"statKey\":\"G|ctl\",\"timestamps\":[7],\"values\":[\"a\\u0001b\\u001fc\\td\\r\\ne\u007f\"]},{\"statKey\":\"G|quote\",\"timestamps\":[7],\"values\":[\"say \\\"hi\\\"\"]},{\"statKey\":\"G|bs\",\"timestamps\":[7],\"values\":[\"C:\\\\temp\\\\\"]},{\"statKey\":\"G|nonbmp\",\"timestamps\":[7],\"values\":[\"\ud83d\ude00 x\"]},{\"statKey\":\"G|latin\",\"timestamps\":[7],\"values\":[\"caf\u00e9 \u2028\"]},{\"statKey\":\"G|\\\"k\\\\\",\"timestamps\":[7],\"values\":[\"v\"]}]}},{\"resourceId\":\"1e9de40c-b045-4f9e-9b4f-be7d471773e6\",\"property-contents\":{\"property-content\":[{\"statKey\":\"G|x\",\"timestamps\":[7],\"values\":[\"true\"]}]}}]}",
+            "POST /api/resources/stats",
+            "{\"resource-stat-content\":[{\"id\":\"6baa06d3-0811-45a2-ba2a-c7b38f646ce9\",\"stat-contents\":[{\"statKey\":\"G|a\",\"timestamps\":[7],\"data\":[2.5]},{\"statKey\":\"G|neg0\",\"timestamps\":[7],\"data\":[-0.0]},{\"statKey\":\"G|tiny\",\"timestamps\":[7],\"data\":[1.0E-7]}]},{\"id\":\"1e9de40c-b045-4f9e-9b4f-be7d471773e6\",\"stat-contents\":[{\"statKey\":\"G|b\",\"timestamps\":[7],\"data\":[48.0]}]}]}",
+    };
+
+    static final String[] GOLDEN_PUSH_BATCH_400_FALLBACK = {
+            "POST /api/resources/properties",
+            "{\"values\":[{\"resourceId\":\"6baa06d3-0811-45a2-ba2a-c7b38f646ce9\",\"property-contents\":{\"property-content\":[{\"statKey\":\"G|empty\",\"timestamps\":[7],\"values\":[\"\"]},{\"statKey\":\"G|ctl\",\"timestamps\":[7],\"values\":[\"a\\u0001b\\u001fc\\td\\r\\ne\u007f\"]},{\"statKey\":\"G|quote\",\"timestamps\":[7],\"values\":[\"say \\\"hi\\\"\"]},{\"statKey\":\"G|bs\",\"timestamps\":[7],\"values\":[\"C:\\\\temp\\\\\"]},{\"statKey\":\"G|nonbmp\",\"timestamps\":[7],\"values\":[\"\ud83d\ude00 x\"]},{\"statKey\":\"G|latin\",\"timestamps\":[7],\"values\":[\"caf\u00e9 \u2028\"]},{\"statKey\":\"G|\\\"k\\\\\",\"timestamps\":[7],\"values\":[\"v\"]}]}},{\"resourceId\":\"1e9de40c-b045-4f9e-9b4f-be7d471773e6\",\"property-contents\":{\"property-content\":[{\"statKey\":\"G|x\",\"timestamps\":[7],\"values\":[\"true\"]}]}}]}",
+            "POST /api/resources/6baa06d3-0811-45a2-ba2a-c7b38f646ce9/properties",
+            "{\"property-content\":[{\"statKey\":\"G|empty\",\"timestamps\":[7],\"values\":[\"\"]},{\"statKey\":\"G|ctl\",\"timestamps\":[7],\"values\":[\"a\\u0001b\\u001fc\\td\\r\\ne\u007f\"]},{\"statKey\":\"G|quote\",\"timestamps\":[7],\"values\":[\"say \\\"hi\\\"\"]},{\"statKey\":\"G|bs\",\"timestamps\":[7],\"values\":[\"C:\\\\temp\\\\\"]},{\"statKey\":\"G|nonbmp\",\"timestamps\":[7],\"values\":[\"\ud83d\ude00 x\"]},{\"statKey\":\"G|latin\",\"timestamps\":[7],\"values\":[\"caf\u00e9 \u2028\"]},{\"statKey\":\"G|\\\"k\\\\\",\"timestamps\":[7],\"values\":[\"v\"]}]}",
+            "POST /api/resources/1e9de40c-b045-4f9e-9b4f-be7d471773e6/properties",
+            "{\"property-content\":[{\"statKey\":\"G|x\",\"timestamps\":[7],\"values\":[\"true\"]}]}",
+            "POST /api/resources/stats",
+            "{\"resource-stat-content\":[{\"id\":\"6baa06d3-0811-45a2-ba2a-c7b38f646ce9\",\"stat-contents\":[{\"statKey\":\"G|a\",\"timestamps\":[7],\"data\":[2.5]},{\"statKey\":\"G|neg0\",\"timestamps\":[7],\"data\":[-0.0]},{\"statKey\":\"G|tiny\",\"timestamps\":[7],\"data\":[1.0E-7]}]},{\"id\":\"1e9de40c-b045-4f9e-9b4f-be7d471773e6\",\"stat-contents\":[{\"statKey\":\"G|b\",\"timestamps\":[7],\"data\":[48.0]}]}]}",
+            "POST /api/resources/6baa06d3-0811-45a2-ba2a-c7b38f646ce9/stats",
+            "{\"stat-content\":[{\"statKey\":\"G|a\",\"timestamps\":[7],\"data\":[2.5]},{\"statKey\":\"G|neg0\",\"timestamps\":[7],\"data\":[-0.0]},{\"statKey\":\"G|tiny\",\"timestamps\":[7],\"data\":[1.0E-7]}]}",
+            "POST /api/resources/1e9de40c-b045-4f9e-9b4f-be7d471773e6/stats",
+            "{\"stat-content\":[{\"statKey\":\"G|b\",\"timestamps\":[7],\"data\":[48.0]}]}",
+    };
+
+    /** Every non-token request as alternating "METHOD path" and body. */
+    static List<String> wire(Harness h) {
+        List<String> out = new ArrayList<>();
+        for (Req r : h.requests) {
+            if (r.url.equals(TOKEN_URL)) continue;
+            out.add(r.method + " " + r.url.substring(BASE.length()));
+            out.add(r.body);
+        }
+        return out;
+    }
+
+    private static void testGoldenStringBodies() throws Exception {
+        Harness h1 = new Harness(SuiteApiStitchClientTransportTest.okTokenThen(200, ""));
+        h1.client.pushPropertiesBatch(goldenProps(), 7L);
+        assertEquals("pushPropertiesBatch: origin/main bytes",
+                java.util.Arrays.asList(GOLDEN_PROPERTIES_BATCH), wire(h1));
+        Harness h2 = new Harness(SuiteApiStitchClientTransportTest.okTokenThen(200, ""));
+        h2.client.pushBatch(goldenProps(), goldenStats(), 7L);
+        assertEquals("pushBatch: origin/main bytes",
+                java.util.Arrays.asList(GOLDEN_PUSH_BATCH), wire(h2));
+        Responder batch400 = (m, u, b) -> {
+            if (u.equals(TOKEN_URL)) return new Resp(200, "{\"token\":\"tok-1\"}");
+            if (u.equals(PROPS_URL) || u.equals(STATS_URL)) {
+                return new Resp(400, "{\"apiErrorCode\":1}");
+            }
+            return new Resp(200, "");
+        };
+        Harness h3 = new Harness(batch400);
+        h3.client.pushBatch(goldenProps(), goldenStats(), 7L);
+        assertEquals("pushBatch 400 per-id fallback: origin/main bytes",
+                java.util.Arrays.asList(GOLDEN_PUSH_BATCH_400_FALLBACK), wire(h3));
+    }
 
     static Map<String, Double> stats(Object... kv) {
         Map<String, Double> m = new LinkedHashMap<>();

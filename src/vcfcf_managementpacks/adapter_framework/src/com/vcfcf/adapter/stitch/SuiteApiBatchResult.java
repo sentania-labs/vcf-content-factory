@@ -6,7 +6,10 @@ package com.vcfcf.adapter.stitch;
  * {@link SuiteApiStitchClient#pushStatsBatch} and
  * {@link SuiteApiStitchClient#pushBatch} (and the {@link SuiteApiStitcher}
  * methods of the same names), so an adapter can count the outcome rather than
- * only read it from the log. Immutable.
+ * only read it from the log. Immutable. Also returned by the typed property
+ * pushes and by {@link SuiteApiStitchClient#pushEvents}, where every count is
+ * of events rather than resources ({@code dropped}: events refused before
+ * sending; {@code fellBack}: always 0).
  *
  * <p>Every resource the caller passed with something to send ends up in at
  * least one of {@link #getSent()} and {@link #getSkipped()}: a resource is

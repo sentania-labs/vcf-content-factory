@@ -6,6 +6,8 @@ Subcommands:
   setup:  interactive credential wizard (bootstrap-v2 Phase 2). Must be
             run by the user in a real terminal; refuses a non-TTY stdin
             so no hook or pipe can ever feed it a password.
+  keydiff: read-only key differential between two instances or two
+            saved snapshots (a port's parity check).
   migrate-prefix: rewrite the retired "[VCF Content Factory]" content-name
             prefix to "[VCF CF]" in a factory checkout or pak repo.
   cleanup-legacy-prefix: list (default) or delete the old-named copies a
@@ -26,6 +28,13 @@ subcommands:
             writes it to .env. The password is read with a silent
             prompt, so it never reaches the transcript. Run it in your
             own terminal (in a Claude session, prefix with `!`).
+  keydiff   compare stat and property keys and latest values of matching
+            objects on two instances (--profile) or snapshots
+            (--snapshot-in); --snapshot-out captures one side. Read-only:
+            reads are GETs; each live side also logs in and out (token
+            acquire and release). Exits 0 only when objects and keys were
+            compared and nothing differs. `keydiff --help` for the options
+            and exit codes.
   migrate-prefix [ROOT] [--dry-run] [--force]
             rewrite the retired "[VCF Content Factory]" content-name
             prefix to "[VCF CF]" in names and by-name references.
@@ -51,6 +60,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if args[0] == "setup":
         from .setup_credentials import main as setup_main  # noqa: PLC0415
         return setup_main(args[1:])
+    if args[0] == "keydiff":
+        from .keydiff import main as keydiff_main  # noqa: PLC0415
+        return keydiff_main(args[1:])
     if args[0] == "migrate-prefix":
         from .migrate_prefix import main as migrate_main  # noqa: PLC0415
         return migrate_main(args[1:])
