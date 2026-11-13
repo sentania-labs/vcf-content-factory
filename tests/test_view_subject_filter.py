@@ -166,7 +166,9 @@ class TestLoaderValidation:
             {
                 "filter_type": "metrics",
                 "metric_key": "net|usage_average",
-                "condition": "LESS_THAN",
+                # Not in the eight comparators the built-in exports carry
+                # (LESS_THAN, once rejected here, is now accepted).
+                "condition": "BETWEEN",
                 "value": 12,
             }
         ])
@@ -198,7 +200,8 @@ class TestLoaderValidation:
                 "metric_key": "net|usage_average",
                 "condition": "GREATER_THAN",
                 "value": 12,
-                "transform": "SUM",
+                # SUM is evidenced in the built-in exports; MEDIAN is not.
+                "transform": "MEDIAN",
             }
         ])
         p = _write_view(tmp_path, data)

@@ -203,16 +203,19 @@ columns:
 
 ### Default sort
 
-A view opens sorted by the one column that sets `sort: asc` or
-`sort: desc` (list views only). The product stores this on the view
-column (`sortCriteria`), not on the dashboard widget, so every dashboard
-embedding the view opens in that order; two dashboards wanting different
-orders need two views. Widget keys `sort_by_column` / `sort_by_dir` are
-rejected (HealthChart keeps its own `sort_by_dir`). The loader rejects
-`sort:` on more than one column (which one wins is unverified), on
-time_segment and instanced_group columns, and on a view that has a
-time_segment column (that column is always sorted). Issue #175, wire
-format in `wire-formats/dashboard_sort_color_default_summary_rows.md`.
+A view opens sorted by the column that sets `sort: asc` or
+`sort: desc` (list and distribution views). The product stores this on the
+view column (`sortCriteria`), not on the dashboard widget, so every
+dashboard embedding the view opens in that order; two dashboards wanting
+different orders need two views. Widget keys `sort_by_column` /
+`sort_by_dir` are rejected (HealthChart keeps its own `sort_by_dir`).
+Several sorted columns and instanced-group driver or member columns are
+accepted (vendor shapes, 2026-11-12), but which sorted column takes
+precedence is unverified, so for a new view sort one column. The loader
+rejects `sort:` on trend views, on time_segment columns, and on a view
+that has a time_segment column (that column is always sorted). Issue #175,
+wire format in `wire-formats/dashboard_sort_color_default_summary_rows.md`
+and `wire-formats/view_fidelity_wire_format.md` §3.
 
 ```yaml
 columns:

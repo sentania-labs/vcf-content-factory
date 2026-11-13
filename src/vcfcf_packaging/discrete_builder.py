@@ -127,19 +127,47 @@ def _expand_sm_crossrefs(
 
 
 def _resolve_view_deps(view: ViewDef, all_sms: List[SuperMetricDef]) -> List[SuperMetricDef]:
-    """Return SMs referenced by this view's column attributes."""
+    """Return SMs referenced by this view's column attributes: ``columns:``
+    and distribution ``additional_columns:``, by ``sm_<uuid>`` or by
+    ``supermetric:"<name>"`` (resolved like the renderer resolves it: the
+    view's own content set, then the factory). A name that resolves to no
+    SM is left to the renderer, which fails the build on it."""
+    from vcfcf_core.supermetrics.column_resolver import (
+        SmColumnResolutionError,
+        SmColumnResolver,
+        column_sm_name,
+        view_column_entries,
+    )
+
     sm_by_id = {sm.id.lower(): sm for sm in all_sms}
+    resolver = None
     result = []
     seen = set()
-    for col in view.columns:
+
+    def _add(sm) -> None:
+        sm_id = sm.id.lower()
+        if sm_id not in seen:
+            result.append(sm)
+            seen.add(sm_id)
+
+    for _label, col in view_column_entries(view):
         m = re.search(r"sm_([0-9a-f\-]{36})", col.attribute, re.IGNORECASE)
         if m:
-            sm_id = m.group(1).lower()
-            if sm_id not in seen:
-                sm = sm_by_id.get(sm_id)
-                if sm:
-                    result.append(sm)
-                    seen.add(sm_id)
+            sm = sm_by_id.get(m.group(1).lower())
+            if sm:
+                _add(sm)
+            continue
+        name = column_sm_name(col.attribute)
+        if name is None:
+            continue
+        if resolver is None:
+            resolver = SmColumnResolver(all_sms)
+        try:
+            sm = resolver.resolve(view, name)
+        except SmColumnResolutionError as exc:
+            raise DiscreteBuilderError(str(exc)) from exc
+        if sm is not None and sm.id:
+            _add(sm)
     return result
 
 

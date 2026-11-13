@@ -1152,7 +1152,15 @@ reused. Field lines are `- **Field:** value` (parsed by
   `subject_filter:` and instanced-group member `is_property` into YAML, and
   the round-trip test in `tests/test_view_multi_subject_column_binding.py`
   (or a sibling) asserts a byte-identical re-render for those views.
-- **Related:** none.
+- **Related:** 2026-11-12 view schema fidelity change
+  (`knowledge/context/wire-formats/view_fidelity_wire_format.md`): not
+  closed and not narrowed in the reverse path, which was not touched. It
+  removes the schema-side obstacle: every ViewDef feature behind the
+  residual diff (subject filter, instanced member `isProperty`, summary
+  rows, plus roll-up, Property presence via `omit:`, SubjectType sets) now
+  has a YAML form the renderer reproduces (183 of 189 vCommunity 0.8.1
+  views round-trip with zero semantic difference through a mechanical
+  mapper), so the close condition is now only importer work.
 
 ### DEF-020
 

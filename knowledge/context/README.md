@@ -56,6 +56,7 @@ These files cost almost nothing to scan and prevent re-deriving known knowledge.
 | `customgroup_import_format.md` | Custom group UI import envelope format |
 | `customgroup_relationship_grammar.md` | Custom group relationship grammar |
 | `view_column_wire_format.md` | View column wire format (XML attribute encoding) |
+| `view_fidelity_wire_format.md` | View schema fidelity fields (2026-11-12): distribution `additional_columns`/`distribution_color`, bucket `ranges`/`is_sum`/explicit count, multi-column and distribution/instanced sort, per-column roll-up, `use_symptom_thresholds`, `top_n`/`page_size`/`max_points_count`, timestamps, eight filter comparators, `group_by`, SubjectType `types`/`usage`, `omit:`; owning-SubjectType analysis; 183/189 vCommunity round trip |
 | `pak_wire_format.md` | .pak wire format |
 | `auth_source_wire_formats.md` | Auth source wire formats |
 | `ui_import_formats.md` | UI import format investigation |

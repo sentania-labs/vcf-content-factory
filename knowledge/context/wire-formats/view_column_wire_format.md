@@ -293,6 +293,13 @@ are "cell is red if value equals `redBound`, neutral otherwise".
 The `ascendingRange` Property is irrelevant for string matches and
 is not emitted on these columns.
 
+> **Corrected 2026-11-12.** A wider survey shows most string-only
+> `redBound` columns DO carry `ascendingRange="true"` (22 in the
+> vCommunity 0.8.1 pak, 59 in the 9.1.1 built-ins; 2 and 3 without). The
+> loader now accepts `ascending_range: true` on such a column and the
+> renderer emits it; `false` stays rejected. See
+> `view_fidelity_wire_format.md` §String red bound.
+
 #### ascending_range derivation (reverse-parser)
 
 Some source XMLs omit `ascendingRange` even when all three numeric bounds are
@@ -956,6 +963,11 @@ corpus doesn't prove):
   loader (e.g. `net|usage_average`).
 - `condition`: `"EQUALS"` | `"NOT_EQUALS"` | `"GREATER_THAN"` — no
   `LESS_THAN` or other comparator observed anywhere in the corpus.
+  **Widened 2026-11-12** after auditing the 9.1.1 and 8.18.7 built-in
+  exports: also `LESS_THAN`, `CONTAINS`, `NOT_CONTAINS`, `EXISTS`,
+  `NOT_EXISTS`; `transform` also `LAST`, `SUM`, `MAX`; EXISTS with
+  `value: null` plus `string_metric:`. See
+  `view_fidelity_wire_format.md` §8.
 - `metricValue`: `{"isStringMetric": bool, "value": ...}` — `isStringMetric`
   tracks the Python/JS type of `value` (string -> true, numeric -> false),
   confirmed by every occurrence including string-typed `"true"`/`"false"`

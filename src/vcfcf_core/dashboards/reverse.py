@@ -507,10 +507,11 @@ def _parse_column_value_to_dataclass(value_elem) -> Optional[ViewColumn]:
     ascending: Optional[bool] = None
     red_is_string = red is not None and not isinstance(red, (int, float))
     if ascending_raw is not None:
-        # Suppress ascending_range for property-match coloring (string-only red_bound
-        # with no yellow/orange bounds).  This mirrors the forward renderer logic in
-        # render.py which skips ascendingRange emission for this case, and the validator
-        # which rejects ascending_range in this configuration.
+        # Drops ascending_range for property-match coloring (string-only red_bound
+        # with no yellow/orange bounds).  The forward path no longer needs this:
+        # since 2026-11-12 the loader accepts ascending_range: true there (it still
+        # rejects false) and the renderer emits it, so dropping it only loses
+        # round-trip fidelity; the importer pass is tracked by DEF-019.
         if not (red_is_string and yellow is None and orange is None):
             ascending = ascending_raw.lower() == "true"
     else:
