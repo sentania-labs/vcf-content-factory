@@ -538,9 +538,11 @@ def _parse_column_value(value_elem) -> Optional[dict]:
 
     ascending = props.get("ascendingRange")
     if ascending is not None:
-        # Suppress ascending_range for property-match coloring (string-only red_bound
-        # with no yellow/orange bounds).  This mirrors the forward renderer logic in
-        # render.py which skips ascendingRange emission for this case.
+        # Drops ascending_range for property-match coloring (string-only red_bound
+        # with no yellow/orange bounds).  The forward path no longer needs this:
+        # since 2026-11-12 the loader accepts ascending_range: true there and the
+        # renderer emits it (the dominant vendor shape), so dropping it only
+        # loses round-trip fidelity; the importer pass is tracked by DEF-019.
         has_yellow = col.get("yellow_bound") is not None
         has_orange = col.get("orange_bound") is not None
         red_val = col.get("red_bound")

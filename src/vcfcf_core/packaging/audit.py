@@ -437,9 +437,11 @@ def _refs_from_views_xml(views_path: Path) -> list[MetricReference]:
     """Extract metric references from a views_content.xml artifact.
 
     Parses ViewDef elements, reads their adapterKind/resourceKind from the
-    <SubjectType> element, then walks the attributeInfos column list for
-    attributeKey values and the SubjectType filter= JSON for subject-filter
-    metricKey values.
+    <SubjectType> element, then walks every column Item for attributeKey
+    values (the attributeInfos list and a distribution view's metadata
+    distributionAdditionalColumns list alike: the walk visits every
+    ``Item`` in the ViewDef) and the SubjectType filter= JSON for
+    subject-filter metricKey values.
 
     Wire shape (see knowledge/context/wire-formats/view_column_wire_format.md
     and vcfcf_dashboards/render.py:_render_view_def_fragment /
@@ -486,7 +488,9 @@ def _refs_from_views_xml(views_path: Path) -> list[MetricReference]:
 
         # Per-column attributeKey values live inside the attributeInfos
         # Property, one <Item><Value>...<Property name="attributeKey"
-        # value="..."/>...</Value></Item> per column.
+        # value="..."/>...</Value></Item> per column. Distribution
+        # additional columns (metadata Control, distributionAdditionalColumns)
+        # have the same Item shape; iterating every Item covers both.
         for item in viewdef.iter("Item"):
             value_el = item.find("Value")
             if value_el is None:

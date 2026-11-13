@@ -33,6 +33,8 @@ from .loader import (
     PropertyListConfig, ResourceRelationshipAdvancedConfig,
     _UUID_RE as _VIEW_UUID_RE,
     _COLUMN_SORT_CRITERIA,
+    _COLUMN_OMITTABLE,
+    _USAGE_ORDER,
 )
 
 
@@ -352,24 +354,86 @@ def _attribute_to_localization_key(attribute: str) -> str:
     return _cap_localization_key(key)
 
 
+def _num_str(v) -> str:
+    """A YAML number as the wire string: ints stay integral (``25``, not
+    ``25.0``), floats use Python's repr."""
+    return str(v)
+
+
+def _drop_omitted(props: list[str], omit: Iterable[str]) -> list[str]:
+    """Remove the Properties a column's ``omit:`` names (YAML field names,
+    mapped to wire names by ``_COLUMN_OMITTABLE``). An empty ``omit`` is
+    the identity, so every historical render is untouched."""
+    wire = {w for name in omit for w in _COLUMN_OMITTABLE[name]}
+    if not wire:
+        return props
+    keep = []
+    for p in props:
+        m = re.match(r'<Property(?: localizationKey="[^"]*")? name="([^"]+)"', p)
+        if m and m.group(1) in wire:
+            continue
+        keep.append(p)
+    return keep
+
+
 def _xml_buckets_control(view: ViewDef) -> str:
-    """Emit the buckets-control XML element for distribution views."""
+    """Emit the buckets-control XML element for distribution views.
+
+    Historical shapes are unchanged: dynamic -> isDynamic +
+    dynamicCalcFunction; fixed -> isDynamic, minValue, maxValue,
+    bucketCount. The 2026-11-12 fidelity fields only add Properties when
+    the YAML sets them: an explicit ``count`` in dynamic mode, an explicit
+    ``calc_function`` in fixed mode, ``ranges`` (bucketInfos, which also
+    drops the implicit bucketCount and pins SIMPLEMAXMIN, the vendor
+    pairing) and ``is_sum``. Wire format:
+    knowledge/context/wire-formats/view_fidelity_wire_format.md §Buckets.
+    """
     from .loader import BucketsConfig
     b = view.buckets or BucketsConfig()
+    is_sum = (
+        f'<Property name="isSum" value="{_bool_str(b.is_sum)}"/>'
+        if b.is_sum is not None else ""
+    )
     if b.is_dynamic:
+        count = f'<Property name="bucketCount" value="{b.count}"/>' if b.count_set else ""
         return (
             '<Control id="buckets-control_id_1" type="buckets-control" visible="false">'
             '<Property name="isDynamic" value="true"/>'
             f'<Property name="dynamicCalcFunction" value="{escape(b.calc_function, {chr(34): "&quot;"})}"/>'
+            f"{count}{is_sum}"
             "</Control>"
         )
     else:
+        calc = ""
+        if b.ranges:
+            calc = '<Property name="dynamicCalcFunction" value="SIMPLEMAXMIN"/>'
+        elif b.calc_function_set:
+            calc = f'<Property name="dynamicCalcFunction" value="{escape(b.calc_function, {chr(34): "&quot;"})}"/>'
+        count = (
+            f'<Property name="bucketCount" value="{b.count}"/>'
+            if (not b.ranges or b.count_set) else ""
+        )
+        infos = ""
+        if b.ranges:
+            items = []
+            for r in b.ranges:
+                color = (
+                    _xml_property("bucketColor", r.color) if r.color is not None else ""
+                )
+                items.append(
+                    "<Item><Value>"
+                    + _xml_property("startValue", _num_str(r.start))
+                    + _xml_property("endValue", _num_str(r.end))
+                    + color
+                    + "</Value></Item>"
+                )
+            infos = '<Property name="bucketInfos"><List>' + "".join(items) + "</List></Property>"
         return (
             '<Control id="buckets-control_id_1" type="buckets-control" visible="false">'
             '<Property name="isDynamic" value="false"/>'
             f'<Property name="minValue" value="{b.min_value}"/>'
             f'<Property name="maxValue" value="{b.max_value}"/>'
-            f'<Property name="bucketCount" value="{b.count}"/>'
+            f"{count}{calc}{infos}{is_sum}"
             "</Control>"
         )
 
@@ -533,11 +597,17 @@ def _xml_instanced_group_item(view: ViewDef, col) -> str:
     if ig.is_driver:
         props.append(_xml_property("attributeKey", "Instance Name"))
         props.append(_xml_property("rollUpCount", "0"))
+        # Driver sort (2026-11-12): the vendor position is right after
+        # rollUpCount, before isInstancedGroup (vCommunity 0.8.1 "ESXi
+        # Network Interfaces", sortCriteria=true on the GROUP_net driver).
+        if col.sort is not None:
+            props.append(_xml_property("sortCriteria", _COLUMN_SORT_CRITERIA[col.sort]))
         props.append(_xml_property("isInstancedGroup", "true"))
         props.append(_xml_property("showInstanceName", "true" if ig.show_instance_name else "false"))
         props.append(_xml_property("instanceGroupName", ig.name))
         props.append(_xml_property("keepInstanceSummary", "true" if ig.keep_instance_summary else "false"))
         props.append(_xml_property("displayName", col.display_name))
+        props = _drop_omitted(props, col.omit)
         return "<Item><Value>" + "".join(props) + "</Value></Item>"
 
     # Member column.
@@ -563,13 +633,20 @@ def _xml_instanced_group_item(view: ViewDef, col) -> str:
     # subject (see _column_kind_binding).
     props.extend(_xml_kind_binding_props(view, col))
     transform = (col.transformation or "CURRENT").upper()
-    if not col.is_property:
+    if col.roll_up_type is not None:
+        # Explicit roll-up (2026-11-12) replaces the default below.
+        props.append(_xml_property("rollUpType", col.roll_up_type))
+        if col.roll_up_unit is not None:
+            props.append(_xml_property("rollUpUnit", col.roll_up_unit))
+    elif not col.is_property:
         # Every non-property instanced-group member column found in the
         # vendor survey, CURRENT, MAX, TRANSFORM_EXPRESSION, TIMESTAMP,
         # carries rollUpType="NONE" (see docstring). No vendor evidence
         # supports a different rollUpType here for any transformation.
         props.append(_xml_property("rollUpType", "NONE"))
-    props.append(_xml_property("rollUpCount", "0"))
+    props.append(_xml_property(
+        "rollUpCount", str(col.roll_up_count) if col.roll_up_count is not None else "0"
+    ))
     # transformExpression is a sibling Property emitted immediately before
     # the transformations block, matches both the generic column path
     # ordering and the vendor's "Linux Disk Performance" instanced example
@@ -581,6 +658,11 @@ def _xml_instanced_group_item(view: ViewDef, col) -> str:
     props.append(
         f'<Property name="transformations"><List><Item value="{escape(transform, {chr(34): "&quot;"})}"/></List></Property>'
     )
+    # Member sort (2026-11-12): same position as a generic column, after
+    # transformations and before isProperty (9.1.1 built-in instanced
+    # views, e.g. stats|Interface:eth0|TxDroppedPPS under GROUP_stats).
+    if col.sort is not None:
+        props.append(_xml_property("sortCriteria", _COLUMN_SORT_CRITERIA[col.sort]))
     props.append(_xml_property("isProperty", "true" if col.is_property else "false"))
 
     def _bound_str(v) -> str:
@@ -590,36 +672,36 @@ def _xml_instanced_group_item(view: ViewDef, col) -> str:
             return str(v)
         return str(v)
 
-    def _is_numeric_bound(v) -> bool:
-        if v is None:
-            return False
-        if isinstance(v, (int, float)):
-            return True
-        try:
-            float(str(v))
-            return True
-        except (ValueError, TypeError):
-            return False
-
     has_yellow = col.yellow_bound is not None
     has_orange = col.orange_bound is not None
     has_red = col.red_bound is not None
-    red_is_string = has_red and not _is_numeric_bound(col.red_bound)
     if has_yellow:
         props.append(_xml_property("yellowBound", _bound_str(col.yellow_bound)))
     if has_orange:
         props.append(_xml_property("orangeBound", _bound_str(col.orange_bound)))
     if has_red:
         props.append(_xml_property("redBound", _bound_str(col.red_bound)))
-    if col.ascending_range is not None and not (red_is_string and not has_yellow and not has_orange):
+    if col.ascending_range is not None:
         props.append(_xml_property("ascendingRange", "true" if col.ascending_range else "false"))
+    if col.use_symptom_thresholds is not None:
+        props.append(_xml_property("useSymptomThresholds", _bool_str(col.use_symptom_thresholds)))
 
     props.append(_xml_property("displayName", col.display_name))
-    props += [
-        _xml_property("addTimestampAsColumn", "false"),
-        _xml_property("isShowRelativeTimestamp", "false"),
-    ]
+    props += _xml_timestamp_props(col)
+    props = _drop_omitted(props, col.omit)
     return "<Item><Value>" + "".join(props) + "</Value></Item>"
+
+
+def _xml_timestamp_props(col) -> list[str]:
+    """addTimestampAsColumn and isShowRelativeTimestamp, historically both
+    ``false``; ``add_timestamp_as_column`` / ``show_relative_timestamp``
+    override the value, ``omit:`` drops the Property."""
+    ats = col.add_timestamp_as_column
+    rel = col.show_relative_timestamp
+    return [
+        _xml_property("addTimestampAsColumn", _bool_str(bool(ats))),
+        _xml_property("isShowRelativeTimestamp", _bool_str(bool(rel))),
+    ]
 
 
 def _xml_time_segment_item(col) -> str:
@@ -699,30 +781,26 @@ _SM_COLUMN_REF_RE = re.compile(r'''(?i:@?supermetric):["'](.+?)["']$''')
 SmResolver = Callable[[ViewDef, str], Optional[str]]
 
 
-def _xml_attribute_item(
+def _column_attribute_key(
     view: ViewDef,
-    col,
-    idx: int,
+    raw: str,
+    where: str,
     sm_map: dict[str, str] | None = None,
     sm_scope_active: bool = False,
     bundle_context: str | None = None,
     sm_resolver: "SmResolver | None" = None,
-) -> str:
-    # Instanced-group columns (driver + member) have their own wire shape,
-    # distinct from every other column kind rendered below. Handle them
-    # first and return early. See InstancedGroupSpec in loader.py for the
-    # vendor XML citations this mirrors.
-    if getattr(col, "instanced_group", None) is not None:
-        return _xml_instanced_group_item(view, col)
-    if getattr(col, "time_segment", None) is not None:
-        return _xml_time_segment_item(col)
-
+) -> tuple[str, str]:
+    """``(attributeKey, default rollUpType)`` for a column attribute: a
+    ``supermetric:"<name>"`` resolved to ``Super Metric|sm_<uuid>``, a bare
+    ``sm_<uuid>`` prefixed, anything else verbatim. ``where`` names the
+    column in errors (``column 3``, ``additional column 0``). Shared by
+    ``columns:`` and distribution ``additional_columns:``, so both resolve a
+    name the same way."""
     # Super metric columns live in their own namespace and need the
     # "Super Metric|sm_<uuid>" attributeKey form, bare "sm_<uuid>"
     # renders as a blank column in the UI. Reference: exported views
     # from the sentania/AriaOperationsContent VCF License Consumption
     # bundle. Super metric columns also use rollUpType=NONE, not AVG.
-    raw = col.attribute
     if _SM_COLUMN_PREFIX_RE.match(raw):
         # Author wrote supermetric:"<name>", resolve to sm_<uuid> using
         # the SM name map built from supermetrics/ YAML at render time.
@@ -745,7 +823,7 @@ def _xml_attribute_item(
                     sm_id = sm_resolver(view, sm_name)
                 except ValueError as exc:
                     raise ValueError(
-                        f'View "{view.name}" column {idx}: {exc}'
+                        f'View "{view.name}" {where}: {exc}'
                     ) from exc
             else:
                 sm_id = (sm_map or {}).get(sm_name)
@@ -754,7 +832,7 @@ def _xml_attribute_item(
             else:
                 if sm_resolver is not None:
                     raise ValueError(
-                        f'View "{view.name}" column {idx} references super metric '
+                        f'View "{view.name}" {where} references super metric '
                         f'"{sm_name}" which could not be resolved to a UUID in '
                         f"the view's own content set or the factory set."
                     )
@@ -767,14 +845,14 @@ def _xml_attribute_item(
                         f"list, or remove the reference from the view."
                     )
                 raise ValueError(
-                    f'View "{view.name}" column {idx} references super metric '
+                    f'View "{view.name}" {where} references super metric '
                     f'"{sm_name}" which could not be resolved to a UUID. '
                     f"Ensure the SM YAML exists in content/supermetrics/ and "
                     f"has a valid id field."
                 )
         else:
             raise ValueError(
-                f'View "{view.name}" column {idx} has malformed supermetric '
+                f'View "{view.name}" {where} has malformed supermetric '
                 f'reference: {raw!r}. Expected supermetric:"<name>" '
                 f"(quoted, no space after the colon)."
             )
@@ -788,6 +866,31 @@ def _xml_attribute_item(
     else:
         attribute_key = raw
         roll_up_type = "AVG"
+    return attribute_key, roll_up_type
+
+
+def _xml_attribute_item(
+    view: ViewDef,
+    col,
+    idx: int,
+    sm_map: dict[str, str] | None = None,
+    sm_scope_active: bool = False,
+    bundle_context: str | None = None,
+    sm_resolver: "SmResolver | None" = None,
+) -> str:
+    # Instanced-group columns (driver + member) have their own wire shape,
+    # distinct from every other column kind rendered below. Handle them
+    # first and return early. See InstancedGroupSpec in loader.py for the
+    # vendor XML citations this mirrors.
+    if getattr(col, "instanced_group", None) is not None:
+        return _xml_instanced_group_item(view, col)
+    if getattr(col, "time_segment", None) is not None:
+        return _xml_time_segment_item(col)
+
+    attribute_key, roll_up_type = _column_attribute_key(
+        view, col.attribute, f"column {idx}", sm_map, sm_scope_active,
+        bundle_context, sm_resolver,
+    )
     props = [
         _xml_property("objectType", "RESOURCE"),
         _xml_property("attributeKey", attribute_key),
@@ -799,10 +902,17 @@ def _xml_attribute_item(
     # view; on a multi-subject view omitted (column resolves against every
     # kind) unless the column names a subject. See _column_kind_binding.
     props.extend(_xml_kind_binding_props(view, col))
-    props += [
-        _xml_property("rollUpType", roll_up_type),
-        _xml_property("rollUpCount", "1"),
-    ]
+    # Roll-up: the historical AVG/NONE + count 1 unless the YAML sets
+    # roll_up_type / roll_up_unit / roll_up_count (2026-11-12). rollUpUnit
+    # sits between rollUpType and rollUpCount, the vendor order.
+    if col.roll_up_type is not None:
+        roll_up_type = col.roll_up_type
+    props.append(_xml_property("rollUpType", roll_up_type))
+    if col.roll_up_unit is not None:
+        props.append(_xml_property("rollUpUnit", col.roll_up_unit))
+    props.append(_xml_property(
+        "rollUpCount", str(col.roll_up_count) if col.roll_up_count is not None else "1"
+    ))
     # Per-column transformation block.
     # Trend views retain the view-level stacked list (NONE/TREND/FORECAST);
     # all other view types get a per-column single-item transformations block.
@@ -850,21 +960,9 @@ def _xml_attribute_item(
             return str(v)
         return str(v)
 
-    def _is_numeric_bound(v) -> bool:
-        if v is None:
-            return False
-        if isinstance(v, (int, float)):
-            return True
-        try:
-            float(str(v))
-            return True
-        except (ValueError, TypeError):
-            return False
-
     has_yellow = col.yellow_bound is not None
     has_orange = col.orange_bound is not None
     has_red = col.red_bound is not None
-    red_is_string = has_red and not _is_numeric_bound(col.red_bound)
 
     if has_yellow:
         props.append(_xml_property("yellowBound", _bound_str(col.yellow_bound)))
@@ -872,9 +970,16 @@ def _xml_attribute_item(
         props.append(_xml_property("orangeBound", _bound_str(col.orange_bound)))
     if has_red:
         props.append(_xml_property("redBound", _bound_str(col.red_bound)))
-    # ascendingRange: emit for numeric bounds; suppress for string-only red_bound
-    if col.ascending_range is not None and not (red_is_string and not has_yellow and not has_orange):
+    # ascendingRange: emitted whenever set. A string-only red_bound
+    # (property-match) column historically could not set it (the loader
+    # rejected it); since 2026-11-12 it may set true, the dominant vendor
+    # shape, which renders here.
+    if col.ascending_range is not None:
         props.append(_xml_property("ascendingRange", "true" if col.ascending_range else "false"))
+    # useSymptomThresholds: after the bounds, before displayName (vendor
+    # order, vCommunity 0.8.1 "VM CPU Utilization").
+    if col.use_symptom_thresholds is not None:
+        props.append(_xml_property("useSymptomThresholds", _bool_str(col.use_symptom_thresholds)))
 
     # displayName is emitted as a plain name/value Property with no
     # localizationKey.  Real VCF Ops exports (brockpeterson_operations_dashboards,
@@ -885,13 +990,66 @@ def _xml_attribute_item(
     # environments that honour localizationKey.  The factory's content.properties
     # files are empty, so the key served no purpose anyway.
     props.append(_xml_property("displayName", col.display_name))
-    props += [
-        _xml_property("addTimestampAsColumn", "false"),
-        _xml_property("isShowRelativeTimestamp", "false"),
-    ]
+    props += _xml_timestamp_props(col)
     # Trend views additionally carry a forecastDays attribute on each metric
     if view.data_type == "trend" and view.forecast_days and view.forecast_days > 0:
         props.append(_xml_property("forecastDays", str(view.forecast_days)))
+    props = _drop_omitted(props, col.omit)
+    return "<Item><Value>" + "".join(props) + "</Value></Item>"
+
+
+def _xml_additional_column_item(
+    view: ViewDef,
+    col,
+    idx: int = 0,
+    sm_map: dict[str, str] | None = None,
+    sm_scope_active: bool = False,
+    bundle_context: str | None = None,
+    sm_resolver: "SmResolver | None" = None,
+) -> str:
+    """One metadata ``distributionAdditionalColumns`` Item (YAML
+    ``additional_columns:``). Vendor order (vCommunity 0.8.1 "VM Disk
+    Latency Distribution", "VM with RDM disks"): objectType, attributeKey,
+    [preferredUnitId], localizedAttributeName, isStringAttribute,
+    adapterKind, resourceKind, [rollUpType], rollUpCount, [percentile],
+    [transformations], [sortCriteria], isProperty, displayName,
+    [isShowRelativeTimestamp]. Optional Properties render only when the
+    YAML sets them; rollUpCount defaults to 0, the only vendor value.
+    A ``supermetric:"<name>"`` attribute resolves exactly as in a
+    ``columns:`` entry (the loader rejects the raw key forms here); its
+    rollUpType still renders only when the YAML sets one."""
+    attribute_key, _ = _column_attribute_key(
+        view, col.attribute, f"additional column {idx}", sm_map,
+        sm_scope_active, bundle_context, sm_resolver,
+    )
+    props = [
+        _xml_property("objectType", "RESOURCE"),
+        _xml_property("attributeKey", attribute_key),
+    ]
+    if col.unit:
+        props.append(_xml_property("preferredUnitId", col.unit))
+    props.append(_xml_property("localizedAttributeName", col.localized_attribute_name))
+    props.append(_xml_property("isStringAttribute", _bool_str(col.is_string_attribute)))
+    props.extend(_xml_kind_binding_props(view, col))
+    if col.roll_up_type is not None:
+        props.append(_xml_property("rollUpType", col.roll_up_type))
+    props.append(_xml_property(
+        "rollUpCount", str(col.roll_up_count) if col.roll_up_count is not None else "0"
+    ))
+    if col.transformation is not None:
+        transform = col.transformation.upper()
+        if transform == "PERCENTILE" and col.percentile is not None:
+            props.append(_xml_property("percentile", str(col.percentile)))
+        props.append(
+            f'<Property name="transformations"><List><Item value="{escape(transform, {chr(34): "&quot;"})}"/></List></Property>'
+        )
+    if col.sort is not None:
+        props.append(_xml_property("sortCriteria", _COLUMN_SORT_CRITERIA[col.sort]))
+    props.append(_xml_property("isProperty", _bool_str(col.is_property)))
+    props.append(_xml_property("displayName", col.display_name))
+    if col.show_relative_timestamp is not None:
+        props.append(_xml_property("isShowRelativeTimestamp", _bool_str(col.show_relative_timestamp)))
+    props = _drop_omitted(props, col.omit)
     return "<Item><Value>" + "".join(props) + "</Value></Item>"
 
 
@@ -921,6 +1079,72 @@ def _render_summary_infos(view: ViewDef) -> str:
 
 def _bool_str(v: bool) -> str:
     return "true" if v else "false"
+
+
+def _xml_pagination_control(view: ViewDef) -> str:
+    """pagination-control: start 0, size ``page_size`` (historically 500);
+    empty when the view omits it (vCommunity 0.8.1 trend and list views
+    ship without one)."""
+    if "pagination" in view.omit:
+        return ""
+    size = view.page_size if view.page_size is not None else 500
+    return (
+        '<Control id="pagination-control_id_1" type="pagination-control" visible="true">'
+        '<Property name="start" value="0"/>'
+        f'<Property name="size" value="{size}"/>'
+        "</Control>"
+    )
+
+
+def _xml_metadata_control(
+    view: ViewDef,
+    sm_map: dict[str, str] | None = None,
+    sm_scope_active: bool = False,
+    bundle_context: str | None = None,
+    sm_resolver: "SmResolver | None" = None,
+) -> str:
+    """metadata control. Historical bytes when no fidelity field is set:
+    maxPointsCount 5000, hideObjectNameColumn, listTopResultSize -1,
+    includeResourceCreationTime false. ``distribution_color`` adds
+    distributionColor after maxPointsCount and ``additional_columns`` adds
+    distributionAdditionalColumns last (vendor order); ``omit:`` drops the
+    whole control or includeResourceCreationTime. Wire format:
+    knowledge/context/wire-formats/view_fidelity_wire_format.md §Metadata."""
+    if "metadata" in view.omit:
+        return ""
+    max_points = view.max_points_count if view.max_points_count is not None else 5000
+    top_n = view.top_n if view.top_n is not None else -1
+    color = (
+        _xml_property("distributionColor", view.distribution_color)
+        if view.distribution_color is not None else ""
+    )
+    irct = ""
+    if "include_resource_creation_time" not in view.omit:
+        irct = (
+            '<Property name="includeResourceCreationTime" '
+            f'value="{_bool_str(bool(view.include_resource_creation_time))}"/>'
+        )
+    addl = ""
+    if view.additional_columns:
+        addl = (
+            '<Property name="distributionAdditionalColumns"><List>'
+            + "".join(
+                _xml_additional_column_item(
+                    view, c, i, sm_map, sm_scope_active, bundle_context, sm_resolver
+                )
+                for i, c in enumerate(view.additional_columns)
+            )
+            + "</List></Property>"
+        )
+    return (
+        '<Control id="metadata_id_1" type="metadata" visible="false">'
+        f'<Property name="maxPointsCount" value="{max_points}"/>'
+        f"{color}"
+        f'<Property name="hideObjectNameColumn" value="{_bool_str(view.hide_object_name)}"/>'
+        f'<Property name="listTopResultSize" value="{top_n}"/>'
+        f"{irct}{addl}"
+        "</Control>"
+    )
 
 
 def _render_view_def_fragment(
@@ -977,17 +1201,33 @@ def _render_view_def_fragment(
     # per kind, kinds in sequence): reference/docs/extracted/
     # view-multi-subject/. A single-subject view emits the same two
     # elements it always has.
+    # `types:` (2026-11-12) narrows or reorders the pair per kind; the
+    # default is descendant then self.
     subject_types = "".join(
-        f'<SubjectType adapterKind="{escape(ak, {chr(34): "&quot;"})}"{filter_attr} resourceKind="{escape(rk, {chr(34): "&quot;"})}" type="descendant"/>'
-        f'<SubjectType adapterKind="{escape(ak, {chr(34): "&quot;"})}"{filter_attr} resourceKind="{escape(rk, {chr(34): "&quot;"})}" type="self"/>'
-        for ak, rk in view.subject_kinds
+        f'<SubjectType adapterKind="{escape(ak, {chr(34): "&quot;"})}"{filter_attr} resourceKind="{escape(rk, {chr(34): "&quot;"})}" type="{t}"/>'
+        for ak, rk, types in view.subject_type_entries
+        for t in types
+    )
+    # <SubjectsGroupBy> sits after the SubjectTypes, before <Usage>
+    # (vCommunity 0.8.1 "VM Shares by RP"; 14 built-in list views).
+    group_by = ""
+    if view.group_by is not None:
+        group_by = (
+            f'<SubjectsGroupBy adapterKind="{escape(view.group_by.adapter_kind, {chr(34): "&quot;"})}"'
+            f' resourceKind="{escape(view.group_by.resource_kind, {chr(34): "&quot;"})}"/>'
+        )
+    # <Usage>: the YAML subset, always in the product's own order.
+    usage_values = (
+        [u for u in _USAGE_ORDER if u in view.usage] if view.usage is not None
+        else list(_USAGE_ORDER)
     )
     header = (
         f'<ViewDef id="{view.id}">'
         f'<Title>{escape(view.name)}</Title>'
         + desc_elem
-        + subject_types +
-        "<Usage>dashboard</Usage><Usage>report</Usage><Usage>details</Usage><Usage>content</Usage>"
+        + subject_types
+        + group_by
+        + "".join(f"<Usage>{u}</Usage>" for u in usage_values)
     )
 
     # Time-interval control appears in all view types.
@@ -1004,19 +1244,18 @@ def _render_view_def_fragment(
     if view.data_type == "distribution":
         # Distribution view: buckets-control instead of pagination/summary
         buckets_ctrl = _xml_buckets_control(view)
-        metadata_ctrl = (
-            '<Control id="metadata_id_1" type="metadata" visible="false">'
-            '<Property name="maxPointsCount" value="5000"/>'
-            f'<Property name="hideObjectNameColumn" value="{_bool_str(view.hide_object_name)}"/>'
-            '<Property name="listTopResultSize" value="-1"/>'
-            '<Property name="includeResourceCreationTime" value="false"/>'
-            "</Control>"
+        metadata_ctrl = _xml_metadata_control(
+            view, sm_map, sm_scope_active, bundle_context, sm_resolver
         )
+        # No pagination control unless page_size asks for one (vendor
+        # order: buckets, pagination, metadata).
+        pagination_ctrl = _xml_pagination_control(view) if view.page_size is not None else ""
         controls = (
             "<Controls>"
             + time_control
             + attr_control
             + buckets_ctrl
+            + pagination_ctrl
             + metadata_ctrl
             + "</Controls>"
         )
@@ -1025,19 +1264,9 @@ def _render_view_def_fragment(
 
     elif view.data_type == "trend":
         # Trend view: pagination-control (same as list), no summary
-        pagination_ctrl = (
-            '<Control id="pagination-control_id_1" type="pagination-control" visible="true">'
-            '<Property name="start" value="0"/>'
-            '<Property name="size" value="500"/>'
-            "</Control>"
-        )
-        metadata_ctrl = (
-            '<Control id="metadata_id_1" type="metadata" visible="false">'
-            '<Property name="maxPointsCount" value="5000"/>'
-            f'<Property name="hideObjectNameColumn" value="{_bool_str(view.hide_object_name)}"/>'
-            '<Property name="listTopResultSize" value="-1"/>'
-            '<Property name="includeResourceCreationTime" value="false"/>'
-            "</Control>"
+        pagination_ctrl = _xml_pagination_control(view)
+        metadata_ctrl = _xml_metadata_control(
+            view, sm_map, sm_scope_active, bundle_context, sm_resolver
         )
         controls = (
             "<Controls>"
@@ -1061,19 +1290,9 @@ def _render_view_def_fragment(
             f'{summary}'
             "</Control>"
         )
-        pagination_ctrl = (
-            '<Control id="pagination-control_id_1" type="pagination-control" visible="true">'
-            '<Property name="start" value="0"/>'
-            '<Property name="size" value="500"/>'
-            "</Control>"
-        )
-        metadata_ctrl = (
-            '<Control id="metadata_id_1" type="metadata" visible="false">'
-            '<Property name="maxPointsCount" value="5000"/>'
-            f'<Property name="hideObjectNameColumn" value="{_bool_str(view.hide_object_name)}"/>'
-            '<Property name="listTopResultSize" value="-1"/>'
-            '<Property name="includeResourceCreationTime" value="false"/>'
-            "</Control>"
+        pagination_ctrl = _xml_pagination_control(view)
+        metadata_ctrl = _xml_metadata_control(
+            view, sm_map, sm_scope_active, bundle_context, sm_resolver
         )
         controls = (
             "<Controls>"
@@ -1175,8 +1394,12 @@ def render_view_def_fragments(
             f' resourceKind="{escape(owning_resource_kind, {chr(34): "&quot;"})}"'
             f' type="descendant"/>'
         )
-        # Insert just before the first <Usage> element.
-        usage_pos = frag.find("<Usage>")
+        # Insert just before the first <Usage> element, or before
+        # <SubjectsGroupBy> when the view has one, so every SubjectType
+        # still precedes the group-by element (the vendor order).
+        usage_pos = frag.find("<SubjectsGroupBy ")
+        if usage_pos == -1:
+            usage_pos = frag.find("<Usage>")
         if usage_pos == -1:
             # Fallback: append before closing </ViewDef>
             frag = frag[:-len("</ViewDef>")] + owning_st + "</ViewDef>"

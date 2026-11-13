@@ -64,6 +64,9 @@ Key facts:
 - Columns reference super metrics as `sm_<uuid>` in `attributeKey`.
 - Can run standalone or embedded in a dashboard widget.
 - No REST CRUD: delete only via UI action layer.
+- Distribution views also carry drill-down columns, explicit bucket
+  ranges and colors; per-column roll-up and Property presence are
+  expressible: `knowledge/context/wire-formats/view_fidelity_wire_format.md`.
 
 ### Dashboards
 

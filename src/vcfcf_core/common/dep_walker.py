@@ -289,7 +289,8 @@ def extract_refs_from_views(
     views: "List[ViewDef]",
     column_resolver=None,
 ) -> Tuple[List[SmRef], List[MetricRef]]:
-    """Extract SM and OOTB metric references from view column attributes.
+    """Extract SM and OOTB metric references from view column attributes
+    (``columns:`` and distribution ``additional_columns:`` alike).
 
     A ``supermetric:"<name>"`` column (any token case, optional ``@``, the
     renderer's ``_SM_COLUMN_REF_RE``) is a super metric reference, never an
@@ -305,16 +306,18 @@ def extract_refs_from_views(
     A malformed name-form token (``supermetric: "x"``) yields nothing: the
     renderer rejects it, so no column of that shape reaches the instance.
     """
-    from ..supermetrics.column_resolver import SM_COLUMN_PREFIX_RE, column_sm_name
+    from ..supermetrics.column_resolver import (
+        SM_COLUMN_PREFIX_RE, column_sm_name, view_column_entries,
+    )
 
     sm_refs: List[SmRef] = []
     metric_refs: List[MetricRef] = []
     for v in views:
         ak = v.adapter_kind or "VMWARE"
         rk = v.resource_kind or ""
-        for col in v.columns:
+        for label, col in view_column_entries(v):
             attr = col.attribute.strip()
-            source = f"view '{v.name}' col '{col.display_name}'"
+            source = f"view '{v.name}' {label} '{col.display_name}'"
             if SM_COLUMN_PREFIX_RE.match(attr):
                 name = column_sm_name(attr)
                 if name is None:
@@ -341,7 +344,7 @@ def extract_refs_from_views(
                     adapter_kind=ak,
                     resource_kind=rk,
                     metric_key=attr,
-                    source=f"view '{v.name}' col '{col.display_name}'",
+                    source=source,
                 ))
     return sm_refs, metric_refs
 
@@ -622,7 +625,7 @@ def supermetrics_used_by(
     not be checked from the repo; the caller decides how loud to be.
     """
     from ..dashboards.render import _SM_COLUMN_REF_RE
-    from ..supermetrics.column_resolver import SmColumnResolver
+    from ..supermetrics.column_resolver import SmColumnResolver, view_column_entries
 
     if isinstance(column_resolver, Mapping):  # positional pre-#270 column_sms
         column_sms, column_resolver = column_resolver, None
@@ -665,14 +668,14 @@ def supermetrics_used_by(
         else:
             _add(sm)
     for view in views:
-        for col in view.columns:
+        for label, col in view_column_entries(view):
             m = _SM_COLUMN_REF_RE.match((col.attribute or "").strip())
             if not m:
                 continue
             sm = column_resolver.resolve(view, m.group(1))
             if sm is None:
                 unresolved.append(
-                    f"view '{view.name}' col '{col.display_name}' references "
+                    f"view '{view.name}' {label} '{col.display_name}' references "
                     f"super metric '{m.group(1)}'"
                 )
             else:
@@ -974,13 +977,15 @@ def collect_deps(
 
     sm_name_re = _re.compile(r'''supermetric:["'](.+?)["']''')
 
+    from ..supermetrics.column_resolver import view_column_entries
+
     for view in needed_views.values():
-        for col in view.columns:
+        for label, col in view_column_entries(view):
             m = sm_uuid_re.search(col.attribute)
             if m:
                 _collect_sm_uuid(
                     m.group(1),
-                    f"view '{view.name}' col '{col.display_name}'",
+                    f"view '{view.name}' {label} '{col.display_name}'",
                 )
                 continue
             mn = sm_name_re.search(col.attribute)
@@ -989,11 +994,11 @@ def collect_deps(
                 if sm and sm.id:
                     _collect_sm_uuid(
                         sm.id,
-                        f"view '{view.name}' col '{col.display_name}'",
+                        f"view '{view.name}' {label} '{col.display_name}'",
                     )
                 elif sm is None:
                     graph.errors.append(
-                        f"view '{view.name}' col '{col.display_name}' "
+                        f"view '{view.name}' {label} '{col.display_name}' "
                         f"references unknown SM name '{mn.group(1)}'"
                     )
 
