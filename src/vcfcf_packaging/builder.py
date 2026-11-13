@@ -493,7 +493,7 @@ def build_bundle(
     )
 
     # --- Assemble zip ---
-    out_path.write_bytes(assemble_distribution_zip(
+    zip_bytes = assemble_distribution_zip(
         slug=slug,
         payloads=payloads,
         bundle_json=bundle_json,
@@ -503,7 +503,11 @@ def build_bundle(
         framework_readme=framework_readme,
         vcfops_manifest=vcfops_manifest,
         license_text=license_text,
-    ))
+    )
+    # Stock content ids (#345): refuse before anything is written.
+    from .stock_ids import guard_bundle
+    guard_bundle(bundle, zip_bytes, f"bundle {slug!r}")
+    out_path.write_bytes(zip_bytes)
 
     # Print audit summary after successful build.
     if audit_result is not None:

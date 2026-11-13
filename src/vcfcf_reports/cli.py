@@ -52,11 +52,17 @@ def cmd_validate(args) -> int:
     except ReportValidationError as e:
         print(f"INVALID: {e}", file=sys.stderr)
         return 1
-    print(f"OK: {len(defs)} report definition(s) valid")
-    for rd in defs:
-        sections_summary = ", ".join(s.type for s in rd.sections)
-        print(f"  {rd.id}  {rd.name}")
-        print(f"    sections: {sections_summary}")
+    # Stock content ids (#345): no report template may ship under a stock id.
+    # Checked before the OK line, which prints only when it passes.
+    from vcfcf_core.stock_ids.guard import definitions_from_objects
+    from vcfcf_packaging.stock_ids import report_stock_ids
+    stock_rc = report_stock_ids(definitions_from_objects("report", defs), "report templates")
+    if stock_rc == 0:
+        print(f"OK: {len(defs)} report definition(s) valid")
+        for rd in defs:
+            sections_summary = ", ".join(s.type for s in rd.sections)
+            print(f"  {rd.id}  {rd.name}")
+            print(f"    sections: {sections_summary}")
 
     # Slug-uniqueness check across content/ and third_party/*/
     if not getattr(args, "paths", None):
@@ -73,7 +79,7 @@ def cmd_validate(args) -> int:
         except ImportError:
             pass  # vcfcf_packaging not available — skip cross-provenance check
 
-    return 0
+    return stock_rc
 
 
 def cmd_list(args) -> int:

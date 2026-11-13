@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from .handler import ContentHandler, DeleteResult, ItemResult, SyncResult, discover_handlers
+from .stock_ids import import_allowlist
 from .loader import Bundle, BundleValidationError, load_bundle, load_all_bundles
 from .navigation import print_navigation_prerequisites
 
@@ -67,6 +68,7 @@ UNSYNCED_CONTENT_TYPES = {
 KNOWN_MANIFEST_KEYS = frozenset({
     "name", "description", "sync", "author", "license", "source",
     "factory_native", "display_name", "design", "released", "version",
+    "stock_id_allowlist",  # not content: the stock-id guard's escape hatch (#345)
     *SYNC_CONTENT_TYPES, *UNSYNCED_CONTENT_TYPES,
 })
 
@@ -255,6 +257,9 @@ def sync_bundle(
 
     if _check_sm_referents_before_import(bundle, session):
         return 1
+    # Symptoms and alerts sync by name: warn on a stock name (#345 W8).
+    from .stock_ids import warn_bundle_stock_names
+    warn_bundle_stock_names(bundle)
 
     any_failure = False
     # Warn/skip counts per content type, for the end-of-run trailer. The
@@ -275,13 +280,17 @@ def sync_bundle(
             # gets them, so it syncs with the bundle's own context
             # (factory_native prefix rule, resolved references) instead of
             # reloading the files with factory defaults (#232 review W4).
+            # Every content import it makes is owned by this bundle: only
+            # this manifest's stock_id_allowlist applies to it (#345).
             sync_loaded = getattr(handler, "sync_loaded", None)
-            if callable(sync_loaded):
-                result = sync_loaded(
-                    list(getattr(bundle, content_type, None) or []), yaml_paths, session
-                )
-            else:
-                result = handler.sync(yaml_paths, session)
+            with import_allowlist(str(getattr(bundle, "source_path", None) or bundle_path),
+                                  getattr(bundle, "stock_id_allowlist", None) or []):
+                if callable(sync_loaded):
+                    result = sync_loaded(
+                        list(getattr(bundle, content_type, None) or []), yaml_paths, session
+                    )
+                else:
+                    result = handler.sync(yaml_paths, session)
         except Exception as exc:  # noqa: BLE001
             _print_fail(f"{content_type}: unexpected error: {exc}")
             any_failure = True

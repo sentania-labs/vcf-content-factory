@@ -9,7 +9,8 @@ LLM / agent involvement.  CI runners pull the tarball, extract it, and run:
 Kit contents (assembled under a temp dir, then tarballed):
   sdk_buildkit/
     __init__.py
-    __main__.py                : exposes build-sdk / validate-sdk / pak-compare
+    __main__.py                : exposes build-sdk / validate-sdk / pak-compare /
+                                 stock-id-check
     sdk_builder.py             : copy of vcfcf_managementpacks/sdk_builder.py (paths relocated)
     sdk_project.py             : copy (no path changes needed)
     pak_compare.py             : copy (no path changes needed)
@@ -25,6 +26,10 @@ Kit contents (assembled under a temp dir, then tarballed):
     defect_gate.py             : vcfcf_packaging/defects.py verbatim behind a
                                  generated header; the standalone RULE-012 gate
                                  for pak CI (#226)
+    stock_ids.py               : copy of vcfcf_core/stock_ids/guard.py (the
+                                 stock content id guard, #345; no rewrites)
+    stock_ids_baseline.json    : copy of vcfcf_core/stock_ids/stock_ids_baseline.json,
+                                 the stock-id baseline it loads from beside itself
     adapter_framework/src/      : framework Java source (compiled at build-sdk time)
     adapter_runtime/            : empty directory (jar compiled into here on first use)
     templates/icons/            : SVG icon assets
@@ -89,7 +94,7 @@ from typing import Optional
 # Version constant: bump when kit contents change in a meaningful way
 # ---------------------------------------------------------------------------
 
-BUILDKIT_VERSION = "1.0.28"
+BUILDKIT_VERSION = "1.0.29"
 
 # ---------------------------------------------------------------------------
 # Source paths (relative to this file's parent = vcfcf_managementpacks/)
@@ -124,6 +129,11 @@ _FACTORY_SOURCES = {
     "reports_loader.py": _CORE_ROOT / "reports" / "loader.py",
     "reports_render.py": _CORE_ROOT / "reports" / "render.py",
     "docs_gen.py": _HERE / "docs_gen.py",
+    # Stock content id guard (#345). guard.py is self-contained and finds its
+    # baseline beside itself (Path(__file__).with_name), so both ship flat,
+    # byte for byte. No baseline in the kit fails every build (fail closed).
+    "stock_ids.py": _CORE_ROOT / "stock_ids" / "guard.py",
+    "stock_ids_baseline.json": _CORE_ROOT / "stock_ids" / "stock_ids_baseline.json",
 }
 
 # The RULE-012 defect gate, shipped as a standalone script so pak CI can run
@@ -197,6 +207,12 @@ _IMPORT_REWRITES: dict[str, list[tuple[str, str]]] = {
         (
             r"from vcfcf_dashboards\.render import render_view_def_fragments",
             "from .dashboard_render import render_view_def_fragments",
+        ),
+        # from vcfcf_core.stock_ids import guard as _stock_ids  (module-level;
+        # the stock content id guard, #345)
+        (
+            r"from vcfcf_core\.stock_ids import guard as _stock_ids",
+            "from . import stock_ids as _stock_ids",
         ),
         # from vcfcf_core.supermetrics import crossref as _crossref  (module-level;
         # the shared @supermetric:"<name>" formula cross-reference resolver)
@@ -354,10 +370,25 @@ Run as:
     python3 -m sdk_buildkit build-sdk <adapter_dir>
     python3 -m sdk_buildkit validate-sdk <adapter_dir>
     python3 -m sdk_buildkit pak-compare <factory.pak> <reference.pak>
+    python3 -m sdk_buildkit stock-id-check <pak-or-zip-or-dir> [...]
 
 The RULE-012 defect gate ships beside them as a standalone script, the
 factory's own implementation (exit 0 clean, 1 unusable registry, 2 refused):
     python3 sdk_buildkit/defect_gate.py --pak <name> --registry <defects.md> --require-registry
+
+The stock content id guard (kit 1.0.29+, factory issue #345): validate-sdk
+and build-sdk refuse a pak whose bundled content defines content under an
+id VCF Operations ships as its own (installing would overwrite the stock
+object, uninstalling would delete it). The ids are in
+stock_ids_baseline.json beside stock_ids.py. A type the baseline holds no
+ids for is scanned but not checked, and the success line names it (in the
+1.0.29 baseline: super metrics and recommendations). Without that file, or
+when a member of the built pak cannot be read, every build fails.
+References to stock ids are fine. The escape hatch is adapter.yaml
+stock_id_allowlist (type, id, reason per entry; a warning on every build).
+Read-only check of any pak, content zip or export (exit 0 clean, 2 stock
+ids found, 1 cannot check):
+    python3 -m sdk_buildkit stock-id-check <path> [<path> ...]
 
 ## Consumer contract
 
@@ -654,6 +685,20 @@ def _build_parser() -> argparse.ArgumentParser:
         help=_REQUIRE_SDK_COMPAT_HELP,
     )
 
+    # ----- stock-id-check -----
+    psic = sub.add_parser(
+        "stock-id-check",
+        help=(
+            "read-only: list every definition in a .pak (packed or unpacked), "
+            "content zip or export whose id is a VCF Operations stock id "
+            "(exit 0 none, 2 found, 1 cannot check: unreadable content or "
+            "nothing to check)"
+        ),
+    )
+    psic.add_argument("paths", nargs="+", metavar="PATH")
+    psic.add_argument("--baseline", default=None, metavar="JSON",
+                      help="baseline to check against (default: the kit's own)")
+
     # ----- pak-compare -----
     ppc = sub.add_parser(
         "pak-compare",
@@ -729,6 +774,20 @@ def main() -> int:
             return 1
         print(f"OK: {project_dir} is a valid Tier 2 SDK adapter project")
         return 0
+
+    elif args.cmd == "stock-id-check":
+        from . import stock_ids
+        try:
+            baseline = stock_ids.load_baseline(args.baseline)
+        except stock_ids.StockIdBaselineError as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            return 1
+        missing = [p for p in args.paths if not Path(p).exists()]
+        for p in missing:
+            print(f"ERROR: not found: {p}", file=sys.stderr)
+        if missing:
+            return 1
+        return stock_ids.standalone_check(args.paths, baseline)
 
     elif args.cmd == "pak-compare":
         # Exit status is the gate (#181): 0 only when the comparison ran

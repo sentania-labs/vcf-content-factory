@@ -34,14 +34,19 @@ def cmd_validate(args) -> int:
     except SymptomValidationError as e:
         print(f"INVALID: {e}", file=sys.stderr)
         return 1
-    print(f"OK: {len(defs)} symptom definition(s) valid")
-    for d in defs:
-        print(
-            f"  - {d.name}  "
-            f"({d.adapter_kind}/{d.resource_kind}, "
-            f"severity={d.severity})  "
-            f"({d.source_path})"
-        )
+    # Stock content ids (#345): no symptom may ship under a stock id.
+    # Checked before the OK line, which prints only when it passes.
+    from vcfcf_packaging.stock_ids import report_stock_ids, symptom_definitions
+    stock_rc = report_stock_ids(symptom_definitions(defs), "symptom definitions")
+    if stock_rc == 0:
+        print(f"OK: {len(defs)} symptom definition(s) valid")
+        for d in defs:
+            print(
+                f"  - {d.name}  "
+                f"({d.adapter_kind}/{d.resource_kind}, "
+                f"severity={d.severity})  "
+                f"({d.source_path})"
+            )
 
     # Slug-uniqueness check across content/ and third_party/*/
     if not args.paths:
@@ -58,7 +63,7 @@ def cmd_validate(args) -> int:
         except ImportError:
             pass  # vcfcf_packaging not available — skip cross-provenance check
 
-    return 0
+    return stock_rc
 
 
 def cmd_list(args) -> int:

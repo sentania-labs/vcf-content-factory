@@ -585,6 +585,7 @@ def cmd_install(args) -> int:
         materialization_wait=getattr(args, "materialization_wait", None),
         summary_rebind=summary_rebind,
         restart_failed=getattr(args, "restart_failed", True),
+        allow_stock_ids=getattr(args, "allow_stock_ids", False),
     )
 
 
@@ -1416,6 +1417,19 @@ def build_parser() -> argparse.ArgumentParser:
             "the install, and to one with no usable state from before the "
             "install only when FAILED (a remote collector or Cloud Proxy gets "
             "the start before it loads the new jar). Not run with --no-wait."
+        ),
+    )
+    pi.add_argument(
+        "--allow-stock-ids",
+        action="store_true",
+        dest="allow_stock_ids",
+        default=False,
+        help=(
+            "Install even though the pak defines content under VCF Operations "
+            "stock ids (issue #345). Without it install refuses such a pak and "
+            "lists the ids: installing overwrites those stock objects and "
+            "uninstalling the pak deletes them. A third-party pak, or a "
+            "factory pak built with an adapter.yaml stock_id_allowlist, needs it."
         ),
     )
     pi.epilog = (
