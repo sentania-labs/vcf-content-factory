@@ -348,10 +348,17 @@ Sections with no content edit. Code: `widget_versions.section_omission_reason`
 `loader.apply_section_fallback` (both, with the notes). Tests:
 `tests/test_section_fallback.py`.
 
-**Contract.** Without the key nothing changes: same objects, same bytes
-(78 renders of every dashboard in `content/`, `tests/fixtures/`,
-`third_party/*/` and the registered paks, content-import and pak path,
-identical before and after). With the key, every omission prints
+**Contract.** Without the key nothing changes: same objects, same bytes.
+Checked 2026-11-13 by rendering every dashboard YAML under
+`content/dashboards/`, `tests/fixtures/dashboards/`,
+`third_party/*/dashboards/` and the registered pak clones'
+`dashboards/` (12 + 2 + 1 in the repo, 6 in the compliance clone, the only
+registered pak that bundles dashboards: 21 dashboards) with
+`render_dashboards_bundle_json`, once without and once with an owning
+adapter kind (the content-import and pak paths: 42 renders), on the base
+commit and on the change, and comparing sha256 per render: all identical.
+`tests/test_section_fallback.py` pins the same for every repo dashboard at
+the object level (`apply_section_fallback` returns the same objects). With the key, every omission prints
 `SECTIONS OMITTED: dashboard '<name>': <n> Section widget(s) left out
 (section_fallback: omit): <reason>.`, the reason naming the target version
 and the floor. Load errors: any other value (the message names `omit`), and
@@ -406,7 +413,10 @@ incoming navigations are unchanged; Sections contribute nothing to
 closes each removed Section row that no remaining widget covers: every
 widget below moves up one row per closed row above it. A row a remaining
 widget still covers (a widget starting above the Section and spanning past
-it) is left open. Why close rather than leave the gap:
+it) is left open. Rows are counted as rendered: an authored `y` below 1 is
+row 1, the floor `render._clamp_gridster_floor` applies (DEF-013), so a
+0-based Section that renders on another widget's row is not closed. Why
+close rather than leave the gap:
 
 - Saved product layouts carry no empty rows: of 227 dashboards in the
   reference corpus (205 under `reference/references/`, 22 under

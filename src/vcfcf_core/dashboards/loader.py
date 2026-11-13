@@ -2747,8 +2747,11 @@ class Dashboard:
         the loader rejects any widget starting on it). Each removed Section
         row that no remaining widget covers is closed, so every widget below
         moves up one row per closed row above it; a row a remaining widget
-        still covers is left as it is. Closing only empty rows cannot create
-        an overlap, and it keeps the layout gap-free, as every saved product
+        still covers is left as it is. Rows are the rendered ones (y below 1
+        counts as row 1, as the renderer clamps it), so a 0-based Section
+        that renders on a widget's row is not closed. Closing only empty rows
+        cannot create an overlap, and it keeps the layout gap-free, as every
+        saved product
         layout is (reasoning: knowledge/context/wire-formats/
         dashboard_fidelity_wire_format.md §Section fallback).
 
@@ -3159,8 +3162,12 @@ _UUID_RE = re.compile(
 
 
 def _grid_rows(w: "Widget") -> "tuple[int, int]":
-    """``(top row, height in rows)`` of a widget as authored (``coords``)."""
-    return int(w.coords.get("y", 1)), max(1, int(w.coords.get("h", 1)))
+    """``(top row, height in rows)`` of a widget as it renders: the top row
+    is ``max(1, y)``, the same floor ``render._clamp_gridster_floor`` applies
+    (DEF-013; the loader accepts an authored y below 1 and the renderer
+    clamps it), so the Section transform and its overlap check see the rows
+    the wire carries."""
+    return max(1, int(w.coords.get("y", 1))), max(1, int(w.coords.get("h", 1)))
 
 
 def _widgets_overlap(a: "Widget", b: "Widget") -> bool:

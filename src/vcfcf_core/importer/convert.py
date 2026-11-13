@@ -893,8 +893,10 @@ class _Planner:
                             f"widget {w.get('id')} ({wt}) needs VCF Operations {format_ops_version(floor)} or later; "
                             f"the stated target {format_ops_version(self.target)} aborts the whole dashboard on "
                             f"import (issue #199)"
-                            + ("; section_fallback: omit on the written YAML would deliver it without its "
-                               "Section rows (the importer never adds it)" if wt == "Section" else ""))
+                            + ("; to deliver it without its Section rows, convert it at a target that "
+                               "imports Section (9.1.1 or later) or without --target-min, then add "
+                               "section_fallback: omit to the written dashboard YAML (the importer never "
+                               "adds it)" if wt == "Section" else ""))
                     else:
                         e.version_warnings.append(
                             f"dashboard {e.name!r} widget {w.get('id')} ({wt}): needs VCF Operations "

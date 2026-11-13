@@ -730,6 +730,8 @@ def test_target_min_drops_newer_omit_and_lists_the_deviation(source, tmp_path, c
     assert rc == 1 and not out.exists()
     assert "NOT DELIVERABLE to 8.18.7: dashboards/probe-dashboard-b.yaml" in text
     assert "widget w0 (Section) needs VCF Operations 9.1.1" in text
+    assert ("convert it at a target that imports Section (9.1.1 or later) or without "
+            "--target-min, then add section_fallback: omit") in text
     rc, text = _run(source, out, capsys, "--layout", "third-party", "--ids", "keep", "--naming", "unprefixed",
                     "--target-min", "8.18.7", "--allow-partial")
     assert rc == 0, text

@@ -207,6 +207,38 @@ def test_a_row_still_covered_is_not_closed(tmp_path):
     assert {w.local_id: w.coords["y"] for w in without.widgets} == {"tall": 1, "low": 7}
 
 
+def _rows_after(tmp_path, widgets):
+    p = _write(tmp_path / "d.yaml", _dash_yaml(widgets, interactions=None))
+    return {w.local_id: w.coords["y"] for w in _load(p).without_sections().widgets}
+
+
+def test_two_adjacent_sections_close_both_rows(tmp_path):
+    widgets = [_text("top", 1, 1, 12, 2), _section("s1", 3), _section("s2", 4),
+               _text("a", 1, 5, 12, 2)]
+    assert _rows_after(tmp_path, widgets) == {"top": 1, "a": 3}
+
+
+def test_section_on_the_last_row_moves_nothing_further(tmp_path):
+    """s1's row closes (a rises one); the trailing Section has nothing below."""
+    widgets = [_text("top", 1, 1, 12, 2), _section("s1", 3), _text("a", 1, 4, 12, 2),
+               _section("tail", 6)]
+    assert _rows_after(tmp_path, widgets) == {"top": 1, "a": 3}
+
+
+def test_y_below_one_is_counted_as_the_rendered_row(tmp_path):
+    """DEF-013: the renderer clamps y to at least 1, so a 0-based Section
+    renders on a's row 1; that row is covered and not closed, and a and b
+    do not overlap on the wire after the omission (review NIT 1)."""
+    widgets = [_section("s1", 0), _text("a", 1, 1, 12, 2), _text("b", 1, 3, 12, 2)]
+    p = _write(tmp_path / "d.yaml", _dash_yaml(widgets, interactions=None))
+    without = _load(p).without_sections()
+    wire = json.loads(_render(without))["dashboards"][0]["widgets"]
+    spans = sorted((w["gridsterCoords"]["y"], w["gridsterCoords"]["h"]) for w in wire)
+    assert spans == [(1, 2), (3, 2)]
+    for (y1, h1), (y2, _h2) in zip(spans, spans[1:]):
+        assert y1 + h1 <= y2
+
+
 def test_without_sections_is_identity_without_a_section(tmp_path):
     d = _load(_write(tmp_path / "d.yaml", _dash_yaml(EXPECTED_WITHOUT, fallback=None)))
     assert d.without_sections() is d
@@ -657,8 +689,36 @@ def test_bundle_preflight_does_not_refuse_an_opted_in_dashboard(monkeypatch, tmp
                                 session=_VersionSession("VCF Operations 9.0.2.0"))
     cap = capsys.readouterr()
     assert ran and "FATAL" not in cap.err
-    assert "WARN  SECTIONS OMITTED: dashboard '[VCF CF] Section Fallback Probe'" in cap.out
+    # The preflight only checks; the handler that imports says the omission.
+    assert "SECTIONS OMITTED" not in cap.out + cap.err
     assert rc == 0
+
+
+def test_bundle_sync_says_each_omission_once(monkeypatch, tmp_path, capsys):
+    """Preflight plus the real dashboards handler: one SECTIONS OMITTED line
+    (review NIT 3)."""
+    import vcfcf_core.packaging.loader as core_bundle
+    from vcfcf_packaging import syncer
+    _sync_tree(tmp_path)
+    manifest = _write(tmp_path / "bundles" / "probe.yaml",
+                      "name: probe\ndashboards:\n  - content/dashboards/d.yaml\n"
+                      "  - content/dashboards/plain.yaml\n")
+    monkeypatch.setattr(syncer, "load_bundle",
+                        lambda p: core_bundle.load_bundle(Path(p), repo_root=tmp_path))
+    sent = []
+    monkeypatch.setattr(dash_handler, "get_current_user", lambda s: {"id": "u1", "username": "admin"})
+    monkeypatch.setattr(dash_handler, "discover_marker_filename", lambda s: "1L.v1")
+    monkeypatch.setattr(dash_handler, "build_import_zip",
+                        lambda views, ds, **kw: sent.append(sorted(x.section_count for x in ds)) or b"zip")
+    monkeypatch.setattr(dash_handler, "import_content_zip", lambda s, b: _clean_envelope(2))
+    monkeypatch.setattr(dash_handler, "_materialization_by_id", lambda s, ds: {})
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        syncer.sync_bundle(str(manifest), handlers=[dash_handler.DashboardsHandler()],
+                           session=_VersionSession("VCF Operations 9.0.2.0"))
+    cap = capsys.readouterr()
+    assert sent == [[0, 0]]
+    assert (cap.out + cap.err).count("SECTIONS OMITTED") == 1
 
 
 # --- 7. local package ----------------------------------------------------------

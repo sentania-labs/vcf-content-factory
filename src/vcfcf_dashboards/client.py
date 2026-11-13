@@ -214,7 +214,7 @@ def get_ops_version(client: VCFOpsClient):
         return None
 
 
-def plan_dashboard_import(client: VCFOpsClient, dashboards) -> "tuple":
+def plan_dashboard_import(client: VCFOpsClient, dashboards, *, omission_notes: bool = True) -> "tuple":
     """``(dashboards, refusal, notes)`` for a content import of ``dashboards``
     on ``client``: what to import, whether to import at all, what to say.
 
@@ -229,7 +229,10 @@ def plan_dashboard_import(client: VCFOpsClient, dashboards) -> "tuple":
     dashboard, then any WARNING (unmeasured version, 9.1.0 for Section; or
     version unreadable) under which the import goes ahead with the import
     result check as the backstop. No request is made and nothing changes
-    when no dashboard carries a floored widget type.
+    when no dashboard carries a floored widget type. ``omission_notes=False``
+    leaves the ``SECTIONS OMITTED`` lines out of ``notes`` for a caller that
+    only checks and is followed by one that imports and says them (bundle
+    sync's preflight before the dashboards handler), so each is said once.
     """
     from vcfcf_core.dashboards.loader import apply_section_fallback
     from vcfcf_core.dashboards.widget_versions import (
@@ -251,6 +254,8 @@ def plan_dashboard_import(client: VCFOpsClient, dashboards) -> "tuple":
         return dashboards, None, []
     version = get_ops_version(client)
     planned, notes = apply_section_fallback(dashboards, version, unknown_target="omit")
+    if not omission_notes:
+        notes = []
     pairs = _pairs(planned)
     if not _floored(pairs):
         return planned, None, notes
