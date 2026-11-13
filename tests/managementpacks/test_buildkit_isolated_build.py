@@ -877,3 +877,89 @@ def test_kit_isolated_bundled_yaml_without_id_fails_the_build_and_writes_nothing
         loader = {"views": load_view, "dashboards": load_dashboard, "supermetrics": load_sm}[kind]
         loaded = loader(factory_copy, enforce_framework_prefix=False)
     assert factory_copy.read_text(encoding="utf-8").startswith(f"id: {loaded.id}\n")
+
+
+# ---------------------------------------------------------------------------
+# Prefix transition through the isolated kit (prefix_migration.md §Pak repos)
+# ---------------------------------------------------------------------------
+#
+# A pak repo migrates to the [VCF CF] prefix at its own pace once a kit with
+# it is released. Through the shipped kit (only the kit on PYTHONPATH), the
+# three outcomes of check_content_naming must hold for both build-sdk and
+# validate-sdk: uniformly legacy is accepted with one warning, mixed is an
+# error and writes no pak, the new spelling passes without a word.
+
+_OLD_PREFIX = "[VCF Content Factory] "
+_NEW_PREFIX = "[VCF CF] "
+
+
+def _respell(project_dir: Path, rel_paths) -> None:
+    for rel in rel_paths:
+        p = project_dir / rel
+        p.write_text(p.read_text(encoding="utf-8").replace(_NEW_PREFIX, _OLD_PREFIX),
+                     encoding="utf-8")
+
+
+_ALL_CONTENT = (
+    "supermetrics/kit-isolation-sm.yaml", "symptoms/kit-isolation-symptom.yaml",
+    "alerts/kit-isolation-alert.yaml", "views/kit-isolation-view.yaml",
+    "reports/kit-isolation-report.yaml",
+)
+# The symptom and the alert that names it: a consistent half of the pak.
+_HALF_CONTENT = ("symptoms/kit-isolation-symptom.yaml", "alerts/kit-isolation-alert.yaml")
+
+
+def _run_kit(tmp_path: Path, spelling: str, command: str):
+    import tempfile
+
+    kit_root = tmp_path / "kit"
+    if not kit_root.exists():
+        _assemble_kit_python_only(kit_root)
+    fixture_root = tmp_path / f"fixture-{spelling}-{command}"
+    fixture_root.mkdir()
+    project_dir = _write_fixture_adapter(fixture_root)
+    if spelling == "legacy":
+        _respell(project_dir, _ALL_CONTENT)
+    elif spelling == "mixed":
+        _respell(project_dir, _HALF_CONTENT)
+    output_dir = tmp_path / f"output-{spelling}-{command}"
+    output_dir.mkdir()
+    argv = [sys.executable, "-m", "sdk_buildkit", command, str(project_dir)]
+    if command == "build-sdk":
+        argv += ["--output", str(output_dir)]
+    result = subprocess.run(argv, capture_output=True, text=True,
+                            cwd=tempfile.gettempdir(), env=_make_isolated_env(kit_root),
+                            timeout=55)
+    combined = result.stderr + result.stdout
+    _assert_no_vcfcf_module_error(result.stderr, result.stdout)
+    return result, combined, output_dir
+
+
+@pytest.mark.timeout(120)
+@pytest.mark.parametrize("command", ["build-sdk", "validate-sdk"])
+def test_kit_accepts_a_uniformly_legacy_pak_with_one_warning(tmp_path, command):
+    result, combined, _ = _run_kit(tmp_path, "legacy", command)
+    warnings = [l for l in combined.splitlines()
+                if "warning:" in l and "retired" in l]
+    assert len(warnings) == 1, combined[:3000]
+    assert "migrate-prefix" in warnings[0] and "later sdk-buildkit" in warnings[0]
+    assert "split" not in combined
+    if command == "build-sdk":
+        # Past the naming gate: content was loaded (Java may fail after it).
+        _assert_content_loading_succeeded(result.stderr)
+
+
+@pytest.mark.timeout(120)
+@pytest.mark.parametrize("command", ["build-sdk", "validate-sdk"])
+def test_kit_rejects_a_pak_that_mixes_the_spellings(tmp_path, command):
+    result, combined, output_dir = _run_kit(tmp_path, "mixed", command)
+    assert result.returncode != 0
+    assert "carries the retired" in combined and "split" in combined, combined[:3000]
+    assert not list(output_dir.glob("*.pak"))
+
+
+@pytest.mark.timeout(120)
+@pytest.mark.parametrize("command", ["build-sdk", "validate-sdk"])
+def test_kit_new_spelling_says_nothing_about_the_prefix(tmp_path, command):
+    _result, combined, _ = _run_kit(tmp_path, "new", command)
+    assert "retired" not in combined and "content_naming" not in combined, combined[:3000]

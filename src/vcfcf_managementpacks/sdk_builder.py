@@ -87,6 +87,7 @@ from vcfcf_core.naming import (
     MIGRATE_COMMAND,
     has_factory_prefix,
     has_legacy_prefix,
+    id_basis_name,
     is_factory_name,
 )
 
@@ -2855,8 +2856,13 @@ def _view_slug(view_name: str, view_id: str) -> str:
 
     Used to produce ``content/reports/<slug>/content.xml`` entries that match
     the VMware first-party pak convention (subdirectory per view).
+
+    The slug is taken from :func:`id_basis_name`, the legacy spelling of a
+    factory name, so the in-pak path does not move with the prefix rename
+    (knowledge/context/authoring/prefix_migration.md). Every content path
+    below (dashboards, super metrics, symptoms, alerts) does the same.
     """
-    slug = view_name.replace("/", "_").replace(" ", "_").replace("[", "").replace("]", "")
+    slug = id_basis_name(view_name).replace("/", "_").replace(" ", "_").replace("[", "").replace("]", "")
     slug = "".join(c for c in slug if c.isalnum() or c in "_-")
     slug = slug.strip("_")
     return slug or view_id
@@ -3420,7 +3426,7 @@ def _write_outer_pak(
                     }
                 }
                 # Derive a filesystem-safe filename from the SM display name.
-                safe_name = sm.name.replace("/", "_").replace("\\", "_")
+                safe_name = id_basis_name(sm.name).replace("/", "_").replace("\\", "_")
                 safe_name = "".join(
                     c for c in safe_name if c.isalnum() or c in " _-."
                 ).strip()
@@ -3517,8 +3523,10 @@ def _write_outer_pak(
                     owning_adapter_kind=owning_adapter_kind,
                     known_dashboards=dashboards,
                 )
-                # Derive a filesystem-safe slug from the dashboard name
-                slug = d.name.replace("/", "_").replace(" ", "_").replace("[", "").replace("]", "")
+                # Derive a filesystem-safe slug from the dashboard name (its
+                # id basis, so the directory, and the dashboards.properties
+                # key below, do not move with the prefix rename).
+                slug = id_basis_name(d.name).replace("/", "_").replace(" ", "_").replace("[", "").replace("]", "")
                 slug = "".join(c for c in slug if c.isalnum() or c in "_-")
                 slug = slug.strip("_") or d.id
                 zf.writestr(f"content/dashboards/{slug}/", "")
@@ -3568,10 +3576,12 @@ def _write_outer_pak(
                     recommendations=[],
                 )
                 # Derive a filesystem-safe name: keep alphanumerics, spaces, hyphens.
+                # From the id basis, so the path survives the prefix rename.
+                _sym_basis = id_basis_name(sym.name)
                 safe_name = "".join(
-                    c for c in sym.name if c.isalnum() or c in " -."
+                    c for c in _sym_basis if c.isalnum() or c in " -."
                 ).strip()
-                safe_name = safe_name or sym.name.replace("/", "_")
+                safe_name = safe_name or _sym_basis.replace("/", "_")
                 # Deduplicate: if two symptom names sanitize to the same string,
                 # append a counter suffix so the second file is not silently lost.
                 if safe_name in _sym_seen_names:
@@ -3636,10 +3646,12 @@ def _write_outer_pak(
                     alerts=[alert],
                     recommendations=referenced_recs,
                 )
+                # From the id basis, so the path survives the prefix rename.
+                _alert_basis = id_basis_name(alert.name)
                 safe_name = "".join(
-                    c for c in alert.name if c.isalnum() or c in " -."
+                    c for c in _alert_basis if c.isalnum() or c in " -."
                 ).strip()
-                safe_name = safe_name or alert.name.replace("/", "_")
+                safe_name = safe_name or _alert_basis.replace("/", "_")
                 # Deduplicate: if two alert names sanitize to the same string,
                 # append a counter suffix so the second file is not silently lost.
                 if safe_name in _alert_seen_names:
@@ -5155,9 +5167,21 @@ def check_content_naming(
     mismatch is an error. When the key is absent, the default
     (``factory_prefixed``) is applied but mismatches come back as one
     warning, so a pak that predates the key keeps validating until it
-    declares its contract. A name in the retired spelling is an error either
-    way: it points at the migration command, and a pak that ships it would
-    split its by-name references across two spellings.
+    declares its contract.
+
+    The retired spelling, in a ``factory_prefixed`` pak (transition, see
+    knowledge/context/authoring/prefix_migration.md §Pak repos): a pak repo
+    migrates at its own pace once a kit with the new prefix is released, so
+
+    - a pak whose prefixed names are all in the retired spelling is accepted,
+      with one warning per pak naming the migration command; a later kit
+      makes it an error;
+    - a pak that mixes the two spellings is an error per retired name, since
+      its by-name references would split across them;
+    - a pak in the new spelling passes silently.
+
+    Factory content (``content/``) keeps the hard cut: its loaders reject the
+    retired spelling outright.
     """
     labels = ("view", "dashboard", "supermetric", "symptom", "alert",
               "report", "recommendation")
@@ -5167,6 +5191,7 @@ def check_content_naming(
     unprefixed = content_naming == CONTENT_NAMING_UNPREFIXED
     mismatches: List[str] = []
     legacy: List[str] = []
+    current = 0
     for label, objs in zip(labels, bundled):
         for obj in objs or []:
             name = str(getattr(obj, "name", "") or "")
@@ -5178,35 +5203,56 @@ def check_content_naming(
                 continue
             else:
                 bad = not has_factory_prefix(name)
+                if not bad:
+                    current += 1
             if bad:
                 mismatches.append(f"{label} {name!r}")
 
-    legacy_errors = [
-        f"content_naming: {content_naming}: bundled {m} carries the retired "
-        f"'{LEGACY_FACTORY_PREFIX_LABEL}' prefix; factory content now starts "
-        f"with '{FACTORY_PREFIX}'. Run `{MIGRATE_COMMAND} <pak dir>` to rename "
-        f"the pak's content and its references."
-        for m in legacy
-    ]
+    errors: List[str] = []
+    warnings: List[str] = []
+    # A pak entirely in the retired spelling is mid-transition, not broken.
+    legacy_pak = bool(legacy) and current == 0
+    if legacy and current:
+        errors.extend(
+            f"content_naming: {content_naming}: bundled {m} carries the retired "
+            f"'{LEGACY_FACTORY_PREFIX_LABEL}' prefix while {current} other "
+            f"bundled name(s) use '{FACTORY_PREFIX_LABEL}'; a pak uses one "
+            f"spelling, or its by-name references split. Run "
+            f"`{MIGRATE_COMMAND} <pak dir>` to finish the rename."
+            for m in legacy
+        )
+    elif legacy_pak:
+        warnings.append(
+            f"content_naming: {content_naming}: all {len(legacy)} prefixed "
+            f"bundled name(s) carry the retired '{LEGACY_FACTORY_PREFIX_LABEL}' "
+            f"prefix; factory content now starts with '{FACTORY_PREFIX}'. "
+            f"Accepted for now, as a pak mid-transition; a later sdk-buildkit "
+            f"makes the retired spelling an error. Run "
+            f"`{MIGRATE_COMMAND} <pak dir>` to rename the pak's content and "
+            f"its references (knowledge/context/authoring/prefix_migration.md)."
+        )
 
     if not mismatches:
-        return legacy_errors, []
+        return errors, warnings
 
     if unprefixed:
         rule = (f"must not carry the '{FACTORY_PREFIX_LABEL}' or "
                 f"'{LEGACY_FACTORY_PREFIX_LABEL}' prefix")
+    elif legacy_pak:
+        rule = (f"must start with '{FACTORY_PREFIX}' (or, until the pak "
+                f"migrates, '{LEGACY_FACTORY_PREFIX_LABEL} ')")
     else:
         rule = f"must start with '{FACTORY_PREFIX}'"
 
     if declared:
-        return legacy_errors + [
+        return errors + [
             f"content_naming: {content_naming}: bundled {m} {rule}"
             for m in mismatches
-        ], []
+        ], warnings
 
     sample = ", ".join(mismatches[:3])
     more = f" and {len(mismatches) - 3} more" if len(mismatches) > 3 else ""
-    return legacy_errors, [
+    return errors, warnings + [
         f"content_naming not declared in adapter.yaml, so the default "
         f"factory_prefixed applies, and {len(mismatches)} bundled name(s) "
         f"lack the '{FACTORY_PREFIX}' prefix ({sample}{more}). "

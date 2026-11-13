@@ -7,10 +7,16 @@ the start of its display name. The prefix moved from ``[VCF Content Factory] ``
 to ``[VCF CF] `` on 2026-11-12: the Operations dashboard editor caps names at
 50 characters and the old prefix spent 22 of them.
 
-This is a hard cut. A name that still carries ``LEGACY_FACTORY_PREFIX`` is a
-load error that points at ``MIGRATE_COMMAND``; there is no period in which
-both are accepted, because by-name cross-references would split across the
-two spellings.
+For factory content this is a hard cut. A name that still carries
+``LEGACY_FACTORY_PREFIX`` is a load error that points at ``MIGRATE_COMMAND``;
+there is no period in which both are accepted, because by-name
+cross-references would split across the two spellings.
+
+Pak repos are the exception, for a transition: a pak migrates at its own
+pace once an sdk-buildkit with the new prefix is released, so
+``vcfcf_managementpacks.sdk_builder.check_content_naming`` accepts a pak
+whose names are all in the legacy spelling (with a warning), and rejects one
+that mixes the two.
 
 Not covered here, and unchanged by the move:
 
@@ -107,6 +113,11 @@ def rewrite_legacy_prefix(text: str) -> Tuple[str, int]:
 
     Returns ``(new_text, count)``. The label followed by ``(`` is a Markdown
     link (``[VCF Content Factory](https://...)``), not a name, and is kept.
+    The rule is lexical, so it also keeps a *name* whose label is followed
+    directly by ``(``, such as ``[VCF Content Factory](Beta) X``: that name
+    is left unmigrated and its loader then rejects it with the retired-prefix
+    error, which is the signal to rename it by hand. No name in the corpus
+    has that shape (2026-11-12).
     A label wrapped across lines (whitespace runs between its words) is
     matched too and rewritten onto one line. Idempotent: the current label
     does not contain the legacy one.
