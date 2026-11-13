@@ -87,6 +87,20 @@ so a malformed file cannot hide one.
 paks ship empty content directories. The distribution zips' `install.py`
 is not changed: what it installs passed the bundle build check.
 
+### References by raw id (warnings, never errors)
+
+The same baseline also checks content that *references* a stock object by
+raw id: a report section's `view_id:` / `dashboard_id:` and a dashboard
+View widget whose `view:` is a UUID (`guard.reference_warnings`). An id the
+baseline does not hold is a warning naming the file (a typo renders a
+blank section or widget, but the id may be another pak's object).
+`vcfcf_reports validate` and `vcfcf_dashboards validate` print it; in a
+Tier 2 pak (`validate-sdk`, `build-sdk`, `sdk_builder.bundled_reference_warnings`)
+a stock id the baseline shows absent on a supported line is also a warning
+naming those lines (a line counts only when the baseline holds an export of
+that type for it). Wire docs: `wire-formats/template_fidelity_wire_format.md`,
+`wire-formats/dashboard_fidelity_wire_format.md`.
+
 ### What the output claims
 
 A pass says what was compared, never just "no stock id". The built-pak

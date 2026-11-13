@@ -11,10 +11,24 @@ The report YAML fields that let an existing report template (`ReportDef` in
 
 - Every field is optional; without it the renderer emits exactly what it did
   before (render regression over every report YAML in the repo: identical).
-- A field the renderer cannot honour is a load error naming the file and
-  section index.
+- A field the renderer cannot honour is a load error naming the file, the
+  report and the section index (`<path>: report '<name>': sections[<i>]:
+  ...`); `ReportDef.validate()` errors are prefixed with the path too.
 - Evidence: 16 third-party templates and the 9.0.2, 8.18.7 and 9.1.1
   built-in exports (63, 62, 62 templates). Snippets are composed here.
+- Keys the older loader silently ignored (it does not reject unknown keys)
+  that now render: CoverPage `colorize` and `font_color`, and section
+  `omit`. One now fails to load: `colorize` on a Dashboard section ("not
+  rendered on a Dashboard section"). `view_id` / `dashboard_id` and
+  `subject_types: []` were load errors before, not ignored. The riskiest
+  newly read keys across the branch are dashboard `disabled: true` and
+  alert or recommendation `id:` (`dashboard_fidelity_wire_format.md`
+  §Keys an older loader ignored, `alert_fidelity_wire_format.md`).
+- SDK-adapter paks: buildkit 1.0.28 and earlier vendor the older loader,
+  which ignores those keys, so a pak built with such a kit renders without
+  them and reports no error. Pak CI pins the kit by tag, so neither these
+  fields nor the `omit:` version gate reach an official pak release until a
+  newer kit is tagged and the pak bumps its pin.
 
 ## Section attributes audited
 
@@ -39,6 +53,18 @@ sections:
 `font_color` and the CoverPage `colorize` are rejected on other section
 types; `omit: [formatting]` is View only and contradicts `colorize`.
 
+### Omit version floor
+
+`omit: [formatting]` has floor **8.18.7**: 77 of 91 View sections in the
+8.18.7 built-in export carry no ContentFormatting (79 of 92 on 9.0.2, 78 of
+90 on 9.1.1). Table: `reports/loader.SECTION_OMIT_MIN_OPS_VERSION`; check:
+`ReportDef.omit_version_problems(target)`. A Tier 2 pak build
+(`sdk_builder.check_bundled_version_floors`) fails on an entry whose floor
+is above its oldest supported line, and `load_file` warns for one above
+8.18.7 with no target, the same rule as dashboards
+(`dashboard_fidelity_wire_format.md` §Omit version floors). Nothing trips
+it today.
+
 ## Built-in (product-shipped) views and dashboards by id
 
 A View or Dashboard section names exactly one of `view:` / `dashboard:` (the
@@ -58,8 +84,19 @@ Such a section is `Section.external`. Dependency walkers: the discrete
 release builder (`discrete_builder._resolve_report_deps`) skips external
 sections (nothing to bundle), and the SDK pak report embedding
 (`sdk_builder`, which embeds only views bundled in the pak) leaves the id
-verbatim. No walker can check offline that a built-in id exists on the
-target.
+verbatim.
+
+The ids are checked against the stock-id baseline
+(`src/vcfcf_core/stock_ids/stock_ids_baseline.json`, 8.18.7, 9.0.2 and
+9.1.1 exports). `vcfcf_reports validate` warns, naming the file, report and
+section, when an id is not a known stock view or dashboard id: a typo
+renders a blank section, but the id may be another pak's object, so it is
+never an error. In a Tier 2 pak (`validate-sdk`, `build-sdk`) a stock id the
+baseline shows absent on a supported line (for example a view stock only
+in 9.0.2 and 9.1.1) is a warning naming the lines it is missing on.
+Check: `ReportDef.external_references()` and
+`stock_ids.guard.reference_warnings`. An id that exists only on the target
+instance (another pak installed there) cannot be checked offline.
 
 ## Reports with no SubjectType
 
@@ -83,5 +120,8 @@ resolved by name against the mapped dashboards and the pak's views, 5 with
 CoverPage formatting, 5 without SubjectType): **16 identical**. 62 built-in
 9.1.1 templates (every View section by `view_id`): 1 identical, 61 differ
 only by the two localizationKey attributes. XML compared as an ordered
-element tree, attributes unordered, text whitespace-collapsed; the
-comparator detected all 843 single-attribute, text and element mutations.
+element tree, attributes unordered, text whitespace-collapsed
+(`" ".join(text.split())`, which also hides a whitespace-only text change).
+The comparator detected all 843 single-attribute, text and element
+mutations; that mutation check ran over the 16 third-party report templates
+only, not over the alert or symptom XML.
