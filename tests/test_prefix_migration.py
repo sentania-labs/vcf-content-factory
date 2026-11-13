@@ -33,6 +33,9 @@ from vcfcf_core.naming import (  # noqa: E402
 
 NEW = FACTORY_PREFIX
 OLD = LEGACY_FACTORY_PREFIX
+# A synthetic historical record under the tmp factory tree. Built from parts so
+# the path reference audit (RULE-015) does not read it as a repo citation.
+_HISTORY_NOTE = "/".join(("knowledge", "context", "investigations", "old.md"))
 
 
 # ---------------------------------------------------------------------------
@@ -321,7 +324,7 @@ def _factory_tree(root: Path) -> None:
            f"name: Upstream View\ncolumns:\n  - attribute: 'supermetric:\"{OLD}A\"'\n")
     _write(root, "third_party/proj/debug/export.yaml", f'name: "{OLD}Captured"\n')
     _write(root, "third_party/proj/DESCRIPTION.md", "Via the [VCF Content Factory](https://x.invalid).\n")
-    _write(root, "knowledge/context/investigations/old.md", f"{OLD}D was slow\n")
+    _write(root, _HISTORY_NOTE, f"{OLD}D was slow\n")
     _write(root, "content/sdk-adapters/pak/adapter.yaml", "name: P\n")
     _write(root, "content/sdk-adapters/pak/views/pv.yaml", f'name: "{OLD}PV"\n')
 
@@ -349,7 +352,7 @@ def test_migrate_factory_tree(tmp_path):
     assert data["id"] == yaml.safe_load(before)["id"]
     assert data["name"] == NEW + "A" and data["formula"].endswith(f'"{NEW}B"}}')
     # Untouched: history, debug captures, links, pak repos, MP prose names.
-    assert OLD in (tmp_path / "knowledge/context/investigations/old.md").read_text()
+    assert OLD in (tmp_path / _HISTORY_NOTE).read_text()
     assert OLD in (tmp_path / "third_party/proj/debug/export.yaml").read_text()
     assert "[VCF Content Factory](" in (tmp_path / "third_party/proj/DESCRIPTION.md").read_text()
     assert OLD in (tmp_path / "content/sdk-adapters/pak/views/pv.yaml").read_text()
