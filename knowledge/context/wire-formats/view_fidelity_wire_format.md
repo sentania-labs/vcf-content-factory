@@ -19,12 +19,28 @@ bounds, units, instanced groups, subject filter) and
   views and `tests/fixtures/views/` (plain and with the SDK owning-subject
   injection), plus 189 views written in the old schema by the base
   importer: identical before and after.
+- **Two keys that existed before now render.** `count:` on a `dynamic:
+  true` buckets block and `calc_function:` on a `dynamic: false` one were
+  silently ignored by the old renderer; both now emit (`bucketCount`,
+  `dynamicCalcFunction`), and fixed-mode `calc_function` must be
+  `SIMPLEMAXMIN`. No YAML in the repo set either at the time of the
+  change; a clone that does sees those two Properties appear. Nothing
+  else changes for YAML that already existed.
 - **A field the renderer cannot honour for that view type is a load
   error**, never ignored. So is a value no vendor export carries (for
   example `use_symptom_thresholds: true`), and so is an `omit:` entry that
   contradicts a field the YAML also sets.
-- Property order inside a Control or an Item follows the vendor exports
-  for every new Property; the product reads Properties by name.
+- Column Items (attributeInfos and distributionAdditionalColumns) and the
+  metadata control follow vendor Property order. The buckets-control keeps
+  its historical order (`isDynamic` first; in dynamic mode `bucketCount`
+  after `dynamicCalcFunction`), which differs from the vendor's
+  (`dynamicCalcFunction, isDynamic, isSum`, `bucketCount` first in dynamic
+  mode). Harmless: the product reads Properties by name.
+- **SDK-adapter paks need a newer buildkit.** The buildkit vendors
+  `loader.py` and `render.py`, and pak CI builds with the kit pinned by
+  tag. Kit 1.0.28 and earlier carry the old loader, which rejects every
+  field on this page, so a pak view that uses any of them fails pak CI
+  until the pak pins a kit cut after this change.
 
 ## Evidence
 
@@ -103,11 +119,21 @@ No color bounds, ascending_range, transform expression, time-point
 siblings, instanced group, time segment, column `subject:`, roll_up_unit,
 use_symptom_thresholds or add_timestamp_as_column (none appear in the
 vendor shape). `omit:` may only name `display_name` (one vendor Item has no
-displayName). A super metric is accepted only as the literal
-`Super Metric|sm_<uuid>` key, passed through verbatim; a
-`supermetric:"<name>"` reference is a load error here, because the
-dependency walkers only scan `columns:` and the super metric would not be
-bundled. Column binding follows `columns:` (the view's kind on a
+displayName). A super metric is named as `supermetric:"<name>"`, as in
+`columns:`; the renderer resolves it to `Super Metric|sm_<uuid>` the same
+way (no rollUpType is added; set `roll_up_type:` if the source has one).
+The raw key (`Super Metric|sm_<uuid>`, any case, or any `sm_<uuid>`) is
+a load error that points at the name form (cross-reference convention: by
+name, never raw UUID). Every dependency walker and audit reads
+`additional_columns` alongside `columns`: the build audit
+(`packaging/deps.py`), the staged-bundle audit (`packaging/audit.py`, which
+walks every column Item), the dependency walker (`common/dep_walker.py`:
+live pre-flight, `supermetrics_used_by`, `collect_deps`), the discrete
+release builder and the validate/sync column check
+(`SmColumnResolver.column_problems`). So a super metric named only in an
+additional column is bundled, and a typo'd built-in key there fails the
+describe-cache audit. The source vCommunity 0.8.1 pak has one such column
+(1 of 189 views). Column binding follows `columns:` (the view's kind on a
 single-subject view).
 
 ### `distribution_color:`
@@ -134,7 +160,7 @@ Historical shapes (unchanged): dynamic emits `isDynamic=true` and
 | `ranges: [{start, end, color}]` | `bucketInfos` List, one Item of `startValue`, `endValue`, optional `bucketColor` | fixed mode only; renders `dynamicCalcFunction=SIMPLEMAXMIN` (every vendor `bucketInfos` pairs with it) and drops the implicit `bucketCount` (vendor shape) |
 | `count:` in dynamic mode | `bucketCount` | emitted only when `count` is written; dynamic mode never emitted it before |
 | `count:` with `ranges` | `bucketCount` | kept when written explicitly |
-| `calc_function:` in fixed mode | `dynamicCalcFunction` | emitted only when written (vendor fixed controls carry it) |
+| `calc_function:` in fixed mode | `dynamicCalcFunction` | emitted only when written (vendor fixed controls carry it); only `SIMPLEMAXMIN` accepted |
 | `is_sum: true\|false` | `isSum` | emitted only when set; vendor values true and false |
 
 ```xml
@@ -163,9 +189,13 @@ buckets:
     - {start: 25, end: 100, color: "DE3F30"}
 ```
 
-Rules: `ranges` needs `dynamic: false`; `calc_function`, if written, must
-be `SIMPLEMAXMIN`; each `start` below its `end`; numbers, not strings;
-`color` six hex digits. Ranges, `is_sum`, an explicit dynamic `count` or a
+Rules: `ranges` needs `dynamic: false`; in fixed mode `calc_function`, if
+written, must be `SIMPLEMAXMIN` (every fixed buckets-control in the three
+corpora, 73 / 72 / 33, carries it and nothing else); each `start` below its
+`end`, and the ranges ascending and non-overlapping (each `start` at or
+above the previous `end`): every vendor `bucketInfos` list (68 / 67 / 29)
+is, most contiguous, some with gaps, none overlapping or unordered;
+numbers, not strings; `color` six hex digits. Ranges, `is_sum`, an explicit dynamic `count` or a
 fixed `calc_function` on a non-distribution view is a load error. Integer
 range bounds render integral (`25`, not `25.0`). Vendor calc functions
 seen: DISCRETE, SIMPLEMAXMIN, LOGMAGNITUDE (one 9.1.1 view).
@@ -307,8 +337,22 @@ The subject filter applies to every SubjectType element, as before.
 
 `usage: [dashboard, report, content]` renders that subset of `<Usage>`,
 always in the product's order (dashboard, report, details, content).
-Default all four. `analysis:compliance` (one built-in view) is not
-accepted.
+Default all four. Only the sets the corpora carry are accepted (YAML order
+free):
+
+| Set | 9.1.1 | 8.18.7 | vCommunity 0.8.1 |
+|---|---|---|---|
+| dashboard, report, details, content (default) | 757 | 696 | 154 |
+| dashboard, report, content | 77 | 68 | 33 |
+| report, content | 7 | 6 | 0 |
+| dashboard, content | 9 | 7 | 2 |
+
+Any other set (`details` alone, `dashboard` alone, a set without
+`content`, and so on) is a load error. `analysis:compliance` (one built-in
+view in each built-in export, beside all four) is not accepted. A
+dashboard View widget that names a view whose `usage` leaves out
+`dashboard` fails `Dashboard.validate` (what the product does with such a
+widget is unverified). The matching report-side check is not implemented.
 
 ## `omit:` (presence fidelity)
 
@@ -323,7 +367,7 @@ Column `omit:`
 | Entry | Drops | Notes |
 |---|---|---|
 | `roll_up_type` | rollUpType | error with roll_up_type/roll_up_unit set, or on a property instanced member (emits none) |
-| `transformation` | transformations | error with transformation, percentile, transform_expression or time-point fields set |
+| `transformation` | transformations | error with transformation, percentile, transform_expression or time-point fields set; error on a trend view (the Property is the view-level TREND/FORECAST stack, and none of the 586 vendor trend columns lacks it) |
 | `add_timestamp_as_column` | addTimestampAsColumn | error with the field set |
 | `show_relative_timestamp` | isShowRelativeTimestamp | error with the field set |
 | `ascending_range` | ascendingRange, and waives the "all three numeric bounds need ascending_range" rule | needs a numeric bound; error with ascending_range set |
