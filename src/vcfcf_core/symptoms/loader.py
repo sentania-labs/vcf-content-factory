@@ -112,6 +112,18 @@ DYNAMIC_DIRECTIONS = {"ABOVE", "BELOW", "ABNORMAL"}
 # third-party pak (7 condition_self).
 SYMPTOM_DEF_TYPES = {"condition_self", "condition_population"}
 SYMPTOM_OMIT = {"wait_cycles", "cancel_cycles", "instanced"}
+#: Oldest VCF Operations version whose own built-in export shows each
+#: ``omit:`` entry's attribute absent (symptomdefs.xml of the 8.18.7, 9.0.2
+#: and 9.1.1 exports; alert_fidelity_wire_format.md §Omit version floors).
+#: A Tier 2 pak build fails on an entry whose floor is above its oldest
+#: supported line; ``None`` would mean no product export shows it absent.
+SYMPTOM_OMIT_MIN_OPS_VERSION = {
+    "wait_cycles": (8, 18, 7),    # 1,327 of 1,685 8.18.7 symptoms carry no waitCycle
+    "cancel_cycles": (8, 18, 7),  # 1,209 of 1,685 carry no cancelCycle
+    "instanced": (8, 18, 7),      # 934 of 985 metric / property conditions carry none
+}
+#: The oldest export set the floors above were read from.
+OLDEST_OMIT_EVIDENCE = (8, 18, 7)
 
 
 _UUID_RE = re.compile(
@@ -176,6 +188,27 @@ class SymptomDef:
             )
         self._validate_fidelity()
         self._validate_condition(self.condition)
+
+    def omit_version_problems(self, target_version=None) -> List[str]:
+        """``omit:`` entries whose floor (SYMPTOM_OMIT_MIN_OPS_VERSION) is
+        above ``target_version`` (a dotted version or int tuple). With no
+        target, entries whose floor is above the oldest export read
+        (OLDEST_OMIT_EVIDENCE) or unknown."""
+        target = _version_tuple(target_version) if target_version is not None else OLDEST_OMIT_EVIDENCE
+        src = f"{self.source_path}: " if self.source_path else ""
+        out: List[str] = []
+        for entry in self.omit:
+            floor = SYMPTOM_OMIT_MIN_OPS_VERSION.get(entry)
+            if floor is not None and _version_tuple(floor) <= target:
+                continue
+            seen = (f"absent only from VCF Operations {'.'.join(map(str, floor))} and later exports"
+                    if floor is not None else "absent from no product export")
+            out.append(
+                f"{src}symptom {self.name!r}: omit: {entry} leaves out an attribute {seen}; "
+                f"whether VCF Operations {'.'.join(map(str, target))} imports the symptom "
+                f"without it is unproven"
+            )
+        return out
 
     def _validate_fidelity(self) -> None:
         src = f"{self.source_path}: " if self.source_path else ""
@@ -353,6 +386,13 @@ def _condition_to_wire(cond: dict) -> dict:
     raise SymptomValidationError(f"Unknown condition type: {ctype!r}")
 
 
+def _version_tuple(v) -> tuple:
+    parts = [int(x) for x in (v if isinstance(v, tuple) else str(v).split("."))]
+    while len(parts) > 1 and parts[-1] == 0:
+        parts.pop()
+    return tuple(parts)
+
+
 def load_file(path: str | Path, enforce_framework_prefix: bool = True) -> SymptomDef:
     path = Path(path)
     try:
@@ -396,7 +436,17 @@ def load_file(path: str | Path, enforce_framework_prefix: bool = True) -> Sympto
         symptom_def_type=sdt_raw,
         omit=list(omit_raw),
     )
-    sd.validate(enforce_framework_prefix=enforce_framework_prefix)
+    try:
+        sd.validate(enforce_framework_prefix=enforce_framework_prefix)
+    except SymptomValidationError as exc:
+        # Field errors name the symptom; prefix the file so every message
+        # names both (some already start with the path).
+        if str(exc).startswith(str(path)):
+            raise
+        raise SymptomValidationError(f"{path}: {exc}") from None
+    import warnings
+    for _problem in sd.omit_version_problems():
+        warnings.warn(_problem, UserWarning, stacklevel=2)
     return sd
 
 
@@ -415,4 +465,10 @@ def load_dir(directory: str | Path, enforce_framework_prefix: bool = True) -> Li
             )
         seen[sd.name] = p
         out.append(sd)
+    # Two symptoms under one rendered id (case-insensitive): the later
+    # replaces the earlier on content import. Same check as the alert loader.
+    from vcfcf_core.alerts.render import rendered_id_collisions
+    problems = rendered_id_collisions(symptoms=out)
+    if problems:
+        raise SymptomValidationError("\n".join(problems))
     return out

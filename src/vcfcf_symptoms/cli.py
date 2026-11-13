@@ -37,7 +37,12 @@ def cmd_validate(args) -> int:
     # Stock content ids (#345): no symptom may ship under a stock id.
     # Checked before the OK line, which prints only when it passes.
     from vcfcf_packaging.stock_ids import report_stock_ids, symptom_definitions
-    stock_rc = report_stock_ids(symptom_definitions(defs), "symptom definitions")
+    try:
+        stock_rc = report_stock_ids(symptom_definitions(defs), "symptom definitions")
+    except ValueError as e:
+        # AlertContent did not render: two symptoms under one id.
+        print(f"INVALID: {e}", file=sys.stderr)
+        return 1
     if stock_rc == 0:
         print(f"OK: {len(defs)} symptom definition(s) valid")
         for d in defs:

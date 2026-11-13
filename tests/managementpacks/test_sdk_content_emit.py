@@ -1044,6 +1044,7 @@ _SM_YAML_COLL_B = textwrap.dedent(
 _SYMPTOM_YAML_COLL_A = textwrap.dedent(
     """\
     name: "High CPU"
+    id: 0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d
     adapter_kind: VMWARE
     resource_kind: VirtualMachine
     severity: CRITICAL
@@ -1060,6 +1061,7 @@ _SYMPTOM_YAML_COLL_A = textwrap.dedent(
 _SYMPTOM_YAML_COLL_B = textwrap.dedent(
     """\
     name: "High CPU"
+    id: 1b2c3d4e-5f60-4b7c-9d8e-0f1a2b3c4d5e
     adapter_kind: VMWARE
     resource_kind: VirtualMachine
     severity: WARNING
@@ -1076,6 +1078,7 @@ _SYMPTOM_YAML_COLL_B = textwrap.dedent(
 _ALERT_YAML_COLL_A = textwrap.dedent(
     """\
     name: "CPU Alert"
+    id: 2c3d4e5f-6071-4c8d-ae9f-1a2b3c4d5e6f
     description: "First CPU alert"
     adapter_kind: VMWARE
     resource_kind: VirtualMachine
@@ -1099,6 +1102,7 @@ _ALERT_YAML_COLL_A = textwrap.dedent(
 _ALERT_YAML_COLL_B = textwrap.dedent(
     """\
     name: "CPU Alert"
+    id: 3d4e5f60-7182-4d9e-bf0a-2b3c4d5e6f70
     description: "Second CPU alert — same display name, different config"
     adapter_kind: VMWARE
     resource_kind: VirtualMachine
@@ -1122,7 +1126,9 @@ _ALERT_YAML_COLL_B = textwrap.dedent(
 
 class TestSafeNameCollisionDedup:
     """Two items whose display names sanitize to the same safe_name must both
-    appear in the pak with distinct filenames (suffix -2)."""
+    appear in the pak with distinct filenames (suffix -2). The symptom and
+    alert pairs carry distinct ids: under one rendered id they would collide
+    on import, which the build refuses (rendered_id_collisions)."""
 
     def test_sm_collision_both_files_present(self, tmp_path: Path) -> None:
         """Two SMs whose distinct names sanitize to one filename get <name>.json

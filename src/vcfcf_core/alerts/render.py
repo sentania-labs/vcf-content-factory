@@ -117,6 +117,58 @@ def _rec_key(adapter_kind: str, name: str) -> str:
     return f"Recommendation-df-{adapter_kind}-{_slug(name)}"
 
 
+def alert_definition_id(alert) -> str:
+    """The ``id`` an alert renders under: ``AlertDefinition-<id>`` for a
+    YAML ``id:`` (the author's case kept), else the derived form."""
+    explicit = getattr(alert, "id", None)
+    return f"AlertDefinition-{explicit}" if explicit else _alert_id(alert.adapter_kind, alert.name)
+
+
+def symptom_definition_id(sym) -> str:
+    """The ``id`` a symptom renders under (see ``_symptom_id``)."""
+    return _symptom_id(sym.adapter_kind, sym.name, uuid=getattr(sym, "id", None))
+
+
+def _source_of(obj) -> str:
+    src = getattr(obj, "source_path", None) or getattr(obj, "source_file", None)
+    return str(src) if src else f"{getattr(obj, 'name', '?')!r}"
+
+
+def rendered_id_collisions(symptoms=(), alerts=(), recommendations=()) -> List[str]:
+    """One message per pair of definitions that render under the same id.
+
+    Ids compare case-insensitively, explicit and derived alike: whether the
+    content importer treats ids case-sensitively is not established, and a
+    case-only difference is never intended. On import the later definition
+    silently replaces the earlier one, so a collision is an error wherever
+    definitions meet: ``load_dir`` / ``load_recommendations``, a bundle, a
+    discrete build and a pak. The same file listed twice is one definition,
+    not a collision.
+    """
+    out: List[str] = []
+    for label, objs, id_of in (
+        ("symptom", symptoms, symptom_definition_id),
+        ("alert", alerts, alert_definition_id),
+        ("recommendation", recommendations, lambda r: r.id),
+    ):
+        seen: dict = {}
+        for obj in objs or []:
+            rid = id_of(obj)
+            first = seen.get(rid.lower())
+            if first is None:
+                seen[rid.lower()] = (obj, rid)
+                continue
+            if _source_of(first[0]) == _source_of(obj) and first[0].name == obj.name:
+                continue
+            out.append(
+                f"duplicate {label} id: {_source_of(obj)} ({obj.name!r}) renders as "
+                f"{rid!r}, which {_source_of(first[0])} ({first[0].name!r}) already renders "
+                f"as {first[1]!r} (ids compare case-insensitively). On content import "
+                f"one would silently replace the other; give each its own id"
+            )
+    return out
+
+
 # ---------------------------------------------------------------------------
 # Operator translation: YAML API-style names -> XML symbol form
 # ---------------------------------------------------------------------------
@@ -366,7 +418,7 @@ def _render_alert_definition(
     adapter_kind = alert.adapter_kind
     resource_kind = alert.resource_kind
     name = alert.name
-    aid = f"AlertDefinition-{alert.id}" if getattr(alert, "id", None) else _alert_id(adapter_kind, name)
+    aid = alert_definition_id(alert)
 
     attribs = {
         "adapterKind": adapter_kind,
@@ -404,8 +456,15 @@ def _render_alert_definition(
     # is omitted (bare <SymptomSet> directly under <State>) when there is
     # exactly one set.  Within a set: a single symptom is a bare ref=
     # attribute on <SymptomSet>; multiple symptoms become <Symptom ref=.../>
-    # children of a <SymptomSet operator="...">.  The non-vendor
-    # aggregation="any" attribute is never emitted.
+    # children of a <SymptomSet operator="...">.  aggregation is emitted only
+    # for an authored threshold_type ANY / ALL on a non-SELF set, as
+    # aggregation="any" / "all" (seen on non-SELF sets in the 8.18.7, 9.0.2
+    # and 9.1.1 built-in alertdefs.xml); a set without one keeps no
+    # aggregation, as before. Thresholds the XML cannot carry are refused
+    # (AlertDef.xml_symptom_set_problems), never dropped.
+    _problems = alert.xml_symptom_set_problems() if hasattr(alert, "xml_symptom_set_problems") else []
+    if _problems:
+        raise ValueError("\n".join(_problems))
     symptom_sets = alert.symptom_sets or {}
     sets = symptom_sets.get("sets") or []
 
@@ -431,17 +490,14 @@ def _render_alert_definition(
                         break
                 refs.append(_symptom_id(sym_adapter, sym_name, uuid=sym_uuid))
 
+            ss_attrs = {"applyOn": apply_on, "operator": set_op}
+            if s.get("threshold_type") is not None:
+                # Only ANY / ALL reach here (xml_symptom_set_problems).
+                ss_attrs = {"aggregation": str(s["threshold_type"]).lower(), **ss_attrs}
             if len(refs) == 1:
-                ss_elem = ET.Element("SymptomSet", {
-                    "applyOn": apply_on,
-                    "operator": set_op,
-                    "ref": refs[0],
-                })
+                ss_elem = ET.Element("SymptomSet", {**ss_attrs, "ref": refs[0]})
             else:
-                ss_elem = ET.Element("SymptomSet", {
-                    "applyOn": apply_on,
-                    "operator": set_op,
-                })
+                ss_elem = ET.Element("SymptomSet", ss_attrs)
                 for ref in refs:
                     ET.SubElement(ss_elem, "Symptom", {"ref": ref})
             elements.append(ss_elem)
@@ -473,7 +529,7 @@ def _render_alert_definition(
         rec_priority = ref.priority if hasattr(ref, "priority") else ref.get("priority", 1)
         rec_obj = rmap.get(rec_name)
         if rec_obj is not None:
-            resolved_recs.append((rec_priority, getattr(rec_obj, "explicit_id", None) or rec_obj.id))
+            resolved_recs.append((rec_priority, rec_obj.id))
         # Unresolved recommendations are silently skipped in render
         # (validation already caught missing [VCF Content Factory] refs)
     if resolved_recs:
@@ -510,6 +566,9 @@ def render_alert_content_xml(
         declaration, suitable for writing to ``AlertContent.xml``.
     """
     recommendations = recommendations or []
+    _collisions = rendered_id_collisions(symptoms, alerts, recommendations)
+    if _collisions:
+        raise ValueError("\n".join(_collisions))
 
     # Build a name -> Recommendation map for O(1) lookups in alert rendering.
     rec_map: dict = {}
@@ -546,7 +605,7 @@ def render_alert_content_xml(
         for rec in recommendations:
             if not hasattr(rec, "id"):
                 continue  # skip non-Recommendation objects (safety guard)
-            rec_elem = ET.SubElement(recs_elem, "Recommendation", {"key": getattr(rec, "explicit_id", None) or rec.id})
+            rec_elem = ET.SubElement(recs_elem, "Recommendation", {"key": rec.id})
             desc_elem = ET.SubElement(rec_elem, "Description")
             desc_elem.text = rec.description or ""
 

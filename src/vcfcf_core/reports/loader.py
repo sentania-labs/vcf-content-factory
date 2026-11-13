@@ -106,6 +106,16 @@ _STATIC_CONTENT_KEYS = {
 VALID_ORIENTATIONS = {"Landscape", "Portrait"}
 VALID_OUTPUT_FORMATS = {"pdf", "csv"}
 
+#: Oldest VCF Operations version whose own built-in export shows each section
+#: ``omit:`` entry's element absent (content.xml of the 8.18.7, 9.0.2 and
+#: 9.1.1 report exports; template_fidelity_wire_format.md §Omit version
+#: floor). A Tier 2 pak build fails on an entry whose floor is above its
+#: oldest supported line.
+SECTION_OMIT_MIN_OPS_VERSION = {
+    "formatting": (8, 18, 7),  # 77 of 91 8.18.7 View sections carry no ContentFormatting
+}
+OLDEST_OMIT_EVIDENCE = (8, 18, 7)
+
 
 @dataclass
 class SubjectType:
@@ -245,6 +255,50 @@ class ReportDef:
                 )
 
 
+    def omit_version_problems(self, target_version=None) -> List[str]:
+        """Section ``omit:`` entries whose floor (SECTION_OMIT_MIN_OPS_VERSION)
+        is above ``target_version``; with no target, above the oldest export
+        read (OLDEST_OMIT_EVIDENCE) or unknown."""
+        target = _version_tuple(target_version) if target_version is not None else OLDEST_OMIT_EVIDENCE
+        out: List[str] = []
+        for i, sec in enumerate(self.sections):
+            if not sec.omit_formatting:
+                continue
+            floor = SECTION_OMIT_MIN_OPS_VERSION.get("formatting")
+            if floor is not None and _version_tuple(floor) <= target:
+                continue
+            seen = (f"absent only from VCF Operations {'.'.join(map(str, floor))} and later exports"
+                    if floor is not None else "absent from no product export")
+            out.append(
+                f"{self.source_path or self.name}: report {self.name!r}: sections[{i}]: "
+                f"omit: formatting leaves out an element {seen}; whether VCF Operations "
+                f"{'.'.join(map(str, target))} imports the report without it is unproven"
+            )
+        return out
+
+    def external_references(self) -> List[tuple]:
+        """``(content_type, id, where)`` for each section that names a view
+        or dashboard by raw id (``view_id:`` / ``dashboard_id:``), for the
+        stock-id baseline check (template_fidelity_wire_format.md)."""
+        out: List[tuple] = []
+        for i, sec in enumerate(self.sections):
+            if not sec.external:
+                continue
+            where = f"{self.source_path or self.name}: report {self.name!r}: sections[{i}]"
+            if sec.type == "View" and sec.view_id:
+                out.append(("view", sec.view_id, f"{where} view_id"))
+            elif sec.type == "Dashboard" and sec.dashboard_id:
+                out.append(("dashboard", sec.dashboard_id, f"{where} dashboard_id"))
+        return out
+
+
+def _version_tuple(v) -> tuple:
+    parts = [int(x) for x in (v if isinstance(v, tuple) else str(v).split("."))]
+    while len(parts) > 1 and parts[-1] == 0:
+        parts.pop()
+    return tuple(parts)
+
+
 IdMinter = Callable[[Path], str]
 
 
@@ -371,7 +425,7 @@ def load_file(
     sections: List[Section] = []
     for i, raw_sec in enumerate(data.get("sections") or []):
         sec_type = str(raw_sec.get("type", "")).strip()
-        where = f"{path}: sections[{i}]"
+        where = f"{path}: report {str(data.get('name', '')).strip()!r}: sections[{i}]"
         raw_omit = raw_sec.get("omit") or []
         if raw_omit not in ([], ["formatting"]):
             raise ReportValidationError(f"{where}: omit accepts only [formatting]; got {raw_omit!r}")
@@ -464,7 +518,17 @@ def load_file(
         released=released,
         version=version,
     )
-    rd.validate(enforce_framework_prefix=enforce_framework_prefix)
+    try:
+        rd.validate(enforce_framework_prefix=enforce_framework_prefix)
+    except ReportValidationError as exc:
+        # Field errors name the report; prefix the file so every message
+        # names both (some already start with the path).
+        if str(exc).startswith(str(path)):
+            raise
+        raise ReportValidationError(f"{path}: {exc}") from None
+    import warnings
+    for _problem in rd.omit_version_problems():
+        warnings.warn(_problem, UserWarning, stacklevel=2)
     return rd
 
 

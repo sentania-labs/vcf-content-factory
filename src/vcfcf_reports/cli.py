@@ -57,6 +57,10 @@ def cmd_validate(args) -> int:
     from vcfcf_core.stock_ids.guard import definitions_from_objects
     from vcfcf_packaging.stock_ids import report_stock_ids
     stock_rc = report_stock_ids(definitions_from_objects("report", defs), "report templates")
+    # Raw view_id / dashboard_id sections: a warning when the id is not a
+    # known stock id (a typo renders a blank section).
+    from vcfcf_packaging.stock_ids import report_reference_warnings
+    report_reference_warnings([ref for rd in defs for ref in rd.external_references()])
     if stock_rc == 0:
         print(f"OK: {len(defs)} report definition(s) valid")
         for rd in defs:

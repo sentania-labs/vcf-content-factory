@@ -290,13 +290,18 @@ def test_oldest_supported_line_is_the_rule_019_floor():
 
 
 def test_sdk_pak_build_refuses_a_section_dashboard(tmp_path):
-    from vcfcf_managementpacks.sdk_builder import SdkBuildError, _load_bundled_content
+    # The gate runs after the load (W8): check_bundled_version_floors, which
+    # build-sdk raises on and validate-sdk reports under its own label.
+    from vcfcf_managementpacks.sdk_builder import _load_bundled_content, check_bundled_version_floors
     _section_dash(tmp_path)
     raw = {"bundled_content": {"dashboards": ["dashboards/d.yaml"]}}
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        with pytest.raises(SdkBuildError, match=r"Section Probe.*Section.*9\.1\.1.*8\.18\.7"):
-            _load_bundled_content(raw, tmp_path, tmp_path)
+        bundled = _load_bundled_content(raw, tmp_path, tmp_path)
+    errors = check_bundled_version_floors(bundled)
+    assert len(errors) == 1
+    import re
+    assert re.search(r"d\.yaml.*Section Probe.*Section.*9\.1\.1.*8\.18\.7", errors[0])
 
 
 def test_dashboard_version_problems_against_a_target(tmp_path):

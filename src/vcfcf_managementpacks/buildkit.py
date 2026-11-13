@@ -252,6 +252,12 @@ _IMPORT_REWRITES: dict[str, list[tuple[str, str]]] = {
             r"from vcfcf_alerts\.render import _symptom_id as _compute_symptom_id",
             "from .alerts_render import _symptom_id as _compute_symptom_id",
         ),
+        # from vcfcf_alerts.render import rendered_id_collisions  (inline in
+        # check_bundled_content_references; duplicate rendered ids)
+        (
+            r"from vcfcf_alerts\.render import rendered_id_collisions",
+            "from .alerts_render import rendered_id_collisions",
+        ),
         # from vcfcf_alerts.render import render_alert_content_xml
         (
             r"from vcfcf_alerts\.render import render_alert_content_xml",
@@ -316,6 +322,32 @@ _IMPORT_REWRITES: dict[str, list[tuple[str, str]]] = {
         (
             r"from \.widget_versions import widget_version_problems",
             "from .dashboard_widget_versions import widget_version_problems",
+        ),
+        # from .widget_versions import omit_version_problems
+        # from . import widget_versions as _wv  (inline in
+        # Dashboard.omit_version_problems; omit: version floors)
+        (
+            r"from \.widget_versions import omit_version_problems",
+            "from .dashboard_widget_versions import omit_version_problems",
+        ),
+        (
+            r"from \. import widget_versions as _wv",
+            "from . import dashboard_widget_versions as _wv",
+        ),
+    ],
+    # alerts_loader.py: load_dir / load_recommendations check rendered-id
+    # collisions through the renderer (inline import).
+    "alerts_loader.py": [
+        (
+            r"from \.render import rendered_id_collisions",
+            "from .alerts_render import rendered_id_collisions",
+        ),
+    ],
+    # symptoms_loader.py: load_dir checks rendered-id collisions (inline import).
+    "symptoms_loader.py": [
+        (
+            r"from vcfcf_core\.alerts\.render import rendered_id_collisions",
+            "from .alerts_render import rendered_id_collisions",
         ),
     ],
     # dashboard_render.py: rewrite .loader import (it's a relative import within

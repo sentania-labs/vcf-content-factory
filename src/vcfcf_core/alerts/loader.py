@@ -178,7 +178,9 @@ class Recommendation:
         slug = re.sub(r"[^\w\-]", "_", stripped)
         # Collapse consecutive underscores
         slug = re.sub(r"_+", "_", slug).strip("_")
-        return f"Recommendation-df-{self.adapter_kind}-{slug}"
+        # A YAML `id:` (explicit_id) is the key itself; it wins over the
+        # derived form everywhere the key is read (render, validate, stock guard).
+        return self.explicit_id or f"Recommendation-df-{self.adapter_kind}-{slug}"
 
 
 @dataclass
@@ -363,6 +365,40 @@ class AlertDef:
                         f"Create the recommendation file first."
                     )
 
+    def xml_symptom_set_problems(self) -> List[str]:
+        """Symptom-set thresholds the content-import XML cannot carry.
+
+        Product exports (8.18.7, 9.0.2, 9.1.1 built-in alertdefs.xml) write
+        a population condition as ``aggregation`` plus, for count and
+        percent, ``aggregationOperator`` and ``value``. ``threshold_type:
+        ANY`` / ``ALL`` render as ``aggregation="any"`` / ``"all"``. COUNT
+        and PERCENT need an ``aggregationOperator``, which the YAML has no
+        field for, and a ``threshold_value`` means nothing without them, so
+        the XML path refuses those rather than dropping them. A threshold on
+        a SELF set is ignored by the REST path too, so it is refused here.
+        """
+        src = self.source_path or self.name
+        out: List[str] = []
+        for i, s in enumerate((self.symptom_sets or {}).get("sets") or []):
+            if not isinstance(s, dict):
+                continue
+            tt, tv = s.get("threshold_type"), s.get("threshold_value")
+            if tt is None and tv is None:
+                continue
+            where = f"{src}: alert {self.name!r}: symptom_sets.sets[{i}]"
+            if (s.get("defined_on") or "SELF").upper() == "SELF":
+                out.append(f"{where}: threshold_type / threshold_value apply to PARENT, "
+                           f"CHILD, DESCENDANT and ANCESTOR sets only; remove them from this "
+                           f"SELF set")
+            elif tv is not None or str(tt).upper() in ("COUNT", "PERCENT"):
+                out.append(f"{where}: threshold_type {tt!r} / threshold_value {tv!r} is not "
+                           f"rendered on the content-import XML path (pak builds, "
+                           f"AlertContent.xml in bundles): COUNT and PERCENT need an "
+                           f"aggregationOperator the YAML cannot express, so the XML would "
+                           f"drop the threshold. Use threshold_type ANY or ALL with no "
+                           f"threshold_value")
+        return out
+
     def to_wire(self, symptom_name_to_id: dict[str, str]) -> dict:
         """Serialize to the JSON body for POST /api/alertdefinitions.
 
@@ -534,6 +570,7 @@ def load_recommendations(directory: str | Path, enforce_framework_prefix: bool =
             )
         seen[rec.name] = p
         out.append(rec)
+    _raise_on_id_collisions(recommendations=out)
     return out
 
 
@@ -658,10 +695,19 @@ def load_file(path: str | Path, enforce_framework_prefix: bool = True) -> AlertD
         source_path=path,
         released=released,
         version=version,
-        id=(str(data["id"]).strip().lower() if data.get("id") is not None else None),
+        # The author's case is kept (alert_fidelity_wire_format.md §Ids);
+        # duplicate checks compare case-insensitively.
+        id=(str(data["id"]).strip() if data.get("id") is not None else None),
         disable_in_base_policy=_opt_bool_field(data, "disable_in_base_policy", path),
     )
-    ad.validate(enforce_framework_prefix=enforce_framework_prefix)
+    try:
+        ad.validate(enforce_framework_prefix=enforce_framework_prefix)
+    except AlertValidationError as exc:
+        # Field errors name the alert; prefix the file so every message
+        # names both (some already start with the path).
+        if str(exc).startswith(str(path)):
+            raise
+        raise AlertValidationError(f"{path}: {exc}") from None
     return ad
 
 
@@ -680,4 +726,16 @@ def load_dir(directory: str | Path, enforce_framework_prefix: bool = True) -> Li
             )
         seen[ad.name] = p
         out.append(ad)
+    _raise_on_id_collisions(alerts=out)
     return out
+
+
+def _raise_on_id_collisions(**objs) -> None:
+    """Two definitions that render under one id (case-insensitive) collide
+    on content import: the later silently replaces the earlier. B2 of the
+    2026-11-12 fidelity review; the render path runs the same check over
+    its combined inputs."""
+    from .render import rendered_id_collisions
+    problems = rendered_id_collisions(**objs)
+    if problems:
+        raise AlertValidationError("\n".join(problems))

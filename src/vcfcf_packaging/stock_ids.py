@@ -209,6 +209,23 @@ def report_stock_ids(defs: Sequence[Definition], what: str) -> int:
     return 1 if result.errors else 0
 
 
+def report_reference_warnings(refs: Sequence) -> int:
+    """Print a ``WARNING:`` per raw-id view or dashboard reference that is
+    not a known stock id (``guard.reference_warnings``). Never fails a
+    validate: the id may be another pak's object. Returns the count."""
+    if not refs:
+        return 0
+    try:
+        baseline = load_baseline()
+    except StockIdBaselineError as exc:
+        print(f"WARNING: raw-id references not checked: {exc}", file=sys.stderr)
+        return 1
+    warnings = _guard.reference_warnings(refs, baseline)
+    for w in warnings:
+        print(f"WARNING: {w}", file=sys.stderr)
+    return len(warnings)
+
+
 def symptom_definitions(symptoms: Sequence) -> List[Definition]:
     """Definitions for loaded symptoms, under the ids they render with."""
     if not symptoms:

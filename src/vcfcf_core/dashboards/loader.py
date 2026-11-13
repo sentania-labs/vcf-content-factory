@@ -2731,6 +2731,45 @@ class Dashboard:
             ((w.local_id, w.type) for w in self.widgets), target_version
         )
 
+    def omit_version_problems(self, target_version=None) -> List[str]:
+        """``omit:`` entries (dashboard, widget, metric entry, Heatmap tab)
+        whose floor in ``widget_versions`` is above ``target_version`` or
+        unknown (W3, dashboard_fidelity_wire_format.md §Omit version floors).
+        The SDK pak build passes its oldest supported line and fails on any;
+        ``validate()`` warns with no target."""
+        from .widget_versions import omit_version_problems
+        from . import widget_versions as _wv
+        src = str(self.source_path) if self.source_path else self.name
+        head = f"{src}: dashboard {self.name!r}"
+        entries = [(head, e, _wv.DASHBOARD_OMIT_MIN_OPS_VERSION.get(e)) for e in self.omit]
+        for w in self.widgets:
+            wh = f"{head}: widget {w.local_id!r}"
+            entries += [(wh, e, _wv.WIDGET_OMIT_MIN_OPS_VERSION.get((w.type, e))) for e in w.omit]
+            for cfg in (w.scoreboard_config, w.metric_chart_config):
+                for m in (cfg.metrics if cfg is not None else []):
+                    entries += [(f"{wh}: metric {m.metric_key!r}", e,
+                                 _wv.METRIC_OMIT_MIN_OPS_VERSION.get(e)) for e in m.omit]
+            if w.heatmap_config is not None:
+                for tab in w.heatmap_config.tabs:
+                    entries += [(f"{wh}: Heatmap tab {tab.name!r}", e,
+                                 _wv.HEATMAP_TAB_OMIT_MIN_OPS_VERSION.get(e)) for e in tab.omit]
+        return omit_version_problems(entries, target_version)
+
+    def external_view_references(self, own_view_ids=()) -> List[tuple]:
+        """``(content_type, id, where)`` for each View widget that names a
+        view by raw id (the external-view passthrough) other than one of
+        ``own_view_ids`` (the caller's loaded views), for the stock-id
+        baseline check."""
+        out: List[tuple] = []
+        own = {str(i).lower() for i in own_view_ids}
+        src = str(self.source_path) if self.source_path else self.name
+        for w in self.widgets:
+            if (w.type == "View" and w.view_name and _UUID_RE.match(w.view_name)
+                    and w.view_name.lower() not in own):
+                out.append(("view", w.view_name,
+                            f"{src}: dashboard {self.name!r}: widget {w.local_id!r} view"))
+        return out
+
     def validate(
         self,
         known_views: dict[str, ViewDef],
@@ -2799,6 +2838,10 @@ class Dashboard:
         ):
             src = str(self.source_path) if self.source_path else self.name
             warnings.warn(f"{src}: dashboard {self.name!r}: {_problem}", UserWarning, stacklevel=2)
+        # W3: an omit: entry no export at or below the oldest export read
+        # shows absent. A warning here; the Tier 2 pak build gates it.
+        for _problem in self.omit_version_problems():
+            warnings.warn(_problem, UserWarning, stacklevel=2)
         seen: set[str] = set()
         for w in self.widgets:
             if w.local_id in seen:
@@ -4245,8 +4288,11 @@ def widget_extra_metric_refs(w: "Widget") -> List[tuple]:
     """Metric keys a widget names outside its main metric surface, as
     ``(metric_key, adapter_kind, resource_kind, where)``: ParetoAnalysis
     ``additional_columns`` and Heatmap tab ``custom_filter`` conditions.
-    Every dependency walker and audit that reads widget metric keys calls
-    this, so a super metric or a built-in key named only there is seen."""
+    Every dependency walker over loaded YAML that reads widget metric keys
+    calls this (dep_walker, packaging.deps), so a super metric or a built-in
+    key named only there is seen. The exception is the vcfcf_extractor
+    enablement walk: its widgets come from reverse.py, which never fills
+    these two fields, so it has nothing to read here."""
     out: List[tuple] = []
     pa = w.pareto_analysis_config
     if pa is not None:
@@ -4264,6 +4310,35 @@ def widget_extra_metric_refs(w: "Widget") -> List[tuple]:
 
 
 def load_dashboard(
+    path: Path,
+    enforce_framework_prefix: bool = True,
+    default_name_path: str = "VCF Content Factory",
+    on_missing_id: Optional[IdMinter] = None,
+    provenance_of: Optional[ProvenanceFn] = None,
+) -> Dashboard:
+    """Load one dashboard YAML. Every ``DashboardValidationError`` names the
+    file; widget-level errors also name the dashboard (``<path>: dashboard
+    '<name>': widget '<id>': ...``)."""
+    try:
+        return _load_dashboard(
+            path, enforce_framework_prefix=enforce_framework_prefix,
+            default_name_path=default_name_path, on_missing_id=on_missing_id,
+            provenance_of=provenance_of,
+        )
+    except DashboardValidationError as exc:
+        msg = str(exc)
+        if msg.startswith(str(path)):
+            raise
+        name = ""
+        try:
+            name = str((_strict_load(Path(path).read_text()) or {}).get("name", "") or "").strip()
+        except Exception:
+            pass
+        head = f"{path}: dashboard {name!r}: " if name and not msg.startswith("dashboard ") else f"{path}: "
+        raise DashboardValidationError(head + msg) from exc
+
+
+def _load_dashboard(
     path: Path,
     enforce_framework_prefix: bool = True,
     default_name_path: str = "VCF Content Factory",
@@ -4670,6 +4745,17 @@ def load_dashboard(
                     "valid with metric_mode: resource"
                 )
             specs = _parse_metric_specs(raw_metrics)
+            if metric_mode == "resource":
+                for _spec in specs:
+                    if _spec.resource_kind_name is not None:
+                        # Resource-mode entries carry no resourceKindName
+                        # (render._render_resource_metric_spec), so it would
+                        # render nothing.
+                        raise _fid_err(
+                            _wid, f"metric {_spec.metric_key!r}: resource_kind_name is not "
+                            f"rendered with metric_mode: resource (those entries carry no "
+                            f"resourceKindName); remove it"
+                        )
             scoreboard_config = ScoreboardConfig(
                 metrics=specs,
                 metric_mode=metric_mode,
