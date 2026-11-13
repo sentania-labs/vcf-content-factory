@@ -295,6 +295,11 @@ ignore one, never silently downgrade. Decide:
 - **Extract:** `/extract` pulls a live-lab dashboard into a
   third-party bundle (walks view/SM dependencies, interviews for
   attribution, emits factory YAML + manifest).
+- **Offline import:** `python3 -m vcfcf_extractor import-local` converts
+  existing content files, exports or paks to factory YAML with explicit
+  `--ids` and `--naming`, the stock-id guard and `--verify`. Validate the
+  written tree like authored content. How-to:
+  `knowledge/context/authoring/importer_offline_conversion.md`.
 - **Package + QA:** author, `content-packager`, `qa-tester`, report.
   qa-tester and content-installer run a Playwright browser pass over
   rendered surfaces when MCP tools are available and report VISUAL
