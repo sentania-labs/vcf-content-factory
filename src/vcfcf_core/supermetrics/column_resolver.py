@@ -75,6 +75,18 @@ def column_sm_name(attribute: str) -> Optional[str]:
     return m.group(1) if m else None
 
 
+def view_column_entries(view) -> List[tuple]:
+    """``(label, column)`` for every column of ``view`` that names a metric
+    or super metric: ``("col", c)`` per ``columns:`` entry, then
+    ``("additional col", c)`` per distribution ``additional_columns:``
+    entry (metadata ``distributionAdditionalColumns``). Every dependency
+    walker reads columns through this, so an additional column's super
+    metric is bundled and checked like any other column's."""
+    out = [("col", c) for c in (getattr(view, "columns", None) or [])]
+    out += [("additional col", c) for c in (getattr(view, "additional_columns", None) or [])]
+    return out
+
+
 def _default_set_of(obj) -> str:
     return getattr(obj, "provenance", "") or ""
 
@@ -204,12 +216,13 @@ class SmColumnResolver:
         :class:`SmColumnResolutionError` kind."""
         errors: List[tuple] = []
         for view in views:
-            for col in getattr(view, "columns", None) or []:
+            for label, col in view_column_entries(view):
                 name = column_sm_name(getattr(col, "attribute", "") or "")
                 if name is None:
                     continue
+                kind = "column" if label == "col" else "additional column"
                 where = (
-                    f'view "{getattr(view, "name", "?")}" column '
+                    f'view "{getattr(view, "name", "?")}" {kind} '
                     f'"{getattr(col, "display_name", "")}"'
                 )
                 try:

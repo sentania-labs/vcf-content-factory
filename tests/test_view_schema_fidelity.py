@@ -189,12 +189,77 @@ def test_distribution_color_on_list_view(tmp_path):
     assert ("distributionColor", "6870C4") in props
 
 
-def test_additional_column_literal_super_metric_key_passes_through(tmp_path):
+SM_UUID = "0a0a0a0a-0000-4000-8000-000000000001"
+
+
+def test_additional_column_super_metric_by_name_resolves(tmp_path):
+    """supermetric:"<name>" in an additional column renders the wire key,
+    resolved like a columns: entry; no rollUpType is added."""
     data = _dist_view(additional_columns=[{
-        "attribute": "Super Metric|sm_0a0a0a0a-0000-4000-8000-000000000001",
+        "attribute": 'supermetric:"Probe SM"',
         "display_name": "SM", "localized_name": "Super Metrics|Probe"}])
-    rows = _items(_xml(tmp_path, data), "distributionAdditionalColumns")
-    assert ("attributeKey", "Super Metric|sm_0a0a0a0a-0000-4000-8000-000000000001") in rows[0]
+    view = _load(tmp_path, data)
+    root = ET.fromstring(_render_view_def_fragment(view, {"Probe SM": SM_UUID}))
+    rows = _items(root, "distributionAdditionalColumns")
+    assert rows == [[
+        ("objectType", "RESOURCE"), ("attributeKey", f"Super Metric|sm_{SM_UUID}"),
+        ("localizedAttributeName", "Super Metrics|Probe"), ("isStringAttribute", "false"),
+        ("adapterKind", "VMWARE"), ("resourceKind", "HostSystem"), ("rollUpCount", "0"),
+        ("isProperty", "false"), ("displayName", "SM"),
+    ]]
+
+
+def test_additional_column_super_metric_resolver_and_unresolved(tmp_path):
+    data = _dist_view(additional_columns=[{
+        "attribute": 'supermetric:"Probe SM"',
+        "display_name": "SM", "localized_name": "Super Metrics|Probe"}])
+    view = _load(tmp_path, data)
+    frag = render_view_def_fragments([view], sm_resolver=lambda v, n: SM_UUID)
+    assert f'value="Super Metric|sm_{SM_UUID}"' in frag
+    with pytest.raises(ValueError, match="additional column 0 references super metric"):
+        _render_view_def_fragment(view, {})
+    with pytest.raises(ValueError, match="not in the bundle scope"):
+        _render_view_def_fragment(view, {}, sm_scope_active=True, bundle_context="b")
+
+
+@pytest.mark.parametrize("attribute", [
+    f"Super Metric|sm_{SM_UUID}",
+    f"super metric|sm_{SM_UUID}",
+    f"sm_{SM_UUID}",
+    "sm_probe",
+    f"prefix|sm_{SM_UUID}",
+])
+def test_additional_column_raw_super_metric_key_rejected(tmp_path, attribute):
+    data = _dist_view(additional_columns=[{
+        "attribute": attribute, "display_name": "SM", "localized_name": "Super Metrics|Probe"}])
+    _rejects(tmp_path, data, 'is a raw super metric key; additional_columns name a super '
+                             'metric as supermetric:"<name>"')
+
+
+# Every ViewColumn field the additional-column renderer does not read
+# (_xml_additional_column_item reads attribute, unit, localized_name,
+# is_string_attribute, roll_up_type, roll_up_count, transformation,
+# percentile, sort, is_property, display_name, show_relative_timestamp,
+# omit) is a load error there, never a silent drop.
+@pytest.mark.parametrize("field, value", [
+    ("yellow_bound", 1), ("orange_bound", 2), ("red_bound", 3),
+    ("ascending_range", True),
+    ("transform_expression", "a+1"),
+    ("metric_to_relate_with", "cpu|usage_average"),
+    ("localized_metric_to_relate_with", "CPU|Usage"),
+    ("operator_to_relate_with", "MAX"),
+    ("instanced_group", {"name": "GROUP_probe"}),
+    ("time_segment", {"breakdown_by": "HOUR_OF_DAY", "starting_on_unit": "DAYS",
+                      "starting_on_count": 1}),
+    ("subject", {"adapter_kind": "VMWARE", "resource_kind": "HostSystem"}),
+    ("roll_up_unit", "HOURS"),
+    ("use_symptom_thresholds", False),
+    ("add_timestamp_as_column", True),
+])
+def test_additional_column_unrendered_field_rejected(tmp_path, field, value):
+    col = {"attribute": "a|b", "display_name": "A", "localized_name": "A|B", field: value}
+    with pytest.raises(DashboardValidationError):
+        _load(tmp_path, _dist_view(additional_columns=[col]))
 
 
 @pytest.mark.parametrize("data, needle", [
@@ -205,9 +270,6 @@ def test_additional_column_literal_super_metric_key_passes_through(tmp_path):
     (_dist_view(additional_columns=[{"attribute": "a|b", "display_name": "A",
                                      "localized_name": "A|B", "red_bound": 5}]),
      "do not carry red_bound"),
-    (_dist_view(additional_columns=[{"attribute": 'supermetric:"Probe SM"', "display_name": "A",
-                                     "localized_name": "A|B"}]),
-     "only as the literal 'Super Metric|sm_<uuid>' key"),
     (_dist_view(additional_columns=[{"attribute": "a|b", "display_name": "A",
                                      "localized_name": "A|B", "omit": ["roll_up_type"]}]),
      "can only omit display_name"),
@@ -247,6 +309,14 @@ def test_bucket_ranges_render_bucket_infos(tmp_path):
     assert "bucketCount" not in frag
 
 
+def test_bucket_ranges_contiguous_and_gapped_accepted(tmp_path):
+    """Vendor ranges are ascending; most touch end-to-start, some leave gaps."""
+    data = _dist_view(buckets={"dynamic": False, "ranges": [
+        {"start": 0, "end": 10}, {"start": 10, "end": 20}, {"start": 30, "end": 40}]})
+    rows = _items(_xml(tmp_path, data), "bucketInfos")
+    assert [r[0][1] for r in rows] == ["0", "10", "30"]
+
+
 def test_bucket_ranges_round_trip(tmp_path):
     data = _dist_view(buckets={"dynamic": False, "ranges": [{"start": 1, "end": 2, "color": "ED891F"}]})
     rows = _items(_xml(tmp_path, data), "bucketInfos")
@@ -277,8 +347,14 @@ def test_fixed_explicit_calc_function_emitted(tmp_path):
 @pytest.mark.parametrize("buckets, needle", [
     ({"dynamic": True, "ranges": [{"start": 0, "end": 1}]}, "needs dynamic: false"),
     ({"dynamic": False, "calc_function": "DISCRETE", "ranges": [{"start": 0, "end": 1}]},
-     "contradicts it"),
+     "takes only SIMPLEMAXMIN"),
     ({"dynamic": False, "ranges": [{"start": 5, "end": 5}]}, "must be below end"),
+    ({"dynamic": False, "ranges": [{"start": 0, "end": 50}, {"start": 10, "end": 20}]},
+     "ranges must be ascending and must not overlap"),
+    ({"dynamic": False, "ranges": [{"start": 50, "end": 60}, {"start": 0, "end": 10}]},
+     "ranges must be ascending and must not overlap"),
+    ({"dynamic": False, "calc_function": "BOGUS"}, "takes only SIMPLEMAXMIN"),
+    ({"dynamic": False, "calc_function": "DISCRETE", "count": 5}, "takes only SIMPLEMAXMIN"),
     ({"dynamic": False, "ranges": [{"start": 0, "end": 1, "color": "red"}]}, "six hex digits"),
     ({"dynamic": False, "ranges": [{"start": "0", "end": 1}]}, "must be a number"),
     ({"dynamic": False, "ranges": [{"start": 0, "end": 1, "width": 3}]}, "must be a mapping of start"),
@@ -609,6 +685,59 @@ def test_subject_type_and_usage_errors(tmp_path, data, needle):
     _rejects(tmp_path, data, needle)
 
 
+@pytest.mark.parametrize("usage", [
+    ["dashboard", "report", "details", "content"],
+    ["dashboard", "report", "content"],
+    ["report", "content"],
+    ["content", "dashboard"],
+])
+def test_usage_evidenced_sets_accepted(tmp_path, usage):
+    root = _xml(tmp_path, _list_view(usage=usage))
+    assert sorted(u.text for u in root.findall("Usage")) == sorted(usage)
+
+
+@pytest.mark.parametrize("usage", [
+    ["details"], ["dashboard"], ["content"], ["dashboard", "report"],
+    ["report", "details", "content"], ["dashboard", "details", "content"],
+])
+def test_usage_unevidenced_sets_rejected(tmp_path, usage):
+    _rejects(tmp_path, _list_view(usage=usage), "is not a set any vendor export carries")
+
+
+_USAGE_DASH = """\
+id: 1f5a4b3c-2d1e-4f60-8a7b-9c8d7e6f5a4c
+name: "Probe Usage Dash"
+description: ""
+widgets:
+  - id: v1
+    type: View
+    title: Listing
+    coords: {x: 1, y: 1, w: 4, h: 4}
+    view: "Fidelity Probe"
+interactions: []
+"""
+
+
+@pytest.mark.parametrize("usage, ok", [
+    (None, True),
+    (["dashboard", "content"], True),
+    (["dashboard", "report", "content"], True),
+    (["report", "content"], False),
+])
+def test_dashboard_rejects_embedded_view_without_dashboard_usage(tmp_path, usage, ok):
+    from vcfcf_core.dashboards.loader import load_dashboard
+    over = {} if usage is None else {"usage": usage}
+    view = _load(tmp_path, _list_view(**over))
+    p = tmp_path / "dash.yaml"
+    p.write_text(_USAGE_DASH)
+    dash = load_dashboard(p, enforce_framework_prefix=False)
+    if ok:
+        dash.validate({view.name: view}, enforce_framework_prefix=False)
+    else:
+        with pytest.raises(DashboardValidationError, match="leaves out dashboard"):
+            dash.validate({view.name: view}, enforce_framework_prefix=False)
+
+
 # Column omit and the string red bound ----------------------------------------
 
 def test_column_omit_display_name_is_property_subject(tmp_path):
@@ -687,6 +816,33 @@ def test_omit_on_time_segment_rejected(tmp_path):
     _rejects(tmp_path, data, "remove omit")
 
 
+def test_trend_column_cannot_omit_transformation(tmp_path):
+    """B1: a trend column's transformations Property is the view-level
+    NONE/TREND/FORECAST stack; omit: [transformation] would drop it."""
+    data = _list_view(data_type="trend", transformations=["NONE", "TREND", "FORECAST"],
+                      columns=[{"attribute": "cpu|usage_average", "display_name": "CPU",
+                                "omit": ["transformation"]}])
+    _rejects(tmp_path, data, "omit: [transformation] on a trend view column")
+
+
+def test_trend_column_keeps_view_level_transformations(tmp_path):
+    data = _list_view(data_type="trend", transformations=["NONE", "TREND", "FORECAST"],
+                      columns=[{"attribute": "cpu|usage_average", "display_name": "CPU"}])
+    row = dict(_items(_xml(tmp_path, data))[0])
+    assert row["transformations"] == ["NONE", "TREND", "FORECAST"]
+
+
+def test_validate_errors_name_the_file(tmp_path):
+    """N2: errors raised from ViewDef.validate() carry the YAML path."""
+    p = tmp_path / "named.yaml"
+    p.write_text(yaml.safe_dump(_list_view(columns=[{
+        "attribute": "cpu|usage_average", "display_name": "CPU",
+        "use_symptom_thresholds": True}])))
+    with pytest.raises(DashboardValidationError) as exc:
+        load_view(p, enforce_framework_prefix=False)
+    assert str(exc.value).startswith(f"{p}: view 'Fidelity Probe' column 'CPU'")
+
+
 # Defaults: nothing moves ---------------------------------------------------
 
 def _explicit_defaults(view: dict) -> dict:
@@ -733,7 +889,7 @@ def test_absent_fields_render_historical_shape(tmp_path):
 def test_fields_on_one_view_do_not_leak_into_another(tmp_path):
     rich = _load(tmp_path, _list_view(
         id="22222222-2222-4333-8444-555555555555", page_size=25, top_n=5,
-        usage=["dashboard"], distribution_color="ED891F",
+        usage=["dashboard", "content"], distribution_color="ED891F",
         group_by={"adapter_kind": "VMWARE", "resource_kind": "Datacenter"},
         subject={"adapter_kind": "VMWARE", "resource_kind": "HostSystem", "types": ["descendant"]},
         columns=[{"attribute": "cpu|usage_average", "display_name": "CPU", "roll_up_type": "NONE",

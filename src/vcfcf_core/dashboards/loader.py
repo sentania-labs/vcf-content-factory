@@ -316,6 +316,15 @@ _VIEW_OMITTABLE: frozenset[str] = frozenset(
 
 # `<Usage>` values, in the order the product always emits them.
 _USAGE_ORDER: tuple[str, ...] = ("dashboard", "report", "details", "content")
+# The `<Usage>` sets the vendor corpora carry (9.1.1 851, 8.18.7 778,
+# vCommunity 0.8.1 189 ViewDefs): all four (the default), and three
+# subsets. No export drops `content`, and only the full set has `details`.
+_USAGE_SETS: tuple[frozenset, ...] = (
+    frozenset({"dashboard", "report", "details", "content"}),
+    frozenset({"dashboard", "report", "content"}),
+    frozenset({"report", "content"}),
+    frozenset({"dashboard", "content"}),
+)
 
 # SubjectType `type=` values.
 _VALID_SUBJECT_TYPES: frozenset[str] = frozenset({"descendant", "self"})
@@ -323,9 +332,13 @@ _DEFAULT_SUBJECT_TYPES: tuple[str, ...] = ("descendant", "self")
 
 _HEX_COLOR_RE = re.compile(r"^[0-9A-Fa-f]{6}$")
 
-# Same wide gate as render._SM_COLUMN_PREFIX_RE: anything shaped like a
-# super metric reference.
-_SM_ADDITIONAL_RE = re.compile(r"(?i:@?supermetric)\s*:")
+# A super metric written as its raw wire key: a ``Super Metric|`` prefix
+# (any case) or an ``sm_<uuid>`` anywhere in the attribute. Additional
+# columns take only the ``supermetric:"<name>"`` form (cross-reference
+# convention: by name, never raw UUID).
+_SM_LITERAL_RE = re.compile(
+    r"(?i)^\s*super\s*metric\s*\||(?:^|[^0-9a-z_])sm_[0-9a-f]{8}-?[0-9a-f]{4}"
+)
 
 
 @dataclass
@@ -1196,6 +1209,15 @@ class ViewDef:
                     f"{name_ctx}: omit: [{name}] contradicts the column's own "
                     f"{name} setting; drop one of them"
                 )
+        if "transformation" in c.omit and self.data_type == "trend":
+            # A trend column's transformations Property is the view-level
+            # stack (NONE/TREND/FORECAST); none of the 586 trend columns in
+            # the 9.1.1, 8.18.7 and vCommunity 0.8.1 corpora lacks it.
+            raise DashboardValidationError(
+                f"{name_ctx}: omit: [transformation] on a trend view column; trend "
+                "columns take the view-level transformations list, and no export "
+                "has a trend column without one"
+            )
         nothing = []
         if "roll_up_type" in c.omit and is_member and c.is_property:
             nothing.append("roll_up_type (a property member column emits no rollUpType)")
@@ -1220,16 +1242,19 @@ class ViewDef:
             raise DashboardValidationError(
                 f"{name_ctx}: additional column requires attribute and display_name"
             )
-        if _SM_ADDITIONAL_RE.match(c.attribute) or c.attribute.startswith("sm_"):
-            # The vendor shape carries the full "Super Metric|sm_<uuid>" key
-            # (vCommunity 0.8.1 "vSphere Switch Version"), which passes
-            # through verbatim. Name references are not resolved here: the
-            # dependency walkers only scan `columns:`, so a name in an
-            # additional column would ship without its super metric.
+        if _SM_LITERAL_RE.search(c.attribute) or c.attribute.strip().lower().startswith("sm_"):
+            # The vendor wire key is "Super Metric|sm_<uuid>" (vCommunity
+            # 0.8.1 "vSphere Switch Version"); the YAML names the super
+            # metric instead, like a `columns:` entry, and the renderer
+            # resolves it. Every dependency walker and audit reads
+            # additional_columns alongside columns, so the name form is
+            # bundled and checked; a raw key would also be, but puts a UUID
+            # in content YAML (cross-reference convention: by name).
             raise DashboardValidationError(
-                f"{name_ctx}: additional_columns accept a super metric only as the "
-                f"literal 'Super Metric|sm_<uuid>' key; supermetric:\"<name>\" and "
-                f"bare sm_<uuid> references are not resolved in additional columns"
+                f"{name_ctx}: attribute {c.attribute!r} is a raw super metric key; "
+                f"additional_columns name a super metric as supermetric:\"<name>\" "
+                f"(the super metric's display name), never 'Super Metric|sm_<uuid>' "
+                f"or sm_<uuid>"
             )
         if not c.localized_attribute_name:
             raise DashboardValidationError(
@@ -1243,6 +1268,10 @@ class ViewDef:
                 ("red_bound", c.red_bound), ("ascending_range", c.ascending_range),
                 ("transform_expression", c.transform_expression),
                 ("metric_to_relate_with", c.metric_to_relate_with),
+                # No distributionAdditionalColumns Item in the 9.1.1, 8.18.7
+                # or vCommunity 0.8.1 corpora carries a time-point sibling.
+                ("localized_metric_to_relate_with", c.localized_metric_to_relate_with),
+                ("operator_to_relate_with", c.operator_to_relate_with),
                 ("instanced_group", c.instanced_group), ("time_segment", c.time_segment),
                 ("subject", c.subject), ("roll_up_unit", c.roll_up_unit),
                 ("use_symptom_thresholds", c.use_symptom_thresholds),
@@ -1303,6 +1332,13 @@ class ViewDef:
                 raise DashboardValidationError(
                     f"{where}: usage must be a non-empty list of distinct values from "
                     f"{list(_USAGE_ORDER)}; got {self.usage!r}"
+                )
+            if frozenset(self.usage) not in _USAGE_SETS:
+                raise DashboardValidationError(
+                    f"{where}: usage {self.usage!r} is not a set any vendor export "
+                    "carries; use one of " + ", ".join(
+                        str([u for u in _USAGE_ORDER if u in s]) for s in _USAGE_SETS
+                    ) + " (or leave usage out for all four)"
                 )
         if self.group_by is not None:
             if self.data_type != "list":
@@ -1394,6 +1430,16 @@ class ViewDef:
                     f"{where}: buckets ranges / is_sum / explicit count or calc_function "
                     "only render on data_type: distribution views"
                 )
+        if b is not None and not b.is_dynamic and b.calc_function_set \
+                and b.calc_function != "SIMPLEMAXMIN":
+            # Every fixed (isDynamic=false) buckets-control in the 9.1.1,
+            # 8.18.7 and vCommunity 0.8.1 corpora (73 / 72 / 33) carries
+            # dynamicCalcFunction=SIMPLEMAXMIN and nothing else.
+            raise DashboardValidationError(
+                f"{where}: buckets.calc_function {b.calc_function!r} with dynamic: "
+                "false; a fixed buckets control takes only SIMPLEMAXMIN (the only "
+                "value any vendor export pairs with isDynamic=false)"
+            )
         if b is not None and b.count_set and b.count <= 0:
             raise DashboardValidationError(
                 f"{where}: buckets.count must be a positive integer, got {b.count}"
@@ -1403,12 +1449,6 @@ class ViewDef:
                 raise DashboardValidationError(
                     f"{where}: buckets.ranges needs dynamic: false; every vendor "
                     "bucketInfos sits on a fixed (isDynamic=false) buckets control"
-                )
-            if b.calc_function_set and b.calc_function != "SIMPLEMAXMIN":
-                raise DashboardValidationError(
-                    f"{where}: buckets.ranges renders dynamicCalcFunction=SIMPLEMAXMIN "
-                    f"(the only function the vendor pairs with bucketInfos); "
-                    f"calc_function {b.calc_function!r} contradicts it"
                 )
             for i, r in enumerate(b.ranges):
                 if not r.start < r.end:
@@ -1420,6 +1460,15 @@ class ViewDef:
                     raise DashboardValidationError(
                         f"{where}: buckets.ranges[{i}].color must be six hex digits "
                         f"(RRGGBB, no '#'), got {r.color!r}"
+                    )
+                # Every bucketInfos list in the three corpora (68 / 67 / 29)
+                # is ascending and non-overlapping; some leave gaps between
+                # ranges, none overlaps.
+                if i and r.start < b.ranges[i - 1].end:
+                    raise DashboardValidationError(
+                        f"{where}: buckets.ranges[{i}] start {r.start} is below the "
+                        f"previous range's end {b.ranges[i - 1].end}; ranges must be "
+                        "ascending and must not overlap"
                     )
 
     def _validate_column(self, c: "ViewColumn") -> None:  # noqa: F821
@@ -2518,6 +2567,17 @@ class Dashboard:
                     raise DashboardValidationError(
                         f"dashboard {self.name}: widget {w.local_id}: "
                         f"unknown view '{w.view_name}'"
+                    )
+                # A view whose usage leaves out `dashboard` carries no
+                # <Usage>dashboard</Usage>; what the product does with a View
+                # widget on such a view is unverified, so it is an error.
+                ref_usage = getattr(known_views.get(w.view_name), "usage", None)
+                if ref_usage is not None and "dashboard" not in ref_usage:
+                    raise DashboardValidationError(
+                        f"dashboard {self.name}: widget {w.local_id}: view "
+                        f"'{w.view_name}' has usage {list(ref_usage)!r}, which leaves "
+                        f"out dashboard; add dashboard to the view's usage or drop "
+                        f"usage to keep all four"
                     )
             if w.type == "Scoreboard" and w.scoreboard_config is None:
                 raise DashboardValidationError(
@@ -3679,7 +3739,14 @@ def load_view(
         additional_columns=additional_columns,
         omit=_opt_str_list(data, "omit", ctx) or [],
     )
-    v.validate(enforce_framework_prefix=enforce_framework_prefix, embedded_in_dashboard=embedded_in_dashboard)
+    try:
+        v.validate(enforce_framework_prefix=enforce_framework_prefix, embedded_in_dashboard=embedded_in_dashboard)
+    except DashboardValidationError as exc:
+        # validate() names the view and field, not the file; say which file.
+        msg = str(exc)
+        if msg.startswith(f"{path}"):
+            raise
+        raise DashboardValidationError(f"{path}: {msg}") from exc
     return v
 
 

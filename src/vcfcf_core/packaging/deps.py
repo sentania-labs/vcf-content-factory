@@ -248,7 +248,8 @@ def _refs_from_formula(
 
 
 def _refs_from_view(view) -> list[MetricReference]:
-    """Extract built-in metric references from a ViewDef's columns.
+    """Extract built-in metric references from a ViewDef's columns and
+    distribution additional columns.
 
     View columns reference metrics via their ``attribute`` field.  The
     renderer auto-prefixes Super Metric|sm_<uuid>, we skip those.
@@ -265,7 +266,10 @@ def _refs_from_view(view) -> list[MetricReference]:
     # (metric key, kinds to audit it against); None means every subject kind.
     keys: list[tuple[str, list[tuple[str, str]] | None]] = []
     source_desc = f"view {view.name!r}"
-    for col in view.columns:
+    # Distribution ``additional_columns:`` (metadata
+    # distributionAdditionalColumns) reference describe-cache keys exactly
+    # like ``columns:`` and render blank on a typo just the same.
+    for col in list(view.columns) + list(getattr(view, "additional_columns", None) or []):
         if getattr(col, "time_segment", None) is not None:
             # A time-segment ("Interval Breakdown") pseudo-column carries no
             # describe-cache key: its attributeKey is a literal the renderer

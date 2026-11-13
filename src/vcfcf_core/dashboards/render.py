@@ -781,30 +781,26 @@ _SM_COLUMN_REF_RE = re.compile(r'''(?i:@?supermetric):["'](.+?)["']$''')
 SmResolver = Callable[[ViewDef, str], Optional[str]]
 
 
-def _xml_attribute_item(
+def _column_attribute_key(
     view: ViewDef,
-    col,
-    idx: int,
+    raw: str,
+    where: str,
     sm_map: dict[str, str] | None = None,
     sm_scope_active: bool = False,
     bundle_context: str | None = None,
     sm_resolver: "SmResolver | None" = None,
-) -> str:
-    # Instanced-group columns (driver + member) have their own wire shape,
-    # distinct from every other column kind rendered below. Handle them
-    # first and return early. See InstancedGroupSpec in loader.py for the
-    # vendor XML citations this mirrors.
-    if getattr(col, "instanced_group", None) is not None:
-        return _xml_instanced_group_item(view, col)
-    if getattr(col, "time_segment", None) is not None:
-        return _xml_time_segment_item(col)
-
+) -> tuple[str, str]:
+    """``(attributeKey, default rollUpType)`` for a column attribute: a
+    ``supermetric:"<name>"`` resolved to ``Super Metric|sm_<uuid>``, a bare
+    ``sm_<uuid>`` prefixed, anything else verbatim. ``where`` names the
+    column in errors (``column 3``, ``additional column 0``). Shared by
+    ``columns:`` and distribution ``additional_columns:``, so both resolve a
+    name the same way."""
     # Super metric columns live in their own namespace and need the
     # "Super Metric|sm_<uuid>" attributeKey form, bare "sm_<uuid>"
     # renders as a blank column in the UI. Reference: exported views
     # from the sentania/AriaOperationsContent VCF License Consumption
     # bundle. Super metric columns also use rollUpType=NONE, not AVG.
-    raw = col.attribute
     if _SM_COLUMN_PREFIX_RE.match(raw):
         # Author wrote supermetric:"<name>", resolve to sm_<uuid> using
         # the SM name map built from supermetrics/ YAML at render time.
@@ -827,7 +823,7 @@ def _xml_attribute_item(
                     sm_id = sm_resolver(view, sm_name)
                 except ValueError as exc:
                     raise ValueError(
-                        f'View "{view.name}" column {idx}: {exc}'
+                        f'View "{view.name}" {where}: {exc}'
                     ) from exc
             else:
                 sm_id = (sm_map or {}).get(sm_name)
@@ -836,7 +832,7 @@ def _xml_attribute_item(
             else:
                 if sm_resolver is not None:
                     raise ValueError(
-                        f'View "{view.name}" column {idx} references super metric '
+                        f'View "{view.name}" {where} references super metric '
                         f'"{sm_name}" which could not be resolved to a UUID in '
                         f"the view's own content set or the factory set."
                     )
@@ -849,14 +845,14 @@ def _xml_attribute_item(
                         f"list, or remove the reference from the view."
                     )
                 raise ValueError(
-                    f'View "{view.name}" column {idx} references super metric '
+                    f'View "{view.name}" {where} references super metric '
                     f'"{sm_name}" which could not be resolved to a UUID. '
                     f"Ensure the SM YAML exists in content/supermetrics/ and "
                     f"has a valid id field."
                 )
         else:
             raise ValueError(
-                f'View "{view.name}" column {idx} has malformed supermetric '
+                f'View "{view.name}" {where} has malformed supermetric '
                 f'reference: {raw!r}. Expected supermetric:"<name>" '
                 f"(quoted, no space after the colon)."
             )
@@ -870,6 +866,31 @@ def _xml_attribute_item(
     else:
         attribute_key = raw
         roll_up_type = "AVG"
+    return attribute_key, roll_up_type
+
+
+def _xml_attribute_item(
+    view: ViewDef,
+    col,
+    idx: int,
+    sm_map: dict[str, str] | None = None,
+    sm_scope_active: bool = False,
+    bundle_context: str | None = None,
+    sm_resolver: "SmResolver | None" = None,
+) -> str:
+    # Instanced-group columns (driver + member) have their own wire shape,
+    # distinct from every other column kind rendered below. Handle them
+    # first and return early. See InstancedGroupSpec in loader.py for the
+    # vendor XML citations this mirrors.
+    if getattr(col, "instanced_group", None) is not None:
+        return _xml_instanced_group_item(view, col)
+    if getattr(col, "time_segment", None) is not None:
+        return _xml_time_segment_item(col)
+
+    attribute_key, roll_up_type = _column_attribute_key(
+        view, col.attribute, f"column {idx}", sm_map, sm_scope_active,
+        bundle_context, sm_resolver,
+    )
     props = [
         _xml_property("objectType", "RESOURCE"),
         _xml_property("attributeKey", attribute_key),
@@ -977,7 +998,15 @@ def _xml_attribute_item(
     return "<Item><Value>" + "".join(props) + "</Value></Item>"
 
 
-def _xml_additional_column_item(view: ViewDef, col) -> str:
+def _xml_additional_column_item(
+    view: ViewDef,
+    col,
+    idx: int = 0,
+    sm_map: dict[str, str] | None = None,
+    sm_scope_active: bool = False,
+    bundle_context: str | None = None,
+    sm_resolver: "SmResolver | None" = None,
+) -> str:
     """One metadata ``distributionAdditionalColumns`` Item (YAML
     ``additional_columns:``). Vendor order (vCommunity 0.8.1 "VM Disk
     Latency Distribution", "VM with RDM disks"): objectType, attributeKey,
@@ -985,10 +1014,17 @@ def _xml_additional_column_item(view: ViewDef, col) -> str:
     adapterKind, resourceKind, [rollUpType], rollUpCount, [percentile],
     [transformations], [sortCriteria], isProperty, displayName,
     [isShowRelativeTimestamp]. Optional Properties render only when the
-    YAML sets them; rollUpCount defaults to 0, the only vendor value."""
+    YAML sets them; rollUpCount defaults to 0, the only vendor value.
+    A ``supermetric:"<name>"`` attribute resolves exactly as in a
+    ``columns:`` entry (the loader rejects the raw key forms here); its
+    rollUpType still renders only when the YAML sets one."""
+    attribute_key, _ = _column_attribute_key(
+        view, col.attribute, f"additional column {idx}", sm_map,
+        sm_scope_active, bundle_context, sm_resolver,
+    )
     props = [
         _xml_property("objectType", "RESOURCE"),
-        _xml_property("attributeKey", col.attribute),
+        _xml_property("attributeKey", attribute_key),
     ]
     if col.unit:
         props.append(_xml_property("preferredUnitId", col.unit))
@@ -1060,7 +1096,13 @@ def _xml_pagination_control(view: ViewDef) -> str:
     )
 
 
-def _xml_metadata_control(view: ViewDef) -> str:
+def _xml_metadata_control(
+    view: ViewDef,
+    sm_map: dict[str, str] | None = None,
+    sm_scope_active: bool = False,
+    bundle_context: str | None = None,
+    sm_resolver: "SmResolver | None" = None,
+) -> str:
     """metadata control. Historical bytes when no fidelity field is set:
     maxPointsCount 5000, hideObjectNameColumn, listTopResultSize -1,
     includeResourceCreationTime false. ``distribution_color`` adds
@@ -1086,7 +1128,12 @@ def _xml_metadata_control(view: ViewDef) -> str:
     if view.additional_columns:
         addl = (
             '<Property name="distributionAdditionalColumns"><List>'
-            + "".join(_xml_additional_column_item(view, c) for c in view.additional_columns)
+            + "".join(
+                _xml_additional_column_item(
+                    view, c, i, sm_map, sm_scope_active, bundle_context, sm_resolver
+                )
+                for i, c in enumerate(view.additional_columns)
+            )
             + "</List></Property>"
         )
     return (
@@ -1197,7 +1244,9 @@ def _render_view_def_fragment(
     if view.data_type == "distribution":
         # Distribution view: buckets-control instead of pagination/summary
         buckets_ctrl = _xml_buckets_control(view)
-        metadata_ctrl = _xml_metadata_control(view)
+        metadata_ctrl = _xml_metadata_control(
+            view, sm_map, sm_scope_active, bundle_context, sm_resolver
+        )
         # No pagination control unless page_size asks for one (vendor
         # order: buckets, pagination, metadata).
         pagination_ctrl = _xml_pagination_control(view) if view.page_size is not None else ""
@@ -1216,7 +1265,9 @@ def _render_view_def_fragment(
     elif view.data_type == "trend":
         # Trend view: pagination-control (same as list), no summary
         pagination_ctrl = _xml_pagination_control(view)
-        metadata_ctrl = _xml_metadata_control(view)
+        metadata_ctrl = _xml_metadata_control(
+            view, sm_map, sm_scope_active, bundle_context, sm_resolver
+        )
         controls = (
             "<Controls>"
             + time_control
@@ -1240,7 +1291,9 @@ def _render_view_def_fragment(
             "</Control>"
         )
         pagination_ctrl = _xml_pagination_control(view)
-        metadata_ctrl = _xml_metadata_control(view)
+        metadata_ctrl = _xml_metadata_control(
+            view, sm_map, sm_scope_active, bundle_context, sm_resolver
+        )
         controls = (
             "<Controls>"
             + time_control
