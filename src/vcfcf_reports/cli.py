@@ -58,6 +58,11 @@ def cmd_validate(args) -> int:
         print(f"  {rd.id}  {rd.name}")
         print(f"    sections: {sections_summary}")
 
+    # Stock content ids (#345): no report template may ship under a stock id.
+    from vcfcf_core.stock_ids.guard import definitions_from_objects
+    from vcfcf_packaging.stock_ids import report_stock_ids
+    stock_rc = report_stock_ids(definitions_from_objects("report", defs), "report templates")
+
     # Slug-uniqueness check across content/ and third_party/*/
     if not getattr(args, "paths", None):
         try:
@@ -73,7 +78,7 @@ def cmd_validate(args) -> int:
         except ImportError:
             pass  # vcfcf_packaging not available — skip cross-provenance check
 
-    return 0
+    return stock_rc
 
 
 def cmd_list(args) -> int:

@@ -769,7 +769,7 @@ def _assemble_zip(
         built_at=_dt.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
     )
 
-    out_path.write_bytes(assemble_distribution_zip(
+    zip_bytes = assemble_distribution_zip(
         slug=slug,
         payloads=payloads,
         bundle_json=bundle_json_str,
@@ -779,5 +779,9 @@ def _assemble_zip(
         framework_readme=framework_readme,
         vcfops_manifest=vcfops_manifest,
         license_text=license_text,
-    ))
+    )
+    # Stock content ids (#345): refuse before anything is written.
+    from .stock_ids import guard_bundle
+    guard_bundle(bundle, zip_bytes, f"{item_type} {display_name!r}")
+    out_path.write_bytes(zip_bytes)
     return out_path

@@ -67,6 +67,7 @@ UNSYNCED_CONTENT_TYPES = {
 KNOWN_MANIFEST_KEYS = frozenset({
     "name", "description", "sync", "author", "license", "source",
     "factory_native", "display_name", "design", "released", "version",
+    "stock_id_allowlist",  # not content: the stock-id guard's escape hatch (#345)
     *SYNC_CONTENT_TYPES, *UNSYNCED_CONTENT_TYPES,
 })
 

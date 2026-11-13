@@ -471,6 +471,23 @@ buildkit (`python3 -m sdk_buildkit`), from buildkit 1.0.11:
 - `javac` runs with `-proc:none` (framework and adapter compiles), so an
   annotation processor inside a classpath jar never executes at build time.
 
+### Stock content id guard (#345)
+
+`validate-sdk` and `build-sdk` refuse a pak whose bundled content defines a
+view, dashboard, report template, super metric, symptom, alert or
+recommendation under an id VCF Operations ships as its own: installing it
+would overwrite the stock object and uninstalling it would delete it (the
+retired vCommunity port deleted 64 stock views that way). An error, not a
+warning, in both the factory and the kit: before the compile against the
+bundled content (naming the YAML), and again on the built pak (a
+`--release` build deletes a failing pak, as the pak-compare gate does).
+References to stock ids (a widget pointing at a stock view) are fine. The
+baseline ships in the kit as `sdk_buildkit/stock_ids_baseline.json`; without
+it every build fails. The escape hatch is adapter.yaml `stock_id_allowlist`
+(`type`, `id`, `reason` per entry; a warning on every build). Read-only
+check of any pak: `python3 -m sdk_buildkit stock-id-check <pak>`. Full
+reference: `stock_id_guard.md`.
+
 ### Defect gate in pak repos (generated vendored copy, #226)
 
 Each pak repo's release CI runs the RULE-012 gate as `ci/defect_gate.py`

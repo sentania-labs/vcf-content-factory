@@ -44,6 +44,11 @@ def cmd_validate(args) -> int:
     for d in defs:
         print(f"  - {d.name}  ({d.source_path})")
 
+    # Stock content ids (#345): no super metric may ship under a stock id.
+    from vcfcf_core.stock_ids.guard import definitions_from_objects
+    from vcfcf_packaging.stock_ids import report_stock_ids
+    stock_rc = report_stock_ids(definitions_from_objects("supermetric", defs), "super metrics")
+
     # Slug-uniqueness check across content/ and third_party/*/
     if not args.paths:
         try:
@@ -59,7 +64,7 @@ def cmd_validate(args) -> int:
         except ImportError:
             pass  # vcfcf_packaging not available — skip cross-provenance check
 
-    return 0
+    return stock_rc
 
 
 def cmd_list(args) -> int:

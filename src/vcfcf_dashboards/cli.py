@@ -212,6 +212,16 @@ def cmd_validate(args) -> int:
 
     rc = 0
 
+    # Stock content ids (#345): no view or dashboard may ship under a stock
+    # id. A dashboard widget pointing at a stock view by id is a reference
+    # and is fine; only the definitions loaded here are checked.
+    from vcfcf_core.stock_ids.guard import definitions_from_objects
+    from vcfcf_packaging.stock_ids import report_stock_ids
+    rc |= report_stock_ids(
+        definitions_from_objects("view", views) + definitions_from_objects("dashboard", dashboards),
+        "views and dashboards",
+    )
+
     # Dashboard Navigation targets resolve by exact name against every
     # dashboard in the repo (the loaded set, content/dashboards/ and
     # third_party/*/dashboards/). A full-corpus validate checks third-party

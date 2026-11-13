@@ -17,6 +17,7 @@ These files cost almost nothing to scan and prevent re-deriving known knowledge.
 | `api_pattern_catalog.md` | Recognized API shapes with default object models and known gaps |
 | `repo_layout.md` | Directory map of the repo |
 | `defects.md` | Defect registry — open blocking defects gate releases (RULE-012) |
+| `stock_id_guard.md` | Stock content id guard (#345): no build, validate, import or pak install ships a definition under an id VCF Operations ships as its own; the baseline, where the guard runs, the allowlist, how the baseline is generated and its known holes |
 
 ---
 

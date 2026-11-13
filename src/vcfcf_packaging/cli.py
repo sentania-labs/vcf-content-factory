@@ -1898,6 +1898,12 @@ def build_parser() -> argparse.ArgumentParser:
     pvdg.set_defaults(func=cmd_vendor_defect_gate)
 
     # -----------------------------------------------------------------------
+    # stock-id-check PATH ... / stock-id-baseline ... (#345)
+    # -----------------------------------------------------------------------
+    from .stock_ids import add_parsers as _add_stock_id_parsers
+    _add_stock_id_parsers(sub)
+
+    # -----------------------------------------------------------------------
     # publish
     # -----------------------------------------------------------------------
     ppub = sub.add_parser(

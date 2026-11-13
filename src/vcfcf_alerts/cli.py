@@ -118,6 +118,12 @@ def cmd_validate(args) -> int:
                 f"({r.adapter_kind}, ref={r.id})"
             )
 
+    # Stock content ids (#345): no alert or recommendation may ship under a
+    # stock id (ids as rendered into AlertContent.xml / a pak).
+    from vcfcf_packaging.stock_ids import alert_definitions, report_stock_ids
+    rc |= report_stock_ids(alert_definitions(defs, repo_recs),
+                           "alert definitions and recommendations")
+
     # Slug-uniqueness check across content/ and third_party/*/
     if not args.paths:
         try:

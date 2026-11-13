@@ -43,6 +43,10 @@ def cmd_validate(args) -> int:
             f"({d.source_path})"
         )
 
+    # Stock content ids (#345): no symptom may ship under a stock id.
+    from vcfcf_packaging.stock_ids import report_stock_ids, symptom_definitions
+    stock_rc = report_stock_ids(symptom_definitions(defs), "symptom definitions")
+
     # Slug-uniqueness check across content/ and third_party/*/
     if not args.paths:
         try:
@@ -58,7 +62,7 @@ def cmd_validate(args) -> int:
         except ImportError:
             pass  # vcfcf_packaging not available — skip cross-provenance check
 
-    return 0
+    return stock_rc
 
 
 def cmd_list(args) -> int:

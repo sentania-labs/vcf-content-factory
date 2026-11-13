@@ -1092,6 +1092,42 @@ def _verify_adapter_registered(
 # Unsigned-pak preflight (issue #216)
 # ---------------------------------------------------------------------------
 
+def _preflight_stock_ids(pak_path: Path, allow: bool) -> None:
+    """Refuse a pak that defines content under stock ids (issue #345).
+
+    VCF Operations tracks pak content by id: installing overwrites the stock
+    object with the pak's copy, and uninstalling the pak deletes it. A pak
+    the factory built passed this check in build-sdk; a third-party pak did
+    not. ``allow`` (``--allow-stock-ids``) installs anyway with a warning.
+    The check fails closed: no baseline, no install.
+    """
+    from vcfcf_core.stock_ids import guard as _stock_ids
+
+    try:
+        baseline = _stock_ids.load_baseline()
+    except _stock_ids.StockIdBaselineError as exc:
+        _abort(f"stock-id guard cannot run, install refused: {exc}")
+    lines, total = _stock_ids.check_paths([pak_path], baseline)
+    if not total:
+        return
+    report = "\n".join(lines)
+    if allow:
+        _warn(
+            f"{pak_path.name} defines {total} definition(s) under VCF Operations "
+            f"stock ids; installing anyway (--allow-stock-ids). Installing "
+            f"overwrites these stock objects and uninstalling the pak deletes "
+            f"them:\n{report}"
+        )
+        return
+    _abort(
+        f"{pak_path.name} defines {total} definition(s) under VCF Operations "
+        f"stock ids (issue #345). Installing would overwrite these stock "
+        f"objects and uninstalling the pak would delete them:\n{report}\n"
+        f"Install refused. Fix the pak (mint its own ids), or pass "
+        f"--allow-stock-ids to install it anyway."
+    )
+
+
 def _preflight_unsigned_policy(ui: "_UISession", pak_path: Path) -> None:
     """Abort before upload when the cluster refuses an unsigned pak.
 
@@ -1144,12 +1180,16 @@ def install_pak(
     summary_rebind: bool = True,
     restart_failed: bool = True,
     suite_factory=None,
+    allow_stock_ids: bool = False,
 ) -> int:
     """Install a .pak file onto a VCF Ops instance via the /ui/ SPA Struts layer.
 
     All steps run through a single _UISession — no /admin/ session required.
 
     Steps executed:
+      0:   _preflight_stock_ids(): a pak that defines content under VCF
+           Operations stock ids stops here, listing them, unless
+           ``allow_stock_ids`` (issue #345); offline, before any login
       1:   Manifest parse (offline preflight)
       2:   _UISession.login()  (3-step /ui/ login + OPS_SESSION CSRF)
       2a:  _preflight_unsigned_policy(): an unsigned pak on a cluster whose
@@ -1210,6 +1250,7 @@ def install_pak(
         _abort(f"Pak file not found: {pak_path}")
     if not p.is_file():
         _abort(f"Not a file: {pak_path}")
+    _preflight_stock_ids(p, allow_stock_ids)
 
     host, user, password, profile_verify_ssl, auth = _resolve_credentials(
         host, user, password, profile=profile
