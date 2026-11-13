@@ -613,6 +613,7 @@ def build_discrete(
         version=version,
         description=description,
         output_dir=output_dir,
+        stock_id_project_dirs=extra_search_dirs,
     )
 
     if audit_result is not None:
@@ -750,10 +751,15 @@ def _assemble_zip(
     version: str,
     description: str,
     output_dir: Path,
+    stock_id_project_dirs: "list[Path] | None" = None,
 ) -> Path:
     """Assemble the output zip from a synthetic Bundle, mirroring build_bundle
     (same ``vcfcf_core.packaging.assembly`` layout; only bundle.json,
-    the README and the manifest fields are item-shaped)."""
+    the README and the manifest fields are item-shaped).
+
+    ``stock_id_project_dirs``: third-party project roots the item was found
+    in; each one's ``PROJECT.yaml`` ``stock_id_allowlist`` covers the
+    definitions under that root and nothing else (#345)."""
     # Zip filename follows the same [VCF Content Factory] prefix convention
     out_path = output_dir / f"[VCF Content Factory] {display_name}.zip"
     slug = bundle.name
@@ -802,7 +808,7 @@ def _assemble_zip(
         built_at=_dt.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
     )
 
-    out_path.write_bytes(assemble_distribution_zip(
+    zip_bytes = assemble_distribution_zip(
         slug=slug,
         payloads=payloads,
         bundle_json=bundle_json_str,
@@ -812,5 +818,17 @@ def _assemble_zip(
         framework_readme=framework_readme,
         vcfops_manifest=vcfops_manifest,
         license_text=license_text,
-    ))
+    )
+    # Stock content ids (#345): refuse before anything is written. The item
+    # has no manifest of its own; a third-party project's PROJECT.yaml
+    # allowlist covers that project's files only.
+    from vcfcf_core.stock_ids.guard import StockIdAllowlistError
+    from .loader import BundleValidationError
+    from .stock_ids import guard_bundle, project_allowlists
+    try:
+        manifests = project_allowlists(stock_id_project_dirs or [])
+    except StockIdAllowlistError as exc:
+        raise BundleValidationError(f"stock-id guard: {exc}") from exc
+    guard_bundle(bundle, zip_bytes, f"{item_type} {display_name!r}", manifests=manifests)
+    out_path.write_bytes(zip_bytes)
     return out_path

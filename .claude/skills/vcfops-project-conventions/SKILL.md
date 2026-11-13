@@ -118,6 +118,16 @@ Never silently downgrade. Never hack around a gap. Report it.
   Generated on first validate, never changed.
 - Custom group, symptom, alert: No `id` field. Server assigns.
   Sync matches by `name`.
+- Never a stock id (#345). An `id` (or a symptom, alert or recommendation
+  id derived from its name) must not be one VCF Operations ships as its
+  own: installing would overwrite the stock object and uninstalling would
+  delete it. A port of third-party content mints new ids for everything
+  it copied. `validate`, `validate-sdk`, `build-sdk`, the bundle builders
+  and every content import refuse a stock id (`STOCK-ID:` /
+  `stock-id guard:`); referencing a stock id (a widget pointing at a stock
+  view) is fine. Check a third-party pak with
+  `python3 -m vcfcf_packaging stock-id-check <pak>`. Details:
+  `knowledge/context/stock_id_guard.md`.
 
 ## Cross-reference syntax
 

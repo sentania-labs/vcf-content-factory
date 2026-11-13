@@ -201,6 +201,10 @@ def cmd_validate(args) -> int:
             if bundle.alerts:
                 parts.append(f"{len(bundle.alerts)} alert(s)")
             print(f"    {', '.join(parts) if parts else '(empty bundle)'}")
+            # Symptoms and alerts install by name: a stock name overwrites
+            # the stock object whatever its id (#345 W8). A warning.
+            from .stock_ids import warn_bundle_stock_names
+            warn_bundle_stock_names(bundle)
         except BundleValidationError as e:
             print(f"INVALID  {p}: {e}", file=sys.stderr)
             rc = 1
@@ -1896,6 +1900,12 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     pvdg.set_defaults(func=cmd_vendor_defect_gate)
+
+    # -----------------------------------------------------------------------
+    # stock-id-check PATH ... / stock-id-baseline ... (#345)
+    # -----------------------------------------------------------------------
+    from .stock_ids import add_parsers as _add_stock_id_parsers
+    _add_stock_id_parsers(sub)
 
     # -----------------------------------------------------------------------
     # publish

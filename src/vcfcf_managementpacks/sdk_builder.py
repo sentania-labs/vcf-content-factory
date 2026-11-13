@@ -80,6 +80,9 @@ except ImportError:
 # build-buildkit (_factory_source_commit), which runs with only PyYAML
 # installed, and the wrapper package's import chain reaches requests.
 from vcfcf_core.supermetrics import crossref as _crossref
+# Stock content id guard (#345): baseline, allowlist and check. In the
+# sdk-buildkit this is the flat stock_ids.py beside its baseline file.
+from vcfcf_core.stock_ids import guard as _stock_ids
 
 from .sdk_project import (
     CONTENT_NAMING_DEFAULT,
@@ -4863,6 +4866,16 @@ def build_sdk_pak(project_dir: Path, output_dir: Optional[Path] = None,
     ), project_dir / "describe.xml")
     if _content_errors:
         raise SdkBuildError("\n".join(_content_errors))
+    # Stock content ids (#345). Same reason as above: release CI runs
+    # build-sdk only. A bundled definition under a stock id fails the build.
+    _stock_errors, _stock_warnings = check_stock_ids(project, (
+        bundled_views, bundled_dashboards, bundled_supermetrics, bundled_symptoms,
+        bundled_alerts, bundled_reports, bundled_recommendations,
+    ))
+    if _stock_errors:
+        raise SdkBuildError("\n".join(_stock_errors))
+    for _w in _stock_warnings:
+        print(f"  build-sdk: warning: {_w}", file=sys.stderr)
 
     # Resolve owning-adapter binding info for content renderers.
     # owning_adapter_kind — the pak's adapter_kind key (e.g. "vcfcf_compliance").
@@ -4994,6 +5007,11 @@ def build_sdk_pak(project_dir: Path, output_dir: Optional[Path] = None,
 
     print(f"Built: {pak_path}", file=sys.stderr)
 
+    # Step 11b: stock content ids in the built pak (#345). Belt and braces
+    # behind the bundled-content check above: scans every definition the
+    # pak actually carries, whatever path put it there.
+    _gate_built_pak_stock_ids(pak_path, project, release_build=release_build)
+
     # Step 12: pak-compare gate (fail-closed, #181).
     _gate_built_pak(
         pak_path,
@@ -5032,6 +5050,99 @@ def _gate_built_pak(pak_path: Path, *, release_build: bool,
                 file=sys.stderr,
             )
         raise
+
+
+def _stock_id_allowlist(project: SdkProjectDef) -> List["_stock_ids.AllowlistEntry"]:
+    return _stock_ids.parse_allowlist(
+        getattr(project, "stock_id_allowlist", None),
+        f"{getattr(project, 'source_path', 'adapter.yaml')}",
+    )
+
+
+def check_stock_ids(
+    project: SdkProjectDef, bundled: Tuple[list, ...]
+) -> Tuple[List[str], List[str]]:
+    """Bundled content must not ship under VCF Operations stock ids (#345).
+
+    ``bundled`` is the tuple ``_load_bundled_content`` returns. Returns
+    ``(errors, warnings)``: one error block naming every offending file,
+    id, type, stock name and version; a warning per allowlisted hit
+    (``stock_id_allowlist`` in adapter.yaml) and per unused allowlist entry.
+    Fail closed: an unloadable baseline or a malformed allowlist is an
+    error, never a skipped check.
+    """
+    views, dashboards, sms, symptoms, alerts, reports, recs = bundled
+    try:
+        baseline = _stock_ids.load_baseline()
+    except _stock_ids.StockIdBaselineError as exc:
+        return [f"stock-id guard: {exc}"], []
+    try:
+        allow = _stock_id_allowlist(project)
+    except _stock_ids.StockIdAllowlistError as exc:
+        return [f"stock-id guard: {exc}"], []
+    alert_xml = None
+    if symptoms or alerts or recs:
+        from vcfcf_alerts.render import render_alert_content_xml
+        alert_xml = render_alert_content_xml(
+            symptoms=list(symptoms or []),
+            alerts=list(alerts or []),
+            recommendations=list(recs or []),
+        )
+    defs = _stock_ids.bundled_definitions(
+        views=views or [], dashboards=dashboards or [], supermetrics=sms or [],
+        reports=reports or [], symptoms=symptoms or [], alerts=alerts or [],
+        recommendations=recs or [], alert_content_xml=alert_xml,
+    )
+    pak = f"pak {getattr(project, 'name', '')!r}"
+    result = _stock_ids.check_definitions(
+        defs, baseline=baseline, allowlist=allow, subject=pak,
+    )
+    errors = [_stock_ids.guard_failure_text(result, pak)] if result.errors else []
+    return errors, result.warnings
+
+
+def _gate_built_pak_stock_ids(pak_path: Path, project: SdkProjectDef, *,
+                              release_build: bool) -> None:
+    """Scan the built pak for stock-id definitions; raise on any hit (#345).
+
+    Same disposal as the pak-compare gate: a release build's pak is
+    deleted, a dev build's is left for inspection and must not be
+    installed.
+    """
+    defs: list = []
+    try:
+        baseline = _stock_ids.load_baseline()
+        allow = _stock_id_allowlist(project)
+        unreadable: list = []
+        defs = _stock_ids.scan_path(pak_path, unreadable=unreadable)
+        if unreadable:
+            # Unread is not checked: fail closed, as for no baseline.
+            failure = _stock_ids.unreadable_failure_text(unreadable, f"built pak {pak_path.name}")
+        else:
+            result = _stock_ids.check_definitions(defs, baseline=baseline, allowlist=allow)
+            failure = (
+                _stock_ids.guard_failure_text(result, f"built pak {pak_path.name}")
+                if result.errors else None
+            )
+    except (_stock_ids.StockIdBaselineError, _stock_ids.StockIdAllowlistError) as exc:
+        failure = f"stock-id guard: {exc}"
+    if failure is None:
+        if defs:
+            print(f"  stock-id guard: built pak: {_stock_ids.coverage_text(defs, baseline)}",
+                  file=sys.stderr)
+        else:
+            print("  stock-id guard: built pak carries no content definitions; nothing to check",
+                  file=sys.stderr)
+        return
+    if release_build:
+        pak_path.unlink(missing_ok=True)
+        failure += f"\n  removed {pak_path.name} (release build failed the stock-id guard)."
+    else:
+        failure += (
+            f"\n  {pak_path} left for inspection; it failed the stock-id guard "
+            "and must not be installed."
+        )
+    raise SdkBuildError(failure)
 
 
 def _validate_localization_key_contract(views: list, sm_scope: Optional[List[Path]] = None) -> List[str]:
@@ -5630,6 +5741,11 @@ def validate_sdk_project(project_dir: Path) -> List[str]:
         # Bundled symptom/alert/recommendation references and describe.xml
         # conformance: the same check build-sdk runs.
         errors.extend(check_bundled_content(project, _bundled, describe_xml))
+        # Stock content ids (#345): an error, the same check build-sdk runs.
+        _stock_errors, _stock_warnings = check_stock_ids(project, _bundled)
+        errors.extend(_stock_errors)
+        for _w in _stock_warnings:
+            print(f"  validate-sdk: warning: {_w}", file=sys.stderr)
         if bundled_views:
             # Build sm_scope from bundled SM source paths so that view columns
             # using supermetric:"<name>" resolve against adapter-local SMs, not
