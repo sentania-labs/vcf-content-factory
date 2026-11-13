@@ -107,6 +107,13 @@ applies the view-definition sort with no widget input.
 - Consequence: an embedded view opens sorted for every dashboard that
   uses it. Two dashboards wanting different default orders need two views.
 
+> **Update 2026-11-12.** The factory first shipped `sort:` on one column
+> of a list view only. It now accepts several sorted columns, distribution
+> views (including `additional_columns`), and instanced-group driver and
+> member columns, all vendor shapes; trend views and time-segment views
+> stay rejected. Precedence between several sorted columns is still
+> untested. See `view_fidelity_wire_format.md` §3.
+
 ## #176: lower-is-worse colors on Scoreboard and MetricChart
 
 ### Finding
