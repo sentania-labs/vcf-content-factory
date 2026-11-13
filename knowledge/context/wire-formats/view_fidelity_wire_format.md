@@ -394,6 +394,15 @@ sample: the vendor majority carries it (22 vCommunity columns and 59
 9.1.1 built-in columns with, 2 and 3 without). `false` is not accepted on
 such a column, no export carries it.
 
+A bound on a **string** attribute column (`isStringAttribute="true"`) is
+matched as a string, but the loader reads every numeric-looking bound
+through `float` (`_maybe_float`), so `"0"` / `"1"` render as `"0.0"` /
+`"1.0"` (4 vCommunity columns, VLAN ids and flags, mixed with a string
+`redBound="none"`). Not modeled: `import-local` stops such a view with a
+TOOLSET GAP (before 2026-11-13 its comparison treated the two spellings as
+one number). A numeric column's bounds are numbers: `70` and `70.0` are the
+same bound.
+
 ## SDK pak owning SubjectType (not changed)
 
 `render_view_def_fragments(owning_adapter_kind=..., owning_resource_kind=...)`

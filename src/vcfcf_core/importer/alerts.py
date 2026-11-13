@@ -15,7 +15,7 @@ from typing import Dict, List
 
 from . import flat as _flat
 from .accounting import account
-from .model import MappedObject, MappingError, gap_error, toolset_gap
+from .model import MappedObject, MappingError, gap_error, toolset_gap, wire_number
 from .refs import Ref
 
 #: XML operator symbol -> YAML operator (inverse of alerts.render._XML_OPERATOR_MAP).
@@ -38,13 +38,12 @@ def strip_prefix(value: str, prefix: str) -> str:
 
 
 def _value(v: str, numeric: bool):
+    """A condition threshold: a string where the value type is not numeric;
+    otherwise exactly (``model.wire_number``: an integer spelling is an int,
+    never through float)."""
     if not numeric:
         return v
-    try:
-        f = float(v)
-    except (TypeError, ValueError):
-        return v
-    return float(f) if "." in v or "e" in v.lower() else int(f)
+    return wire_number(v, "condition value", "symptom")
 
 
 def map_symptom(sd, location: str) -> MappedObject:

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from decimal import Decimal
 from typing import Dict, List, Optional
 
 from .flat import EMPTY_DICT, EMPTY_LIST, under
@@ -28,6 +29,29 @@ class MappingError(Exception):
     def __init__(self, msg: str, gap: Optional[Dict[str, str]] = None):
         super().__init__(msg)
         self.gap = gap
+
+
+_INT_SPELLING = re.compile(r"[+-]?\d+")
+_DEC_SPELLING = re.compile(r"[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?")
+
+
+def wire_number(s, where: str, type_: str):
+    """A numeric wire string as a YAML number, exactly: an integer spelling
+    becomes an ``int`` (never through ``float``), any other decimal spelling
+    a ``float`` only when that float is exactly the written value; a value a
+    YAML float cannot carry exactly stops the object (``gap_error``). A
+    string that is not a number is returned unchanged."""
+    if not isinstance(s, str):
+        return s
+    t = s.strip()
+    if _INT_SPELLING.fullmatch(t):
+        return int(t)
+    if not _DEC_SPELLING.fullmatch(t):
+        return s
+    f = float(t)
+    if Decimal(repr(f)) != Decimal(t):
+        raise gap_error(f"{where}: number {s!r} has more digits than a YAML float carries exactly", type_)
+    return f
 
 
 _QUOTED = re.compile(r'"[^"]*"|\'[^\']*\'')

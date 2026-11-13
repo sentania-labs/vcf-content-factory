@@ -13,7 +13,7 @@ TOOLSET GAP, and ``accounting.account`` classifies every source key.
 from __future__ import annotations
 
 from collections import OrderedDict
-from typing import Dict, List
+from typing import Dict
 
 from . import flat as _flat
 from .accounting import account

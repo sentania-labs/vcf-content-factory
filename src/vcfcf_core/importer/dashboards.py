@@ -29,6 +29,7 @@ constants the renderer writes are rows there).
 from __future__ import annotations
 
 import re
+from decimal import Decimal
 from collections import OrderedDict
 from typing import Dict, List, Optional, Tuple
 
@@ -40,7 +41,7 @@ from ..dashboards.loader import (
 )
 from . import flat as _flat
 from .accounting import account
-from .model import MappedObject, MappingError, Mark, documented_loss, gap_error
+from .model import MappedObject, MappingError, Mark, documented_loss, gap_error, wire_number
 from .refs import NavRef, Ref
 
 UUID = r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
@@ -72,13 +73,13 @@ def split_rkid(s: str) -> Tuple[str, str]:
 
 
 def _num(v):
-    if isinstance(v, str):
-        try:
-            f = float(v)
-        except ValueError:
-            return v
-        return int(f) if f.is_integer() else f
-    return v
+    """A numeric string (a metric entry ``maxValue``) as a YAML number,
+    exactly (``model.wire_number``; an integral decimal such as ``"25.0"``
+    becomes 25, as before)."""
+    n = wire_number(v, "maxValue", "dashboard")
+    if isinstance(n, float) and n.is_integer():
+        return int(Decimal(repr(n)))
+    return n
 
 
 def local_widget_ids(db: dict) -> Dict[str, str]:

@@ -1281,3 +1281,169 @@ def test_a_view_render_failure_in_verification_is_that_views_error(source, tmp_p
     assert "Traceback" not in text and rc != 0
     assert "views/probe-trend.yaml: render or compare failed: ValueError: probe view render failure" in text, text
     assert "views/probe-host-list.yaml: render or compare failed" not in text
+
+
+# ================================================ PR 358 Codex round 2
+# Numbers are exact (Decimal, never float), and an XML string is a number
+# only at a key that is numeric by its semantics.
+BIG = 2 ** 53 + 1  # 9007199254740993: the first integer a float cannot hold
+
+
+def _symptom_xml(tmp_path: Path, name: str, sid: str, cond: str) -> str:
+    y = _load_yaml(f"""
+        id: {sid}
+        name: {name}
+        adapter_kind: VMWARE
+        resource_kind: HostSystem
+        severity: WARNING
+        wait_cycles: 1
+        cancel_cycles: 1
+        condition: {cond}
+    """, tmp_path, f"{sid}.yaml")
+    return render_alert_content_xml([load_sym(y, enforce_framework_prefix=False)], [], [])
+
+
+def test_string_condition_values_spelling_one_number_do_not_merge(tmp_path, capsys):
+    sid = "3c000000-0000-4000-8000-0000000000f1"
+    src = tmp_path / "src"
+    src.mkdir()
+    xml = _symptom_xml(tmp_path, "Probe String Value", sid,
+                       '{type: property, key: config|name, operator: EQ, value: "01", instanced: false}')
+    assert 'valueType="string"' in xml and 'value="01"' in xml
+    (src / "a.xml").write_text(xml)
+    (src / "b.xml").write_text(xml.replace('value="01"', 'value="1"'))
+    rc, text = _run(src, tmp_path / "o", capsys, "--layout", "third-party", "--ids", "keep", "--naming",
+                    "unprefixed", "--allow-partial")
+    assert f"merged: symptom {sid}" not in text and "is the same in 2 files" not in text
+    assert re.search(rf"FAILED symptom \S*{sid} .*differently", text), text
+
+
+def test_numeric_condition_values_spelling_one_number_still_merge(tmp_path, capsys):
+    sid = "3c000000-0000-4000-8000-0000000000f2"
+    src = tmp_path / "src"
+    src.mkdir()
+    xml = _symptom_xml(tmp_path, "Probe Numeric Value", sid,
+                       "{type: metric_static, key: cpu|usage_average, operator: GT, value: 1, instanced: false}")
+    assert 'valueType="numeric"' in xml and 'value="1"' in xml
+    (src / "a.xml").write_text(xml)
+    (src / "b.xml").write_text(xml.replace('value="1"', 'value="1.0"'))
+    rc, text = _run(src, tmp_path / "o", capsys, "--layout", "third-party", "--ids", "keep", "--naming",
+                    "unprefixed")
+    assert rc == 0, text
+    assert "is the same in 2 files" in text
+
+
+def test_a_2_pow_53_plus_1_threshold_survives_and_a_change_by_1_is_caught(tmp_path, capsys):
+    sid = "3c000000-0000-4000-8000-0000000000f3"
+    src = tmp_path / "src"
+    src.mkdir()
+    xml = _symptom_xml(tmp_path, "Probe Big Threshold", sid,
+                       f"{{type: metric_static, key: cpu|usage_average, operator: GT, value: {BIG}, instanced: false}}")
+    assert f'value="{BIG}"' in xml
+    (src / "s.xml").write_text(xml)
+    out = tmp_path / "o"
+    rc, text = _run(src, out, capsys, "--layout", "third-party", "--ids", "keep", "--naming", "unprefixed")
+    assert rc == 0 and re.search(r"; 0 differ$", text, re.M), text
+    rel = "symptoms/probe-big-threshold.yaml"
+    assert _yaml(out, rel)["condition"]["value"] == BIG and str(BIG) in (out / rel).read_text()
+    from vcfcf_core.symptoms.loader import load_file
+    assert f'value="{BIG}"' in render_alert_content_xml([load_file(out / rel, enforce_framework_prefix=False)], [], [])
+    # the written YAML changed by 1 is reported (the comparator is exact)
+    from vcfcf_core.importer.convert import ConvertOptions, plan_conversion
+    from vcfcf_core.importer.inputs import scan_inputs
+    from vcfcf_extractor import importer as I
+    plan = plan_conversion(scan_inputs([src]), ConvertOptions(ids="keep", naming="unprefixed", layout="third-party"))
+    I._load_check(plan, "third-party", None)
+    tree = tmp_path / "tree"
+    I._write_tree(plan, tree, SimpleNamespace(layout="third-party", project_name="big", naming="unprefixed"),
+                  tmp_path / "absent", None)
+    assert _status(plan, tree, rel) == "identical"
+    p = tree / rel
+    p.write_text(p.read_text().replace(str(BIG), str(BIG - 1)))
+    assert _status(plan, tree, rel) == "differs"
+
+
+def _host_first_column(**props):
+    """Set Properties of V_HOST's first column (both of its identical copies)."""
+    def m(root):
+        for f in (root / "reports" / "View - Set.xml", root / "resources" / "nested" / "extra.xml"):
+            text = f.read_text()
+            vd = re.search(r'<ViewDef id="%s".*?</ViewDef>' % V_HOST, text, re.S).group(0)
+            item = re.search(r"<Item>.*?</Item>", vd, re.S).group(0)
+            new_item = item
+            for k, v in props.items():
+                new_item, n = re.subn(r'(<Property name="%s" value=")[^"]*(")' % k, r"\g<1>%s\2" % v, new_item)
+                assert n == 1, k
+            f.write_text(text.replace(vd, vd.replace(item, new_item, 1)))
+    return m
+
+
+def _dist_buckets(**props):
+    def m(root):
+        f = root / "reports" / "View - Set.xml"
+        text = f.read_text()
+        vd = re.search(r'<ViewDef id="%s".*?</ViewDef>' % V_DIST, text, re.S).group(0)
+        new = vd
+        for k, v in props.items():
+            new, n = re.subn(r'(<Control[^>]*type="buckets-control".*?<Property name="%s" value=")[^"]*(")' % k,
+                             r"\g<1>%s\2" % v, new, count=1, flags=re.S)
+            assert n == 1, k
+        f.write_text(text.replace(vd, new))
+    return m
+
+
+@pytest.mark.parametrize("label,vid,mutate,text", [
+    ("view bound 2**53+1", V_HOST, _host_first_column(yellowBound=BIG), "float"),
+    ("view buckets maxValue 2**53+1", V_DIST, _dist_buckets(maxValue=BIG), "float"),
+    ("view bound with more digits than a float", V_HOST, _host_first_column(yellowBound="0.10000000000000000001"),
+     "more digits than a YAML float"),
+    ("view string-attribute bound the loader respells", V_HOST,
+     _host_first_column(isStringAttribute="true", yellowBound="70"), "string attribute"),
+])
+def test_a_value_a_loader_rounds_through_float_is_a_gap(mutation_source, tmp_path, label, vid, mutate, text):
+    from vcfcf_core.importer.convert import norm_id
+    src = tmp_path / "src"
+    shutil.copytree(mutation_source, src)
+    mutate(src)
+    plan, _tree = _convert(src, tmp_path)
+    failed = [f for f in plan.failures if f.type == "view" and norm_id("view", f.id) == vid]
+    assert failed and failed[0].gap and text in failed[0].reason, (label, [f.reason for f in plan.failures])
+
+
+def test_a_numeric_bound_spelled_differently_still_verifies(mutation_source, tmp_path):
+    """``70`` on a numeric column renders ``70.0``: equal (the tolerance kept)."""
+    src = tmp_path / "src"
+    shutil.copytree(mutation_source, src)
+    _host_first_column(yellowBound="70")(src)
+    plan, tree = _convert(src, tmp_path)
+    e = next(e for e in plan.emitted if e.source_id == V_HOST)
+    assert _status(plan, tree, e.relpath) == "identical"
+
+
+def test_a_dashboard_bound_a_loader_rounds_through_float_is_a_gap(mutation_source, tmp_path):
+    from vcfcf_core.importer.convert import norm_id
+    src = tmp_path / "src"
+    shutil.copytree(mutation_source, src)
+
+    def big(d):
+        m = d["widgets"][1]["config"]["metric"]["resourceKindMetrics"][0]
+        m.update(colorMethod=0, yellowBound=BIG, orangeBound=BIG + 1, redBound=BIG + 2)
+    _dash_json(src, big)
+    plan, _tree = _convert(src, tmp_path)
+    failed = [f for f in plan.failures if f.type == "dashboard" and norm_id("dashboard", f.id) == D_A]
+    assert failed and failed[0].gap and "float" in failed[0].reason, [f.reason for f in plan.failures]
+
+
+def test_number_equivalence_is_exact_and_only_where_numeric():
+    from vcfcf_core.importer.compare import same, xml_numeric
+    assert same(1, 1.0, xml=False) and same(BIG, BIG, xml=False)
+    assert not same(BIG, float(BIG), xml=False) and not same(BIG, BIG - 1, xml=False)
+    assert not same("01", "1", xml=True) and not same("1.0", "1", xml=True)
+    assert same("1.0", "1", xml=True, numeric=True) and not same(str(BIG), str(BIG - 1), xml=True, numeric=True)
+    cond = "SymptomDefinition/State/Condition[0]"
+    assert xml_numeric(cond + "@value", {cond + "@valueType": "numeric"})
+    assert not xml_numeric(cond + "@value", {cond + "@valueType": "string"})
+    col = "ViewDef/Controls/Control{attributes-selector}/Property{attributeInfos}/List/Item[0]/Value"
+    assert xml_numeric(col + "/Property{redBound}@value", {})
+    assert not xml_numeric(col + "/Property{redBound}@value", {col + "/Property{isStringAttribute}@value": "true"})
+    assert not xml_numeric("ViewDef/Title#text", {})

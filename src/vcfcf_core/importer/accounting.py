@@ -42,7 +42,9 @@ position, a state key and a repeat); ``?`` after a group makes it optional.
 from __future__ import annotations
 
 import json
+import math
 import re
+from decimal import Decimal, InvalidOperation
 from typing import Callable, Dict, List, Optional, Tuple
 
 from . import flat as _flat
@@ -493,6 +495,64 @@ for _rows in STRIPPED_TEXT.values():
             raise ValueError(f"stripped text row {_pat}: {_cls!r} is not a documented class")
 
 
+# --------------------------------------------------- float-converted keys
+#: Numeric keys the factory loaders read through ``float`` (the YAML carries
+#: the number exactly; the loader does not): a source value there must be
+#: one a float holds exactly, or the object stops with a GAP rather than
+#: ship rounded. ``(generic pattern, the loader line)``.
+_FLOATED = {
+    "view": [
+        (f"{_COL}/Property{{(yellowBound|orangeBound|redBound)}}@value",
+         "dashboards.loader._load_column: _maybe_float on every bound"),
+        (f"{_BKT}/Property{{(minValue|maxValue)}}@value", "dashboards.loader._load_view: buckets min_value / max_value"),
+    ],
+    "dashboard": [
+        (f"{_METRICS}.(yellowBound|orangeBound|redBound|maxValue)",
+         "dashboards.loader: metric entry bounds and max_value"),
+        ("widget:Scoreboard.config.(boxHeight|roundDecimals)", "dashboards.loader: Scoreboard box_height, round_decimals"),
+        ("widget:ParetoAnalysis.config.(roundDecimals|yellowBound|orangeBound|redBound|maxValue)",
+         "dashboards.loader: ParetoAnalysis round_decimals, bounds"),
+        ("widget:HealthChart.config.(yellowBound|orangeBound|redBound)", "dashboards.loader: HealthChart bounds"),
+        ("widget:Heatmap.config.configs[].color.(minValue|maxValue)", "dashboards.loader: Heatmap color min / max"),
+    ],
+}
+_FLOATED_RX = {t: [(re.compile(_pattern_rx(pat)), ev) for pat, ev in rows] for t, rows in _FLOATED.items()}
+
+
+def _float_problem(type_: str, path: str, value, leaves) -> Optional[str]:
+    """Why ``value`` at a float-converted key would not ship as written, or
+    ``None``."""
+    g = _flat.generic(path)
+    ev = next((e for rx, e in _FLOATED_RX.get(type_, ()) if rx.fullmatch(g)), None)
+    if ev is None or isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, (int, float)):
+        text = repr(value)
+    elif isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return None
+    else:
+        return None
+    try:
+        f = float(text)
+    except ValueError:
+        return None  # a string the loader keeps as a string (a string-match bound)
+    if not math.isfinite(f):
+        return f"the loader reads {text!r} as the float {f!r} ({ev})"
+    try:
+        exact = Decimal(repr(f)) == Decimal(text)
+    except InvalidOperation:
+        exact = False
+    if not exact:
+        return f"the loader reads it through float, which holds {f!r}, not {text} ({ev})"
+    if (type_ == "view" and isinstance(value, str) and str(f) != value
+            and leaves.get(path.rsplit("/", 1)[0] + "/Property{isStringAttribute}@value") == "true"):
+        return (f"a bound on a string attribute column is matched as a string, and the loader writes {value!r} "
+                f"as {str(f)!r} ({ev})")
+    return None
+
+
 def _stripped_text(type_: str, path: str):
     g = _flat.generic(path)
     for cls, rx, ev in _STRIPPED_RX.get(type_, ()):
@@ -690,6 +750,10 @@ def account(type_: str, leaves: _flat.Leaves, losses: List[Loss]) -> None:
         if rule is None:
             raise _gap(type_, path, "unclassified: no rule says the YAML carries it, the renderer writes it as "
                                     "a constant or derives it, or that it is a documented loss")
+        if rule.kind != "const":
+            why = _float_problem(type_, path, value, leaves)
+            if why:
+                raise _gap(type_, path, f"the source has {json.dumps(value, default=str)[:80]}; {why}")
         st = _stripped_text(type_, path) if rule.kind in ("conv", "same") else None
         if st and isinstance(value, str) and value != value.strip():
             cls, ev = st

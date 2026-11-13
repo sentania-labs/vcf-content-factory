@@ -357,12 +357,31 @@ its objects and occurrences, the differences at recorded losses per loss
 class, the forced target keys, and what was set aside.
 
 Set aside, each counted and printed by class: the renumbered ids above;
-**number spelling** (an XML value `70` equals `70.0` when both are plain
-decimal numbers; a JSON `1` equals `1.0`; a string never equals a number,
-`true` never `1`); and order where the product keys an element by identity
+**number spelling**, exact in `Decimal` (never through a float, so
+9007199254740993 is not 9007199254740992): a JSON `1` equals `1.0`; an XML
+value `70` equals `70.0` only at a key that is numeric by its semantics (a
+column bound unless the column is a string attribute, bucket, count, size
+and roll-up Properties, a filter operand that is not a string metric, a
+symptom condition whose `valueType` is numeric, cycle counts, alert type and
+sub-type, recommendation priority; `compare.xml_numeric`), and every other
+XML value is the exact string (`"01"` is not `"1"`, in a verification and
+when deciding whether two copies of one id are the same); a string never
+equals a number, `true` never `1`; and order where the product keys an element by identity
 (SubjectType, SubjectsGroupBy and Usage elements of a view, Controls by
 type, Properties by name, JSON object keys, dashboard and widget `states` by
 key). Every other list is compared by position.
+
+Numbers are converted exactly: an integer spelling becomes a YAML integer
+(never through a float), any other decimal a float only when that float is
+the written value, else the object stops. Where a factory loader reads a
+number through a float (view column bounds and bucket min / max; dashboard
+metric entry bounds and `maxValue`, Scoreboard `boxHeight` and
+`roundDecimals`, ParetoAnalysis and HealthChart bounds, Heatmap colour min
+/ max; `accounting._FLOATED`), a value a float does not hold exactly stops
+the object as a GAP rather than ship rounded, and so does a numeric-looking
+bound on a string attribute column that the loader would respell (`"0"`
+written as `"0.0"`, a string match changed). Symptom condition values are not
+floated on the content path and survive exactly.
 
 Limits, each a place a difference can still pass or a check the run does not
 make:
@@ -440,22 +459,27 @@ preferred). Each run takes 2 to 4 seconds.
 - `--ids keep`: every one of the 274 objects maps (no GAP); the stock-id
   guard refuses 120 stock ids among them, nothing written.
 - With the 101-entry id map and the 19-entry drop list, third-party layout:
-  every object that is not dropped converts (170 views, 52 dashboards, 16
-  templates, 10 symptoms, 4 alerts, 1 recommendation, 2 super metrics; no
-  GAP, no cascade); 255 objects and 46,117 fields compared: 152 identical,
-  103 differ only at recorded losses, 0 differ. The losses: Description
-  whitespace on 51 views and 11 templates, `adapterName` on 34 dashboards,
+  166 views, 50 dashboards, 15 templates, 10 symptoms, 4 alerts, 1
+  recommendation and 2 super metrics convert. 4 views stop on a GAP: a
+  numeric-looking bound (`"0"`, `"1"`) on a string attribute column, which
+  the view loader writes as `"0.0"` / `"1.0"` ("Report: vSphere Clusters for
+  CSV Export", "vSphere Port Group Configuration", "vSphere Cluster
+  Configuration List", "ESXi Cluster Settings"); 2 dashboards and 1
+  template cascade from them. 248 objects and 42,445 fields compared: 148
+  identical, 100 differ only at recorded losses, 0 differ. The losses:
+  Description whitespace on 51 views and 10 templates, `adapterName` on 32 dashboards,
   a buckets-control on 5 list views, a `config.widgetId` naming no widget of
   its dashboard on 3, stale navigations on 3, metric label whitespace on 2
   (11 Scoreboard labels), and one each of tab-name whitespace, formula
   whitespace, `displayName` `localizationKey`, Title / Description
   `localizationKey` and empty `preferredUnitId`. 11 view names lose trailing
   whitespace (recorded renames). The run exits 1 because losses were
-  recorded; with `--allow-partial` it exits 0 and writes all 255 files.
-- The same as a pak with `--target-min 8.18.7`: the same objects; 146
+  recorded and 4 views stop; with `--allow-partial` it exits 0 and writes the
+  248 that convert.
+- The same as a pak with `--target-min 8.18.7`: the same objects; 142
   identical, 6 identical apart from forced keys (`temporary` is forced on 11
   dashboards, the folder in the name and `widgetInteractions` on one each),
-  103 differ only at recorded losses, 0 differ. "Overall Daily Check" and
+  100 differ only at recorded losses, 0 differ. "Overall Daily Check" and
   "vSphere Cluster Capacity 2.0" carry Sections, so they are not deliverable
   to 8.18.7, and the pak layout never accepts that: the run exits 1 even
   with `--allow-partial` (raise the target to 9.1.1 or drop them).
@@ -465,16 +489,16 @@ preferred). Each run takes 2 to 4 seconds.
   differ.
 
 9.1.1 built-in export, views, report templates and dashboards (851 + 62 +
-179), `--ids mint`, third-party layout: no internal error. 756 views, 56
-templates and 43 dashboards convert (855 compared: 62 identical, 788 differ
+179), `--ids mint`, third-party layout: no internal error. 752 views, 55
+templates and 43 dashboards convert (850 compared: 62 identical, 783 differ
 only at recorded losses, mostly the Title / Description and `displayName`
 `localizationKey` and empty `preferredUnitId`, 5 dashboards differ at real
 mismatches: TextDisplay `editorData`, HealthChart bounds and
-`relationshipMode`, a View state value); 95
-views stop on the gaps listed above (fractional `percentile`, text views,
+`relationshipMode`, a View state value); 99
+views stop (4 of them on a string attribute bound the loader respells) on the gaps listed above (fractional `percentile`, text views,
 `relatedAdapterKind` columns, a metadata control without
 `hideObjectNameColumn` ...), 134 dashboards on their own gaps (unmodeled
-widget types, renderer constants) and 2 dashboards and 6 templates cascade.
+widget types, renderer constants) and 2 dashboards and 7 templates cascade.
 The dashboards alone: 46 of 179 convert (4 identical, 36 only at recorded
 losses, 6 differ at real mismatches verification reports); 133 stop, 26 of
 them on widget types the schema does not model.

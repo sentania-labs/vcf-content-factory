@@ -25,11 +25,12 @@ from __future__ import annotations
 import json
 import re
 from collections import OrderedDict
+from decimal import Decimal, InvalidOperation
 from typing import Dict, List, Tuple
 
 from . import flat as _flat
 from .accounting import account
-from .model import MappedObject, MappingError, Mark, documented_loss, gap_error
+from .model import MappedObject, MappingError, Mark, documented_loss, gap_error, wire_number
 from .refs import Ref
 
 DATA_TYPES = {"list-view": "list", "distribution-view": "distribution", "trend-view": "trend"}
@@ -58,21 +59,27 @@ _ADDITIONAL_PROPS = {
 _FILTER_KEYS = {"condition", "transform", "metricKey", "metricValue", "businessHours", "filterType"}
 
 
-def _num(s: str):
-    """A wire number as YAML: integers stay integers, the rest floats."""
-    try:
-        f = float(s)
-    except (TypeError, ValueError):
-        return s
-    return int(f) if re.fullmatch(r"-?\d+", str(s).strip()) else f
+def _num(s: str, where: str = "number"):
+    """A wire number as YAML, exactly (``model.wire_number``): integers stay
+    integers (never through float), the rest floats that equal the written
+    value; a string that is not a number is kept."""
+    return wire_number(s, where, "view")
 
 
 def _bound(s: str):
+    return _num(s, "bound")
+
+
+def _int_exact(s: str, where: str) -> int:
+    """An integral wire value (``7`` or ``7.0``) as an int, exactly; anything
+    else stops the view."""
     try:
-        float(s)
-    except ValueError:
-        return s
-    return _num(s)
+        d = Decimal(str(s).strip())
+    except (InvalidOperation, ValueError):
+        raise gap_error(f"{where} {s!r} is not a number", "view")
+    if d != d.to_integral_value():
+        raise gap_error(f"{where} {s} is not an integer (the YAML field is an integer)", "view")
+    return int(d)
 
 
 def _item_props(item) -> Dict[str, object]:
@@ -296,11 +303,7 @@ class _ViewMapper:
                 self.loss(f"column {idx}: {len(tx)} transformations on a {dt} column are not modeled (first kept)")
             col["transformation"] = tx[0] if tx else "CURRENT"
             if "percentile" in d:
-                pf = float(d["percentile"])
-                if not pf.is_integer():
-                    self.loss(f"column {idx}: percentile {d['percentile']} is not an integer (the YAML "
-                              f"field percentile is an integer)")
-                col["percentile"] = int(pf)
+                col["percentile"] = _int_exact(d["percentile"], f"column {idx}: percentile")
             if "transformExpression" in d:
                 col["transform_expression"] = d["transformExpression"]
             for wk, yk in (("metricToRelateWith", "metric_to_relate_with"),
@@ -370,10 +373,7 @@ class _ViewMapper:
             tx = d["transformations"]
             col["transformation"] = tx[0] if tx else "CURRENT"
             if "percentile" in d:
-                pf = float(d["percentile"])
-                if not pf.is_integer():
-                    self.loss(f"additional column {idx}: percentile {d['percentile']} is not an integer")
-                col["percentile"] = int(pf)
+                col["percentile"] = _int_exact(d["percentile"], f"additional column {idx}: percentile")
         if "sortCriteria" in d:
             col["sort"] = "asc" if d["sortCriteria"] == "true" else "desc"
         if "isShowRelativeTimestamp" in d:
@@ -551,8 +551,8 @@ class _ViewMapper:
             if len(fd) > 1:
                 self.loss("trend columns with differing forecastDays are not modeled")
             fdv = next(iter(fd)) if fd else None
-            if fdv is not None and int(float(fdv)) > 0:
-                y["forecast_days"] = int(float(fdv))
+            if fdv is not None and _int_exact(fdv, "forecastDays") > 0:
+                y["forecast_days"] = _int_exact(fdv, "forecastDays")
             elif fdv is not None:
                 self.loss("forecastDays=0 on a trend column is not modeled")
         y["columns"] = cols
@@ -645,7 +645,8 @@ class _ViewMapper:
         if "bucketInfos" in bp:
             for it in bp["bucketInfos"].find("List"):
                 d = _item_props(it)
-                r: Dict[str, object] = OrderedDict(start=_num(d.get("startValue")), end=_num(d.get("endValue")))
+                r: Dict[str, object] = OrderedDict(start=_num(d.get("startValue"), "bucket startValue"),
+                                                   end=_num(d.get("endValue"), "bucket endValue"))
                 if "bucketColor" in d:
                     r["color"] = d["bucketColor"]
                 ranges.append(r)
@@ -664,8 +665,8 @@ class _ViewMapper:
         if not dyn:
             if "minValue" not in bp or "maxValue" not in bp:
                 self.loss("fixed buckets without minValue/maxValue are not modeled")
-            b["min_value"] = _num(bp.get("minValue", "0"))
-            b["max_value"] = _num(bp.get("maxValue", "100"))
+            b["min_value"] = _num(bp.get("minValue", "0"), "buckets minValue")
+            b["max_value"] = _num(bp.get("maxValue", "100"), "buckets maxValue")
         elif "minValue" in bp or "maxValue" in bp:
             self.loss("minValue/maxValue on dynamic buckets are not modeled")
         if "isSum" in bp:

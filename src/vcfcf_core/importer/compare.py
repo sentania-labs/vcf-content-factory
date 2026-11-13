@@ -10,9 +10,14 @@ each counted by class in ``Comparison.set_aside`` (the ids the product
 renumbers, server metadata; ``flat`` module docstring), plus two
 equivalences that are counted too when they decide a comparison:
 
-- **number spelling**: an XML value ``"70"`` equals ``"70.0"`` when both
-  are plain decimal numbers, and a JSON ``1`` equals ``1.0`` (a JSON string
-  is never equal to a number, and ``true`` is never ``1``);
+- **number spelling**, exact (``Decimal``, never ``float``): a JSON ``1``
+  equals ``1.0`` (a JSON string is never equal to a number, and ``true`` is
+  never ``1``); an XML value ``"70"`` equals ``"70.0"`` only at a key that is
+  numeric by its semantics (:func:`xml_numeric`: a view bound on a column
+  that is not a string attribute, bucket, count and size Properties, a
+  numeric filter operand, a symptom condition whose ``valueType`` is
+  numeric, cycle counts and priorities). Everywhere else an XML value is
+  compared as the exact string (``"01"`` is not ``"1"``);
 - **order** where the product keys an element by identity rather than
   position: SubjectType, SubjectsGroupBy and Usage elements of a view,
   Controls by type, Properties by name, JSON object keys, dashboard and
@@ -27,9 +32,11 @@ kind, and where the mark names a condition by the two values
 from __future__ import annotations
 
 import json
+import math
 import re
 from collections import Counter
 from dataclasses import dataclass, field
+from decimal import Decimal, InvalidOperation
 from typing import Dict, List, NamedTuple, Optional
 
 from . import flat as _flat
@@ -73,8 +80,27 @@ def _short(v) -> str:
     return json.dumps(v, default=str)[:80]
 
 
-def same(a, b, xml: bool, sa: Optional[Counter] = None) -> bool:
-    """Value equality of two leaves (see the module docstring)."""
+def _exact(v) -> Optional[Decimal]:
+    """A JSON number or a decimal string as an exact ``Decimal`` (a float by
+    its shortest repr, which is the value it holds as written)."""
+    try:
+        if isinstance(v, bool):
+            return None
+        if isinstance(v, int):
+            return Decimal(v)
+        if isinstance(v, float):
+            return Decimal(repr(v)) if math.isfinite(v) else None
+        if isinstance(v, str) and _DECIMAL.match(v):
+            return Decimal(v)
+    except InvalidOperation:
+        return None
+    return None
+
+
+def same(a, b, xml: bool, sa: Optional[Counter] = None, numeric: bool = False) -> bool:
+    """Value equality of two leaves (see the module docstring). ``numeric``:
+    the key is numeric by its semantics (:func:`xml_numeric`), so two XML
+    strings spelling one number are equal."""
     if isinstance(a, _EmptyMarker) != isinstance(b, _EmptyMarker):
         return False
     if type(a) is bool or type(b) is bool:
@@ -83,31 +109,68 @@ def same(a, b, xml: bool, sa: Optional[Counter] = None) -> bool:
         return True
     num = (int, float)
     if isinstance(a, num) and isinstance(b, num):
-        if float(a) == float(b):
+        da, db = _exact(a), _exact(b)
+        if da is not None and da == db:
             if sa is not None:
                 sa[NUMBER_SPELLING] += 1
             return True
         return False
-    if xml and isinstance(a, str) and isinstance(b, str) and _DECIMAL.match(a) and _DECIMAL.match(b):
-        try:
-            if float(a) == float(b):
-                if sa is not None:
-                    sa[NUMBER_SPELLING] += 1
-                return True
-        except ValueError:
-            return False
+    if xml and numeric and isinstance(a, str) and isinstance(b, str):
+        da, db = _exact(a), _exact(b)
+        if da is not None and da == db:
+            if sa is not None:
+                sa[NUMBER_SPELLING] += 1
+            return True
+    return False
+
+
+_COLPROP = r"ViewDef/Controls/Control\{[^}]*\}/Property\{(?:attributeInfos|summaryInfos|distributionAdditionalColumns)\}/List/Item\[\d+\]/Value"
+_VIEW_BOUND = re.compile(_COLPROP + r"/Property\{(?:yellowBound|orangeBound|redBound)\}@value")
+_VIEW_NUMERIC = re.compile(
+    "(?:" + _COLPROP + r"/Property\{(?:rollUpCount|percentile|forecastDays|startingOnCount)\}@value"
+    r"|" + _COLPROP + r"/Property\{attributeIndexes\}/List/Item\[\d+\]@value"
+    r"|ViewDef/Controls/Control\{time-interval-selector\}/Property\{count\}@value"
+    r"|ViewDef/Controls/Control\{buckets-control\}/Property\{(?:bucketCount|minValue|maxValue)\}@value"
+    r"|ViewDef/Controls/Control\{buckets-control\}/Property\{bucketInfos\}/List/Item\[\d+\]/Value/"
+    r"Property\{(?:startValue|endValue)\}@value"
+    r"|ViewDef/Controls/Control\{metadata\}/Property\{(?:maxPointsCount|listTopResultSize)\}@value"
+    r"|ViewDef/Controls/Control\{pagination-control\}/Property\{(?:start|size)\}@value"
+    r"|(?:Symptom|Alert)Definition@(?:waitCycle|cancelCycle)|AlertDefinition@(?:type|subType)"
+    r"|AlertDefinition/State/Recommendations/Recommendation\[\d+\]@priority)")
+_FILTER_VALUE = re.compile(r"(ViewDef/SubjectType\{[^}]*\}(?:~\d+)?@filter\[\d+\]\[\d+\]\.metricValue)\.value")
+_COND_VALUE = re.compile(r"(SymptomDefinition/State/Condition\[\d+\])@value")
+
+
+def xml_numeric(path: str, leaves: Leaves) -> bool:
+    """True when the XML key ``path`` is numeric by its semantics, read from
+    the object's own flat form ``leaves`` (the source side): a column bound
+    unless the column is a string attribute, the count / size / bucket /
+    roll-up Properties, a filter operand that is not a string metric, a
+    symptom condition value whose ``valueType`` is numeric, cycle counts,
+    alert type and sub-type, recommendation priorities."""
+    if _VIEW_NUMERIC.fullmatch(path):
+        return True
+    if _VIEW_BOUND.fullmatch(path):
+        return leaves.get(path.rsplit("/", 1)[0] + "/Property{isStringAttribute}@value") != "true"
+    m = _FILTER_VALUE.fullmatch(path)
+    if m:
+        return leaves.get(m.group(1) + ".isStringMetric") is False
+    m = _COND_VALUE.fullmatch(path)
+    if m:
+        return leaves.get(m.group(1) + "@valueType") == "numeric"
     return False
 
 
 def diff_flat(a: Leaves, b: Leaves, out: Comparison, xml: bool) -> None:
-    """``a`` is the expected (source) side, ``b`` the render."""
+    """``a`` is the expected (source) side, ``b`` the render. Which XML keys
+    are numeric is read from ``a`` (:func:`xml_numeric`)."""
     for k in sorted(set(a) | set(b)):
         out.fields += 1
         if k not in b:
             out.differences.append(Difference(k, "missing", _short(a[k])))
         elif k not in a:
             out.differences.append(Difference(k, "extra", _short(b[k])))
-        elif not same(a[k], b[k], xml, out.set_aside):
+        elif not same(a[k], b[k], xml, out.set_aside, numeric=xml and xml_numeric(k, a)):
             out.differences.append(Difference(k, "value", f"{_short(a[k])} vs {_short(b[k])}", a[k], b[k]))
 
 
