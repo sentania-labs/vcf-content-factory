@@ -35,6 +35,7 @@ from .loader import (
     _COLUMN_SORT_CRITERIA,
     _COLUMN_OMITTABLE,
     _USAGE_ORDER,
+    DASHBOARD_TIME_RANGES, METRIC_OMIT_KEYS, WIDGET_OMIT_KEYS, WIDGET_STATE_SELF_TOKEN,
 )
 
 
@@ -1615,7 +1616,8 @@ def _view_widget(w: Widget, view: "ViewDef | str", kind_index: dict[tuple[str, s
         # our own checked-in VKS working export agree on both).
         resource = {
             "resourceId": f"resource:id:{res_idx}_::_",
-            "traversalSpecId": "",
+            # "" unless the YAML names one (pin.traversal_spec, never inferred).
+            "traversalSpecId": w.pin_traversal_spec if w.pin_traversal_spec is not None else "",
             "resourceName": c_name,
             "resourceKindId": f"{prefix}{c_adapter}{c_kind}",
             "id": f"Ext.vcops.chrome.model.Resource-{res_idx + 1}",
@@ -1633,8 +1635,9 @@ def _view_widget(w: Widget, view: "ViewDef | str", kind_index: dict[tuple[str, s
         "config": {
             "refreshInterval": 300,
             "resource": resource,
-            # Vendor bytes: top-level traversalSpecId is always null.
-            "traversalSpecId": None,
+            # Historical value null; the product's exports also carry "" or
+            # a spec name (traversal_spec_id).
+            "traversalSpecId": w.traversal_spec_id if w.traversal_spec_id_set else None,
             # Vendor bytes: refreshContent is always false on this widget
             # type, self-provider or not.
             "refreshContent": {"refreshContent": False},
@@ -1647,6 +1650,113 @@ def _view_widget(w: Widget, view: "ViewDef | str", kind_index: dict[tuple[str, s
         },
         "height": 600,
     }
+
+
+def _tag_filter_json(tf, kind_index: dict[tuple[str, str], int]):
+    """``config.tagFilter`` from a TagFilterSpec (same object a ResourceList
+    renders from resource_kinds); ``None`` for ``tag_filter: null``."""
+    if tf.null_filter:
+        return None
+    kinds = [
+        f"resourceKind:id:{kind_index[(k.adapter_kind, k.resource_kind)]}_::_"
+        for k in tf.resource_kinds
+    ]
+    path = (
+        [f"/source/kind/kind:{k}" for k in kinds]
+        + [f"/source/state/state:{s}" for s in tf.states]
+        + [f"/source/status/status:{s}" for s in tf.statuses]
+    )
+    return {
+        "path": path,
+        "value": {
+            "bus": [], "adapterKind": [], "kind": kinds,
+            "exclaim": False, "healthRange": [], "maintenanceSchedule": [],
+            "adapterInstance": [], "collector": [], "tier": [],
+            "state": list(tf.states), "tag": [], "day": [], "status": list(tf.statuses),
+        },
+    }
+
+
+def _num_json(v):
+    """A YAML number as the product writes it: integral floats as ints."""
+    if isinstance(v, float) and v.is_integer():
+        return int(v)
+    return v
+
+
+def _apply_metric_entry_fidelity(entry: dict, spec: "MetricSpec") -> dict:
+    """Per-entry fidelity fields (dashboard_fidelity_wire_format.md): set only
+    when authored, so existing entries are untouched."""
+    if spec.link is not None:
+        entry["link"] = spec.link
+    if spec.label_localized is not None:
+        entry["labelLocalized"] = spec.label_localized
+    if spec.label_orig is not None:
+        entry["labelOrig"] = spec.label_orig
+    if spec.metric_unit is not None:
+        entry["metricUnit"] = spec.metric_unit
+    if spec.def_unit is not None:
+        entry["defUnit"] = spec.def_unit
+    if spec.resource_kind_name is not None and "resourceKindName" in entry:
+        entry["resourceKindName"] = spec.resource_kind_name
+    if spec.unit_explicit_empty:
+        entry["unit"] = ""
+    for name in spec.omit:
+        for key in METRIC_OMIT_KEYS[name]:
+            entry.pop(key, None)
+    return entry
+
+
+def _apply_widget_fidelity(widget_json: dict, w: Widget, dashboard_id: str) -> dict:
+    """Widget fields common to every type, applied after the type renderer.
+    Each is emitted only when authored (dashboard_fidelity_wire_format.md)."""
+    cfg = widget_json["config"]
+    if w.description is not None:
+        cfg["description"] = w.description
+    if w.title_localized is not None:
+        cfg["titleLocalized"] = w.title_localized
+    if w.collapsed is not None:
+        widget_json["collapsed"] = w.collapsed
+    for name in w.omit:
+        path = WIDGET_OMIT_KEYS[w.type][name]
+        node = cfg
+        for key in path[:-1]:
+            node = node.get(key, {})
+        node.pop(path[-1], None)
+    ui = w.ui
+    if ui is None:
+        return widget_json
+    if ui.states:
+        own = f"widget_{dashboard_id}_{w.widget_id}"
+        # Appended after any state the type renderer wrote (a ResourceList
+        # column_preset); the loader rejects a second permResGrid_ state.
+        widget_json["states"] = list(widget_json.get("states") or []) + [
+            {"value": value.replace(WIDGET_STATE_SELF_TOKEN, own), "key": f"{prefix}{own}"}
+            for prefix, value in ui.states
+        ]
+    if ui.height is not None:
+        widget_json["height"] = ui.height
+    if ui.state is not None:
+        widget_json["state"] = ui.state
+    if ui.tab_id:
+        widget_json["tabId"] = dashboard_id
+    if ui.widget_id:
+        cfg["widgetId"] = w.widget_id
+    if ui.config_key:
+        cfg["key"] = widget_json["type"]   # the wire type (AlertVolume: IntSummaryAlertVolume)
+    if ui.legacy_xy is not None:
+        widget_json["x"], widget_json["y"] = ui.legacy_xy
+    if ui.view_type is not None:
+        cfg["viewType"] = ui.view_type
+    if ui.undefined is not None:
+        cfg["undefined"] = [dict(e) for e in ui.undefined]
+    if ui.custom_filter_mode is not None:
+        cfg.setdefault("customFilter", {})["filterMode"] = ui.custom_filter_mode
+    if ui.blank_relationship_mode:
+        cfg["relationshipMode"] = ""
+    if ui.visual_theme_false:
+        cfg["visualTheme"] = False
+    return widget_json
 
 
 def _max_value_str(v: "float | None") -> str:
@@ -1760,7 +1870,7 @@ def _render_resource_metric_spec(
             entry["yellowBound"] = None
             entry["orangeBound"] = None
             entry["redBound"] = None
-        res_metrics.append(entry)
+        res_metrics.append(_apply_metric_entry_fidelity(entry, spec))
     return {
         "mode": "resource",
         "resourceMetrics": res_metrics,
@@ -1827,7 +1937,7 @@ def _render_metric_spec(
             entry["yellowBound"] = None
             entry["orangeBound"] = None
             entry["redBound"] = None
-        rk_metrics.append(entry)
+        rk_metrics.append(_apply_metric_entry_fidelity(entry, spec))
     return {
         "mode": "resourceKind",
         "resourceMetrics": [],
@@ -1918,9 +2028,17 @@ def _scoreboard_widget(
             "showPercentText": cfg.show_percent_text,
             "focusOnPercent": cfg.focus_on_percent,
         }
-        if cfg.visual_theme == 9
+        if cfg.visual_theme == 9 or cfg.gauge_switches_explicit
         else {}
     )
+    # A self-provider resourceKind-mode Scoreboard pinned to a container
+    # (third-party export: vSphere World) carries it as config.resource[],
+    # the HealthChart shape. Unpinned output is unchanged.
+    sb_resource: list = []
+    if cfg.pin_resource:
+        c_adapter, c_kind, c_name = _resolve_view_pin(w.pin.adapter_kind, w.pin.resource_kind, w.pin.name)
+        res_idx = (resource_index or {})[(c_adapter, c_kind, c_name)]
+        sb_resource = [{"name": c_name, "id": f"resource:id:{res_idx}_::_"}]
     return {
         "collapsed": False,
         "id": w.widget_id,
@@ -1930,7 +2048,7 @@ def _scoreboard_widget(
         "config": {
             "refreshInterval": 300,
             "metric": metric_obj,
-            "resource": [],
+            "resource": sb_resource,
             "refreshContent": {"refreshContent": cfg.refresh_content},
             "relationshipMode": {"relationshipMode": 0},
             "customFilter": {
@@ -1949,7 +2067,7 @@ def _scoreboard_widget(
             "showSparkline": {"showSparkline": cfg.show_sparkline},
             "periodLength": cfg.period_length,
             "maxCellCount": cfg.max_cell_count,
-            "oldMetricValues": True,
+            "oldMetricValues": cfg.old_metric_values,
             "roundDecimals": cfg.round_decimals,
             "valueSize": cfg.value_size,
             "labelSize": cfg.label_size,
@@ -1998,7 +2116,7 @@ def _metric_chart_widget(
             "refreshInterval": 300,
             "metric": metric_obj,
             "resource": [],
-            "refreshContent": {"refreshContent": True},
+            "refreshContent": {"refreshContent": cfg.refresh_content},
             "relationshipMode": {"relationshipMode": relationship_mode_val},
             "customFilter": {
                 "filter": [], "excludedResources": None, "includedResources": None,
@@ -2056,12 +2174,14 @@ def _health_chart_widget(
             "refreshInterval": 300,
             "resource": resource_list,
             "refreshContent": {"refreshContent": False},
-            "relationshipMode": {"relationshipMode": 0},
+            "relationshipMode": {"relationshipMode": (
+                w.scalar_relationship_mode if w.scalar_relationship_mode is not None else 0
+            )},
             "selfProvider": {"selfProvider": w.self_provider},
             "title": w.title,
             "mode": cfg.mode,
             "filterMode": "tagPicker",
-            "tagFilter": None,
+            "tagFilter": _tag_filter_json(w.tag_filter, kind_index) if w.tag_filter else None,
             "depth": cfg.depth,
             "customFilter": {
                 "filter": [], "excludedResources": None, "includedResources": None,
@@ -2110,7 +2230,7 @@ def _pareto_analysis_widget(
     key = (cfg.adapter_kind, cfg.resource_kind)
     rk_id = f"resourceKind:id:{kind_index[key]}_::_"
     bars_count = cfg.bottom_n if cfg.bottom_n > 0 else cfg.top_n
-    return {
+    widget_json = {
         "collapsed": False,
         "id": w.widget_id,
         "gridsterCoords": _clamp_gridster_floor(w.coords),
@@ -2119,8 +2239,10 @@ def _pareto_analysis_widget(
         "config": {
             "refreshInterval": 300,
             "resource": [],
-            "refreshContent": {"refreshContent": True},
-            "relationshipMode": {"relationshipMode": [-1, 0]},
+            "refreshContent": {"refreshContent": cfg.refresh_content},
+            "relationshipMode": {"relationshipMode": (
+                w.scalar_relationship_mode if w.scalar_relationship_mode is not None else [-1, 0]
+            )},
             "selfProvider": {"selfProvider": w.self_provider},
             "title": w.title,
             "mode": cfg.mode,
@@ -2135,10 +2257,24 @@ def _pareto_analysis_widget(
             "barsCount": bars_count,
             "roundDecimals": cfg.round_decimals,
             "regenerationTime": cfg.regeneration_time,
-            "percentileValue": None,
-            "metricName": cfg.metric_name,
-            "metricUnit": {"metricUnitId": -1, "metricUnitName": "Auto"},
-            "additionalColumns": [],
+            "percentileValue": _num_json(cfg.percentile_value),
+            "metricName": cfg.metric_label if cfg.metric_label is not None else cfg.metric_name,
+            "metricUnit": (
+                {"metricUnitId": cfg.metric_unit[0], "metricUnitName": cfg.metric_unit[1]}
+                if cfg.metric_unit is not None
+                else {"metricUnitId": -1, "metricUnitName": "Auto"}
+            ),
+            "additionalColumns": [
+                {
+                    "boxLabel": col.label,
+                    "metricKey": col.metric_key,
+                    "metricName": col.metric_name,
+                    "resourceKindId": (
+                        f"resourceKind:id:{kind_index[(col.adapter_kind, col.resource_kind)]}_::_"
+                    ),
+                }
+                for col in cfg.additional_columns
+            ],
             # Flat metric spec, {metricKey, name} NOT the array pattern
             "metric": {
                 "metricKey": cfg.metric_key,
@@ -2148,6 +2284,14 @@ def _pareto_analysis_widget(
         },
         "height": 600,
     }
+    pc = widget_json["config"]
+    if cfg.max_value_set:
+        pc["maxValue"] = _num_json(cfg.max_value)
+    if cfg.yellow_bound is not None:
+        pc["yellowBound"] = _num_json(cfg.yellow_bound)
+        pc["orangeBound"] = _num_json(cfg.orange_bound)
+        pc["redBound"] = _num_json(cfg.red_bound)
+    return widget_json
 
 
 def _alert_list_widget(w: Widget) -> dict:
@@ -2408,9 +2552,12 @@ def _heatmap_widget(
             "text": gb_text,
             "originalText": gb_text,
             "id": gb_id,
-            "parentText": gb_adapter,
+            "parentText": tab.group_by_parent_text if tab.group_by_parent_text is not None else gb_adapter,
             "parentId": gb_adapter,
         }
+        if "group_by_kind_keys" in tab.omit:
+            group_by.pop("resourceKind")
+            group_by.pop("adapterKind")
 
         color_obj: dict = {
             "minValue": tab.color.min_value,
@@ -2421,8 +2568,10 @@ def _heatmap_widget(
         }
         if tab.color.max_value is not None:
             color_obj["maxValue"] = tab.color.max_value
+        if "color_min_value" in tab.omit:
+            color_obj.pop("minValue")
 
-        configs_json.append({
+        tab_json = {
             "name": tab.name,
             "resourceKind": subj_rk_id,
             "colorBy": color_by,
@@ -2435,12 +2584,45 @@ def _heatmap_widget(
             "solidColoring": tab.solid_coloring,
             "mode": {"mode": False},
             "attributeKind": {"value": ""},
-            "filterMode": "tagPicker",
-            "tagFilter": None,
+            "filterMode": tab.filter_mode or "tagPicker",
+            "tagFilter": _tag_filter_json(tab.tag_filter, kind_index) if tab.tag_filter else None,
             "customFilter": {
                 "filter": [], "excludedResources": None, "includedResources": None,
             },
-        })
+        }
+        if tab.custom_filter_null:
+            tab_json["customFilter"] = None
+        elif tab.custom_filter:
+            tab_json["customFilter"]["filter"] = [
+                {
+                    "resourceKind": f"{adapter_kind_prefix(g.adapter_kind)}{g.adapter_kind}{g.resource_kind}",
+                    "resourceKindId": f"{adapter_kind_prefix(g.adapter_kind)}{g.adapter_kind}{g.resource_kind}",
+                    "filterTypes": [
+                        {
+                            "condition": c.condition,
+                            "metricName": c.metric_name,
+                            "metricKey": c.metric_key,
+                            "metricValue": {"isStringMetric": c.string_metric, "value": c.value},
+                            "isStringMetric": c.string_metric,
+                            "filterType": c.filter_type,
+                            "metricUnit": c.metric_unit,
+                        }
+                        for c in g.conditions
+                    ],
+                }
+                for g in tab.custom_filter
+            ]
+        if "tag_filter" in tab.omit:
+            tab_json.pop("tagFilter")
+        if "custom_filter" in tab.omit:
+            tab_json.pop("customFilter")
+        if tab.name_localized is not None:
+            tab_json["nameLocalized"] = tab.name_localized
+        if tab.name_orig is not None:
+            tab_json["nameOrig"] = tab.name_orig
+        if tab.model_id:
+            tab_json["id"] = _ext_model_id(w.widget_id, len(configs_json) + 1)
+        configs_json.append(tab_json)
 
     return {
         "collapsed": False,
@@ -2455,10 +2637,12 @@ def _heatmap_widget(
             "refreshInterval": 300,
             "refreshContent": {"refreshContent": False},
             "resource": [],
-            "relationshipMode": {"relationshipMode": [1, -1, 0]},
+            "relationshipMode": {"relationshipMode": (
+                w.scalar_relationship_mode if w.scalar_relationship_mode is not None else [1, -1, 0]
+            )},
             "title": w.title,
             "configs": configs_json,
-            "value": 0,
+            "value": cfg.selected_tab,
         },
         "height": 600,
     }
@@ -2558,7 +2742,7 @@ def _resource_relationship_advanced_widget(
             "resourceName": None,
             "title": w.title,
             "filterMode": "tagPicker",
-            "tagFilter": {
+            "tagFilter": None if (w.tag_filter is not None and w.tag_filter.null_filter) else {
                 "path": [f"/source/kind/kind:{k}" for k in kinds],
                 "value": {
                     "bus": [], "adapterKind": [], "kind": kinds,
@@ -2598,12 +2782,17 @@ def _render_dashboard_navigations(
     """
     out: dict = {}
     for w in dashboard.widgets:
+        if w.navigations_explicit_empty and w.type != "Section":
+            out[w.widget_id] = []
+            continue
         if not w.navigations or w.type == "Section":
             continue
         entries = []
         for nav in w.navigations:
             if nav.dashboard_id:
-                entries.append({"id": nav.dashboard_id, "widgets": []})
+                entries.append({"id": nav.dashboard_id, "widgets": [
+                    {"interactionType": "resourceId", "id": uid} for uid in nav.widget_ids
+                ]})
                 continue
             candidates = targets_by_name.get(nav.dashboard) or []
             if not candidates:
@@ -2721,6 +2910,9 @@ def _build_dashboard_obj(
         # (loader rejects it).
         if w.view_details is not None and w.type != "Section" and widgets_json:
             widgets_json[-1]["config"]["viewDetails"] = w.view_details
+        # Fidelity fields common to every type (no-op when none is authored).
+        if widgets_json:
+            _apply_widget_fidelity(widgets_json[-1], w, dashboard.id)
 
     interactions_json = [
         {
@@ -2736,7 +2928,7 @@ def _build_dashboard_obj(
     # zero makes the output deterministic across repeated builds of the same
     # content, which keeps git diffs clean on idempotent re-publishes.
     now_ms = 0
-    return {
+    obj = {
         # Default dashboards to shared so other Ops users can see them.
         # The framework's audience is "an average vSphere admin needs
         # to find and use this", private-to-author dashboards defeat
@@ -2781,6 +2973,32 @@ def _build_dashboard_obj(
         "lastUpdateTime": now_ms,
         "widgets": widgets_json,
     }
+    # Dashboard fidelity fields (dashboard_fidelity_wire_format.md); each is
+    # emitted only when authored.
+    if dashboard.time_range is not None:
+        obj["states"] = [{
+            "key": f"permDashboardTime_dashboard_{dashboard.id}",
+            "value": DASHBOARD_TIME_RANGES[dashboard.time_range],
+        }]
+    if dashboard.disabled:
+        obj["disabled"] = True
+    if dashboard.edit_allowed is not None:
+        obj["editAllowed"] = dashboard.edit_allowed
+    if dashboard.doc_center_key is not None:
+        obj["docCenterKey"] = dashboard.doc_center_key
+    if dashboard.column_proportion is not None:
+        obj["columnProportion"] = dashboard.column_proportion
+    if dashboard.column_count is not None:
+        obj["columnCount"] = dashboard.column_count
+    if "temporary" in dashboard.omit:
+        obj.pop("temporary")
+    if "name_path" in dashboard.omit:
+        obj.pop("namePath")
+    if "folder_in_name" in dashboard.omit:
+        obj["name"] = dashboard.name
+    if "widget_interactions" in dashboard.omit:
+        obj.pop("widgetInteractions")
+    return obj
 
 
 def render_dashboards_bundle_json(
@@ -2854,10 +3072,18 @@ def render_dashboards_bundle_json(
                 key = (w.health_chart_config.adapter_kind, w.health_chart_config.resource_kind)
                 if key not in kind_index:
                     kind_index[key] = len(kind_index)
+                for rk in (w.tag_filter.resource_kinds if w.tag_filter else []):
+                    key = (rk.adapter_kind, rk.resource_kind)
+                    if key not in kind_index:
+                        kind_index[key] = len(kind_index)
             elif w.type == "ParetoAnalysis" and w.pareto_analysis_config:
                 key = (w.pareto_analysis_config.adapter_kind, w.pareto_analysis_config.resource_kind)
                 if key not in kind_index:
                     kind_index[key] = len(kind_index)
+                for col in w.pareto_analysis_config.additional_columns:
+                    key = (col.adapter_kind, col.resource_kind)
+                    if key not in kind_index:
+                        kind_index[key] = len(kind_index)
             elif w.type == "Heatmap" and w.heatmap_config:
                 # Each tab contributes two kinds: the subject resource kind and
                 # the groupBy resource kind. Both must appear in entries.resourceKind[]
@@ -2871,6 +3097,10 @@ def render_dashboards_bundle_json(
                         gb_key = (gb_adapter, tab.group_by_kind)
                         if gb_key not in kind_index:
                             kind_index[gb_key] = len(kind_index)
+                    for rk in (tab.tag_filter.resource_kinds if tab.tag_filter else []):
+                        tf_key = (rk.adapter_kind, rk.resource_kind)
+                        if tf_key not in kind_index:
+                            kind_index[tf_key] = len(kind_index)
             elif w.type == "PropertyList" and w.property_list_config:
                 for spec in _fan_out_summary_specs(
                     w.property_list_config.properties, d.summary_kinds, False
@@ -2930,6 +3160,8 @@ def render_dashboards_bundle_json(
             ):
                 r = w.scoreboard_config.resource
                 container = (r.adapter_kind, r.resource_kind, r.name)
+            elif w.type == "Scoreboard" and w.scoreboard_config and w.scoreboard_config.pin_resource:
+                container = _resolve_view_pin(w.pin.adapter_kind, w.pin.resource_kind, w.pin.name)
             if container is not None:
                 if container not in resource_index:
                     resource_index[container] = len(resource_index)

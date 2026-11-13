@@ -103,8 +103,15 @@ def cmd_validate(args) -> int:
     # stock id (ids as rendered into AlertContent.xml / a pak). Checked
     # before the OK line, which prints only when every check passed.
     from vcfcf_packaging.stock_ids import alert_definitions, report_stock_ids
-    rc |= report_stock_ids(alert_definitions(defs, repo_recs),
-                           "alert definitions and recommendations")
+    try:
+        rc |= report_stock_ids(alert_definitions(defs, repo_recs),
+                               "alert definitions and recommendations")
+    except ValueError as e:
+        # AlertContent did not render (every bundle and pak renders it):
+        # two definitions under one id, or a symptom-set threshold the XML
+        # cannot carry.
+        print(f"INVALID: {e}", file=sys.stderr)
+        return 1
 
     if rc == 0:
         symptom_count = len(_collect_repo_symptom_names())

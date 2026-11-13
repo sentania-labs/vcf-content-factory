@@ -748,6 +748,73 @@ def format_hit(hit: StockIdHit) -> str:
     )
 
 
+def _baseline_versions_for(baseline: StockBaseline, content_type: str) -> List[str]:
+    """Versions whose baseline sources include ``content_type`` definitions
+    (an id's absence on a version is only evidence where that version's
+    export of the type was read)."""
+    out = set()
+    for src in baseline.meta.get("sources") or []:
+        if not isinstance(src, dict):
+            continue
+        defs = src.get("definitions")
+        if isinstance(defs, dict) and content_type in defs and src.get("version"):
+            out.add(str(src["version"]))
+    return sorted(out, key=version_sort_key)
+
+
+def _covers(version: str, line: str) -> bool:
+    """A baseline version speaks for a platform line when one dotted form
+    is a prefix of the other (9.0.2 for line 9.0, 9.1.1 for 9.1.1.0100)."""
+    a, b = version_sort_key(version), version_sort_key(line)
+    n = min(len(a), len(b))
+    return a[:n] == b[:n]
+
+
+def reference_warnings(
+    refs: Iterable[Tuple[str, str, str]],
+    baseline: StockBaseline,
+    lines: Optional[Sequence[str]] = None,
+) -> List[str]:
+    """Warnings for content that REFERENCES a stock object by raw id.
+
+    ``refs`` is ``(content_type, id, where)``: a report section's
+    ``view_id`` / ``dashboard_id``, a dashboard View widget's raw view id.
+    An id the baseline does not hold may be another pak's object, so it is
+    a warning, never an error. With ``lines`` (a Tier 2 pak's supported
+    platform lines, RULE-019) a stock id the baseline shows absent on a
+    line it has an export for is a warning naming the lines: the section or
+    widget renders blank there.
+    """
+    out: List[str] = []
+    for ctype, oid, where in refs:
+        label = type_label(ctype)
+        entry = baseline.lookup(ctype, oid)
+        if entry is None:
+            out.append(
+                f"{where}: {oid} is not a known VCF Operations stock {label} id (the "
+                f"baseline holds {_versions_text(_baseline_versions_for(baseline, ctype))}). "
+                f"A typo renders a blank section or widget; if it is another pak's "
+                f"{label}, ignore this"
+            )
+            continue
+        if not lines:
+            continue
+        exported = _baseline_versions_for(baseline, ctype)
+        missing = [
+            line for line in lines
+            if any(_covers(v, line) for v in exported)
+            and not any(_covers(v, line) for v in entry.versions)
+        ]
+        if missing:
+            out.append(
+                f"{where}: stock {label} {entry.name!r} ({oid}) is absent from VCF "
+                f"Operations {', '.join(missing)} (stock in {_versions_text(entry.versions)}); "
+                f"on {'that line' if len(missing) == 1 else 'those lines'} it renders blank, "
+                f"and a Tier 2 pak supports every line (RULE-019)"
+            )
+    return out
+
+
 def check_definitions(
     defs: Iterable[Definition],
     *,

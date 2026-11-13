@@ -1,8 +1,8 @@
 """Load and validate alert definition YAML definitions.
 
 Alert definitions are identified by name (not UUID) — the VCF Ops API
-assigns the id server-side on create.  Sync matches by name.  Do not
-include an `id:` field in YAML.
+assigns the id server-side on create.  Sync matches by name.  An optional
+`id:` (UUID) keeps a ported alert's content-import id (XML path only).
 
 YAML schema (see .claude/agents/alert-author.md for the full spec):
 
@@ -134,6 +134,20 @@ VALID_SUBTYPES = {
     22: "Configuration",
 }
 
+_ALERT_UUID_RE = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.IGNORECASE
+)
+# Recommendation key: an XML xs:ID (NCName). Seen: vCommunityCollectionWarnings,
+# Recommendation-df-<kind>-<slug>.
+_REC_KEY_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_.\-]*$")
+
+
+def _opt_bool_field(data: dict, key: str, path) -> bool:
+    raw = data.get(key, False)
+    if not isinstance(raw, bool):
+        raise AlertValidationError(f"{path}: {key} must be a bool (unquoted true/false)")
+    return raw
+
 
 # ---------------------------------------------------------------------------
 # Recommendation dataclass
@@ -154,6 +168,9 @@ class Recommendation:
     adapter_kind: str
     source_file: Optional[Path] = None
     version: str = "1.0.0"  # internal semver (released not applicable to recommendations)
+    # YAML `id:` (alert_fidelity_wire_format.md): the content-import key kept
+    # from a source, replacing the derived Recommendation-df-<kind>-<slug>.
+    explicit_id: Optional[str] = None
 
     @property
     def id(self) -> str:
@@ -169,7 +186,9 @@ class Recommendation:
         slug = re.sub(r"[^\w\-]", "_", stripped)
         # Collapse consecutive underscores
         slug = re.sub(r"_+", "_", slug).strip("_")
-        return f"Recommendation-df-{self.adapter_kind}-{slug}"
+        # A YAML `id:` (explicit_id) is the key itself; it wins over the
+        # derived form everywhere the key is read (render, validate, stock guard).
+        return self.explicit_id or f"Recommendation-df-{self.adapter_kind}-{slug}"
 
 
 @dataclass
@@ -200,6 +219,11 @@ class AlertDef:
     source_path: Optional[Path] = None
     released: bool = False   # publish gate
     version: str = "1.0.0"  # internal semver
+    # Fidelity (alert_fidelity_wire_format.md). id: a UUID rendered as
+    # AlertDefinition-<uuid> in place of the derived id. disable_in_base_policy:
+    # disableInBasePolicy="true" (content-import XML only).
+    id: Optional[str] = None
+    disable_in_base_policy: bool = False
 
     def validate(self, enforce_framework_prefix: bool = True) -> None:
         if not self.name or not self.name.strip():
@@ -240,6 +264,11 @@ class AlertDef:
         if self.cancel_cycles < 1:
             raise AlertValidationError(
                 f"{self.name}: cancel_cycles must be >= 1"
+            )
+        if self.id is not None and not _ALERT_UUID_RE.match(self.id):
+            src = f"{self.source_path}: " if self.source_path else ""
+            raise AlertValidationError(
+                f"{src}{self.name}: id must be a UUID (rendered AlertDefinition-<uuid>); got {self.id!r}"
             )
         self._validate_symptom_sets(self.symptom_sets)
 
@@ -341,6 +370,40 @@ class AlertDef:
                         f"{legacy_reference_hint(ref.name)}"
                     )
 
+    def xml_symptom_set_problems(self) -> List[str]:
+        """Symptom-set thresholds the content-import XML cannot carry.
+
+        Product exports (8.18.7, 9.0.2, 9.1.1 built-in alertdefs.xml) write
+        a population condition as ``aggregation`` plus, for count and
+        percent, ``aggregationOperator`` and ``value``. ``threshold_type:
+        ANY`` / ``ALL`` render as ``aggregation="any"`` / ``"all"``. COUNT
+        and PERCENT need an ``aggregationOperator``, which the YAML has no
+        field for, and a ``threshold_value`` means nothing without them, so
+        the XML path refuses those rather than dropping them. A threshold on
+        a SELF set is ignored by the REST path too, so it is refused here.
+        """
+        src = self.source_path or self.name
+        out: List[str] = []
+        for i, s in enumerate((self.symptom_sets or {}).get("sets") or []):
+            if not isinstance(s, dict):
+                continue
+            tt, tv = s.get("threshold_type"), s.get("threshold_value")
+            if tt is None and tv is None:
+                continue
+            where = f"{src}: alert {self.name!r}: symptom_sets.sets[{i}]"
+            if (s.get("defined_on") or "SELF").upper() == "SELF":
+                out.append(f"{where}: threshold_type / threshold_value apply to PARENT, "
+                           f"CHILD, DESCENDANT and ANCESTOR sets only; remove them from this "
+                           f"SELF set")
+            elif tv is not None or str(tt).upper() in ("COUNT", "PERCENT"):
+                out.append(f"{where}: threshold_type {tt!r} / threshold_value {tv!r} is not "
+                           f"rendered on the content-import XML path (pak builds, "
+                           f"AlertContent.xml in bundles): COUNT and PERCENT need an "
+                           f"aggregationOperator the YAML cannot express, so the XML would "
+                           f"drop the threshold. Use threshold_type ANY or ALL with no "
+                           f"threshold_value")
+        return out
+
     def to_wire(self, symptom_name_to_id: dict[str, str]) -> dict:
         """Serialize to the JSON body for POST /api/alertdefinitions.
 
@@ -348,6 +411,15 @@ class AlertDef:
         server-assigned id.  Provided by the client at sync time after
         fetching the symptom list from the instance.
         """
+        if self.disable_in_base_policy:
+            # The Suite API alert-definition schema has no such field, so the
+            # REST path (sync, bundle install.py) would ship it enabled.
+            raise AlertValidationError(
+                f"{self.source_path or self.name}: disable_in_base_policy is only "
+                f"rendered on the content-import XML path (pak builds, AlertContent.xml); "
+                f"the REST alert-definition body has no such field, so this install "
+                f"path would ship the alert enabled"
+            )
         top_op = (self.symptom_sets.get("operator") or "ALL").upper()
         sets = self.symptom_sets.get("sets") or []
 
@@ -457,12 +529,22 @@ def load_recommendation_file(path: str | Path, enforce_framework_prefix: bool = 
 
     version = str(data.get("version", "1.0.0") or "1.0.0").strip() or "1.0.0"
 
+    explicit_id = None
+    if "id" in data:
+        explicit_id = data["id"]
+        if not isinstance(explicit_id, str) or not _REC_KEY_RE.match(explicit_id):
+            raise AlertValidationError(
+                f"{path}: id must be a recommendation key (letters, digits, _ . -, starting "
+                f"with a letter or _), rendered as the Recommendation key; got {explicit_id!r}"
+            )
+
     return Recommendation(
         name=name,
         description=description,
         adapter_kind=adapter_kind,
         source_file=path,
         version=version,
+        explicit_id=explicit_id,
     )
 
 
@@ -488,6 +570,7 @@ def load_recommendations(directory: str | Path, enforce_framework_prefix: bool =
             )
         seen[rec.name] = p
         out.append(rec)
+    _raise_on_id_collisions(recommendations=out)
     return out
 
 
@@ -613,8 +696,19 @@ def load_file(path: str | Path, enforce_framework_prefix: bool = True) -> AlertD
         source_path=path,
         released=released,
         version=version,
+        # The author's case is kept (alert_fidelity_wire_format.md §Ids);
+        # duplicate checks compare case-insensitively.
+        id=(str(data["id"]).strip() if data.get("id") is not None else None),
+        disable_in_base_policy=_opt_bool_field(data, "disable_in_base_policy", path),
     )
-    ad.validate(enforce_framework_prefix=enforce_framework_prefix)
+    try:
+        ad.validate(enforce_framework_prefix=enforce_framework_prefix)
+    except AlertValidationError as exc:
+        # Field errors name the alert; prefix the file so every message
+        # names both (some already start with the path).
+        if str(exc).startswith(str(path)):
+            raise
+        raise AlertValidationError(f"{path}: {exc}") from None
     return ad
 
 
@@ -633,4 +727,16 @@ def load_dir(directory: str | Path, enforce_framework_prefix: bool = True) -> Li
             )
         seen[ad.name] = p
         out.append(ad)
+    _raise_on_id_collisions(alerts=out)
     return out
+
+
+def _raise_on_id_collisions(**objs) -> None:
+    """Two definitions that render under one id (case-insensitive) collide
+    on content import: the later silently replaces the earlier. B2 of the
+    2026-11-12 fidelity review; the render path runs the same check over
+    its combined inputs."""
+    from .render import rendered_id_collisions
+    problems = rendered_id_collisions(**objs)
+    if problems:
+        raise AlertValidationError("\n".join(problems))

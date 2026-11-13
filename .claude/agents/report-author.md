@@ -46,7 +46,9 @@ Track-specific examples:
 ## Hard rules
 
 1. **Never create views, SMs, or dashboards.** If needed, BLOCKED.
-2. **Cross-references use names.**
+2. **Cross-references use names.** A product-shipped view or dashboard
+   is referenced by raw id (`view_id:` / `dashboard_id:`); the project's
+   own are always by name (the loader rejects an own id).
 3. **Section types:** CoverPage, TableOfContents, View, Dashboard.
    Anything else → TOOLSET GAP.
 4. **Validate:** `python -m vcfcf_reports validate`
@@ -70,6 +72,23 @@ sections:
     view: "<exact view name>"
     orientation: Landscape
 ```
+
+Optional, for reproducing an existing template (wire:
+`knowledge/context/wire-formats/template_fidelity_wire_format.md`):
+
+```yaml
+  - {type: CoverPage, colorize: false, font_color: "000000"}   # optional formatting
+  - {type: View, view_id: <built-in uuid>, omit: [formatting]}  # no ContentFormatting
+# subject_types: []   only for a report with no SubjectType
+```
+
+SDK-adapter pak reports: buildkit 1.0.28 and earlier silently ignore
+CoverPage `colorize`/`font_color` and section `omit:`, so a pak built
+with such a kit renders without them and reports no error; pak CI pins
+the kit by tag, so these fields do not reach an official pak release
+until a newer kit is tagged and the pak bumps its pin. A `view_id:` /
+`dashboard_id:` not in the stock baseline is a validate warning; check
+it is not a typo.
 
 ## Workflow
 

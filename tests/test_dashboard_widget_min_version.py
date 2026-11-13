@@ -1,10 +1,10 @@
 """Per-widget minimum VCF Ops version table and validate warning (issue #199).
 
 A Section widget aborts the whole dashboard import on 9.0.2 (WidgetType enum
-has no Section).  No bundle, release or adapter field declares a target Ops
-version, so validate warns whenever a dashboard uses a type with a known
-floor; widget_version_problems() also takes an explicit target for the gate
-that a future target-version field will drive.
+has no Section).  Content bundles declare no target Ops version, so validate
+warns whenever a dashboard uses a type with a known floor;
+widget_version_problems() also takes an explicit target, which the Tier 2
+pak build passes (RULE-019's oldest line, tests/test_report_alert_fidelity.py).
 """
 from __future__ import annotations
 

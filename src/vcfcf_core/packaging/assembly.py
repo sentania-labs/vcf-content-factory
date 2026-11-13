@@ -51,7 +51,7 @@ import zipfile
 from dataclasses import dataclass
 from typing import Mapping, Optional
 
-from ..alerts.render import render_alert_content_xml
+from ..alerts.render import render_alert_content_xml, rendered_id_collisions
 from ..dashboards.render import render_dashboards_bundle_json, render_views_xml
 from ..reports.render import render_report_xml
 from ..supermetrics.crossref import resolve_sm_formula, sm_name_to_uuid_map
@@ -155,6 +155,46 @@ def _render_customgroup_ui_payload(bundle: Bundle) -> dict | None:
         "customGroups": all_groups,
         "customGroupTypes": list(seen_type_keys.values()),
     }
+
+
+def xml_only_alert_field_problems(bundle: Bundle) -> list:
+    """One message per bundled alert, symptom or recommendation that sets a
+    field the bundle's REST installers cannot deliver.
+
+    ``disable_in_base_policy`` (alert or symptom) and an explicit ``id:``
+    (alert or recommendation) render only into content-import XML. A bundle
+    zip installs alerts and symptoms through ``install.py`` / ``install.ps1``,
+    which POST REST bodies built from ``alerts.json`` / ``symptoms.json``;
+    the Suite API has no field for either, so the installer would ship the
+    alert enabled under a server-assigned id while the same zip's drag-drop
+    ``AlertContent.xml`` ships it disabled under the YAML id. Bundle,
+    discrete and release builds therefore refuse them
+    (alert_fidelity_wire_format.md §Install paths).
+    """
+    def src(obj):
+        return getattr(obj, "source_path", None) or getattr(obj, "source_file", None) or obj.name
+
+    problems = []
+    for a in bundle.alerts or []:
+        fields = [f for f, on in (("disable_in_base_policy", getattr(a, "disable_in_base_policy", False)),
+                                  ("id", getattr(a, "id", None))) if on]
+        if fields:
+            problems.append(f"{src(a)}: alert {a.name!r} sets {', '.join(fields)}")
+    for sym in bundle.symptoms or []:
+        if getattr(sym, "disable_in_base_policy", False):
+            problems.append(f"{src(sym)}: symptom {sym.name!r} sets disable_in_base_policy")
+    for rec in bundle.recommendations or []:
+        if getattr(rec, "explicit_id", None):
+            problems.append(f"{src(rec)}: recommendation {rec.name!r} sets id")
+    if problems:
+        problems.append(
+            "these fields are deliverable only through the content-import XML path "
+            "of a pak build (Tier 2 build-sdk); a bundle's install.py / install.ps1 "
+            "installs alerts and symptoms through REST, which would ship the alert "
+            "enabled under a server-assigned id. Remove the field(s) from content "
+            "this bundle ships, or ship it in a pak"
+        )
+    return problems
 
 
 def _render_alerts_payload(alerts: list) -> list:
@@ -357,6 +397,21 @@ def render_bundle_payloads(
     against another bundle's SMs); ``bundle_context`` labels resolution
     errors.
     """
+    # Fidelity fields the REST installers cannot deliver (B1) and two
+    # definitions under one rendered id (B2) fail the build up front, as a
+    # BundleValidationError naming the files.
+    _xml_only = xml_only_alert_field_problems(bundle)
+    if _xml_only:
+        raise BundleValidationError(
+            f"bundle {bundle_context or bundle.name}:\n  " + "\n  ".join(_xml_only)
+        )
+    _collisions = rendered_id_collisions(
+        bundle.symptoms or [], bundle.alerts or [], bundle.recommendations or [],
+    )
+    if _collisions:
+        raise BundleValidationError(
+            f"bundle {bundle_context or bundle.name}:\n  " + "\n  ".join(_collisions)
+        )
     sm_dict = _render_supermetrics_dict(bundle) if bundle.supermetrics else {}
     sm_json = json.dumps(sm_dict, indent=2) if sm_dict else None
 

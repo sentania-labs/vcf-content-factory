@@ -123,6 +123,58 @@ def _rec_key(adapter_kind: str, name: str) -> str:
     return f"Recommendation-df-{adapter_kind}-{_slug(name)}"
 
 
+def alert_definition_id(alert) -> str:
+    """The ``id`` an alert renders under: ``AlertDefinition-<id>`` for a
+    YAML ``id:`` (the author's case kept), else the derived form."""
+    explicit = getattr(alert, "id", None)
+    return f"AlertDefinition-{explicit}" if explicit else _alert_id(alert.adapter_kind, alert.name)
+
+
+def symptom_definition_id(sym) -> str:
+    """The ``id`` a symptom renders under (see ``_symptom_id``)."""
+    return _symptom_id(sym.adapter_kind, sym.name, uuid=getattr(sym, "id", None))
+
+
+def _source_of(obj) -> str:
+    src = getattr(obj, "source_path", None) or getattr(obj, "source_file", None)
+    return str(src) if src else f"{getattr(obj, 'name', '?')!r}"
+
+
+def rendered_id_collisions(symptoms=(), alerts=(), recommendations=()) -> List[str]:
+    """One message per pair of definitions that render under the same id.
+
+    Ids compare case-insensitively, explicit and derived alike: whether the
+    content importer treats ids case-sensitively is not established, and a
+    case-only difference is never intended. On import the later definition
+    silently replaces the earlier one, so a collision is an error wherever
+    definitions meet: ``load_dir`` / ``load_recommendations``, a bundle, a
+    discrete build and a pak. The same file listed twice is one definition,
+    not a collision.
+    """
+    out: List[str] = []
+    for label, objs, id_of in (
+        ("symptom", symptoms, symptom_definition_id),
+        ("alert", alerts, alert_definition_id),
+        ("recommendation", recommendations, lambda r: r.id),
+    ):
+        seen: dict = {}
+        for obj in objs or []:
+            rid = id_of(obj)
+            first = seen.get(rid.lower())
+            if first is None:
+                seen[rid.lower()] = (obj, rid)
+                continue
+            if _source_of(first[0]) == _source_of(obj) and first[0].name == obj.name:
+                continue
+            out.append(
+                f"duplicate {label} id: {_source_of(obj)} ({obj.name!r}) renders as "
+                f"{rid!r}, which {_source_of(first[0])} ({first[0].name!r}) already renders "
+                f"as {first[1]!r} (ids compare case-insensitively). On content import "
+                f"one would silently replace the other; give each its own id"
+            )
+    return out
+
+
 # ---------------------------------------------------------------------------
 # Operator translation: YAML API-style names -> XML symbol form
 # ---------------------------------------------------------------------------
@@ -323,9 +375,21 @@ def _render_symptom_definition(parent: ET.Element, sym, all_sym_names: set) -> N
         "resourceKind": resource_kind,
         "waitCycle": str(sym.wait_cycles),
     }
+    # Fidelity fields (alert_fidelity_wire_format.md), emitted only when set.
+    omit = getattr(sym, "omit", None) or []
+    if "wait_cycles" in omit:
+        del attribs["waitCycle"]
+    if "cancel_cycles" in omit:
+        del attribs["cancelCycle"]
+    if getattr(sym, "disable_in_base_policy", False):
+        attribs["disableInBasePolicy"] = "true"
+    if getattr(sym, "symptom_def_type", None):
+        attribs["symptomDefType"] = sym.symptom_def_type
     sd_elem = ET.SubElement(parent, "SymptomDefinition", attribs)
     state_elem = ET.SubElement(sd_elem, "State", {"severity": _xml_severity(sym.severity)})
     _add_condition_element(state_elem, sym.condition)
+    if "instanced" in omit:
+        state_elem.find("Condition").attrib.pop("instanced", None)
 
 
 # ---------------------------------------------------------------------------
@@ -360,7 +424,7 @@ def _render_alert_definition(
     adapter_kind = alert.adapter_kind
     resource_kind = alert.resource_kind
     name = alert.name
-    aid = _alert_id(adapter_kind, name)
+    aid = alert_definition_id(alert)
 
     attribs = {
         "adapterKind": adapter_kind,
@@ -371,6 +435,15 @@ def _render_alert_definition(
         "subType": str(alert.sub_type),
         "type": str(alert.type),
     }
+    # waitCycle / cancelCycle default to 1 when absent (alertDefinitionSchema
+    # .xsd), so they are written only when they differ; every alert in the
+    # repo and the registered paks uses 1. disableInBasePolicy when set.
+    if getattr(alert, "wait_cycles", 1) != 1:
+        attribs["waitCycle"] = str(alert.wait_cycles)
+    if getattr(alert, "cancel_cycles", 1) != 1:
+        attribs["cancelCycle"] = str(alert.cancel_cycles)
+    if getattr(alert, "disable_in_base_policy", False):
+        attribs["disableInBasePolicy"] = "true"
     ad_elem = ET.SubElement(parent, "AlertDefinition", attribs)
 
     # Build severity for State — use the criticality from the alert (lowercased
@@ -389,8 +462,15 @@ def _render_alert_definition(
     # is omitted (bare <SymptomSet> directly under <State>) when there is
     # exactly one set.  Within a set: a single symptom is a bare ref=
     # attribute on <SymptomSet>; multiple symptoms become <Symptom ref=.../>
-    # children of a <SymptomSet operator="...">.  The non-vendor
-    # aggregation="any" attribute is never emitted.
+    # children of a <SymptomSet operator="...">.  aggregation is emitted only
+    # for an authored threshold_type ANY / ALL on a non-SELF set, as
+    # aggregation="any" / "all" (seen on non-SELF sets in the 8.18.7, 9.0.2
+    # and 9.1.1 built-in alertdefs.xml); a set without one keeps no
+    # aggregation, as before. Thresholds the XML cannot carry are refused
+    # (AlertDef.xml_symptom_set_problems), never dropped.
+    _problems = alert.xml_symptom_set_problems() if hasattr(alert, "xml_symptom_set_problems") else []
+    if _problems:
+        raise ValueError("\n".join(_problems))
     symptom_sets = alert.symptom_sets or {}
     sets = symptom_sets.get("sets") or []
 
@@ -416,17 +496,14 @@ def _render_alert_definition(
                         break
                 refs.append(_symptom_id(sym_adapter, sym_name, uuid=sym_uuid))
 
+            ss_attrs = {"applyOn": apply_on, "operator": set_op}
+            if s.get("threshold_type") is not None:
+                # Only ANY / ALL reach here (xml_symptom_set_problems).
+                ss_attrs = {"aggregation": str(s["threshold_type"]).lower(), **ss_attrs}
             if len(refs) == 1:
-                ss_elem = ET.Element("SymptomSet", {
-                    "applyOn": apply_on,
-                    "operator": set_op,
-                    "ref": refs[0],
-                })
+                ss_elem = ET.Element("SymptomSet", {**ss_attrs, "ref": refs[0]})
             else:
-                ss_elem = ET.Element("SymptomSet", {
-                    "applyOn": apply_on,
-                    "operator": set_op,
-                })
+                ss_elem = ET.Element("SymptomSet", ss_attrs)
                 for ref in refs:
                     ET.SubElement(ss_elem, "Symptom", {"ref": ref})
             elements.append(ss_elem)
@@ -495,6 +572,9 @@ def render_alert_content_xml(
         declaration, suitable for writing to ``AlertContent.xml``.
     """
     recommendations = recommendations or []
+    _collisions = rendered_id_collisions(symptoms, alerts, recommendations)
+    if _collisions:
+        raise ValueError("\n".join(_collisions))
 
     # Build a name -> Recommendation map for O(1) lookups in alert rendering.
     rec_map: dict = {}

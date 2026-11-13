@@ -110,6 +110,23 @@ PROPERTY_OPERATORS = {
 }
 DYNAMIC_DIRECTIONS = {"ABOVE", "BELOW", "ABNORMAL"}
 
+# symptomDefType values seen in product exports (built-ins: 161 / 37) and one
+# third-party pak (7 condition_self).
+SYMPTOM_DEF_TYPES = {"condition_self", "condition_population"}
+SYMPTOM_OMIT = {"wait_cycles", "cancel_cycles", "instanced"}
+#: Oldest VCF Operations version whose own built-in export shows each
+#: ``omit:`` entry's attribute absent (symptomdefs.xml of the 8.18.7, 9.0.2
+#: and 9.1.1 exports; alert_fidelity_wire_format.md §Omit version floors).
+#: A Tier 2 pak build fails on an entry whose floor is above its oldest
+#: supported line; ``None`` would mean no product export shows it absent.
+SYMPTOM_OMIT_MIN_OPS_VERSION = {
+    "wait_cycles": (8, 18, 7),    # 1,327 of 1,685 8.18.7 symptoms carry no waitCycle
+    "cancel_cycles": (8, 18, 7),  # 1,209 of 1,685 carry no cancelCycle
+    "instanced": (8, 18, 7),      # 934 of 985 metric / property conditions carry none
+}
+#: The oldest export set the floors above were read from.
+OLDEST_OMIT_EVIDENCE = (8, 18, 7)
+
 
 _UUID_RE = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
@@ -130,6 +147,13 @@ class SymptomDef:
     source_path: Optional[Path] = None
     version: str = "1.0.0"  # internal semver (released not applicable to symptoms)
     id: Optional[str] = None  # UUID preserved from original for pak content-import
+    # Fidelity (alert_fidelity_wire_format.md), content-import XML only:
+    # disableInBasePolicy, symptomDefType (condition_self / condition_population,
+    # the alert editor's inline condition symptoms), and omit (YAML names of
+    # attributes the source leaves out: wait_cycles, cancel_cycles, instanced).
+    disable_in_base_policy: bool = False
+    symptom_def_type: Optional[str] = None
+    omit: List[str] = field(default_factory=list)
 
     def validate(self, enforce_framework_prefix: bool = True) -> None:
         if not self.name or not self.name.strip():
@@ -159,7 +183,57 @@ class SymptomDef:
             raise SymptomValidationError(
                 f"{self.name}: cancel_cycles must be >= 1"
             )
+        self._validate_fidelity()
         self._validate_condition(self.condition)
+
+    def omit_version_problems(self, target_version=None) -> List[str]:
+        """``omit:`` entries whose floor (SYMPTOM_OMIT_MIN_OPS_VERSION) is
+        above ``target_version`` (a dotted version or int tuple). With no
+        target, entries whose floor is above the oldest export read
+        (OLDEST_OMIT_EVIDENCE) or unknown."""
+        target = _version_tuple(target_version) if target_version is not None else OLDEST_OMIT_EVIDENCE
+        src = f"{self.source_path}: " if self.source_path else ""
+        out: List[str] = []
+        for entry in self.omit:
+            floor = SYMPTOM_OMIT_MIN_OPS_VERSION.get(entry)
+            if floor is not None and _version_tuple(floor) <= target:
+                continue
+            seen = (f"absent only from VCF Operations {'.'.join(map(str, floor))} and later exports"
+                    if floor is not None else "absent from no product export")
+            out.append(
+                f"{src}symptom {self.name!r}: omit: {entry} leaves out an attribute {seen}; "
+                f"whether VCF Operations {'.'.join(map(str, target))} imports the symptom "
+                f"without it is unproven"
+            )
+        return out
+
+    def _validate_fidelity(self) -> None:
+        src = f"{self.source_path}: " if self.source_path else ""
+        if self.symptom_def_type is not None and self.symptom_def_type not in SYMPTOM_DEF_TYPES:
+            raise SymptomValidationError(
+                f"{src}{self.name}: symptom_def_type must be one of {sorted(SYMPTOM_DEF_TYPES)}; "
+                f"got {self.symptom_def_type!r}"
+            )
+        bad = [o for o in self.omit if o not in SYMPTOM_OMIT]
+        if bad or len(set(self.omit)) != len(self.omit):
+            raise SymptomValidationError(
+                f"{src}{self.name}: omit accepts {sorted(SYMPTOM_OMIT)}, each once; got {self.omit!r}"
+            )
+        # An absent waitCycle / cancelCycle means 1 (alertDefinitionSchema.xsd),
+        # so only a value of 1 can be left out without changing the symptom.
+        for o, val in (("wait_cycles", self.wait_cycles), ("cancel_cycles", self.cancel_cycles)):
+            if o in self.omit and val != 1:
+                raise SymptomValidationError(
+                    f"{src}{self.name}: omit {o} needs {o}: 1 (an absent attribute means 1); got {val}"
+                )
+        if "instanced" in self.omit:
+            cond = self.condition if isinstance(self.condition, dict) else {}
+            if cond.get("instanced"):
+                raise SymptomValidationError(f"{src}{self.name}: omit instanced contradicts instanced: true")
+            if cond.get("type") not in ("metric_static", "property"):
+                raise SymptomValidationError(
+                    f"{src}{self.name}: omit instanced applies to metric_static and property conditions"
+                )
 
     def _validate_condition(self, cond: dict) -> None:
         tag = f"{self.name}: condition"
@@ -224,6 +298,15 @@ class SymptomDef:
 
     def to_wire(self) -> dict:
         """Serialize to the JSON body expected by POST /api/symptomdefinitions."""
+        xml_only = [k for k, v in (("disable_in_base_policy", self.disable_in_base_policy),
+                                   ("symptom_def_type", self.symptom_def_type)) if v]
+        if xml_only:
+            # The Suite API symptom-definition schema has neither field.
+            raise SymptomValidationError(
+                f"{self.source_path or self.name}: {', '.join(xml_only)} is only rendered on "
+                f"the content-import XML path (pak builds, AlertContent.xml); the REST "
+                f"symptom-definition body has no such field"
+            )
         return {
             "name": self.name,
             "description": self.description,
@@ -300,6 +383,13 @@ def _condition_to_wire(cond: dict) -> dict:
     raise SymptomValidationError(f"Unknown condition type: {ctype!r}")
 
 
+def _version_tuple(v) -> tuple:
+    parts = [int(x) for x in (v if isinstance(v, tuple) else str(v).split("."))]
+    while len(parts) > 1 and parts[-1] == 0:
+        parts.pop()
+    return tuple(parts)
+
+
 def load_file(path: str | Path, enforce_framework_prefix: bool = True) -> SymptomDef:
     path = Path(path)
     try:
@@ -317,6 +407,16 @@ def load_file(path: str | Path, enforce_framework_prefix: bool = True) -> Sympto
     raw_id = data.get("id")
     sym_id: Optional[str] = str(raw_id).strip() if raw_id is not None else None
 
+    disable_raw = data.get("disable_in_base_policy", False)
+    if not isinstance(disable_raw, bool):
+        raise SymptomValidationError(f"{path}: disable_in_base_policy must be a bool")
+    sdt_raw = data.get("symptom_def_type")
+    if sdt_raw is not None and not isinstance(sdt_raw, str):
+        raise SymptomValidationError(f"{path}: symptom_def_type must be a string")
+    omit_raw = data.get("omit") or []
+    if not isinstance(omit_raw, list) or not all(isinstance(o, str) for o in omit_raw):
+        raise SymptomValidationError(f"{path}: omit must be a list of names")
+
     sd = SymptomDef(
         name=str(data.get("name", "")).strip(),
         adapter_kind=str(data.get("adapter_kind", "") or "").strip(),
@@ -329,8 +429,21 @@ def load_file(path: str | Path, enforce_framework_prefix: bool = True) -> Sympto
         source_path=path,
         version=version,
         id=sym_id,
+        disable_in_base_policy=disable_raw,
+        symptom_def_type=sdt_raw,
+        omit=list(omit_raw),
     )
-    sd.validate(enforce_framework_prefix=enforce_framework_prefix)
+    try:
+        sd.validate(enforce_framework_prefix=enforce_framework_prefix)
+    except SymptomValidationError as exc:
+        # Field errors name the symptom; prefix the file so every message
+        # names both (some already start with the path).
+        if str(exc).startswith(str(path)):
+            raise
+        raise SymptomValidationError(f"{path}: {exc}") from None
+    import warnings
+    for _problem in sd.omit_version_problems():
+        warnings.warn(_problem, UserWarning, stacklevel=2)
     return sd
 
 
@@ -349,4 +462,10 @@ def load_dir(directory: str | Path, enforce_framework_prefix: bool = True) -> Li
             )
         seen[sd.name] = p
         out.append(sd)
+    # Two symptoms under one rendered id (case-insensitive): the later
+    # replaces the earlier on content import. Same check as the alert loader.
+    from vcfcf_core.alerts.render import rendered_id_collisions
+    problems = rendered_id_collisions(symptoms=out)
+    if problems:
+        raise SymptomValidationError("\n".join(problems))
     return out

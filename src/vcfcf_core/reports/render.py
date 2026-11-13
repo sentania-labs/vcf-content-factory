@@ -26,11 +26,23 @@ def _render_section(sec: Section) -> str:
     """Render a single Section element."""
     if sec.type in ("CoverPage", "TableOfContents"):
         content_key = _STATIC_CONTENT_KEYS[sec.type]
+        # CoverPage formatting (third-party templates carry ColorizeListView
+        # then FontColor); emitted only when authored.
+        formatting = ""
+        if sec.cover_colorize is not None or sec.font_color is not None:
+            formatting = (
+                "<ContentFormatting>"
+                + (f"<ColorizeListView>{'true' if sec.cover_colorize else 'false'}</ColorizeListView>"
+                   if sec.cover_colorize is not None else "")
+                + (f"<FontColor>{escape(sec.font_color)}</FontColor>" if sec.font_color is not None else "")
+                + "</ContentFormatting>"
+            )
         return (
             "<Section>"
             f"<ContentType>{escape(sec.type)}</ContentType>"
             f"<ContentKey>{escape(content_key)}</ContentKey>"
-            "</Section>"
+            + formatting
+            + "</Section>"
         )
 
     if sec.type == "View":
@@ -40,10 +52,12 @@ def _render_section(sec: Section) -> str:
             f"<ContentType>View</ContentType>"
             f"<ContentKey>{escape(sec.view_id)}</ContentKey>"
             f"<ContentOrientation>{escape(sec.orientation)}</ContentOrientation>"
-            "<ContentFormatting>"
-            f"<ColorizeListView>{colorize_str}</ColorizeListView>"
-            "</ContentFormatting>"
-            "</Section>"
+            + ("" if sec.omit_formatting else (
+                "<ContentFormatting>"
+                f"<ColorizeListView>{colorize_str}</ColorizeListView>"
+                "</ContentFormatting>"
+            ))
+            + "</Section>"
         )
 
     if sec.type == "Dashboard":

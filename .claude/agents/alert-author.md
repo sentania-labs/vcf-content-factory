@@ -72,9 +72,24 @@ Track-specific examples:
 5. **Write only under `content/alerts/` and `content/recommendations/`, or the
    named pak's alerts and recommendations folders when the brief names that pak.**
    No other directories.
-6. **Alert IDs are server-assigned.** No `id:` field on alerts.
-   Recommendations also have no `id:` field — their ID is derived
-   at load time from `name` + `adapter_kind`.
+6. **IDs are derived.** Leave `id:` out on new content (alerts derive
+   `AlertDefinition-<adapter>-<slug>`, recommendations
+   `Recommendation-df-<adapter>-<slug>`). `id:` (a UUID on an alert, a
+   key on a recommendation) is only for ported content that must keep
+   its source id. `disable_in_base_policy: true` ships the alert
+   disabled in the default policy and renders only on the content-import
+   XML path (pak builds). `vcfcf_alerts sync` refuses it, and a bundle,
+   discrete or release build fails on it or on an alert or recommendation
+   `id:` (bundle installers deliver alerts through REST, which has
+   neither). Explicit ids keep their case and must be unique, compared
+   case-insensitively. On a non-SELF set, `threshold_type: ANY` or `ALL`
+   renders; COUNT, PERCENT and `threshold_value` fail every bundle and
+   pak build. SDK-adapter paks: buildkit 1.0.28 and earlier silently
+   ignore `id:` and `disable_in_base_policy`, so a pak built with such a
+   kit ships the alert enabled under its derived id with no error; pak CI
+   pins the kit by tag, so these fields do not reach an official pak
+   release until a newer kit is tagged and the pak bumps its pin. Wire:
+   `knowledge/context/wire-formats/alert_fidelity_wire_format.md`.
 7. **Never install.** Never create symptoms, views, dashboards, or
    any other content type.
 
@@ -157,8 +172,8 @@ ID at load time (`Recommendation-df-<adapter_kind>-<slug>` where
 slug is the name with the `[VCF CF]` prefix stripped
 and whitespace/punctuation normalized to underscores).
 
-No `id:`, `key:`, or `priority:` fields on the recommendation
-itself — those are all either server-derived or alert-side.
+No `key:` or `priority:` on the recommendation itself (server-derived
+or alert-side); `id:` only as hard rule 6 says.
 
 ## Workflow
 

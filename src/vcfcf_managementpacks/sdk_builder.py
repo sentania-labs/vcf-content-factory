@@ -580,6 +580,15 @@ _SDK_COMPAT_LINES: Tuple[_CompatLine, ...] = (
     _CompatLine("9.1.1.0100", (_SDK_JAR_9_1_1_0100,), 25),
 )
 _PRIMARY_LINE_KEY = "9.0"
+
+
+def _oldest_supported_line() -> str:
+    """The oldest platform line a Tier 2 pak supports (RULE-019): the
+    lowest key of _SDK_COMPAT_LINES, as a dotted version ("8.18.7")."""
+    return min(
+        (line.key for line in _SDK_COMPAT_LINES),
+        key=lambda k: tuple(int(p) for p in k.split(".")),
+    )
 # The primary (shipped compile target) jar's name in adapter_runtime/.
 _SDK_PRIMARY_JAR_NAME = _SDK_JAR_9_0_2_0.file_name
 # 9.1.1.0100: Java 25 class files, JDK 25+ to read.
@@ -2342,6 +2351,9 @@ def _load_bundled_content(
                 f"bundled_content.dashboards: {path}: {exc} "
                 f"(list the referenced views under bundled_content.views)"
             ) from exc
+        # Widget-type and omit: version floors (issue #199, W3) are checked
+        # after the load by check_bundled_version_floors, so validate-sdk
+        # reports them beside the other bundled-content checks (W8).
         dashboards.append(d)
 
     # Validate every bundled dashboard against the bundled views, mirroring
@@ -4836,6 +4848,17 @@ def build_sdk_pak(project_dir: Path, output_dir: Optional[Path] = None,
     bundled_views, bundled_dashboards, bundled_supermetrics, bundled_symptoms, bundled_alerts, bundled_reports, bundled_recommendations = _load_bundled_content(
         _raw_adapter_yaml, project_dir, project_dir
     )
+    _floor_errors = check_bundled_version_floors((
+        bundled_views, bundled_dashboards, bundled_supermetrics, bundled_symptoms,
+        bundled_alerts, bundled_reports, bundled_recommendations,
+    ))
+    if _floor_errors:
+        raise SdkBuildError("\n".join(_floor_errors))
+    for _w in bundled_reference_warnings((
+        bundled_views, bundled_dashboards, bundled_supermetrics, bundled_symptoms,
+        bundled_alerts, bundled_reports, bundled_recommendations,
+    )):
+        print(f"  build-sdk: warning: {_w}", file=sys.stderr)
     if bundled_views or bundled_dashboards or bundled_supermetrics or bundled_symptoms or bundled_alerts or bundled_reports or bundled_recommendations:
         print(
             f"  bundled content: {len(bundled_views)} view(s), "
@@ -5082,11 +5105,17 @@ def check_stock_ids(
     alert_xml = None
     if symptoms or alerts or recs:
         from vcfcf_alerts.render import render_alert_content_xml
-        alert_xml = render_alert_content_xml(
-            symptoms=list(symptoms or []),
-            alerts=list(alerts or []),
-            recommendations=list(recs or []),
-        )
+        try:
+            alert_xml = render_alert_content_xml(
+                symptoms=list(symptoms or []),
+                alerts=list(alerts or []),
+                recommendations=list(recs or []),
+            )
+        except ValueError as exc:
+            # Duplicate ids or an unrenderable threshold, which
+            # check_bundled_content reports; fail closed here too.
+            return [f"stock-id guard: alert content did not render, so its ids "
+                    f"were not checked: {exc}"], []
     defs = _stock_ids.bundled_definitions(
         views=views or [], dashboards=dashboards or [], supermetrics=sms or [],
         reports=reports or [], symptoms=symptoms or [], alerts=alerts or [],
@@ -5449,8 +5478,16 @@ def check_bundled_content_references(symptoms: list, alerts: list,
     function, so the two commands cannot drift apart.
     """
     errors: List[str] = []
+    # Two bundled definitions under one rendered id (case-insensitive): the
+    # pak writes one file per symptom and per alert, so no single render
+    # sees them together; the content importer keeps only one (B2).
+    from vcfcf_alerts.render import rendered_id_collisions
+    errors.extend(rendered_id_collisions(symptoms or [], alerts or [], recommendations or []))
     if not alerts:
         return errors
+    # Symptom-set thresholds the pak's alert XML cannot carry (W7).
+    for alert in alerts:
+        errors.extend(alert.xml_symptom_set_problems())
     from vcfcf_alerts.render import _symptom_id as _compute_symptom_id
     symptom_names = {s.name for s in (symptoms or [])}
     recommendation_names = {r.name for r in (recommendations or [])}
@@ -5722,6 +5759,64 @@ def check_bundled_content_against_describe(
     return errors
 
 
+def check_bundled_version_floors(bundled: tuple) -> List[str]:
+    """Bundled content the oldest supported platform line may not import.
+
+    A Tier 2 pak targets every line in _SDK_COMPAT_LINES (RULE-019), so a
+    dashboard widget type above the oldest line's floor (issue #199), or an
+    ``omit:`` entry whose key no export at or below that line shows absent
+    (dashboards, reports, symptoms; alerts have no ``omit:``; W3 of the
+    2026-11-12 fidelity review), is an error. ``build-sdk`` fails on it;
+    ``validate-sdk`` reports it under its own label. ``bundled`` is the
+    tuple ``_load_bundled_content`` returns.
+    """
+    _views, dashboards, _sms, symptoms, _alerts, reports, _recs = bundled
+    oldest = _oldest_supported_line()
+    tail = (f" Tier 2 paks support VCF Operations {oldest} and later (RULE-019); "
+            f"remove it or move it to content that targets newer builds only.")
+    errors: List[str] = []
+    for d in dashboards or []:
+        src = getattr(d, "source_path", None) or d.name
+        widget_problems = d.widget_version_problems(oldest)
+        if widget_problems:
+            errors.append(
+                f"bundled_content.dashboards: {src}: dashboard {d.name!r}: "
+                + " ".join(widget_problems) + tail
+            )
+        for problem in d.omit_version_problems(oldest):
+            errors.append(f"bundled_content.dashboards: {problem}" + tail)
+    for r in reports or []:
+        for problem in r.omit_version_problems(oldest):
+            errors.append(f"bundled_content.reports: {problem}." + tail)
+    for sym in symptoms or []:
+        for problem in sym.omit_version_problems(oldest):
+            errors.append(f"bundled_content.symptoms: {problem}." + tail)
+    return errors
+
+
+def bundled_reference_warnings(bundled: tuple) -> List[str]:
+    """Warnings for bundled reports and dashboards that reference a view or
+    dashboard by raw id: not a known stock id, or a stock id absent on a
+    supported line (``guard.reference_warnings``; W5 of the 2026-11-12
+    fidelity review). Never an error: the id may be another pak's object."""
+    views, dashboards, _sms, _syms, _alerts, reports, _recs = bundled
+    refs: list = []
+    own_view_ids = [getattr(v, "id", "") for v in views or []]
+    for d in dashboards or []:
+        refs.extend(d.external_view_references(own_view_ids))
+    for r in reports or []:
+        refs.extend(r.external_references())
+    if not refs:
+        return []
+    try:
+        baseline = _stock_ids.load_baseline()
+    except _stock_ids.StockIdBaselineError as exc:
+        return [f"raw-id references not checked: {exc}"]
+    return _stock_ids.reference_warnings(
+        refs, baseline, [line.key for line in _SDK_COMPAT_LINES]
+    )
+
+
 def check_bundled_content(project: SdkProjectDef, bundled: tuple,
                           describe_xml: Path) -> List[str]:
     """Run every bundled symptom/alert/recommendation check; return errors.
@@ -5798,6 +5893,11 @@ def validate_sdk_project(project_dir: Path) -> List[str]:
         _stock_errors, _stock_warnings = check_stock_ids(project, _bundled)
         errors.extend(_stock_errors)
         for _w in _stock_warnings:
+            print(f"  validate-sdk: warning: {_w}", file=sys.stderr)
+        # Version floors (issue #199 widget types, W3 omit: entries): their
+        # own label, beside the checks above, never masking them (W8).
+        errors.extend(f"version floor: {e}" for e in check_bundled_version_floors(_bundled))
+        for _w in bundled_reference_warnings(_bundled):
             print(f"  validate-sdk: warning: {_w}", file=sys.stderr)
         if bundled_views:
             # Build sm_scope from bundled SM source paths so that view columns

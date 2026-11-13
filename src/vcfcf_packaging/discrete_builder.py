@@ -203,6 +203,11 @@ def _resolve_report_deps(
     needed_dashboards: dict[str, Dashboard] = {}
     needed_sms: dict[str, SuperMetricDef] = {}
     for sec in report.sections:
+        # A view_id: / dashboard_id: section names a product-shipped or
+        # other-pak object by raw id; the loader rejects an id that is one of
+        # the project's own, so there is nothing to bundle.
+        if getattr(sec, "external", False):
+            continue
         if sec.view_name and sec.view_name in view_by_name:
             view = view_by_name[sec.view_name]
             if view.name not in needed_views:

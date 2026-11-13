@@ -58,7 +58,16 @@ Track-specific examples:
    once the file is listed in `adapter.yaml` `bundled_content`, and say in
    your report that it is unvalidated until then).
 4. **Write only under `content/symptoms/`, or under `content/sdk-adapters/<name>/symptoms/` when the brief names that pak.**
-5. **IDs are server-assigned.** No `id:` field in YAML.
+5. **IDs.** Leave `id:` out on new symptoms. `id:` (UUID) is for ported
+   content that must keep its source id. `disable_in_base_policy`,
+   `symptom_def_type` and `omit:` reproduce a source symptom on the
+   content-import XML path only. `vcfcf_symptoms sync` refuses the first
+   two, and so does a bundle, discrete or release build. SDK-adapter
+   paks: buildkit 1.0.28 and earlier silently ignore all three, so a pak
+   built with such a kit renders without them and reports no error; pak
+   CI pins the kit by tag, so these fields do not reach an official pak
+   release until a newer kit is tagged and the pak bumps its pin. Wire:
+   `knowledge/context/wire-formats/alert_fidelity_wire_format.md`.
 6. **Never install.** Never create alerts.
 
 ## YAML schema

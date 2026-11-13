@@ -216,6 +216,13 @@ def cmd_validate(args) -> int:
         definitions_from_objects("view", views) + definitions_from_objects("dashboard", dashboards),
         "views and dashboards",
     )
+    # View widgets that name a view by raw id (the external-view
+    # passthrough): a warning when the id is not a known stock id.
+    from vcfcf_packaging.stock_ids import report_reference_warnings
+    _own_view_ids = [v.id for v in views]
+    report_reference_warnings(
+        [ref for d in dashboards for ref in d.external_view_references(_own_view_ids)]
+    )
 
     if rc == 0:
         print(f"OK: {len(views)} view definition(s), {len(dashboards)} dashboard(s) valid")

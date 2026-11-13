@@ -425,6 +425,11 @@ def extract_refs_from_dashboards(
                             f"{tab_src} size_by",
                         )
 
+            # ParetoAnalysis additional columns, Heatmap tab custom filters.
+            from ..dashboards.loader import widget_extra_metric_refs
+            for key, ak, rk, where in widget_extra_metric_refs(w):
+                _handle_metric_key(key, ak or "VMWARE", rk or "", f"{src_base} ({w.type}) {where}")
+
     return sm_refs, metric_refs
 
 
@@ -1040,6 +1045,12 @@ def collect_deps(
                         m = sm_uuid_re.search(key)
                         if m:
                             _collect_sm_uuid(m.group(1), src)
+            # ParetoAnalysis additional columns, Heatmap tab custom filters.
+            from ..dashboards.loader import widget_extra_metric_refs
+            for key, _ak, _rk, _where in widget_extra_metric_refs(w):
+                m = sm_uuid_re.search(key or "")
+                if m:
+                    _collect_sm_uuid(m.group(1), src)
 
     # --- Step 2c: SM formulas → @supermetric:"<name>" refs (SM → SM) -----
     # Every emit path resolves the token to Super Metric|sm_<uuid> and

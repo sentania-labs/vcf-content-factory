@@ -83,11 +83,12 @@ def widget_version_problems(
 ) -> List[str]:
     """Return one message per widget type that may not import on the target.
 
-    *widgets* is ``(local_id, type)`` pairs.  With *target_version* set,
-    a type is reported when its floor is above the target.  With no target
-    (no bundle, release or adapter field declares one today), every type
-    that has a floor is reported, because the dashboard cannot install on
-    builds below that floor and nothing says those builds are out of scope.
+    *widgets* is ``(local_id, type)`` pairs.  With *target_version* set
+    (the Tier 2 pak build passes RULE-019's oldest supported line), a type
+    is reported when its floor is above the target.  With no target
+    (content bundles declare none), every type that has a floor is
+    reported, because the dashboard cannot install on builds below that
+    floor and nothing says those builds are out of scope.
     """
     target = parse_ops_version(target_version) if target_version is not None else None
     by_type: Dict[str, List[str]] = {}
@@ -113,5 +114,91 @@ def widget_version_problems(
             f"{floor_s} or later; on {scope} the importer aborts the WHOLE "
             f"dashboard and any Summary binding on it, while install still "
             f"reports success (issue #199)."
+        )
+    return problems
+
+
+# ---------------------------------------------------------------------------
+# omit: version floors (2026-11-12 fidelity review, W3)
+# ---------------------------------------------------------------------------
+#
+# A dashboard ``omit:`` entry removes a key the renderer always writes. The
+# 9.0.2 importer reads dashboard JSON with strict getters, so a key an older
+# build expects and does not find can abort the whole dashboard (lesson
+# unknown-widget-type-aborts-pak-dashboard-import.md). Each entry's floor is
+# the oldest VCF Operations version whose OWN built-in export shows the key
+# absent, read from the 8.18.7, 9.0.2 and 9.1.1 scope-ALL exports (counts:
+# dashboard_fidelity_wire_format.md §Omit version floors). ``None``: no
+# product export shows it absent (seen only on third-party content of
+# unknown target build). A floor proves an export carries the shape, which
+# is the evidence the factory has; import on that build is not separately
+# tested.
+
+#: The oldest export set the floors were read from.
+OLDEST_OMIT_EVIDENCE: OpsVersion = (8, 18, 7)
+
+#: Dashboard-level ``omit:`` entry -> floor.
+DASHBOARD_OMIT_MIN_OPS_VERSION: Dict[str, Optional[OpsVersion]] = {
+    "temporary": (9, 1, 1),            # on all 163 (8.18.7) and 180 (9.0.2); absent on all 179 (9.1.1)
+    "name_path": (8, 18, 7),           # absent on 14 of 163 (8.18.7)
+    "folder_in_name": None,            # no export; one third-party dashboard
+    "widget_interactions": (9, 1, 1),  # on all 163 and 180; absent on 37 of 179 (9.1.1)
+}
+
+#: (widget type, ``omit:`` entry) -> floor.
+WIDGET_OMIT_MIN_OPS_VERSION: Dict[Tuple[str, str], Optional[OpsVersion]] = {
+    ("AlertList", "alert_definitions"): (8, 18, 7),               # absent on 8 of 14
+    ("ResourceRelationshipAdvanced", "pagination_number"): (8, 18, 7),  # 30 of 30
+    ("ResourceRelationshipAdvanced", "select_first_row"): (8, 18, 7),   # 29 of 30
+    ("Scoreboard", "sub_mode"): (8, 18, 7),                       # 20 of 173
+    ("MetricChart", "sub_mode"): (8, 18, 7),                      # 12 of 71
+}
+
+#: Scoreboard / MetricChart metric entry ``omit:`` entry -> floor (8.18.7
+#: counts over 1,536 entries).
+METRIC_OMIT_MIN_OPS_VERSION: Dict[str, Optional[OpsVersion]] = {
+    "label": (8, 18, 7),                # 268 entries without label
+    "max_value": (8, 18, 7),            # 1,516 without maxValue
+    "handle_old_coloring": (8, 18, 7),  # 379 without handleOldColoring
+    "unit": (8, 18, 7),                 # 285 without unit / metricUnitId
+    "link": (8, 18, 7),                 # 242 without link
+}
+
+#: Heatmap tab ``omit:`` entry -> floor (8.18.7 counts over 77 tabs).
+HEATMAP_TAB_OMIT_MIN_OPS_VERSION: Dict[str, Optional[OpsVersion]] = {
+    "tag_filter": (8, 18, 7),          # 20 tabs without tagFilter
+    "group_by_kind_keys": (8, 18, 7),  # 51 without groupBy resourceKind / adapterKind
+    "color_min_value": (8, 18, 7),     # 15 without color.minValue
+    "custom_filter": (8, 18, 7),       # 27 without customFilter
+}
+
+
+def omit_version_problems(
+    entries: Iterable[Tuple[str, str, Optional[OpsVersion]]],
+    target_version=None,
+) -> List[str]:
+    """One message per ``omit:`` entry the target may not import without.
+
+    *entries* is ``(where, entry, floor)``. With *target_version* (the Tier 2
+    pak build passes RULE-019's oldest supported line) an entry is reported
+    when its floor is above the target or unknown. With no target (content
+    bundles declare none) an entry is reported when its floor is above the
+    oldest export read (``OLDEST_OMIT_EVIDENCE``) or unknown: below that the
+    factory has no evidence either way, and every entry has a floor there.
+    """
+    target = parse_ops_version(target_version) if target_version is not None else OLDEST_OMIT_EVIDENCE
+    problems: List[str] = []
+    for where, entry, floor in entries:
+        if floor is not None and parse_ops_version(floor) <= target:
+            continue
+        seen = (
+            f"absent only from VCF Operations {format_ops_version(floor)} and later exports"
+            if floor is not None else "absent from no product export"
+        )
+        problems.append(
+            f"{where}: omit: {entry} leaves out a key {seen}; whether VCF Operations "
+            f"{format_ops_version(target)} imports the dashboard without it is unproven, "
+            f"and the 9.0.2 importer aborts the WHOLE dashboard on a key it expects "
+            f"(install still reports success)."
         )
     return problems
