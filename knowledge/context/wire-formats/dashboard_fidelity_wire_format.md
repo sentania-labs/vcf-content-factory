@@ -35,8 +35,9 @@ and the per-type renderers). Tests: `tests/test_dashboard_fidelity.py`.
 - **SDK-adapter paks need a newer buildkit.** The kit vendors `loader.py`
   and `render.py`. Kit 1.0.28 and earlier silently ignore almost all of
   these fields (their loader does not reject unknown keys; only `collapsed`
-  on a non-Section widget and `relationship_mode` on HealthChart, Pareto or
-  Heatmap were load errors there), so a pak built with such a kit renders
+  on a non-Section widget, `relationship_mode` on HealthChart, Pareto or
+  Heatmap and navigation `widget_ids` were load errors there), so a pak
+  built with such a kit renders
   without them and reports no error. Pak CI pins the kit by tag, so neither
   these fields nor the Section and `omit:` version gates reach an official
   pak release until a newer kit is tagged and the pak bumps its pin.
@@ -340,8 +341,7 @@ ships the dashboard disabled (above), and, on alerts and recommendations,
   `old_metric_values`, `pin_resource`; MetricChart `refresh_content`;
   ParetoAnalysis `refresh_content`, `max_value`, `yellow_bound`,
   `orange_bound`, `red_bound`, `percentile_value`, `metric_label`,
-  `metric_unit`, `additional_columns`; Heatmap `selected_tab`; navigation
-  `widget_ids`.
+  `metric_unit`, `additional_columns`; Heatmap `selected_tab`.
 - Metric entry (Scoreboard, MetricChart): `link`, `label_localized`,
   `label_orig`, `metric_unit`, `def_unit`, `resource_kind_name` (a load
   error on a `metric_mode: resource` Scoreboard, whose entries carry no
@@ -352,8 +352,9 @@ ships the dashboard disabled (above), and, on alerts and recommendations,
 
 Newly accepted rather than newly read (a load error before, valid now):
 `collapsed` on TextDisplay, View, MetricChart, Scoreboard, ResourceList and
-AlertList, and `relationship_mode: children` on HealthChart, ParetoAnalysis
-and Heatmap.
+AlertList, `relationship_mode: children` on HealthChart, ParetoAnalysis
+and Heatmap, and navigation `widget_ids` (navigation entries reject
+unknown keys).
 
 ## Round trip (52 third-party dashboards)
 
