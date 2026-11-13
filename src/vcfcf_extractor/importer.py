@@ -1,26 +1,41 @@
 """``python3 -m vcfcf_extractor import-local``: offline conversion of existing
 VCF Operations content files to factory YAML, written into a target layout,
-checked by the stock-id guard and optionally verified through the real
-loaders and renderers.
+checked by the stock-id guard and verified through the real loaders and
+renderers.
 
-The parse, map and compare logic is ``vcfcf_core.importer``; this module
-owns what the core may not do: write files, read the stock-id baseline
-through the factory, load the written YAML with the factory, third-party
-and pak loaders, and print the report. No network access anywhere.
-How-to: ``knowledge/context/authoring/importer_offline_conversion.md``.
+The parse, map, account and compare logic is ``vcfcf_core.importer``; this
+module owns what the core may not do: write files, read the stock-id
+baseline through the factory, load the written YAML with the factory,
+third-party and pak loaders, and print the report. No network access
+anywhere. How-to: ``knowledge/context/authoring/importer_offline_conversion.md``.
 
-Exit status: 0 success; 1 an object failed, lost data or differed on
-verification (``--allow-partial`` accepts that), or an input could not be
-read (never accepted: what cannot be read was not checked); 2 a usage or
-safety refusal (nothing written); 3 the stock-id guard refused the result
-(nothing written); 4 ``--verify`` compared nothing.
+Writing is staged: the tree is written into a temporary sibling of
+``--out``, verified there, and moved into place only when the run
+succeeds (or succeeds with partial results ``--allow-partial`` accepts).
+On any other outcome ``--out`` is untouched. ``--force`` replaces only a
+directory carrying this importer's marker file (:data:`MARKER`) from an
+earlier run, whole, so no file of the earlier run is left behind.
+
+Exit status: 0 success; 1 an object failed, lost data, is of an
+unsupported type, is not deliverable to ``--target-min``, or differed on
+verification (``--allow-partial`` accepts these, except in the pak layout a
+pak check failure or a dashboard the stated target cannot import), or an
+input could not be read (never accepted: what cannot be read was not
+checked); 2 a usage or safety refusal, or the tree could not be written
+(nothing written); 3 the stock-id guard refused the result (nothing
+written); 4 verification compared nothing; 5 an internal error in the
+converter on at least one object (never accepted; the other objects are
+reported as usual).
 """
 from __future__ import annotations
 
+import contextlib
 import copy
 import io
 import json
+import os
 import re
+import shutil
 import sys
 import tempfile
 import types
@@ -28,7 +43,7 @@ import warnings
 import xml.etree.ElementTree as ET
 from collections import Counter, defaultdict
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from vcfcf_core.importer import compare as _cmp
 from vcfcf_core.importer.convert import (
@@ -36,17 +51,26 @@ from vcfcf_core.importer.convert import (
     Plan,
     TYPE_DIRS,
     dump_yaml,
+    mint_namespace_uuid,
     norm_id,
     parse_id_list,
+    parse_rename_map,
     parse_tsv_map,
     plan_conversion,
 )
 from vcfcf_core.importer.inputs import CONTENT_TYPES, scan_inputs
-from vcfcf_core.importer.model import loss_path_patterns
+from vcfcf_core.importer.model import Mark
 
-EXIT_OK, EXIT_PARTIAL, EXIT_USAGE, EXIT_STOCK, EXIT_NOTHING = 0, 1, 2, 3, 4
+EXIT_OK, EXIT_PARTIAL, EXIT_USAGE, EXIT_STOCK, EXIT_NOTHING, EXIT_INTERNAL = 0, 1, 2, 3, 4, 5
 _UUID = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
 _RENDERED_PREFIX = {"symptom": "SymptomDefinition-", "alert": "AlertDefinition-"}
+#: Written into every --out this importer produces; --force replaces only a
+#: directory that carries it.
+MARKER = ".vcfcf-import-local"
+#: Written into an explicit --report-dir; the report files there are
+#: overwritten only when it carries it.
+REPORT_MARKER = ".vcfcf-import-local-report"
+REPORT_FILES = ("report.json", "id_map.tsv", "bundled_content.yaml")
 
 
 def add_parser(sub) -> None:
@@ -60,49 +84,67 @@ def add_parser(sub) -> None:
             "no network. Inputs: files, directories (recursive), content-export zips, .pak files.\n"
             "\n"
             "Ids and names are explicit decisions: --ids keep|mint or --id-map, and --naming.\n"
-            "The stock-id guard runs on the result; --verify re-loads the written YAML through the\n"
-            "real loaders of the layout, renders it and compares it with the source.\n"
+            "The stock-id guard runs on the result; verification (on unless --no-verify) re-loads the\n"
+            "written YAML through the real loaders of the layout, renders it and compares it with the\n"
+            "source. The tree is written to a temporary sibling and moved into --out only on success.\n"
             "\n"
             "How-to: knowledge/context/authoring/importer_offline_conversion.md\n"
             "\n"
             "Example:\n"
             "  python3 -m vcfcf_extractor import-local 'Management Pack/content' \\\n"
             "    --out third_party/my-port --layout third-party --project-name my-port \\\n"
-            "    --ids mint --naming unprefixed --verify\n"
+            "    --ids mint --naming unprefixed\n"
         ),
         formatter_class=__import__("argparse").RawDescriptionHelpFormatter,
     )
     p.add_argument("inputs", nargs="+", metavar="INPUT", help="file, directory, zip or .pak (read only)")
-    p.add_argument("--out", required=True, metavar="DIR", help="target directory (must be empty unless --force)")
+    p.add_argument("--out", required=True, metavar="DIR",
+                   help="target directory: absent or empty, or (with --force) one this importer wrote")
     p.add_argument("--layout", required=True, choices=("content", "third-party", "pak"),
                    help="content: a factory content/ tree; third-party: a third_party/<project> with "
                         "PROJECT.yaml; pak: an SDK pak's bundled-content folders")
     ids = p.add_mutually_exclusive_group(required=True)
     ids.add_argument("--ids", choices=("keep", "mint"),
-                     help="keep: carry the source ids; mint: a new UUID for every object, every "
-                          "reference rewritten, the mapping written to the report directory")
+                     help="keep: carry the source ids; mint: a deterministic new UUID for every object "
+                          "(version 5 from --mint-namespace and the source type and id; a rerun gives the "
+                          "same ids), every reference rewritten, the mapping written to the report directory")
     ids.add_argument("--id-map", metavar="TSV", action="append",
                      help="old id<TAB>new id rows for some objects; the rest keep theirs (repeatable; "
                           "an old id listed in two files is an error)")
+    p.add_argument("--mint-namespace", metavar="TEXT",
+                   help="--ids mint: the text the minted ids derive from (default: 'project:<--project-name>'; "
+                        "one of the two is required with --ids mint)")
     p.add_argument("--naming", required=True, choices=("unprefixed", "factory-prefixed"),
                    help="unprefixed: names as in the source; factory-prefixed: '[VCF CF] ' on every name, "
                         "references follow")
-    p.add_argument("--rename", metavar="TSV", help="old name (or id)<TAB>new name rows, applied before --naming")
+    p.add_argument("--rename", metavar="TSV",
+                   help="type<TAB>old name (or id)<TAB>new name rows, applied before --naming; the type "
+                        "(view, dashboard, ...) keeps a rename from crossing types")
     p.add_argument("--drop", metavar="TSV", action="append",
                    help="ids (first column) not to emit; references to them stay raw ids (repeatable)")
     p.add_argument("--target-min", choices=("8.18.7", "9.0.2", "9.1.1"),
                    help="oldest VCF Operations the output must import on: omit: entries proven only on "
-                        "newer builds are not emitted (each deviation listed)")
+                        "newer builds are not emitted (each deviation listed); a dashboard with a widget "
+                        "type the target lacks is not deliverable to it")
     p.add_argument("--prefer-source", action="append", default=[], metavar="FRAGMENT",
-                   help="when one id is defined differently in several files, the copy from the file "
-                        "whose path contains FRAGMENT wins (repeatable, first match wins)")
-    p.add_argument("--project-name", metavar="NAME", help="third-party layout: PROJECT.yaml name (default: --out dir name)")
+                   help="when one id is defined differently in several files, the copy from the one file "
+                        "whose path (relative to its input) contains FRAGMENT wins; a fragment matching "
+                        "two of those files, or none, is an error (repeatable)")
+    p.add_argument("--project-name", metavar="NAME", help="third-party layout: PROJECT.yaml name (default: "
+                                                          "--out dir name); also the default mint namespace")
     p.add_argument("--report-dir", metavar="DIR", help="where the report, id map and pak snippet go "
                                                        "(default: <out>/import-report)")
-    p.add_argument("--verify", action="store_true", help="re-load, render and compare every written object")
+    vg = p.add_mutually_exclusive_group()
+    vg.add_argument("--verify", action="store_true", default=True,
+                    help="re-load, render and compare every written object (the default)")
+    vg.add_argument("--no-verify", dest="verify", action="store_false",
+                    help="skip verification (a warning says nothing was checked)")
     p.add_argument("--allow-partial", action="store_true",
-                   help="exit 0 even when objects failed, lost data or differ on verification")
-    p.add_argument("--force", action="store_true", help="write into a non-empty --out (overwrites are listed)")
+                   help="exit 0 (and write) even when objects failed, lost data, are unsupported or differ "
+                        "on verification")
+    p.add_argument("--force", action="store_true",
+                   help="replace a non-empty --out that this importer wrote before (it carries "
+                        f"{MARKER}); anything else is refused")
     p.add_argument("--dry-run", action="store_true", help="plan and report; write nothing")
 
 
@@ -144,10 +186,11 @@ def _completeness(scan, inputs: List[Path]) -> Tuple[List[str], list]:
     from vcfcf_core.stock_ids.guard import scan_path
     unreadable: list = []
     seen = {(o.type, norm_id(o.type, o.id)) for o in scan.objects}
+    refused = {u.location for u in scan.unreadable}
     missed = []
     for p in inputs:
         for d in scan_path(p, unreadable=unreadable):
-            if d.attrs.get("in_policy"):
+            if d.attrs.get("in_policy") or d.location in refused:
                 continue
             if (d.type, norm_id(d.type, d.id)) not in seen:
                 missed.append(f"{d.location}: {d.type} {d.id} ({d.name!r}) is a definition the stock-id "
@@ -165,20 +208,51 @@ def _stock_guard(plan: Plan) -> Tuple[List[str], str]:
 
 
 # ----------------------------------------------------------------- write
-def _write(plan: Plan, out: Path, report_dir: Path, args, inputs: List[Path]) -> List[str]:
-    """Write every emitted object; return the notes about pre-existing files."""
-    notes = []
-    out.mkdir(parents=True, exist_ok=True)
+def _id_map_text(plan: Plan) -> str:
+    lines = []
+    if plan.mint_namespace:
+        lines.append(f"# mint-namespace: {plan.mint_namespace} (uuid {mint_namespace_uuid(plan.mint_namespace)}); "
+                     f"rerun with the same --mint-namespace to get the same ids")
+    lines.append("type\told_id\tnew_id\tname\tsource_name\tfile")
     for e in plan.emitted:
-        p = out / e.relpath
+        new = _rendered_id(e.type, e.id) if e.type in _RENDERED_PREFIX else e.id
+        src_name = e.source_name if e.source_name != e.name else ""
+        lines.append(f"{e.type}\t{e.source_id}\t{new}\t{e.name}\t{src_name}\t{e.relpath}")
+    return "\n".join(lines) + "\n"
+
+
+def _bundled_content_text(plan: Plan, args) -> str:
+    bc: Dict[str, List[str]] = defaultdict(list)
+    kinds = set()
+    for e in plan.emitted:
+        bc[TYPE_DIRS[e.type]].append(e.relpath)
+        if e.type in ("symptom", "alert") and e.yaml_tree.get("adapter_kind"):
+            kinds.add(str(e.yaml_tree["adapter_kind"]))
+    head = ["# Merge into the pak's adapter.yaml (paths are relative to it)."]
+    if args.naming == "unprefixed":
+        head.append("# The names are unprefixed: also set  content_naming: unprefixed")
+    if kinds:
+        head.append(f"# Symptoms and alerts here target {', '.join(sorted(kinds))}: unless that is the pak's own "
+                    f"adapter kind, also set  content_foreign_adapter_kinds: [{', '.join(sorted(kinds))}]")
+    return "\n".join(head) + "\n" + dump_yaml({"bundled_content": dict(bc)})
+
+
+def _write_tree(plan: Plan, root: Path, args, out: Path, report_inside: Optional[Path]) -> List[str]:
+    """Write every emitted object (and PROJECT.yaml, the marker, the report
+    files that live inside --out) under ``root`` (the staging directory).
+    Returns notes."""
+    notes = []
+    for e in plan.emitted:
+        p = root / e.relpath
         p.parent.mkdir(parents=True, exist_ok=True)
-        if p.exists():
-            notes.append(f"OVERWROTE {p} (it existed before this run)")
         p.write_text(e.text, encoding="utf-8")
     if args.layout == "third-party":
-        proj = out / "PROJECT.yaml"
-        if proj.exists():
-            notes.append(f"KEPT {proj} (it existed before this run; not rewritten)")
+        proj = root / "PROJECT.yaml"
+        old = out / "PROJECT.yaml"
+        if old.is_file():
+            shutil.copyfile(old, proj)
+            notes.append(f"KEPT {old} from the earlier run (its attribution may have been edited); every other file "
+                         f"in {out} is replaced")
         else:
             name = args.project_name or out.name
             proj.write_text(dump_yaml({
@@ -189,27 +263,31 @@ def _write(plan: Plan, out: Path, report_dir: Path, args, inputs: List[Path]) ->
                 "factory_native": False,
                 "released": False,
             }), encoding="utf-8")
-    report_dir.mkdir(parents=True, exist_ok=True)
-    lines = ["type\told_id\tnew_id\tname\tfile"]
-    for (t, old, new, name), e in zip(plan.id_table, plan.emitted):
-        lines.append(f"{t}\t{old}\t{_rendered_id(t, new) if t in _RENDERED_PREFIX else new}\t{name}\t{e.relpath}")
-    (report_dir / "id_map.tsv").write_text("\n".join(lines) + "\n", encoding="utf-8")
-    if args.layout == "pak":
-        bc: Dict[str, List[str]] = defaultdict(list)
-        kinds = set()
-        for e in plan.emitted:
-            bc[TYPE_DIRS[e.type]].append(e.relpath)
-            if e.type in ("symptom", "alert") and e.yaml_tree.get("adapter_kind"):
-                kinds.add(str(e.yaml_tree["adapter_kind"]))
-        head = ["# Merge into the pak's adapter.yaml (paths are relative to it)."]
-        if args.naming == "unprefixed":
-            head.append("# The names are unprefixed: also set  content_naming: unprefixed")
-        if kinds:
-            head.append(f"# Symptoms and alerts here target {', '.join(sorted(kinds))}: unless that is the pak's own "
-                        f"adapter kind, also set  content_foreign_adapter_kinds: [{', '.join(sorted(kinds))}]")
-        (report_dir / "bundled_content.yaml").write_text(
-            "\n".join(head) + "\n" + dump_yaml({"bundled_content": dict(bc)}), encoding="utf-8")
+    (root / MARKER).write_text(json.dumps({
+        "written_by": "python3 -m vcfcf_extractor import-local", "layout": args.layout,
+        "files": sorted(e.relpath for e in plan.emitted)}, indent=1) + "\n", encoding="utf-8")
+    if report_inside is not None:
+        rd = root / report_inside
+        rd.mkdir(parents=True, exist_ok=True)
+        (rd / "id_map.tsv").write_text(_id_map_text(plan), encoding="utf-8")
+        if args.layout == "pak":
+            (rd / "bundled_content.yaml").write_text(_bundled_content_text(plan, args), encoding="utf-8")
     return notes
+
+
+def _write_external_report(report_dir: Path, files: Dict[str, str]) -> None:
+    """Write the report files into an explicit --report-dir outside --out:
+    staged beside it and moved in file by file (``os.replace``)."""
+    report_dir.mkdir(parents=True, exist_ok=True)
+    stage = Path(tempfile.mkdtemp(prefix=".import-local-report-", dir=report_dir))
+    try:
+        for name, text in files.items():
+            (stage / name).write_text(text, encoding="utf-8")
+        (stage / REPORT_MARKER).write_text("written by python3 -m vcfcf_extractor import-local\n", encoding="utf-8")
+        for f in stage.iterdir():
+            os.replace(f, report_dir / f.name)
+    finally:
+        shutil.rmtree(stage, ignore_errors=True)
 
 
 # ---------------------------------------------------------------- verify
@@ -289,7 +367,6 @@ def _load_check(plan: Plan, layout: str, args) -> List[str]:
     object whose written YAML a loader refuses, repeating until the rest
     loads (a dashboard whose view was refused then fails too). Nothing is
     written to --out by this step. Returns one line per dropped object."""
-    import shutil
     from vcfcf_core.importer.convert import Failure
     lines: List[str] = []
     base = Path(tempfile.mkdtemp(prefix="vcfcf-import-check-"))
@@ -430,10 +507,15 @@ def _expected_dashboard(e, plan: Plan) -> dict:
 
 
 def _classify(t: str, path: str, kind: str) -> str:
-    g = re.sub(r"\[\d+:", "[", path)
-    g = re.sub(r"\[\]", "[]", g)
-    k = kind.split(" ")[0]
-    return f"{t}: {g} [{k}]"
+    from vcfcf_core.importer.flat import generic
+    return f"{t}: {generic(path)} [{kind}]"
+
+
+def _translate(mark: Mark, rewrites: Dict[str, str]) -> Mark:
+    """A mark recorded on the source (old ids) as the expected side spells
+    it (intended id rewrites applied, lower case)."""
+    path = _UUID.sub(lambda m: rewrites.get(m.group(0).lower(), m.group(0).lower()), mark.path)
+    return Mark(path, mark.kind, mark.subtree, mark.empty_only) if path != mark.path else mark
 
 
 def _verify(plan: Plan, out: Path, layout: str):
@@ -442,9 +524,10 @@ def _verify(plan: Plan, out: Path, layout: str):
     from vcfcf_core.packaging.assembly import _render_supermetrics_dict
     from vcfcf_core.reports.render import render_report_xml
 
-    res = {"objects": 0, "fields": 0, "identical": 0, "only_documented": 0, "per_type": defaultdict(Counter),
-           "classes": Counter(), "class_objects": defaultdict(set), "set_aside": Counter(),
-           "deviations": Counter(), "objects_detail": [], "load_errors": [], "pak_problems": [],
+    res = {"objects": 0, "fields": 0, "identical": 0, "deviation_only": 0, "only_losses": 0, "differ": 0,
+           "per_type": defaultdict(Counter), "classes": Counter(), "class_objects": defaultdict(set),
+           "set_aside": Counter(), "deviations": Counter(), "loss_classes": Counter(),
+           "loss_class_objects": defaultdict(set), "objects_detail": [], "load_errors": [], "pak_problems": [],
            "guard": []}
     try:
         L = _load_layout(plan, out, layout)
@@ -494,6 +577,7 @@ def _verify(plan: Plan, out: Path, layout: str):
         for sw, yw in zip(e.source.payload.get("widgets") or [], d.widgets):
             widget_ids[sw.get("id")] = yw.widget_id
 
+    rewrites = dict(plan.id_rewrites)
     for e in plan.emitted:
         obj = by_path.get(str((out / e.relpath).resolve()))
         detail = {"type": e.type, "name": e.name, "file": e.relpath}
@@ -508,12 +592,10 @@ def _verify(plan: Plan, out: Path, layout: str):
                 c = _cmp.compare_view(_expected_xml(e.source.payload, e, plan), rv)
             elif e.type == "dashboard":
                 buf = io.StringIO()
-                import contextlib
                 with contextlib.redirect_stderr(buf):
                     env = json.loads(render_dashboards_bundle_json(
                         [obj], views_by_name, "00000000-0000-0000-0000-000000000000",
                         known_dashboards=L.dashboards))
-                rewrites = dict(plan.id_rewrites)
                 c = _cmp.compare_dashboard(_expected_dashboard(e, plan), e.source.context.get("entries") or {},
                                            env, env["dashboards"][0], widget_ids, rewrites)
             elif e.type == "report":
@@ -534,49 +616,100 @@ def _verify(plan: Plan, out: Path, layout: str):
                 exp = dict(e.source.payload)
                 exp["name"] = e.name
                 exp["formula"] = re.sub(r"sm_(" + _UUID.pattern + ")",
-                                        lambda m: "sm_" + plan.id_rewrites.get(m.group(1).lower(), m.group(1)),
+                                        lambda m: "sm_" + rewrites.get(m.group(1).lower(), m.group(1)),
                                         str(exp.get("formula", "")))
-                c = _cmp.compare_supermetric(exp, sm_render[obj.id])
+                got = dict(sm_render[obj.id])
+                if "id" in exp:
+                    exp["id"] = e.id
+                    got["id"] = obj.id
+                c = _cmp.compare_supermetric(exp, got)
         except Exception as exc:
             res["load_errors"].append(f"{e.relpath}: render or compare failed: {type(exc).__name__}: {exc}")
             continue
         res["objects"] += 1
         res["fields"] += c.fields
         res["set_aside"].update(c.set_aside)
-        dev_keys = {k for d in e.deviations for k in d.wire_keys}
-        documented = loss_path_patterns(e.losses)
-        differences, by_loss = [], 0
-        for path, kind in c.differences:
-            if any(re.search(r"[.@/]" + re.escape(k) + r"(\b|$)", path) for k in dev_keys):
-                res["deviations"][_classify(e.type, path, kind)] += 1
+        dev_marks = [_translate(m, rewrites) for d in e.deviations for m in d.marks]
+        loss_marks = [(x, _translate(m, rewrites)) for x in e.losses for m in x.marks]
+        differences, at_losses, at_devs = [], [], []
+        losses_hit = set()
+        for d in c.differences:
+            if any(m.matches(d) for m in dev_marks):
+                res["deviations"][_classify(e.type, d.path, d.kind)] += 1
+                at_devs.append(d)
                 continue
-            cls = _classify(e.type, path, kind)
-            explained = any(re.search(rx, path) for rx in documented)
-            if explained:
-                by_loss += 1
-                cls += "  (a documented loss of this object)"
-            differences.append((path, kind))
+            hit = next((x for x, m in loss_marks if m.matches(d)), None)
+            if hit is not None:
+                at_losses.append(d)
+                losses_hit.add(hit.cls)
+                res["loss_classes"][hit.cls] += 1
+                res["loss_class_objects"][hit.cls].add(e.relpath)
+                continue
+            differences.append(d)
+            cls = _classify(e.type, d.path, d.kind)
             res["classes"][cls] += 1
             res["class_objects"][cls].add(e.relpath)
         detail["fields"] = c.fields
-        detail["differences"] = differences
+        detail["differences"] = [list(d) for d in differences]
+        detail["at_recorded_losses"] = [list(d) for d in at_losses]
+        detail["recorded_losses"] = [x.text for x in e.losses]
         detail["target_deviations"] = [d.text for d in e.deviations]
-        res["per_type"][e.type]["compared"] += 1
-        if not differences:
+        detail["at_target_deviations"] = [list(d) for d in at_devs]
+        pt = res["per_type"][e.type]
+        pt["compared"] += 1
+        if differences:
+            status = "differs"
+            res["differ"] += 1
+        elif at_losses:
+            status = "differs only at recorded losses"
+            res["only_losses"] += 1
+        elif at_devs:
+            status = "identical apart from forced target keys"
+            res["deviation_only"] += 1
+        else:
+            status = "identical"
             res["identical"] += 1
-            res["per_type"][e.type]["identical"] += 1
-        elif by_loss == len(differences):
-            res["only_documented"] += 1
-            res["per_type"][e.type]["only documented losses"] += 1
+        pt[status] += 1
+        detail["status"] = status
         res["objects_detail"].append(detail)
     return res
 
 
 # ------------------------------------------------------------------- main
+def _check_out(out: Path, args) -> Optional[str]:
+    """``None`` when --out may be written, else the refusal."""
+    if not out.exists():
+        return None
+    if not out.is_dir():
+        return f"--out {out} exists and is not a directory"
+    if not any(out.iterdir()):
+        return None
+    if not args.force:
+        return (f"--out {out} is not empty; pass --force to replace a directory this importer wrote before "
+                f"(it carries {MARKER})")
+    if not (out / MARKER).is_file():
+        return (f"--out {out} is not empty and was not written by import-local (no {MARKER}); --force replaces "
+                f"only such a directory. Choose an empty or new --out")
+    return None
+
+
+def _check_report_dir(report_dir: Path) -> Optional[str]:
+    if not report_dir.exists():
+        return None
+    if not report_dir.is_dir():
+        return f"--report-dir {report_dir} exists and is not a directory"
+    ours = [f for f in REPORT_FILES if (report_dir / f).exists()]
+    if ours and not (report_dir / REPORT_MARKER).is_file():
+        return (f"--report-dir {report_dir} holds {', '.join(ours)}, which import-local did not write (no "
+                f"{REPORT_MARKER}); it does not overwrite them. Choose another --report-dir")
+    return None
+
+
 def run(args) -> int:
     inputs = [Path(p) for p in args.inputs]
     out = Path(args.out)
     report_dir = Path(args.report_dir) if args.report_dir else out / "import-report"
+    report_inside = report_dir.resolve().relative_to(out.resolve()) if _inside(report_dir, out) else None
     for p in inputs:
         if not p.exists():
             _err(f"ERROR: input not found: {p}")
@@ -587,8 +720,20 @@ def run(args) -> int:
         if _inside(report_dir, p):
             _err(f"ERROR: --report-dir {report_dir} is inside the input {p}; inputs are read only")
             return EXIT_USAGE
-    if not args.dry_run and out.exists() and any(out.iterdir()) and not args.force:
-        _err(f"ERROR: --out {out} is not empty; pass --force to write into it (every overwritten file is listed)")
+    if not args.dry_run:
+        problem = _check_out(out, args) or (_check_report_dir(report_dir) if report_inside is None else None)
+        if problem:
+            _err(f"ERROR: {problem}")
+            return EXIT_USAGE
+    mint_ns = None
+    if getattr(args, "ids", None) == "mint":
+        mint_ns = args.mint_namespace or (f"project:{args.project_name}" if args.project_name else None)
+        if not mint_ns:
+            _err("ERROR: --ids mint needs --mint-namespace TEXT (or --project-name, whose 'project:<name>' is the "
+                 "default): the minted ids derive from it, so a rerun gives the same ids")
+            return EXIT_USAGE
+    elif args.mint_namespace:
+        _err("ERROR: --mint-namespace is only used with --ids mint")
         return EXIT_USAGE
     try:
         id_map: Dict[str, str] = {}
@@ -600,13 +745,14 @@ def run(args) -> int:
         drop: Dict[str, str] = {}
         for f in args.drop or []:
             drop.update(parse_id_list(Path(f).read_text(encoding="utf-8"), f))
-        rename = parse_tsv_map(Path(args.rename).read_text(encoding="utf-8"), args.rename) if args.rename else {}
+        rename = parse_rename_map(Path(args.rename).read_text(encoding="utf-8"), args.rename) if args.rename else {}
     except (OSError, ValueError) as exc:
         _err(f"ERROR: {exc}")
         return EXIT_USAGE
     opts = ConvertOptions(ids="map" if args.id_map else args.ids, id_map=id_map, drop=drop,
                           naming=args.naming, rename=rename, target_min=args.target_min,
-                          prefer_sources=list(args.prefer_source or []), layout=args.layout)
+                          prefer_sources=list(args.prefer_source or []), layout=args.layout,
+                          mint_namespace=mint_ns)
 
     scan = scan_inputs(inputs)
     missed, guard_unreadable = _completeness(scan, inputs)
@@ -630,6 +776,9 @@ def run(args) -> int:
     # -- report: what was found -------------------------------------------
     _say(f"import-local: {len(inputs)} input(s), {scan.files_read} file(s) read, "
          f"{len(scan.objects)} definition(s) found ({len(plan.merged_duplicates)} id(s) repeated in several files)")
+    if plan.mint_namespace:
+        _say(f"ids minted from namespace {plan.mint_namespace!r} (uuid {mint_namespace_uuid(plan.mint_namespace)}): "
+             f"a rerun with the same namespace gives the same ids")
     if scan.passed_over:
         _say(f"passed over (not content objects): {len(scan.passed_over)}")
         for po in scan.passed_over:
@@ -646,20 +795,30 @@ def run(args) -> int:
              f"(copies in {'; '.join(_rel_location(x, roots) for x in locs)})")
     for t, i, n, locs in plan.dropped:
         _say(f"dropped (--drop): {t} {i} {n!r}")
+    for f in plan.unsupported:
+        _say(f"NOT CONVERTED (unsupported type) {f.type} {f.id} {f.name!r} in {_rel_location(f.locations[0], roots)}")
     for f in plan.failures:
-        _say(f"FAILED {f.type} {f.id} {f.name!r}: {_rel_reason(f.reason, roots)}")
+        if f.kind == "unsupported":
+            continue
+        label = "INTERNAL ERROR" if f.kind == "internal" else "FAILED"
+        _say(f"{label} {f.type} {f.id} {f.name!r}: {_rel_reason(f.reason, roots)}")
         if f.gap:
             _say("  TOOLSET GAP")
             for k, v in f.gap.items():
                 _say(f"  - {k}: {v}")
     for e in plan.emitted:
+        if e.rename_reasons:
+            _say(f"RENAMED {e.type} {e.source_name!r} -> {e.name!r} ({'; '.join(e.rename_reasons)})")
+    for e in plan.emitted:
         for loss in e.losses:
-            _say(f"LOSS {e.type} {e.name!r}: {loss}")
+            _say(f"LOSS {e.type} {e.name!r}: {loss.text} [at {', '.join(m.path for m in loss.marks)}]")
     for e in plan.emitted:
         for d in e.deviations:
             _say(f"TARGET {args.target_min}: {e.relpath}: {d.text}")
         for w in e.version_warnings:
             _say(f"VERSION: {e.relpath}: {w}")
+        for u in e.undeliverable:
+            _say(f"NOT DELIVERABLE to {args.target_min}: {e.relpath} ({e.name!r}): converted, but {u}")
     note_files: Dict[Tuple[str, str], List[str]] = defaultdict(list)
     for e in plan.emitted:
         for n in e.notes:
@@ -689,21 +848,70 @@ def run(args) -> int:
 
     if args.dry_run:
         _summary(plan, unreadable, missed)
-        _say("dry run: nothing written")
+        _say("dry run: nothing written, nothing verified")
         return _exit(plan, unreadable, missed, None, args)
 
-    notes = _write(plan, out, report_dir, args, inputs)
-    for n in notes:
-        _say(n)
-    _say(f"wrote {len(plan.emitted)} YAML file(s) under {out} ({args.layout} layout); "
-         f"report, id map{' and bundled_content snippet' if args.layout == 'pak' else ''} in {report_dir}")
-    v = None
-    if args.verify:
-        v = _verify(plan, out, args.layout)
-        _print_verify(v, args)
-    _summary(plan, unreadable, missed)
-    _write_report(plan, report_dir, args, scan, unreadable, missed, v, roots)
-    return _exit(plan, unreadable, missed, v, args)
+    # -- write into a staging sibling, verify there, move into place ------
+    try:
+        out.parent.mkdir(parents=True, exist_ok=True)
+        stage = Path(tempfile.mkdtemp(prefix=f".{out.name}.import-local-", dir=out.parent))
+    except OSError as exc:
+        _err(f"ERROR: cannot create a staging directory beside {out}: {exc}; nothing written")
+        return EXIT_USAGE
+    try:
+        try:
+            for n in _write_tree(plan, stage, args, out, report_inside):
+                _say(n)
+        except OSError as exc:
+            _err(f"ERROR: writing the tree failed ({type(exc).__name__}: {exc}); nothing written to {out}")
+            return EXIT_USAGE
+        v = None
+        if args.verify:
+            v = _verify(plan, stage, args.layout)
+            for k in ("load_errors", "pak_problems", "guard"):
+                v[k] = [x.replace(str(stage), str(out)) for x in v[k]]
+            _print_verify(v, args)
+        else:
+            _say("")
+            _say("WARNING: --no-verify: nothing was checked. The written YAML was not loaded by the layout's "
+                 "loader, rendered or compared with the source")
+        _summary(plan, unreadable, missed)
+        rc = _exit(plan, unreadable, missed, v, args)
+        rep = _report(plan, args, scan, unreadable, missed, v, roots, rc)
+        rep_files = {"report.json": json.dumps(rep, indent=2, default=str), "id_map.tsv": _id_map_text(plan)}
+        if args.layout == "pak":
+            rep_files["bundled_content.yaml"] = _bundled_content_text(plan, args)
+        if rc == EXIT_OK:
+            if report_inside is not None:
+                (stage / report_inside / "report.json").write_text(rep_files["report.json"], encoding="utf-8")
+            _place(stage, out)
+            stage = None
+            if report_inside is None:
+                _write_external_report(report_dir, rep_files)
+            _say(f"wrote {len(plan.emitted)} YAML file(s) under {out} ({args.layout} layout); report, id map"
+                 f"{' and bundled_content snippet' if args.layout == 'pak' else ''} in {report_dir}")
+        else:
+            _say(f"nothing written to {out}: the run did not succeed (exit {rc}); the tree was staged, "
+                 f"verified and removed. Fix what is reported, or pass --allow-partial to accept what it accepts")
+            if report_inside is None:
+                _write_external_report(report_dir, rep_files)
+                _say(f"report and id map written to {report_dir}")
+        return rc
+    finally:
+        if stage is not None:
+            shutil.rmtree(stage, ignore_errors=True)
+
+
+def _place(stage: Path, out: Path) -> None:
+    """Move the staged tree to ``out``, replacing an earlier run's tree whole."""
+    old = None
+    if out.exists():
+        old = Path(tempfile.mkdtemp(prefix=f".{out.name}.import-local-old-", dir=out.parent))
+        old.rmdir()
+        os.replace(out, old)
+    os.replace(stage, out)
+    if old is not None:
+        shutil.rmtree(old, ignore_errors=True)
 
 
 def _rel_reason(reason: str, roots: List[Path]) -> str:
@@ -715,92 +923,131 @@ def _rel_reason(reason: str, roots: List[Path]) -> str:
 def _summary(plan: Plan, unreadable, missed) -> None:
     c = plan.counts()
     _say("")
-    _say("summary            found  converted  with losses  failed  dropped")
+    _say("summary            found  converted  with losses  not deliverable  failed  internal errors  dropped")
     for t in CONTENT_TYPES:
         r = c[t]
-        _say(f"  {t:16s} {r['found']:5d}  {r['converted']:9d}  {r['with_losses']:11d}  {r['failed']:6d}  {r['dropped']:7d}")
+        _say(f"  {t:16s} {r['found']:5d}  {r['converted']:9d}  {r['with_losses']:11d}  {r['undeliverable']:15d}  "
+             f"{r['failed']:6d}  {r['internal_errors']:15d}  {r['dropped']:7d}")
+    uns = Counter(f.type for f in plan.unsupported)
+    for t, n in sorted(uns.items()):
+        _say(f"  {t:16s} {n:5d}  not converted (unsupported type)")
     if unreadable or missed:
         _say(f"  inputs that could not be read: {len(unreadable)}; definitions missed: {len(missed)}")
 
 
 def _print_verify(v, args) -> None:
     _say("")
-    _say(f"verify ({args.layout} layout, real loaders): compared {v['objects']} object(s), {v['fields']} field(s); "
-         f"{v['identical']} identical; {v['only_documented']} differ only where they list a documented loss")
+    _say(f"verify ({args.layout} layout, real loaders): compared {v['objects']} object(s), {v['fields']} field(s): "
+         f"{v['identical']} identical; {v['deviation_only']} identical apart from keys forced by --target-min; "
+         f"{v['only_losses']} differ only at recorded losses; {v['differ']} differ")
     for t, cnt in sorted(v["per_type"].items()):
-        extra = f"; {cnt['only documented losses']} more differ only by a documented loss" if cnt["only documented losses"] else ""
-        _say(f"  {t:16s} {cnt['identical']} of {cnt['compared']} identical{extra}")
+        _say(f"  {t:16s} {cnt['identical']} of {cnt['compared']} identical"
+             + (f"; {cnt['identical apart from forced target keys']} apart from forced target keys"
+                if cnt["identical apart from forced target keys"] else "")
+             + (f"; {cnt['differs only at recorded losses']} only at recorded losses"
+                if cnt["differs only at recorded losses"] else "")
+             + (f"; {cnt['differs']} differ" if cnt["differs"] else ""))
     for le in v["load_errors"]:
         _say(f"  LOAD ERROR: {le}")
     for pp in v["pak_problems"]:
         _say(f"  PAK CHECK: {pp}")
     for g in v["guard"]:
         _say(f"  STOCK-ID (loaded tree): {g}")
+    if v["loss_classes"]:
+        _say("  differences at recorded losses (class: objects / differences):")
+        for cls, n in sorted(v["loss_classes"].items(), key=lambda kv: (-len(v["loss_class_objects"][kv[0]]), kv[0])):
+            _say(f"    {len(v['loss_class_objects'][cls]):4d} / {n:5d}  {cls}")
     if v["classes"]:
         _say("  differences (class: objects / occurrences):")
         for cls, n in sorted(v["classes"].items(), key=lambda kv: (-len(v["class_objects"][kv[0]]), kv[0])):
             _say(f"    {len(v['class_objects'][cls]):4d} / {n:4d}  {cls}")
     if v["deviations"]:
-        _say("  differences forced by --target-min (listed deviations):")
+        _say("  differences forced by --target-min (each at its recorded path):")
         for cls, n in sorted(v["deviations"].items()):
             _say(f"    {n:4d}  {cls}")
-    _say("  set aside as documented non-differences (count):")
+    _say("  set aside, by class (count):")
     for cls, n in sorted(v["set_aside"].items()):
         _say(f"    {n:6d}  {cls}")
-    _say("    (always also: whitespace collapsed; number spelling; attribute, Property and JSON key order)")
     for d in v["objects_detail"]:
-        if d["differences"]:
+        if d["status"] == "differs":
             _say(f"  DIFFERS {d['file']} ({d['name']!r}):")
-            for path, kind in d["differences"][:12]:
-                _say(f"      {path}: {kind}")
+            for path, kind, detail in d["differences"][:12]:
+                _say(f"      {path}: {kind} {detail}")
             if len(d["differences"]) > 12:
                 _say(f"      ... {len(d['differences']) - 12} more")
+        elif d["status"] == "differs only at recorded losses":
+            _say(f"  ONLY RECORDED LOSSES {d['file']} ({d['name']!r}): differs only at "
+                 f"{len(d['at_recorded_losses'])} recorded loss difference(s): {'; '.join(d['recorded_losses'])}")
 
 
-def _write_report(plan: Plan, report_dir: Path, args, scan, unreadable, missed, v, roots) -> None:
+def _report(plan: Plan, args, scan, unreadable, missed, v, roots, rc) -> dict:
     rep = {
         "command": "import-local",
+        "exit": rc,
         "layout": args.layout, "ids": "map" if args.id_map else args.ids, "naming": args.naming,
+        "mint_namespace": plan.mint_namespace,
         "target_min": args.target_min,
+        "verified": v is not None,
         "counts": plan.counts(),
         "passed_over": [{"location": _rel_location(p.location, roots), "reason": p.reason} for p in scan.passed_over],
         "unreadable": [{"location": _rel_location(u.location, roots), "reason": u.reason} for u in unreadable],
         "missed": missed,
         "merged_duplicates": [{"type": t, "id": i, "files": [_rel_location(x, roots) for x in locs]}
                               for t, i, locs in plan.merged_duplicates],
-        "failures": [{"type": f.type, "id": f.id, "name": f.name, "reason": _rel_reason(f.reason, roots),
-                      "gap": f.gap} for f in plan.failures],
+        "failures": [{"type": f.type, "id": f.id, "name": f.name, "kind": f.kind,
+                      "reason": _rel_reason(f.reason, roots), "gap": f.gap} for f in plan.failures],
         "dropped": [{"type": t, "id": i, "name": n} for t, i, n, _ in plan.dropped],
         "objects": [{"type": e.type, "file": e.relpath, "source_id": e.source_id, "id": e.id, "name": e.name,
-                     "losses": e.losses, "notes": e.notes, "deviations": [d.text for d in e.deviations],
-                     "version_warnings": e.version_warnings} for e in plan.emitted],
+                     "source_name": e.source_name, "renamed": e.rename_reasons,
+                     "losses": [{"class": x.cls, "text": x.text, "at": [m.path for m in x.marks]} for x in e.losses],
+                     "notes": e.notes, "deviations": [{"text": d.text, "at": [m.path for m in d.marks]}
+                                                      for d in e.deviations],
+                     "version_warnings": e.version_warnings, "not_deliverable": e.undeliverable}
+                    for e in plan.emitted],
         "warnings": plan.warnings,
     }
     if v is not None:
         rep["verify"] = {
             "objects": v["objects"], "fields": v["fields"], "identical": v["identical"],
-            "only_documented_losses": v["only_documented"],
+            "identical_apart_from_forced_target_keys": v["deviation_only"],
+            "differ_only_at_recorded_losses": v["only_losses"], "differ": v["differ"],
             "per_type": {t: dict(c) for t, c in v["per_type"].items()},
+            "recorded_loss_classes": {k: {"objects": len(v["loss_class_objects"][k]), "differences": n}
+                                      for k, n in v["loss_classes"].items()},
             "difference_classes": {k: {"objects": len(v["class_objects"][k]), "occurrences": n}
                                    for k, n in v["classes"].items()},
             "target_deviations": dict(v["deviations"]), "set_aside": dict(v["set_aside"]),
             "load_errors": v["load_errors"], "pak_problems": v["pak_problems"], "stock_ids": v["guard"],
             "objects_detail": v["objects_detail"],
         }
-    (report_dir / "report.json").write_text(json.dumps(rep, indent=2, default=str), encoding="utf-8")
+    return rep
 
 
 def _exit(plan: Plan, unreadable, missed, v, args) -> int:
+    if plan.internal_errors:
+        _err(f"internal error in the converter on {len(plan.internal_errors)} object(s) (listed as INTERNAL ERROR); "
+             f"--allow-partial does not accept it")
+        return EXIT_INTERNAL
     if unreadable or missed:
         return EXIT_PARTIAL
-    if v is not None:
-        if v["objects"] == 0 or v["fields"] == 0:
-            _err("verify: compared nothing")
-            return EXIT_NOTHING
-        if v["load_errors"] or v["guard"]:
-            return EXIT_PARTIAL
-    partial = bool(plan.failures) or any(e.losses for e in plan.emitted) or (
-        v is not None and (v["identical"] != v["objects"] or v["pak_problems"]))
+    if v is not None and (v["objects"] == 0 or v["fields"] == 0):
+        _err("verify: compared nothing")
+        return EXIT_NOTHING
+    never = False
+    if v is not None and (v["load_errors"] or v["guard"]):
+        never = True
+    if args.layout == "pak":
+        # A pak build refuses these; accepting them would write a pak tree
+        # that does not build or does not deliver to the stated target.
+        if v is not None and v["pak_problems"]:
+            never = True
+        if any(e.undeliverable for e in plan.emitted):
+            never = True
+    if never:
+        return EXIT_PARTIAL
+    partial = (bool(plan.failures) or any(e.losses for e in plan.emitted)
+               or any(e.undeliverable for e in plan.emitted)
+               or (v is not None and (v["differ"] or v["only_losses"])))
     if partial and not args.allow_partial:
         return EXIT_PARTIAL
     return EXIT_OK

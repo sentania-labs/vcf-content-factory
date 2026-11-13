@@ -6,12 +6,16 @@ source differs from what the renderer emits without it, and an ``omit:``
 entry wherever the source leaves out a Property the renderer always writes,
 so a load and render reproduces the source.
 
-What the schema cannot express is a *loss*: the object still converts, and
-each loss is listed (``MappedObject.losses``). The documented ones (the
-view fidelity doc §Not modeled) are a buckets-control on a list view, an
+What the schema cannot express is a documented *loss* when the view
+fidelity doc lists it as not modeled (a buckets-control on a list view, an
 empty ``preferredUnitId``, filter ``values`` lists and ``conditionId``, a
-different filter per SubjectType; anything the mapper does not recognise is
-reported by name as well.
+different filter per SubjectType, ``startSubUnit``,
+``BlacklistResourceKind``, ``includeNotExistingResources``, ``cellLink``,
+related-object columns, ``objectType=POLICY``, per-column transformations
+on a trend view, and the Title / Description ``localizationKey``): the view
+converts and the loss is recorded at its exact flat path. Anything else
+stops the view with a TOOLSET GAP. After mapping, ``accounting.account``
+classifies every source key.
 """
 from __future__ import annotations
 
@@ -20,7 +24,9 @@ import re
 from collections import OrderedDict
 from typing import Dict, List, Tuple
 
-from .model import MappedObject, MappingError, loss_or_gap
+from . import flat as _flat
+from .accounting import account
+from .model import MappedObject, MappingError, Mark, documented_loss, gap_error
 from .refs import Ref
 
 DATA_TYPES = {"list-view": "list", "distribution-view": "distribution", "trend-view": "trend"}
@@ -90,13 +96,18 @@ class _ViewMapper:
     def __init__(self, elem, location: str):
         self.v = elem
         self.location = location
-        self.losses: List[str] = []
+        self.losses = []
         self.refs: List[Ref] = []
+        self.subject_paths: List[str] = []
 
     def loss(self, msg: str) -> None:
-        """A documented not-modeled feature is listed; anything else stops
-        the view with a TOOLSET GAP (model.loss_or_gap)."""
-        loss_or_gap(self.losses, msg, "view")
+        """A feature the schema cannot carry and the docs do not list: the
+        view stops with a TOOLSET GAP."""
+        raise gap_error(msg, "view")
+
+    def doc(self, cls: str, msg: str, marks) -> None:
+        """A documented not-modeled feature: recorded at its exact marks."""
+        documented_loss(self.losses, cls, msg, list(marks))
 
     # ------------------------------------------------------------ filter
     def _filter(self, fjson: str):
@@ -111,8 +122,13 @@ class _ViewMapper:
             g = []
             for c in grp:
                 extra = set(c) - _FILTER_KEYS
-                if extra:
-                    self.loss(f"subject filter keys {sorted(extra)} are not modeled (view fidelity doc §Not modeled)")
+                if extra - {"conditionId"}:
+                    self.loss(f"subject filter keys {sorted(extra - {'conditionId'})} are not modeled")
+                if "conditionId" in extra:
+                    gi, ci = len(groups), len(g)
+                    self.doc("filter conditionId", "subject filter conditionId is not modeled (view fidelity doc "
+                             "§Not modeled)", [Mark(f"{sp}@filter[{gi}][{ci}].conditionId", "missing")
+                                               for sp in self.subject_paths])
                 mv = c.get("metricValue") or {}
                 if "values" in mv and mv.get("value") is None and c.get("condition") not in ("EXISTS", "NOT_EXISTS"):
                     # Only the list carries the operand: without it the
@@ -122,7 +138,11 @@ class _ViewMapper:
                         f"operand from a metricValue.values list, which the view YAML does not model",
                         gap={"what": "view subject filter metricValue.values (a list operand)"})
                 if "values" in mv:
-                    self.loss("subject filter metricValue.values list is not modeled")
+                    gi, ci = len(groups), len(g)
+                    self.doc("filter values list", "subject filter metricValue.values list is not modeled (view "
+                             "fidelity doc §Not modeled)", [Mark(f"{sp}@filter[{gi}][{ci}].metricValue.values",
+                                                                 "missing", subtree=True)
+                                                            for sp in self.subject_paths])
                 d = OrderedDict()
                 d["filter_type"] = c.get("filterType")
                 d["metric_key"] = c.get("metricKey")
@@ -154,10 +174,18 @@ class _ViewMapper:
         return ref
 
     def _column(self, d: dict, kinds, dt: str, trend_tx: list, forecast: list, idx: int):
+        documented_props = {"includeNotExistingResources": "includeNotExistingResources", "cellLink": "cellLink",
+                            "related": "related-object column", "isRelatedMetricAProperty": "related-object column"}
         for k in d:
-            if k not in _COLUMN_PROPS:
+            if k in documented_props:
+                self.doc(documented_props[k], f"column {idx}: Property {k} is not modeled (view fidelity doc "
+                         f"§Not modeled)", [Mark(_flat.view_column(idx, k), "missing", subtree=True)])
+            elif k not in _COLUMN_PROPS:
                 self.loss(f"column {idx}: Property {k} is not modeled")
-        if d.get("objectType", "RESOURCE") != "RESOURCE":
+        if d.get("objectType", "RESOURCE") == "POLICY":
+            self.doc("objectType POLICY", f"column {idx}: objectType 'POLICY' is not modeled (renders RESOURCE; "
+                     f"view fidelity doc §Not modeled)", [Mark(_flat.view_column(idx, "objectType") + "@value", "value")])
+        elif d.get("objectType", "RESOURCE") != "RESOURCE":
             self.loss(f"column {idx}: objectType {d.get('objectType')!r} is not modeled (renders RESOURCE)")
         col: Dict[str, object] = OrderedDict()
         omit: List[str] = []
@@ -209,7 +237,9 @@ class _ViewMapper:
             if d["preferredUnitId"]:
                 col["unit"] = d["preferredUnitId"]
             else:
-                self.loss(f"column {idx}: empty preferredUnitId is not modeled (view fidelity doc §Not modeled)")
+                self.doc("empty preferredUnitId", f"column {idx}: empty preferredUnitId is not modeled (view "
+                         f"fidelity doc §Not modeled)", [Mark(_flat.view_column(idx, "preferredUnitId"), "any",
+                                                              subtree=True)])
         if d.get("isProperty") == "true":
             col["is_property"] = True
         elif "isProperty" not in d:
@@ -248,7 +278,7 @@ class _ViewMapper:
         elif tx is None:
             omit.append("transformation")
         elif dt == "trend":
-            trend_tx.append(tuple(tx))
+            trend_tx.append((idx, tuple(tx)))
             if "forecastDays" in d:
                 forecast.append(d["forecastDays"])
             else:
@@ -316,7 +346,9 @@ class _ViewMapper:
         if d.get("preferredUnitId"):
             col["unit"] = d["preferredUnitId"]
         elif "preferredUnitId" in d:
-            self.loss(f"additional column {idx}: empty preferredUnitId is not modeled")
+            self.doc("empty preferredUnitId", f"additional column {idx}: empty preferredUnitId is not modeled (view "
+                     f"fidelity doc §Not modeled)", [Mark(_flat.view_additional_column(idx, "preferredUnitId"), "any",
+                                                          subtree=True)])
         if d.get("isStringAttribute") == "true":
             col["is_string_attribute"] = True
         if d.get("isProperty") == "true":
@@ -348,11 +380,18 @@ class _ViewMapper:
         y: Dict[str, object] = OrderedDict()
         y["id"] = v.get("id")
         title = v.find("Title")
-        y["name"] = (v.findtext("Title") or "").strip()
-        y["description"] = (v.findtext("Description") or "").strip()
+        # The name exactly as the source has it: the planner records any
+        # change (whitespace the loader strips) as a rename.
+        y["name"] = v.findtext("Title") or ""
+        desc = v.findtext("Description") or ""
+        if desc != desc.strip():
+            self.loss("Description with leading or trailing whitespace (the view loader strips it)")
+        y["description"] = desc
         for el, label in ((title, "Title"), (v.find("Description"), "Description")):
-            if el is not None and el.get("localizationKey"):
-                self.loss(f"{label} localizationKey is not modeled (no localization bundle ships with the YAML)")
+            if el is not None and el.get("localizationKey") is not None:
+                self.doc("Title/Description localizationKey",
+                         f"{label} localizationKey is not modeled (no localization bundle ships with the YAML; "
+                         f"DEF-018)", [Mark(f"{_flat.VIEW}/{label}@localizationKey", "missing")])
         dps = [d.get("dataType") for d in v.iter("DataProvider")]
         if not dps or dps[0] not in DATA_TYPES:
             pres_t = (v.find("Presentation").get("type") if v.find("Presentation") is not None else None)
@@ -374,15 +413,22 @@ class _ViewMapper:
 
         entries: "OrderedDict[Tuple[str, str], List[str]]" = OrderedDict()
         filters = []
+        seen_st: Dict[Tuple[str, str, str], int] = {}
         for st in v.findall("SubjectType"):
             entries.setdefault((st.get("adapterKind"), st.get("resourceKind")), []).append(st.get("type"))
             filters.append(st.get("filter"))
+            k = (st.get("adapterKind") or "", st.get("resourceKind") or "", st.get("type") or "")
+            self.subject_paths.append(_flat.view_subject(*k, n=seen_st.get(k, 0)))
+            seen_st[k] = seen_st.get(k, 0) + 1
             if set(st.attrib) - {"adapterKind", "resourceKind", "type", "filter"}:
                 self.loss(f"SubjectType attributes {sorted(set(st.attrib) - {'adapterKind', 'resourceKind', 'type', 'filter'})} are not modeled")
         if not entries:
             raise MappingError("ViewDef has no SubjectType")
         if len(set(filters)) > 1:
-            self.loss("different filters per SubjectType are not modeled (the first is applied to all)")
+            self.doc("per-SubjectType filters that differ", "different filters per SubjectType are not modeled (the "
+                     "first is applied to all; view fidelity doc §Not modeled)",
+                     [Mark(f"{sp}@filter", "any", subtree=True) for sp, f in zip(self.subject_paths, filters)
+                      if f != filters[0]])
         kinds = list(entries)
         if len(kinds) == 1:
             (ak, rk), types = kinds[0], entries[kinds[0]]
@@ -409,8 +455,15 @@ class _ViewMapper:
         usage = [(u.text or "").strip() for u in v.findall("Usage")]
         if sorted(usage) != sorted(_USAGE_ALL):
             y["usage"] = usage
+        seen_top: Dict[str, int] = {}
         for child in v:
-            if child.tag not in _TOP_LEVEL:
+            n = seen_top.get(child.tag, 0)
+            seen_top[child.tag] = n + 1
+            if child.tag == "BlacklistResourceKind":
+                self.doc("BlacklistResourceKind", "element BlacklistResourceKind is not modeled (view fidelity doc "
+                         "§Not modeled)", [Mark(f"{_flat.VIEW}/BlacklistResourceKind" + (f"~{n}" if n else ""),
+                                                "missing", subtree=True)])
+            elif child.tag not in _TOP_LEVEL:
                 self.loss(f"top-level element {child.tag} is not modeled")
 
         ctls: Dict[str, object] = {}
@@ -430,7 +483,12 @@ class _ViewMapper:
         else:
             tis = _ctl_props(ctls["time-interval-selector"])
             for k in tis:
-                if k not in ("advancedTimeMode", "unit", "count", "startPeriod", "endPeriod"):
+                if k == "startSubUnit":
+                    self.doc("startSubUnit", "time-interval-selector Property startSubUnit is not modeled (view "
+                             "fidelity doc §Not modeled)",
+                             [Mark(_flat.view_prop(_flat.view_control("time-interval-selector"), k), "missing",
+                                   subtree=True)])
+                elif k not in ("advancedTimeMode", "unit", "count", "startPeriod", "endPeriod"):
                     self.loss(f"time-interval-selector Property {k} is not modeled")
             for k in ("unit", "count"):
                 if k not in tis:
@@ -460,9 +518,14 @@ class _ViewMapper:
         for i, it in enumerate(lst if lst is not None else []):
             cols.append(self._column(_item_props(it), kinds, dt, trend_tx, forecast, i))
         if dt == "trend" and trend_tx:
-            if len(set(trend_tx)) > 1:
-                self.loss("trend columns with differing transformations are not modeled (first kept)")
-            y["transformations"] = list(trend_tx[0])
+            first = trend_tx[0][1]
+            differing = [i for i, t in trend_tx if t != first]
+            if differing:
+                self.doc("per-column transformations on a trend view",
+                         "trend columns with differing transformations are not modeled (the first column's are "
+                         "rendered on every column; view fidelity doc §Not modeled)",
+                         [Mark(_flat.view_column(i, "transformations"), "any", subtree=True) for i in differing])
+            y["transformations"] = list(first)
             fd = {f for f in forecast}
             if len(fd) > 1:
                 self.loss("trend columns with differing forecastDays are not modeled")
@@ -494,8 +557,6 @@ class _ViewMapper:
                     self.loss(f"pagination-control Property {k} is not modeled")
             if pp.get("start", "0") != "0":
                 self.loss(f"pagination start {pp.get('start')} is not modeled (renders 0)")
-            if ctls["pagination-control"].get("visible") != "true":
-                self.loss("pagination-control visible other than true is not modeled")
             size = int(pp.get("size", "500"))
             if dt == "distribution" or size != 500:
                 y["page_size"] = size
@@ -504,8 +565,12 @@ class _ViewMapper:
 
         if "buckets-control" in ctls:
             bp = _ctl_props(ctls["buckets-control"])
-            if dt != "distribution":
-                self.loss("buckets-control on a non-distribution view is not modeled (view fidelity doc §Not modeled)")
+            if dt != "distribution" and dt == "list":
+                self.doc("buckets-control on a list view", "buckets-control on a list view is not modeled (view "
+                         "fidelity doc §Not modeled)", [Mark(_flat.view_control("buckets-control"), "missing",
+                                                             subtree=True)])
+            elif dt != "distribution":
+                self.loss(f"buckets-control on a {dt} view is not modeled")
             else:
                 y["buckets"] = self._buckets(bp)
         elif dt == "distribution":
@@ -588,7 +653,9 @@ class _ViewMapper:
 
 
 def map_view(elem, location: str) -> MappedObject:
-    """Map one ``<ViewDef>`` element. Raises ``MappingError``."""
+    """Map one ``<ViewDef>`` element, then classify every source key
+    (``accounting.account``). Raises ``MappingError``."""
     m = _ViewMapper(elem, location)
     y = m.map()
-    return MappedObject("view", y, losses=m.losses)
+    account("view", _flat.flatten_view(elem), m.losses)
+    return MappedObject("view", y, losses=m.losses, source_name=y["name"])

@@ -431,6 +431,25 @@ exactly this one SubjectType.
   the view-level `transformations:` list (all vCommunity trend columns
   carry `[NONE]`, which `transformations: [NONE]` expresses).
 
+## Found by `import-local` (2026-11-13)
+
+The offline converter classifies every ViewDef attribute and text
+(`authoring/importer_offline_conversion.md`). Two classes with no YAML form
+and no Not-modeled entry above, so a view carrying one stops with a TOOLSET
+GAP:
+
+- `localizationKey` on a column or summary-row `displayName` Property (530
+  of the 851 9.1.1 built-ins stop on it first, 9 vCommunity views). The renderer
+  deliberately writes none (`render.py`, the displayName note: collisions
+  between transformed columns, no localization bundle ships).
+- A `Description` with leading or trailing whitespace (54 vCommunity views):
+  the view loader strips it. The Title gets the same strip, which the
+  converter records as a rename instead.
+
+Control `visible` is a renderer constant per control type (`false` on the
+time selector, attributes selector, buckets and metadata controls, `true` on
+pagination); any other value is a GAP.
+
 ## Round-trip result (vCommunity 0.8.1, 189 unique ViewDefs)
 
 Mechanical XML-to-YAML mapping of all 189, loaded and rendered by the

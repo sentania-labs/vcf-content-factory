@@ -13,7 +13,9 @@ from __future__ import annotations
 from collections import OrderedDict
 from typing import Dict, List
 
-from .model import MappedObject, MappingError, loss_or_gap, toolset_gap
+from . import flat as _flat
+from .accounting import account
+from .model import MappedObject, MappingError, gap_error, toolset_gap
 from .refs import Ref
 
 #: XML operator symbol -> YAML operator (inverse of alerts.render._XML_OPERATOR_MAP).
@@ -132,7 +134,8 @@ def map_symptom(sd, location: str) -> MappedObject:
     y["condition"] = cond
     if omit:
         y["omit"] = omit
-    return MappedObject("symptom", y, losses=losses)
+    account("symptom", _flat.flatten_plain_xml(sd), losses)
+    return MappedObject("symptom", y, losses=losses, source_name=y["name"])
 
 
 def map_recommendation(rec, location: str, adapter_kind: str) -> MappedObject:
@@ -150,8 +153,12 @@ def map_recommendation(rec, location: str, adapter_kind: str) -> MappedObject:
     for a in rec.attrib:
         if a not in ("key", "id"):
             _gap(f"recommendation attribute {a} is not modeled")
+    raw_desc = rec.findtext("Description") or ""
+    if raw_desc != desc:
+        _gap("Description with leading or trailing whitespace (the recommendation loader strips it)")
     y: Dict[str, object] = OrderedDict(name=key, id=key, description=desc, adapter_kind=adapter_kind)
-    return MappedObject("recommendation", y, losses=losses)
+    account("recommendation", _flat.flatten_plain_xml(rec), losses)
+    return MappedObject("recommendation", y, losses=losses, source_name=key)
 
 
 def map_alert(ad, location: str) -> MappedObject:
@@ -181,6 +188,8 @@ def map_alert(ad, location: str) -> MappedObject:
     y: Dict[str, object] = OrderedDict()
     y["name"] = ad.get("name", "")
     y["description"] = ad.get("description", "") or ""
+    if y["description"] != y["description"].strip():
+        _gap("description with leading or trailing whitespace (the alert loader strips it)")
     y["id"] = strip_prefix(ad.get("id", ""), "AlertDefinition-")
     y["adapter_kind"] = ad.get("adapterKind")
     y["resource_kind"] = ad.get("resourceKind")
@@ -257,10 +266,11 @@ def map_alert(ad, location: str) -> MappedObject:
         if prios != sorted(prios):
             _gap("recommendations out of priority order are not modeled (rendered sorted)")
         y["recommendations"] = recs
-    return MappedObject("alert", y, losses=losses)
+    account("alert", _flat.flatten_plain_xml(ad), losses)
+    return MappedObject("alert", y, losses=losses, source_name=y["name"])
 
 
 def _gap(msg: str) -> None:
     """Nothing in these types is documented as not modeled: every feature
     the schema cannot carry stops the object with a TOOLSET GAP."""
-    loss_or_gap([], msg, "alert content")
+    raise gap_error(msg, "alert content")

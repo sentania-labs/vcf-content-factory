@@ -146,17 +146,21 @@ class DepGraph:
         errors:         Missing-dependency error strings. Non-empty means the
                         collected dep graph is incomplete — callers should treat
                         this as a build error.
-        external_views: Raw view UUIDs a View widget names that are no view in
+        external_views: ``(content_type, id, where)`` for each View widget
+                        that names a view by a raw UUID that is no view in
                         the corpus: the external-view passthrough (a
                         product-shipped or other-pak view, which must exist on
-                        the target). Not bundled and not an error; validate
-                        checks them against the stock-id baseline.
+                        the target). Not bundled and not an error; every
+                        caller that builds something deliverable reports
+                        them and checks them against the stock-id baseline
+                        (``vcfcf_packaging.navigation.
+                        print_external_view_prerequisites``), as validate does.
     """
     views: "List" = field(default_factory=list)
     supermetrics: "List" = field(default_factory=list)
     customgroups: "List" = field(default_factory=list)
     errors: List[str] = field(default_factory=list)
-    external_views: List[str] = field(default_factory=list)
+    external_views: List[Tuple[str, str, str]] = field(default_factory=list)
 
 
 @dataclass
@@ -929,6 +933,12 @@ def collect_deps(
     _sm_scope_rejected: Set[Tuple[str, str]] = set()  # (uuid, source) already reported
 
     # --- Step 1: dashboard → view names ------------------------------------
+    _own_ids = [getattr(v, "id", "") or "" for v in all_views]
+    for _d in dashboards:
+        if hasattr(_d, "external_view_references"):
+            for _ref in _d.external_view_references(_own_ids):
+                if _ref not in graph.external_views:
+                    graph.external_views.append(_ref)
     view_names = extract_view_names_from_dashboards(dashboards)
     view_by_id = {(getattr(v, "id", "") or "").lower(): v for v in all_views}
     for vname in view_names:
@@ -944,10 +954,9 @@ def collect_deps(
                     f"dashboard references view '{own.name}' by its raw id {vname}; "
                     f"reference it by name so it is bundled"
                 )
-            else:
-                # The external-view passthrough (dashboard_fidelity_wire_format.md
-                # §Raw view ids on View widgets): nothing to bundle.
-                graph.external_views.append(vname)
+            # else: the external-view passthrough (dashboard_fidelity_wire_format.md
+            # §Raw view ids on View widgets): nothing to bundle; recorded per
+            # widget below.
             continue
         if view is None:
             graph.errors.append(

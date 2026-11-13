@@ -5,34 +5,44 @@ A View or Dashboard section names an object in the conversion set by name
 (``view:`` / ``dashboard:``) and anything else by raw id (``view_id:`` /
 ``dashboard_id:``, the product-shipped form). ``localizationKey`` on the
 Title and Description is not modeled (it points at a localization bundle the
-factory does not ship; DEF-018) and is reported as a loss.
+factory does not ship; DEF-018) and is recorded as a documented loss at its
+exact path; anything else the YAML cannot carry stops the template with a
+TOOLSET GAP, and ``accounting.account`` classifies every source key.
 """
 from __future__ import annotations
 
 from collections import OrderedDict
 from typing import Dict, List
 
-from .model import MappedObject, MappingError, loss_or_gap
+from . import flat as _flat
+from .accounting import account
+from .model import MappedObject, MappingError, Mark, documented_loss, gap_error
 from .refs import Ref
 
 _TOP = ("isTenant", "Title", "Description", "SubjectType", "Sections", "Settings")
 
 
 def map_report(rd, location: str) -> MappedObject:
-    losses: List[str] = []
+    losses: list = []
 
     class _L(list):
-        def append(self, msg):  # documented loss, or a TOOLSET GAP
-            loss_or_gap(losses, msg, "report")
+        def append(self, msg):  # not documented: a TOOLSET GAP
+            raise gap_error(msg, "report")
     issues = _L()
     y: Dict[str, object] = OrderedDict()
     y["id"] = rd.get("id")
-    y["name"] = (rd.findtext("Title") or "").strip()
-    y["description"] = (rd.findtext("Description") or "").strip()
+    # The name exactly as the source has it (the planner records a change).
+    y["name"] = rd.findtext("Title") or ""
+    desc = rd.findtext("Description") or ""
+    if desc != desc.strip():
+        issues.append("Description with leading or trailing whitespace (the report loader strips it)")
+    y["description"] = desc
     for tag in ("Title", "Description"):
         el = rd.find(tag)
-        if el is not None and el.get("localizationKey"):
-            issues.append(f"{tag} localizationKey is not modeled (template fidelity doc §Not modeled; DEF-018)")
+        if el is not None and el.get("localizationKey") is not None:
+            documented_loss(losses, "Title/Description localizationKey",
+                            f"{tag} localizationKey is not modeled (template fidelity doc §Not modeled; DEF-018)",
+                            [Mark(f"ReportDef/{tag}@localizationKey", "missing")])
     if (rd.findtext("isTenant") or "false").strip() != "false":
         issues.append(f"isTenant={rd.findtext('isTenant')!r} is not modeled (renders false)")
     if rd.find("isTenant") is None:
@@ -106,4 +116,5 @@ def map_report(rd, location: str) -> MappedObject:
     )
     if not y["settings"]["output_formats"]:
         issues.append("no OutputFormat is not modeled (renders pdf)")
-    return MappedObject("report", y, losses=losses)
+    account("report", _flat.flatten_plain_xml(rd), losses)
+    return MappedObject("report", y, losses=losses, source_name=y["name"])

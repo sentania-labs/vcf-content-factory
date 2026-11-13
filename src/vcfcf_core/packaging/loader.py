@@ -76,7 +76,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, List, Optional
+from typing import Callable, List, Optional, Tuple
 
 import yaml
 
@@ -272,6 +272,7 @@ def load_bundle(
     report_dashboards_dir: Optional["str | Path"] = None,
     on_missing_id: Optional[IdMinter] = None,
     provenance_of: Optional[ProvenanceFn] = None,
+    report_dirs: Optional[Callable[[], Tuple[Path, Path]]] = None,
 ) -> Bundle:
     """Load a bundle manifest YAML and resolve all referenced content objects.
 
@@ -292,6 +293,11 @@ def load_bundle(
             fails validation.
         provenance_of: Callback classifying a file's provenance; None means
             ``""`` on every loaded object.
+        report_dirs: Callback returning ``(views_dir, dashboards_dir)`` for
+            report sections, called once after the views and dashboards
+            loaded (so ids minted into them are seen) and before the first
+            report; it replaces ``report_views_dir`` /
+            ``report_dashboards_dir``. None keeps those.
 
     Returns:
         A populated Bundle dataclass.
@@ -470,6 +476,8 @@ def load_bundle(
     except Exception as e:
         raise BundleValidationError(f"{path}: custom group error: {e}") from e
 
+    if report_dirs is not None and report_paths:
+        views_dir_for_reports, dashboards_dir_for_reports = report_dirs()
     try:
         reports = [
             load_report(p, views_dir=views_dir_for_reports, dashboards_dir=dashboards_dir_for_reports,

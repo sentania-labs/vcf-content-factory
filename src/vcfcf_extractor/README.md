@@ -36,8 +36,9 @@ Offline conversion of whole content trees (views, dashboards, report
 templates, alerts, symptoms, recommendations, super metrics; directories,
 content-export zips, `.pak` files) to factory YAML in a `content/`,
 third-party or SDK pak layout, with explicit id (`--ids keep|mint`,
-`--id-map`) and naming (`--naming`) decisions, the stock-id guard on the
-result and `--verify` through the real loaders. The table above is the
+`--id-map`) and naming (`--naming`) decisions, every source key accounted
+for, the stock-id guard on the result and verification through the real
+loaders (on unless `--no-verify`), written only when the run succeeds. The table above is the
 live-extract scope; `import-local` covers every type. How-to:
 `knowledge/context/authoring/importer_offline_conversion.md`. Logic in
 `vcfcf_core.importer`, CLI and verification in `importer.py` here.

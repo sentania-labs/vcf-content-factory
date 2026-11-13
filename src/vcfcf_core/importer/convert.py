@@ -10,26 +10,40 @@ and nothing is written here; the factory wrapper
 Order of decisions, each reported:
 
 1. **Duplicates.** The same id found in several files is one object when
-   the copies are the same once renumbered ids and whitespace are set aside
-   (``compare.canonical_key``); when they differ the object fails, naming
-   every file, unless ``prefer_sources`` names the copy that wins.
+   the comparator finds no difference between the copies
+   (``compare.compare_copies``: the same flat form, renumbered ids aside);
+   when they differ the object fails, naming every file, unless one
+   ``prefer_sources`` fragment matches exactly one of the files that define
+   it (matched against the path relative to the input root).
 2. **Drops.** Objects whose id is in ``drop`` are not emitted; references
    to them stay raw ids (the caller references the product object in place).
-3. **Mapping** (per-type modules). A ``MappingError`` fails the object.
-4. **Names.** ``rename`` (old name or id -> new name), then ``naming``
-   (``factory-prefixed`` adds ``[VCF CF] ``). Two objects of one type with
-   the same final name fail, naming both sources.
-5. **Ids.** ``keep`` carries source ids; ``mint`` gives every object a new
-   UUID; ``map`` applies ``id_map`` and keeps the rest. Every reference
-   follows. The stock-id guard runs on the result in the wrapper.
+3. **Mapping** (per-type modules), then **accounting** of every source key
+   (``accounting``). A ``MappingError`` fails the object; any other
+   exception fails it as an internal error (object, file and exception type
+   named), never the run.
+4. **Names.** Whitespace the loaders strip is stripped, then ``rename``
+   (keyed by type and old name or id), then ``naming``
+   (``factory-prefixed`` adds ``[VCF CF] ``). Every change is a recorded
+   rename. Two objects of one type with the same final name fail, naming
+   both sources.
+5. **Ids.** ``keep`` carries source ids; ``mint`` gives every object a
+   UUID version 5 from ``mint_namespace`` and its type and source id (a
+   rerun gives the same ids); ``map`` applies ``id_map`` and keeps the
+   rest. The stock-id guard runs on the result in the wrapper.
 6. **References.** By name inside the set, by raw id outside it where the
    schema has a raw-id form; otherwise the referencing object fails. An
-   object that references a failed one fails too (cascade, named).
+   object that references a failed one fails too (cascade, named). Then
+   every string of every object has the old ids of re-identified objects in
+   the set replaced (``sm_<uuid>`` super metric keys among them: the name
+   form where the schema has one is set by step 6's references, the new id
+   everywhere else), and any old id that still appears anywhere fails that
+   object, naming the field.
 7. **Target version.** With ``target_min``, an ``omit:`` entry whose proven
    floor is above it is not emitted (the key renders), and each such
-   deviation is listed; widgets needing a newer product (Section) are
-   reported, not converted away. Without it the source is reproduced and
-   the same things are warned about.
+   deviation is listed with the exact path it changes; a dashboard carrying
+   a widget type that needs a newer product than the target is *converted,
+   not deliverable to the stated target*. Without a target the source is
+   reproduced and the same things are warned about.
 """
 from __future__ import annotations
 
@@ -38,7 +52,7 @@ import re
 import uuid
 from collections import Counter, OrderedDict, defaultdict
 from dataclasses import dataclass, field
-from typing import Callable, Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 import yaml
 
@@ -61,9 +75,10 @@ from . import dashboards as _dash
 from . import reports as _reports
 from . import supermetrics as _sms
 from . import views as _views
-from .compare import canonical_key
+from .compare import compare_copies
+from .flat import widget_path
 from .inputs import CONTENT_TYPES, InputScan, SourceObject
-from .model import MappedObject, MappingError
+from .model import Loss, MappedObject, MappingError, Mark
 from .refs import FormulaRef, NavRef, Ref, UnresolvedReference
 
 TARGET_VERSIONS = ("8.18.7", "9.0.2", "9.1.1")
@@ -78,6 +93,12 @@ _SM_FORMULA_TERM = re.compile(
     r"((?i:super\s*metric)\s*\|\s*)?sm_([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})")
 _UUID_IN = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
 LAYOUTS = ("content", "third-party", "pak")
+_WIRE_WIDGET = {"AlertVolume": "IntSummaryAlertVolume"}
+#: File names Windows reserves (any extension): a slug equal to one is suffixed.
+WINDOWS_RESERVED = frozenset({"con", "prn", "aux", "nul"} | {f"com{i}" for i in range(1, 10)}
+                             | {f"lpt{i}" for i in range(1, 10)})
+#: The fixed root of every ``--ids mint`` namespace (uuid5 of a text under it).
+MINT_ROOT = uuid.UUID("8f3c7a2e-5d14-5b9e-9c61-4f0a6e2d1b73")
 
 
 def norm_id(type_: str, raw: str) -> str:
@@ -89,17 +110,29 @@ def norm_id(type_: str, raw: str) -> str:
     return s.lower()
 
 
+def mint_namespace_uuid(text: str) -> uuid.UUID:
+    """The UUID namespace a ``--mint-namespace`` text names."""
+    return uuid.uuid5(MINT_ROOT, text)
+
+
+def minted_id(namespace: uuid.UUID, type_: str, source_id: str) -> str:
+    """The deterministic new id of one source object (UUID version 5)."""
+    return str(uuid.uuid5(namespace, f"{type_}:{norm_id(type_, source_id)}"))
+
+
 @dataclass
 class ConvertOptions:
     ids: str = "keep"                          # keep | mint | map
     id_map: Dict[str, str] = field(default_factory=dict)   # old (norm) -> new
     drop: Dict[str, str] = field(default_factory=dict)     # id (norm) -> label
     naming: str = "unprefixed"                 # unprefixed | factory-prefixed
-    rename: Dict[str, str] = field(default_factory=dict)   # old name or id -> new name
+    #: (type, old name or id) -> new name
+    rename: Dict[Tuple[str, str], str] = field(default_factory=dict)
     target_min: Optional[str] = None
     prefer_sources: List[str] = field(default_factory=list)
     layout: str = "third-party"
-    minter: Callable[[], str] = field(default=lambda: str(uuid.uuid4()))
+    #: the ``--ids mint`` namespace text (required with mint)
+    mint_namespace: Optional[str] = None
 
 
 @dataclass
@@ -110,14 +143,17 @@ class Failure:
     locations: List[str]
     reason: str
     gap: Optional[Dict[str, str]] = None
+    #: failed (a mapping or reference failure) | internal (an unexpected
+    #: exception in the converter) | unsupported (a type it does not convert)
+    kind: str = "failed"
 
 
 @dataclass
 class Deviation:
-    """A difference from the source the target version forces."""
+    """A difference from the source the target version forces, at exact marks."""
     entry: str
-    wire_keys: Tuple[str, ...]
     text: str
+    marks: List[Mark] = field(default_factory=list)
 
 
 @dataclass
@@ -129,11 +165,19 @@ class Emitted:
     name: str
     relpath: str = ""
     yaml_tree: Dict[str, object] = field(default_factory=dict)
+    #: the mapper's tree with its reference placeholders (resolved afresh each round)
+    mapped_tree: Dict[str, object] = field(default_factory=dict)
     text: str = ""
-    losses: List[str] = field(default_factory=list)
+    losses: List[Loss] = field(default_factory=list)
     notes: List[str] = field(default_factory=list)
+    base_notes: List[str] = field(default_factory=list)
     deviations: List[Deviation] = field(default_factory=list)
     version_warnings: List[str] = field(default_factory=list)
+    #: the name exactly as the source has it, and why the written name differs
+    source_name: str = ""
+    rename_reasons: List[str] = field(default_factory=list)
+    #: widget types the stated target cannot import (W2): converted, not deliverable
+    undeliverable: List[str] = field(default_factory=list)
     #: the source id is the one the renderer derives from the name (no id: in the YAML)
     derived: bool = False
 
@@ -154,6 +198,8 @@ class Plan:
     #: (type, norm source id) -> final name, for every emitted object
     names: Dict[Tuple[str, str], str] = field(default_factory=dict)
     usage_error: Optional[str] = None
+    #: the namespace text minted ids derive from (``--ids mint``)
+    mint_namespace: Optional[str] = None
 
     def counts(self) -> Dict[str, Dict[str, int]]:
         out: Dict[str, Dict[str, int]] = {}
@@ -163,10 +209,20 @@ class Plan:
                 "found": self.found.get(t, 0),
                 "converted": len(em),
                 "with_losses": sum(1 for e in em if e.losses),
-                "failed": sum(1 for f in self.failures if f.type == t),
+                "undeliverable": sum(1 for e in em if e.undeliverable),
+                "failed": sum(1 for f in self.failures if f.type == t and f.kind == "failed"),
+                "internal_errors": sum(1 for f in self.failures if f.type == t and f.kind == "internal"),
                 "dropped": sum(1 for d in self.dropped if d[0] == t),
             }
         return out
+
+    @property
+    def internal_errors(self) -> List[Failure]:
+        return [f for f in self.failures if f.kind == "internal"]
+
+    @property
+    def unsupported(self) -> List[Failure]:
+        return [f for f in self.failures if f.kind == "unsupported"]
 
 
 # ------------------------------------------------------------------ helpers
@@ -188,6 +244,31 @@ def parse_tsv_map(text: str, what: str) -> Dict[str, str]:
         if k in out:
             raise ValueError(f"{what}: line {n}: {k!r} is listed twice")
         out[k] = cells[1].strip()
+    return out
+
+
+def parse_rename_map(text: str, what: str) -> Dict[Tuple[str, str], str]:
+    """``type<TAB>old name or id<TAB>new name`` rows (a header row whose
+    first cell is ``type`` is skipped; ``#`` and blank lines too). The type
+    is one of :data:`~.inputs.CONTENT_TYPES`, so a rename cannot cross
+    types. Raises ValueError on a malformed row, an unknown type or a
+    repeated key."""
+    out: Dict[Tuple[str, str], str] = {}
+    for n, line in enumerate(text.splitlines(), 1):
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        cells = [c for c in line.rstrip("\r\n").split("\t")]
+        if n == 1 and cells[0].strip().lower() == "type":
+            continue
+        if len(cells) < 3 or not cells[0].strip() or not cells[1] or not cells[2].strip():
+            raise ValueError(f"{what}: line {n}: expected type<TAB>old name or id<TAB>new name, got {line!r}")
+        t = cells[0].strip()
+        if t not in CONTENT_TYPES:
+            raise ValueError(f"{what}: line {n}: type {t!r} is not one of {', '.join(CONTENT_TYPES)}")
+        k = (t, cells[1])
+        if k in out:
+            raise ValueError(f"{what}: line {n}: {t} {cells[1]!r} is listed twice")
+        out[k] = cells[2].strip()
     return out
 
 
@@ -227,6 +308,21 @@ def _version_floor_text(floor) -> str:
     return format_ops_version(floor) if floor is not None else "unknown (no product export shows it)"
 
 
+def _walk_strings(node, path: str = ""):
+    """(path, key-or-None, string) for every string in a YAML tree, keys included."""
+    if isinstance(node, dict):
+        for k, v in node.items():
+            p = f"{path}.{k}" if path else str(k)
+            if isinstance(k, str):
+                yield p, k, k
+            yield from _walk_strings(v, p)
+    elif isinstance(node, list):
+        for i, v in enumerate(node):
+            yield from _walk_strings(v, f"{path}[{i}]")
+    elif isinstance(node, str):
+        yield path, None, node
+
+
 # ------------------------------------------------------------------- plan
 class _Planner:
     def __init__(self, scan: InputScan, opts: ConvertOptions):
@@ -234,9 +330,12 @@ class _Planner:
         self.opts = opts
         self.plan = Plan()
         self.target = parse_ops_version(opts.target_min) if opts.target_min else None
+        self.usage_errors: List[str] = []
+        self.namespace = mint_namespace_uuid(opts.mint_namespace) if opts.mint_namespace else None
+        self.plan.mint_namespace = opts.mint_namespace
 
-    def fail(self, obj: SourceObject, reason: str, gap=None) -> None:
-        self.plan.failures.append(Failure(obj.type, obj.id, obj.name, list(obj.locations), reason, gap))
+    def fail(self, obj: SourceObject, reason: str, gap=None, kind: str = "failed") -> None:
+        self.plan.failures.append(Failure(obj.type, obj.id, obj.name, list(obj.locations), reason, gap, kind))
 
     # 1. duplicates ----------------------------------------------------
     def dedupe(self) -> List[SourceObject]:
@@ -244,11 +343,17 @@ class _Planner:
         for o in self.scan.objects:
             groups.setdefault((o.type, norm_id(o.type, o.id)), []).append(o)
         unique: List[SourceObject] = []
+        used_prefs: Set[str] = set()
         for (t, nid), copies in groups.items():
             self.plan.found[t] += 1
-            forms: "OrderedDict[str, List[SourceObject]]" = OrderedDict()
+            forms: List[List[SourceObject]] = []
             for c in copies:
-                forms.setdefault(canonical_key(c), []).append(c)
+                for f in forms:
+                    if not compare_copies(f[0], c).differences:
+                        f.append(c)
+                        break
+                else:
+                    forms.append([c])
             locs = [c.location for c in copies]
             if len(forms) == 1:
                 first = copies[0]
@@ -257,25 +362,40 @@ class _Planner:
                     self.plan.merged_duplicates.append((t, first.id, locs))
                 unique.append(first)
                 continue
-            # differing copies: does a preferred source pick exactly one form?
-            chosen = None
+            # Differing copies: a --prefer-source fragment must match exactly
+            # one of the files that define this object (relative paths).
+            hits: List[Tuple[str, SourceObject]] = []
             for pref in self.opts.prefer_sources:
-                hits = [k for k, cs in forms.items() if any(pref in c.location for c in cs)]
-                if len(hits) == 1:
-                    chosen = hits[0]
-                    break
-            if chosen is not None:
-                winner = forms[chosen][0]
+                matched = [c for c in copies if pref in c.rel]
+                if not matched:
+                    continue
+                used_prefs.add(pref)
+                if len(matched) != 1:
+                    self.usage_errors.append(
+                        f"--prefer-source {pref!r} matches {len(matched)} of the files that define {t} {copies[0].id} "
+                        f"({'; '.join(c.rel for c in matched)}); it must match exactly one")
+                    continue
+                hits.append((pref, matched[0]))
+            if len({id(c) for _, c in hits}) > 1:
+                self.usage_errors.append(
+                    f"--prefer-source fragments pick different copies of {t} {copies[0].id}: "
+                    + "; ".join(f"{p!r} -> {c.rel}" for p, c in hits))
+                hits = []
+            if hits:
+                winner = hits[0][1]
                 winner.locations = locs
                 self.plan.resolved_duplicates.append((t, winner.id, winner.location, locs))
                 unique.append(winner)
                 continue
             first = copies[0]
             first.locations = locs
-            by_form = "; ".join(f"copy {i + 1}: {', '.join(c.location for c in cs)}"
-                                for i, cs in enumerate(forms.values()))
-            self.fail(first, f"the same id is defined differently in several files ({by_form}); "
-                             f"say which copy wins with --prefer-source <path fragment>")
+            by_form = "; ".join(f"copy {i + 1}: {', '.join(c.rel for c in cs)}" for i, cs in enumerate(forms))
+            self.fail(first, f"the same id is defined differently in several files ({by_form}); say which copy "
+                             f"wins with --prefer-source <fragment of exactly one file's path>")
+        for pref in self.opts.prefer_sources:
+            if pref not in used_prefs:
+                self.usage_errors.append(f"--prefer-source {pref!r} matches none of the files that define an object "
+                                         f"whose copies differ")
         return unique
 
     # 2. drops ---------------------------------------------------------
@@ -332,23 +452,35 @@ class _Planner:
             except MappingError as exc:
                 self.fail(o, str(exc), exc.gap)
                 continue
+            except Exception as exc:  # an unexpected shape: one object, never the run
+                self.fail(o, f"internal error in the converter: {type(exc).__name__}: {exc} (source file "
+                             f"{o.location})", kind="internal")
+                continue
             out.append((o, m))
         return out
 
     # 4. names -----------------------------------------------------------
-    def final_name(self, o: SourceObject, name: str) -> str:
+    def final_name(self, o: SourceObject, src_name: str) -> Tuple[str, List[str]]:
+        reasons: List[str] = []
+        name = src_name.strip()  # every factory loader strips a name
+        if name != src_name:
+            reasons.append("surrounding whitespace the loader strips")
         rename = self.opts.rename
-        for key in (o.id, norm_id(o.type, o.id), name):
+        for key in ((o.type, o.id), (o.type, norm_id(o.type, o.id)), (o.type, src_name), (o.type, name)):
             if key in rename:
                 self.rename_used.add(key)
-                name = rename[key]
+                name = rename[key].strip()
+                reasons.append("--rename")
                 break
         if self.opts.naming == "factory-prefixed":
+            before = name
             if has_legacy_prefix(name):
                 name = FACTORY_PREFIX + strip_factory_prefix(name)
             elif not has_factory_prefix(name):
                 name = FACTORY_PREFIX + name
-        return name
+            if name != before:
+                reasons.append("--naming factory-prefixed")
+        return name, reasons
 
     # 5. ids --------------------------------------------------------------
     def final_id(self, o: SourceObject) -> str:
@@ -356,7 +488,7 @@ class _Planner:
         raw = o.id[len(_ID_PREFIX[o.type]):] if o.type in _ID_PREFIX and o.id.startswith(_ID_PREFIX[o.type]) else o.id
         mapping = {norm_id("", k): v for k, v in self.opts.id_map.items()}
         if self.opts.ids == "mint":
-            new = self.opts.minter()
+            new = minted_id(self.namespace, o.type, o.id)
             return f"Recommendation-{new}" if o.type == "recommendation" else new
         if nid in mapping:
             self.map_used.add(nid)
@@ -396,20 +528,26 @@ class _Planner:
     # ---------------------------------------------------------------- run
     def run(self) -> Plan:
         p = self.plan
+        for u in self.scan.unsupported:
+            p.failures.append(Failure(u.type, u.id, u.name, [u.location],
+                                      f"not converted: the importer does not convert {u.type}s (unsupported type)",
+                                      kind="unsupported"))
         objs = self.apply_drops(self.dedupe())
         mapped = self.map_all(objs)
-        self.rename_used: Set[str] = set()
+        self.rename_used: Set[Tuple[str, str]] = set()
         self.map_used: Set[str] = set()
         entries: List[Emitted] = []
         for o, m in mapped:
-            e = Emitted(o.type, o, o.id, "", "", losses=list(m.losses), notes=list(m.notes))
+            e = Emitted(o.type, o, o.id, "", "", losses=list(m.losses), base_notes=list(m.notes))
             e.yaml_tree = m.yaml
-            e.name = self.final_name(o, str(m.yaml.get("name", "")))
+            e.mapped_tree = m.yaml
+            e.source_name = m.source_name if m.source_name is not None else str(m.yaml.get("name", ""))
+            e.name, e.rename_reasons = self.final_name(o, e.source_name)
             e.id = self.final_id(o)
             entries.append(e)
         for k in self.opts.rename:
             if k not in self.rename_used:
-                p.warnings.append(f"rename file: {k!r} names no object in the input")
+                p.warnings.append(f"rename file: {k[0]} {k[1]!r} names no object in the input")
         for k in self.opts.id_map:
             if norm_id("", k) not in self.map_used:
                 p.warnings.append(f"id map: {k} names no object in the input")
@@ -426,7 +564,7 @@ class _Planner:
                 failed[key] = reason
                 self.fail(e.source, reason, gap)
 
-        # name collisions and id problems
+        # name collisions (on the normalized name, every type) and id problems
         by_name: Dict[Tuple[str, str], List[Emitted]] = defaultdict(list)
         by_id: Dict[Tuple[str, str], List[Emitted]] = defaultdict(list)
         for e in entries:
@@ -445,10 +583,11 @@ class _Planner:
                 mark(e, "the source object has no name")
         for (t, n), es in by_name.items():
             if len(es) > 1:
-                srcs = "; ".join(f"{x.source_id} in {', '.join(x.source.locations)}" for x in es)
+                srcs = "; ".join(f"{x.source_id} ({x.source_name!r}) in {', '.join(x.source.locations)}" for x in es)
                 for x in es:
-                    mark(x, f"{len(es)} {t}s share the name {n!r} ({srcs}); by-name references cannot tell "
-                            f"them apart: give one a new name with --rename (keyed by id)")
+                    mark(x, f"{len(es)} {t}s share the name {n!r} once the loader strips whitespace ({srcs}); "
+                            f"by-name references cannot tell them apart: give one a new name with --rename "
+                            f"(keyed by type and id)")
         for (t, i), es in by_id.items():
             if len(es) > 1:
                 srcs = "; ".join(f"{x.source_id} ({x.name!r})" for x in es)
@@ -464,42 +603,55 @@ class _Planner:
         if self.opts.layout == "content":
             bad = [e for e in entries if not has_factory_prefix(e.name)]
             if bad:
-                p.usage_error = (
+                self.usage_errors.append(
                     f"the content/ layout holds factory content, whose names carry the "
                     f"{FACTORY_PREFIX.strip()} prefix; {len(bad)} converted name(s) do not "
                     f"(for example {bad[0].name!r}). Use --naming factory-prefixed, or a "
                     f"third-party or pak layout")
 
-        # references, to a fixed point (an object referencing a failed one fails)
+        # references, rewrites and the old-id scan, to a fixed point (an
+        # object referencing a failed one fails; so does one an old id
+        # survives in)
         index: Dict[Tuple[str, str], Emitted] = {(e.type, norm_id(e.type, e.source_id)): e for e in entries}
-        changed = True
-        resolved: Dict[int, dict] = {}
-        while changed:
-            changed = False
-            for e in entries:
-                key = (e.type, norm_id(e.type, e.source_id))
-                if key in failed:
-                    continue
-                try:
-                    resolved[id(e)] = self.resolve(e, index, failed)
-                except UnresolvedReference as exc:
-                    mark(e, str(exc))
-                    changed = True
-        ok = [e for e in entries if (e.type, norm_id(e.type, e.source_id)) not in failed]
+        while True:
+            changed = True
+            resolved: Dict[int, dict] = {}
+            while changed:
+                changed = False
+                for e in entries:
+                    key = (e.type, norm_id(e.type, e.source_id))
+                    if key in failed:
+                        continue
+                    try:
+                        resolved[id(e)] = self.resolve(e, index, failed)
+                    except UnresolvedReference as exc:
+                        mark(e, str(exc))
+                        changed = True
+            ok = [e for e in entries if (e.type, norm_id(e.type, e.source_id)) not in failed]
+            p.id_rewrites, p.names = {}, {}
+            for e in ok:
+                e.yaml_tree = resolved[id(e)]
+                e.yaml_tree["name"] = e.name
+                if e.derived:
+                    e.yaml_tree.pop("id", None)
+                elif "id" in e.yaml_tree:
+                    e.yaml_tree["id"] = e.id
+                if e.id.lower() != norm_id(e.type, e.source_id) and e.type != "recommendation":
+                    p.id_rewrites[norm_id(e.type, e.source_id)] = e.id
+                elif e.type == "recommendation" and e.id != e.source_id:
+                    p.id_rewrites[e.source_id] = e.id
+                p.names[(e.type, norm_id(e.type, e.source_id))] = e.name
+            new_failures = False
+            final_ids = {e.id.lower() for e in ok}
+            for e in ok:
+                self.rewrite_ids(e)
+                hit = self.surviving_old_id(e, final_ids)
+                if hit:
+                    mark(e, hit)
+                    new_failures = True
+            if not new_failures:
+                break
         for e in ok:
-            e.yaml_tree = resolved[id(e)]
-            e.yaml_tree["name"] = e.name
-            if e.derived:
-                e.yaml_tree.pop("id", None)
-            elif "id" in e.yaml_tree:
-                e.yaml_tree["id"] = e.id
-            if e.id.lower() != norm_id(e.type, e.source_id) and e.type != "recommendation":
-                p.id_rewrites[norm_id(e.type, e.source_id)] = e.id
-            elif e.type == "recommendation" and e.id != e.source_id:
-                p.id_rewrites[e.source_id] = e.id
-            p.names[(e.type, norm_id(e.type, e.source_id))] = e.name
-        for e in ok:
-            self.rewrite_ids(e)
             self.gate_versions(e)
         self.layout_paths(ok)
         for e in ok:
@@ -507,12 +659,14 @@ class _Planner:
             e.text = dump_yaml(e.yaml_tree, header=f"# Converted offline by vcfcf_extractor import-local from: {rel}\n")
             p.id_table.append((e.type, e.source_id, e.id, e.name))
         p.emitted = ok
-        stale = self.stale_old_ids(ok)
-        p.warnings += stale
+        if self.usage_errors:
+            p.usage_error = "; ".join(self.usage_errors)
         return p
 
     # 6. references ------------------------------------------------------
     def resolve(self, e: Emitted, index, failed) -> dict:
+        e.notes = list(e.base_notes)
+
         def target(t: str, rid: str):
             k = (t, norm_id(t, rid))
             if k in failed:
@@ -568,8 +722,6 @@ class _Planner:
                     if (("dashboard", norm_id("dashboard", node.dashboard_id)) not in self.dropped_keys):
                         e.notes.append(f"navigation target dashboard {node.dashboard_id} is not in the input; "
                                        f"referenced by raw id")
-                if node.label:
-                    out["label"] = node.label
                 return None, out
             if isinstance(node, FormulaRef):
                 # The wire term is ``Super Metric|sm_<uuid>``; the name form
@@ -600,68 +752,74 @@ class _Planner:
                 return None, [res(v)[1] for v in node]
             return None, node
 
-        tree = copy.deepcopy(e.yaml_tree)
+        tree = copy.deepcopy(e.mapped_tree)
         return res(tree)[1]
 
-    # id rewrites in strings --------------------------------------------
+    # id rewrites in strings (every type) ---------------------------------
     def rewrite_ids(self, e: Emitted) -> None:
-        rw = self.plan.id_rewrites
-        if e.type != "dashboard":
-            return
-        missing_sm = set()
+        """Every string of every object: an old id (any letter case) of a
+        re-identified object in the set becomes its new id. A super metric
+        key ``sm_<uuid>`` / ``Super Metric|sm_<uuid>`` takes the name form
+        where the schema has one (view columns, formulas: set as references
+        in ``resolve``) and the new id here everywhere else (symptom
+        conditions, view filters, widget metric entries, Pareto columns,
+        Heatmap metrics, HTML)."""
+        rw = {k: v for k, v in self.plan.id_rewrites.items() if _UUID_ANY.match(k)}
+        missing_sm: Set[str] = set()
 
-        def sub_str(s: str, key: str) -> str:
-            def sm(m):
+        def sub_str(s: str) -> str:
+            for m in _SM_TOKEN.finditer(s):
                 nid = m.group(1).lower()
-                if ("supermetric", nid) in self.plan.names:
-                    return "sm_" + rw.get(nid, m.group(1))
-                missing_sm.add(m.group(1))
-                return m.group(0)
-            s = _SM_TOKEN.sub(sm, s)
-            if key in ("html", "view_details", "link", "alert_definitions"):
-                s = _UUID_IN.sub(lambda m: rw.get(m.group(0).lower(), m.group(0)), s)
-            return s
+                if ("supermetric", nid) not in self.plan.names and ("supermetric", nid) not in self.dropped_keys:
+                    missing_sm.add(m.group(1))
+            if not rw:
+                return s
+            return _UUID_IN.sub(lambda m: rw.get(m.group(0).lower(), m.group(0)), s)
 
-        def walk(node, key=None):
+        def walk(node):
             if isinstance(node, dict):
                 for k, v in list(node.items()):
-                    node[k] = walk(v, k)
+                    node[k] = walk(v)
                 return node
             if isinstance(node, list):
-                return [walk(v, key) for v in node]
+                return [walk(v) for v in node]
             if isinstance(node, str):
-                return sub_str(node, key or "")
+                return sub_str(node)
             return node
         walk(e.yaml_tree)
-        for sid in sorted(missing_sm):
-            e.notes.append(f"references super metric {sid}, which is not in the input (kept as its wire key; "
-                           f"it must exist on the target instance)")
+        if e.type != "supermetric":  # a formula's own note is set in resolve
+            for sid in sorted(missing_sm):
+                e.notes.append(f"references super metric {sid}, which is not in the input (kept as its wire key; "
+                               f"it must exist on the target instance)")
 
-    def stale_old_ids(self, ok: List[Emitted]) -> List[str]:
-        """Old ids of re-identified objects still present in an emitted YAML."""
-        rw = self.plan.id_rewrites
-        if not rw:
-            return []
-        out = []
-        for e in ok:
-            blob = e.text.lower()
-            for old in rw:
-                if old in blob and old != norm_id(e.type, e.source_id):
-                    out.append(f"{e.relpath}: still names the old id {old} of a re-identified object "
-                               f"(free text the converter does not rewrite)")
-        return out
+    def surviving_old_id(self, e: Emitted, final_ids: Set[str]) -> Optional[str]:
+        """The field of ``e`` that still names the OLD id of a re-identified
+        object in the set (any type, any letter case), or ``None``. A
+        dropped object's id is not re-identified, so it may remain."""
+        old = {k for k in self.plan.id_rewrites if _UUID_ANY.match(k)} - final_ids
+        if not old:
+            return None
+        for path, key, s in _walk_strings(e.yaml_tree):
+            for m in _UUID_IN.finditer(s):
+                if m.group(0).lower() in old:
+                    where = f"the key {key!r}" if key is not None else f"field {path}"
+                    return (f"{where} still names {m.group(0)}, the old id of a re-identified object in the set "
+                            f"(its new id is {self.plan.id_rewrites[m.group(0).lower()]})")
+        return None
 
     # 7. target versions -------------------------------------------------
-    def _gate(self, e: Emitted, omit_list: list, entry: str, floor, wire_keys, where: str):
-        """Return True to keep the omit entry."""
+    def _gate(self, e: Emitted, entry: str, floor, wire_keys, where: str, marks: List[Mark]) -> bool:
+        """Return True to keep the omit entry; on a deviation record it."""
         if floor is not None and parse_ops_version(floor) <= (self.target or OLDEST_OMIT_EVIDENCE):
             return True
         floor_s = _version_floor_text(floor)
         if self.target is not None:
             text = (f"{where}: omit: {entry} not emitted: its floor is {floor_s}, above the target "
                     f"{format_ops_version(self.target)}; the render carries {'/'.join(wire_keys)} where the "
-                    f"source leaves it out")
-            e.deviations.append(Deviation(entry, tuple(wire_keys), text))
+                    f"source leaves it out (set aside only at {', '.join(m.path for m in marks)})")
+            if entry == "folder_in_name":
+                text += " (the dashboard name then carries its folder)"
+            e.deviations.append(Deviation(entry, text, list(marks)))
             return False
         e.version_warnings.append(
             f"{where}: omit: {entry} reproduces the source, but its floor is {floor_s}, above "
@@ -675,30 +833,41 @@ class _Planner:
             om = y.get("omit") or []
             wire = {"temporary": ("temporary",), "name_path": ("namePath",), "folder_in_name": ("name",),
                     "widget_interactions": ("widgetInteractions",)}
-            keep = [x for x in om if self._gate(e, om, x, DASHBOARD_OMIT_MIN_OPS_VERSION.get(x),
-                                                wire.get(x, (x,)), f"dashboard {e.name!r}")]
-            if "folder_in_name" in om and "folder_in_name" not in keep:
-                e.deviations[-1].text += " (the dashboard name then carries its folder)"
+            dmarks = {"temporary": [Mark("dashboard.temporary", "extra")],
+                      "name_path": [Mark("dashboard.namePath", "extra")],
+                      "folder_in_name": [Mark("dashboard.name", "value")],
+                      "widget_interactions": [Mark("dashboard.widgetInteractions", "extra", empty_only=True)]}
+            keep = [x for x in om if self._gate(e, x, DASHBOARD_OMIT_MIN_OPS_VERSION.get(x), wire.get(x, (x,)),
+                                                f"dashboard {e.name!r}", dmarks.get(x, []))]
             if keep:
                 y["omit"] = keep
             elif "omit" in y:
                 del y["omit"]
-            for w in y.get("widgets") or []:
+            for wi, w in enumerate(y.get("widgets") or []):
                 wt = w.get("type")
+                base = widget_path(wi, _WIRE_WIDGET.get(wt, wt))
                 floor = WIDGET_TYPE_MIN_OPS_VERSION.get(wt)
                 if floor is not None and (self.target is None or self.target < parse_ops_version(floor)):
-                    scope = (f"the target {format_ops_version(self.target)}" if self.target is not None
-                             else "any build below it (no --target-min given)")
-                    e.version_warnings.append(
-                        f"dashboard {e.name!r} widget {w.get('id')} ({wt}): needs VCF Operations "
-                        f"{format_ops_version(floor)} or later; on {scope} the importer aborts the whole "
-                        f"dashboard (issue #199). Not converted away; a Tier 2 pak build fails on it")
+                    if self.target is not None:
+                        e.undeliverable.append(
+                            f"widget {w.get('id')} ({wt}) needs VCF Operations {format_ops_version(floor)} or later; "
+                            f"the stated target {format_ops_version(self.target)} aborts the whole dashboard on "
+                            f"import (issue #199)")
+                    else:
+                        e.version_warnings.append(
+                            f"dashboard {e.name!r} widget {w.get('id')} ({wt}): needs VCF Operations "
+                            f"{format_ops_version(floor)} or later; on any build below it (no --target-min given) "
+                            f"the importer aborts the whole dashboard (issue #199). Not converted away; a Tier 2 "
+                            f"pak build fails on it")
                 wo = w.get("omit") or []
                 if wo:
-                    kept = [x for x in wo if self._gate(
-                        e, wo, x, WIDGET_OMIT_MIN_OPS_VERSION.get((wt, x)),
-                        (WIDGET_OMIT_KEYS.get(wt, {}).get(x, (x,))[-1],),
-                        f"dashboard {e.name!r} widget {w.get('id')} ({wt})")]
+                    kept = []
+                    for x in wo:
+                        path = WIDGET_OMIT_KEYS.get(wt, {}).get(x, (x,))
+                        if self._gate(e, x, WIDGET_OMIT_MIN_OPS_VERSION.get((wt, x)), (path[-1],),
+                                      f"dashboard {e.name!r} widget {w.get('id')} ({wt})",
+                                      [Mark(f"{base}.config." + ".".join(path), "extra", subtree=True)]):
+                            kept.append(x)
                     if kept:
                         w["omit"] = kept
                     else:
@@ -706,24 +875,32 @@ class _Planner:
                 mwire = {"label": ("label",), "max_value": ("maxValue",),
                          "handle_old_coloring": ("handleOldColoring",), "unit": ("unit", "metricUnitId"),
                          "link": ("link",)}
+                arr = "resourceMetrics" if w.get("metric_mode") == "resource" else "resourceKindMetrics"
                 for mi, m in enumerate(w.get("metrics") or []):
                     mo = m.get("omit") or []
                     if mo:
-                        kept = [x for x in mo if self._gate(e, mo, x, METRIC_OMIT_MIN_OPS_VERSION.get(x),
-                                                            mwire.get(x, (x,)),
-                                                            f"dashboard {e.name!r} widget {w.get('id')} metric {mi}")]
+                        kept = [x for x in mo if self._gate(
+                            e, x, METRIC_OMIT_MIN_OPS_VERSION.get(x), mwire.get(x, (x,)),
+                            f"dashboard {e.name!r} widget {w.get('id')} metric {mi}",
+                            [Mark(f"{base}.config.metric.{arr}[{mi}].{k}", "extra") for k in mwire.get(x, (x,))])]
                         if kept:
                             m["omit"] = kept
                         else:
                             del m["omit"]
-                twire = {"tag_filter": ("tagFilter",), "custom_filter": ("customFilter",),
-                         "color_min_value": ("minValue",), "group_by_kind_keys": ("adapterKind", "resourceKind")}
+                twire = {"tag_filter": (("tagFilter",), True), "custom_filter": (("customFilter",), True),
+                         "color_min_value": (("color.minValue",), False),
+                         "group_by_kind_keys": (("groupBy.adapterKind", "groupBy.resourceKind"), False)}
                 for ti, tab in enumerate(w.get("configs") or []):
                     to = tab.get("omit") or []
                     if to:
-                        kept = [x for x in to if self._gate(e, to, x, HEATMAP_TAB_OMIT_MIN_OPS_VERSION.get(x),
-                                                            twire.get(x, (x,)),
-                                                            f"dashboard {e.name!r} widget {w.get('id')} tab {ti}")]
+                        kept = []
+                        for x in to:
+                            keys, sub = twire.get(x, ((x,), True))
+                            if self._gate(e, x, HEATMAP_TAB_OMIT_MIN_OPS_VERSION.get(x), keys,
+                                          f"dashboard {e.name!r} widget {w.get('id')} tab {ti}",
+                                          [Mark(f"{base}.config.configs[{ti}].{k}", "extra", subtree=sub)
+                                           for k in keys]):
+                                kept.append(x)
                         if kept:
                             tab["omit"] = kept
                         else:
@@ -732,8 +909,10 @@ class _Planner:
             for si, s in enumerate(y.get("sections") or []):
                 so = s.get("omit") or []
                 if so:
-                    kept = [x for x in so if self._gate(e, so, x, SECTION_OMIT_MIN_OPS_VERSION.get(x),
-                                                        ("ContentFormatting",), f"report {e.name!r} section {si}")]
+                    kept = [x for x in so if self._gate(
+                        e, x, SECTION_OMIT_MIN_OPS_VERSION.get(x), ("ContentFormatting",),
+                        f"report {e.name!r} section {si}",
+                        [Mark(f"ReportDef/Sections/Section[{si}]/ContentFormatting", "extra", subtree=True)])]
                     if kept:
                         s["omit"] = kept
                     else:
@@ -742,9 +921,11 @@ class _Planner:
         elif e.type == "symptom":
             so = y.get("omit") or []
             if so:
-                wire = {"wait_cycles": ("waitCycle",), "cancel_cycles": ("cancelCycle",), "instanced": ("instanced",)}
-                kept = [x for x in so if self._gate(e, so, x, SYMPTOM_OMIT_MIN_OPS_VERSION.get(x),
-                                                    wire.get(x, (x,)), f"symptom {e.name!r}")]
+                wire = {"wait_cycles": "SymptomDefinition@waitCycle", "cancel_cycles": "SymptomDefinition@cancelCycle",
+                        "instanced": "SymptomDefinition/State/Condition[0]@instanced"}
+                kept = [x for x in so if self._gate(e, x, SYMPTOM_OMIT_MIN_OPS_VERSION.get(x),
+                                                    (wire.get(x, x).rsplit("@", 1)[-1],), f"symptom {e.name!r}",
+                                                    [Mark(wire.get(x, x), "extra")])]
                 if kept:
                     y["omit"] = kept
                 else:
@@ -754,7 +935,13 @@ class _Planner:
     def layout_paths(self, ok: List[Emitted]) -> None:
         used: Set[str] = set()
         for e in ok:
-            base = f"{TYPE_DIRS[e.type]}/{slug(e.name)}"
+            s = slug(e.name)
+            if s in WINDOWS_RESERVED:
+                e.base_notes.append(f"file name: the name slugs to {s!r}, a name Windows reserves; written as "
+                                    f"{s}-{e.type}.yaml")
+                e.notes.append(e.base_notes[-1])
+                s = f"{s}-{e.type}"
+            base = f"{TYPE_DIRS[e.type]}/{s}"
             rel = f"{base}.yaml"
             n = 2
             while rel.lower() in used:
@@ -771,6 +958,8 @@ def plan_conversion(scan: InputScan, opts: ConvertOptions) -> Plan:
         raise ValueError("ids map needs an id map")
     if opts.ids != "map" and opts.id_map:
         raise ValueError("an id map is only used with ids map")
+    if opts.ids == "mint" and not opts.mint_namespace:
+        raise ValueError("ids mint needs a mint namespace (the minted ids derive from it, so a rerun repeats them)")
     if opts.naming not in ("unprefixed", "factory-prefixed"):
         raise ValueError(f"naming must be unprefixed or factory-prefixed; got {opts.naming!r}")
     if opts.layout not in LAYOUTS:

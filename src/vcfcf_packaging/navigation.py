@@ -23,6 +23,27 @@ def print_navigation_prerequisites(bundle: Bundle, context: str) -> None:
         print(f"  PREREQUISITE: {line}", file=sys.stderr)
 
 
+def bundle_external_views(bundle: Bundle) -> list:
+    """``(content_type, id, where)`` for each View widget of ``bundle`` that
+    names a view by raw id the bundle does not ship."""
+    own = [v.id for v in bundle.views]
+    return [ref for d in bundle.dashboards for ref in d.external_view_references(own)]
+
+
+def print_external_view_prerequisites(refs, context: str) -> int:
+    """One ``PREREQUISITE:`` line to stderr per View widget that names a view
+    by raw id the build does not ship (the external-view passthrough: the
+    view must exist on the target), then the stock-id baseline check on
+    each, with the wording validate and the report ``view_id`` check use
+    (``stock_ids.report_reference_warnings``: not a known product view, or
+    absent on a supported line). Returns the number of warnings."""
+    from .stock_ids import report_reference_warnings
+    for _ctype, oid, where in refs:
+        print(f"  PREREQUISITE: {where} names view {oid} by raw id; {context} does not ship it, so it "
+              f"must exist on the target instance", file=sys.stderr)
+    return report_reference_warnings(list(refs))
+
+
 def navigation_closure(start, all_dashboards, all_views, all_sms, all_customgroups):
     """Everything a set of dashboards needs to ship with its Dashboard
     Navigation targets: the ``start`` dashboards, every dashboard reachable
@@ -69,5 +90,6 @@ def navigation_closure(start, all_dashboards, all_views, all_sms, all_customgrou
         all_customgroups=all_customgroups,
         project_scope=None,
     )
+    print_external_view_prerequisites(graph.external_views, "the navigation closure")
     return (dashboards, graph.views, graph.supermetrics, graph.customgroups,
             unresolved + list(graph.errors))

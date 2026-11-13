@@ -13,11 +13,14 @@ and the local id. So every reference to a widget (interactions, Section
 members, navigations, ``{self}`` in a state value) is rewritten to the local
 id, and a verification maps the source widget ids by position.
 
-Not modeled, reported as losses: ``adapterName`` (install ownership, set by
-the pak builder), navigation entries keyed by a widget that is not on the
-dashboard (no widget can fire them), the absolute-date time range, widget
-states with a key of another widget, and any key the renderer cannot
-reproduce (listed by name).
+Documented as not modeled (dashboard fidelity doc), recorded as losses at
+their exact flat paths: ``adapterName`` (install ownership, set by the pak
+builder), navigation entries keyed by a widget that is not on the dashboard
+(no widget can fire them), the absolute-date time range and ``ext-element``
+UI residue states. Anything else the schema cannot carry stops the
+dashboard with a TOOLSET GAP; ``accounting.account`` classifies every
+source key after mapping (the constants the renderer writes are rows
+there).
 """
 from __future__ import annotations
 
@@ -31,7 +34,9 @@ from ..dashboards.loader import (
     WIDGET_STATE_SELF_TOKEN,
     _WIDGET_STATE_VALUE_RE,
 )
-from .model import MappedObject, MappingError, loss_or_gap
+from . import flat as _flat
+from .accounting import account
+from .model import MappedObject, MappingError, Mark, documented_loss, gap_error
 from .refs import NavRef, Ref
 
 UUID = r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
@@ -41,15 +46,11 @@ TIME_BY_WIRE = {v: k for k, v in DASHBOARD_TIME_RANGES.items()}
 SUMMARY_FOLDERS = {"VMFolder", "HostFolder", "DatastoreFolder", "NetworkFolder",
                    "VmwareDistributedVirtualSwitch", "DistributedVirtualPortgroup"}
 
-#: Dashboard keys the renderer writes as constants: a source that differs is a loss.
-_RENDER_CONSTANTS = {"autoswitchEnabled": False, "importAttempts": 0, "importComplete": True,
-                     "homeTab": False, "gridsterMaxColumns": 12, "rank": 0, "locked": False}
-#: Keys the product writes that the factory does not carry by design
-#: (renumbered or rewritten on import); compared as documented non-differences.
-_IGNORED_TOP = {"creationTime", "lastUpdateTime", "userId", "lastUpdateUserId", "adapterName"}
-_MAPPED_TOP = {"id", "name", "namePath", "description", "shared", "hidden", "disabled", "temporary",
-               "widgets", "widgetInteractions", "dashboardNavigations", "states", "editAllowed",
-               "docCenterKey", "columnProportion", "columnCount", "entries"}
+#: Dashboard keys the renderer writes as constants: an absent one is not
+#: modeled (the render always writes it). Present values are checked by the
+#: accounting table.
+_RENDER_CONSTANTS = ("autoswitchEnabled", "importAttempts", "importComplete", "homeTab", "gridsterMaxColumns",
+                     "rank", "locked")
 _WIRE_TYPES = {"IntSummaryAlertVolume": "AlertVolume"}
 SUPPORTED_WIDGETS = {"View", "TextDisplay", "Scoreboard", "MetricChart", "HealthChart", "ParetoAnalysis",
                      "Heatmap", "ResourceRelationshipAdvanced", "AlertList", "Section", "ResourceList",
@@ -92,7 +93,7 @@ class _DashMapper:
         self.db = db
         self.ctx = context
         self.location = location
-        self.losses: List[str] = []
+        self.losses = []
         self.notes: List[str] = []
         entries = context.get("entries") or {}
         self.rk = {e.get("internalId"): (e.get("adapterKindKey"), e.get("resourceKindKey"))
@@ -102,9 +103,19 @@ class _DashMapper:
         self.lid = local_widget_ids(db)
 
     def loss(self, msg: str) -> None:
-        """A documented not-modeled feature is listed; anything else stops
-        the dashboard with a TOOLSET GAP (model.loss_or_gap)."""
-        loss_or_gap(self.losses, msg, "dashboard")
+        """A feature the schema cannot carry and the docs do not list: the
+        dashboard stops with a TOOLSET GAP."""
+        raise gap_error(msg, "dashboard")
+
+    def doc(self, cls: str, msg: str, marks) -> None:
+        documented_loss(self.losses, cls, msg, list(marks))
+
+    def state_path(self, base: str, key: str) -> str:
+        """The flat path of a ``states[]`` entry (``flat`` grammar)."""
+        own = {str(w.get("id")).lower(): f"w{i}" for i, w in enumerate(self.db.get("widgets") or [])
+               if isinstance(w, dict)}
+        k = re.sub(UUID, lambda m: own.get(m.group(0).lower(), m.group(0).lower()), key)
+        return f"{base}.states{{{k}}}"
 
     def kind(self, rid, where: str) -> Tuple[str, str]:
         if rid not in self.rk:
@@ -117,11 +128,16 @@ class _DashMapper:
         y: Dict[str, object] = OrderedDict()
         y["id"] = db["id"]
         name, npath = db.get("name", ""), db.get("namePath")
+        if not isinstance(name, str) or (npath is not None and not isinstance(npath, str)):
+            raise MappingError(f"dashboard name {name!r} / namePath {npath!r} are not strings")
         omit: List[str] = []
         if npath and not name.startswith(npath + "/"):
             omit.append("folder_in_name")
         y["name"] = strip_folder(name, npath)
-        y["description"] = db.get("description", "") or ""
+        desc = db.get("description", "") or ""
+        if not isinstance(desc, str) or desc != desc.strip():
+            self.loss("description with leading or trailing whitespace (the dashboard loader strips it)")
+        y["description"] = desc
         y["name_path"] = npath or ""
         if "namePath" not in db:
             omit.append("name_path")
@@ -129,6 +145,8 @@ class _DashMapper:
             omit.append("temporary")
         elif db.get("temporary") is not False:
             self.loss(f"temporary={db.get('temporary')!r} is not modeled (renders false)")
+        if npath is not None and npath != npath.strip():
+            self.loss("namePath with leading or trailing whitespace (the dashboard loader strips it)")
         if "widgetInteractions" not in db:
             omit.append("widget_interactions")
         if omit:
@@ -137,15 +155,33 @@ class _DashMapper:
         y["hidden"] = bool(db.get("hidden", False))
         if db.get("disabled"):
             y["disabled"] = True
-        for s in db.get("states") or []:
+        states = db.get("states") or []
+        if not isinstance(states, list) or any(not isinstance(s, dict) for s in states):
+            self.loss("dashboard states that are not a list of objects")
+        kept_states = 0
+        for s in states:
             key = str(s.get("key", ""))
-            if key == f"permDashboardTime_dashboard_{db['id']}" and s.get("value") in TIME_BY_WIRE:
+            sp = self.state_path(_flat.DASH, key)
+            if set(s) - {"key", "value"}:
+                self.loss(f"dashboard state {key!r} with keys {sorted(set(s) - {'key', 'value'})}")
+            if (key == f"permDashboardTime_dashboard_{db['id']}" and s.get("value") in TIME_BY_WIRE
+                    and "time_range" not in y):
                 y["time_range"] = TIME_BY_WIRE[s["value"]]
+                kept_states += 1
             elif key.startswith("permDashboardTime_dashboard_"):
-                self.loss(f"dashboard absolute-date time range {s.get('value')!r} is not modeled "
-                          f"(only the relative ranges are; dashboard fidelity doc §Dashboard level)")
+                self.doc("absolute-date time range",
+                         f"dashboard absolute-date time range {s.get('value')!r} is not modeled (only the relative "
+                         f"ranges are; dashboard fidelity doc §Dashboard level)", [Mark(sp, "missing", subtree=True)])
+            elif key.startswith("ext-element-"):
+                self.doc("ext-element UI residue", f"dashboard state {key!r} (ext-element UI residue) is not modeled "
+                         f"(dashboard fidelity doc §Dashboard level)", [Mark(sp, "missing", subtree=True)])
             else:
                 self.loss(f"dashboard state {key!r} is not modeled")
+        if states and not kept_states:
+            # the render then writes states: []
+            for x in self.losses:
+                if x.cls in ("absolute-date time range", "ext-element UI residue"):
+                    x.marks.append(Mark(f"{_flat.DASH}.states", "extra", empty_only=True))
         if "editAllowed" in db:
             y["edit_allowed"] = db["editAllowed"]
         if "docCenterKey" in db:
@@ -156,28 +192,22 @@ class _DashMapper:
             y["column_count"] = db["columnCount"]
         if self.ctx.get("folder") in SUMMARY_FOLDERS:
             y["summary_for"] = f"VMWARE:{self.ctx['folder']}"
-        for k, v in _RENDER_CONSTANTS.items():
-            if k in db and db[k] != v:
-                self.loss(f"{k}={db[k]!r} is not modeled (renders {v!r})")
-            elif k not in db:
-                self.loss(f"absent {k} is not modeled (renders {v!r})")
-        for k in db:
-            if k not in _MAPPED_TOP and k not in _IGNORED_TOP and k not in _RENDER_CONSTANTS:
-                self.loss(f"dashboard key {k} is not modeled")
+        for k in _RENDER_CONSTANTS:
+            if k not in db:
+                self.loss(f"absent {k} is not modeled (the renderer always writes it)")
         navs = db.get("dashboardNavigations") or {}
         if not isinstance(navs, dict):
             self.loss("dashboardNavigations that is not a mapping is not modeled")
-            navs = {}
-        for wid in navs:
-            if wid not in self.lid:
-                self.notes.append(f"navigation entries keyed by widget {wid}, which is not on the dashboard, "
-                                  f"are not carried (no widget can fire them)")
+        if not isinstance(db.get("widgets") or [], list):
+            self.loss("widgets that is not a list is not modeled")
         widgets = []
         for i, w in enumerate(db.get("widgets") or []):
             widgets.append(self.widget(w, i, navs))
         y["widgets"] = widgets
         inter = []
         for ix in db.get("widgetInteractions") or []:
+            if not isinstance(ix, dict) or set(ix) - {"widgetIdProvider", "widgetIdReceiver", "type"}:
+                self.loss(f"interaction {ix!r} with keys other than widgetIdProvider, widgetIdReceiver, type")
             a, b = ix.get("widgetIdProvider"), ix.get("widgetIdReceiver")
             if a not in self.lid or b not in self.lid:
                 self.loss(f"interaction {a} -> {b} names a widget not on the dashboard (not modeled)")
@@ -233,6 +263,8 @@ class _DashMapper:
 
     def tag_filter(self, t: dict, where: str) -> Dict[str, object]:
         v = t.get("value") or {}
+        if not isinstance(v, dict):
+            self.loss(f"{where}: tag filter value {v!r} is not an object")
         out: Dict[str, object] = OrderedDict()
         if v.get("kind"):
             out["resource_kinds"] = [OrderedDict(zip(("adapter_kind", "resource_kind"), self.kind(k, where)))
@@ -247,6 +279,8 @@ class _DashMapper:
         return out
 
     def pin_from_resource(self, rid, where: str) -> Dict[str, object]:
+        if not isinstance(rid, str):
+            raise MappingError(f"{where}: resource reference {rid!r} is not an entries reference")
         if rid not in self.res:
             raise MappingError(f"{where}: resource reference {rid!r} is not in the entries table")
         ak, k, nm = self.res[rid]
@@ -257,7 +291,11 @@ class _DashMapper:
 
     # -------------------------------------------------------------- widget
     def widget(self, w: dict, idx: int, navs: dict) -> Dict[str, object]:
+        if not isinstance(w, dict):
+            raise MappingError(f"widget {idx} is not an object")
         c = w.get("config") or {}
+        if not isinstance(c, dict):
+            raise MappingError(f"widget {idx}: config is not an object")
         t = _WIRE_TYPES.get(w.get("type"), w.get("type"))
         where = f"widget {idx} ({t} {w.get('title', '')!r})"
         if t not in SUPPORTED_WIDGETS:
@@ -341,12 +379,14 @@ class _DashMapper:
         if nav:
             out = []
             for n in nav:
-                out.append(NavRef(dashboard_id=str(n.get("id")),
-                                  widget_ids=[str(x.get("id")) for x in n.get("widgets") or []],
-                                  label=n.get("label")))
-                extra = set(n) - {"id", "widgets", "label", "name"}
-                if extra:
-                    self.loss(f"{where}: navigation keys {sorted(extra)} are not modeled")
+                if not isinstance(n, dict) or set(n) - {"id", "widgets"}:
+                    self.loss(f"{where}: navigation entry keys {sorted(n) if isinstance(n, dict) else n!r} other "
+                              f"than id and widgets are not modeled")
+                rx = n.get("widgets") or []
+                if not isinstance(rx, list) or any(not isinstance(x, dict) or set(x) - {"id", "interactionType"}
+                                                   for x in rx):
+                    self.loss(f"{where}: navigation receiving widgets {rx!r} are not modeled")
+                out.append(NavRef(dashboard_id=str(n.get("id")), widget_ids=[str(x.get("id")) for x in rx]))
             y["navigations"] = out
         elif nav == []:
             ui["empty_navigations"] = True
@@ -491,7 +531,13 @@ class _DashMapper:
         rc = (c.get("refreshContent") or {}).get("refreshContent")
         if rc is not True:
             y["refresh_content"] = rc
-        rm = (c.get("relationshipMode") or {}).get("relationshipMode")
+        rmo = c.get("relationshipMode") or {}
+        rm = rmo.get("relationshipMode") if isinstance(rmo, dict) else rmo
+        if isinstance(rm, list):
+            # 9.1.1 built-ins ("vSAN Performance"): the array form the renderer
+            # writes for Heatmap / AlertList; MetricChart renders a scalar.
+            self.loss(f"{where}: MetricChart relationshipMode as a list {rm!r} (the renderer writes a scalar "
+                      f"-1, 0 or 1)")
         if rm:
             names = {-1: "children", 1: "parents"}
             if rm not in names:
@@ -670,7 +716,14 @@ class _DashMapper:
         if "alertDefinitions" not in c:
             y.setdefault("omit", []).append("alert_definitions")
         else:
-            y["alert_definitions"] = [a.get("id") for a in c.get("alertDefinitions") or []]
+            ad = c.get("alertDefinitions") or []
+            if not isinstance(ad, list) or any(not isinstance(a, dict) or set(a) - {"id"} for a in ad):
+                # 9.1.1 built-ins ("License Server Health", "vSAN Snapshots and
+                # Replica") carry bare id strings; the renderer writes
+                # [{"id": <id>}] objects only.
+                self.loss(f"{where}: AlertList alertDefinitions {str(ad)[:80]} are not {{id: ...}} objects (the "
+                          f"renderer writes [{{\"id\": <id>}}])")
+            y["alert_definitions"] = [a.get("id") for a in ad]
         if sp:
             y["self_provider"] = True
 
@@ -724,10 +777,20 @@ class _DashMapper:
 
 
 def map_dashboard(db: dict, context: dict, location: str) -> MappedObject:
-    """Map one dashboard dict. Raises ``MappingError``."""
+    """Map one dashboard dict, then classify every source key
+    (``accounting.account``). Raises ``MappingError``."""
+    if not isinstance(db.get("id"), str):
+        raise MappingError(f"dashboard id {db.get('id')!r} is not a string")
     m = _DashMapper(db, context, location)
     y = m.map()
-    return MappedObject("dashboard", y, losses=m.losses, notes=m.notes)
+    account("dashboard", _flat.flatten_dashboard(db, context.get("entries") or {}, {}), m.losses)
+    navs = db.get("dashboardNavigations")
+    if isinstance(navs, dict) and navs and not any(wid in m.lid and m.lid[wid] for wid in navs):
+        # Every navigation key is stale: the render then writes {}.
+        for x in m.losses:
+            if x.cls == "navigation keyed by a widget not on the dashboard":
+                x.marks.append(Mark(f"{_flat.DASH}.dashboardNavigations", "extra", empty_only=True))
+    return MappedObject("dashboard", y, losses=m.losses, notes=m.notes, source_name=y["name"])
 
 
 def sm_ids_in(tree) -> List[str]:

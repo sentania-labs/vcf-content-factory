@@ -12,9 +12,11 @@ on:
   parent);
 - resolve report sections against ``content/views`` and
   ``content/dashboards`` under the working directory (the pre-row-3
-  report loader default, kept verbatim) for a ``bundles/`` manifest, and
-  against the project's own ``views/`` and ``dashboards/`` for a
-  third-party ``PROJECT.yaml`` (since 2026-11-13);
+  report loader default, kept verbatim). For a third-party
+  ``PROJECT.yaml`` the project's own ``views/`` and ``dashboards/`` come
+  first and that same factory content second (since 2026-11-13): a
+  project report may name its own view, or a factory view it cross-links
+  (``cross_links``), as before;
 - mint a uuid4 into a super metric, view, dashboard or report YAML that
   has no ``id`` and derive ``provenance`` from the repo layout;
 - default ``load_all_bundles`` to the ``bundles`` directory.
@@ -26,8 +28,10 @@ running loader sees, patch ``vcfcf_core.packaging.loader``.
 """
 from __future__ import annotations
 
+import shutil
+import tempfile
 from pathlib import Path
-from typing import List
+from typing import List, Sequence
 
 from vcfcf_core.packaging import loader as _core
 from vcfcf_core.packaging.loader import Bundle, BundleValidationError
@@ -59,25 +63,47 @@ def _provenance_of(path: Path) -> str:
     return provenance_from_path(path)
 
 
+def _write_name_index(dirs: Sequence[Path], dest: Path, dashboards: bool) -> None:
+    """``{id, name}`` stubs for every view (or dashboard) YAML under
+    ``dirs``, the first directory that has a name winning it. The report
+    loader indexes a single directory by exactly these two fields."""
+    import yaml
+    from vcfcf_core.reports.loader import _build_dashboard_index, _build_view_index
+    build = _build_dashboard_index if dashboards else _build_view_index
+    merged: dict = {}
+    for d in dirs:
+        for name, oid in build(Path(d)).items():
+            merged.setdefault(name, oid)
+    dest.mkdir(parents=True)
+    for i, (name, oid) in enumerate(sorted(merged.items())):
+        (dest / f"{i}.yaml").write_text(yaml.safe_dump({"id": oid, "name": name}), encoding="utf-8")
+
+
 def load_bundle(path: str | Path) -> Bundle:
     """Load a bundle manifest and every content object it references, with
     the factory's root sniff, minting and provenance (see module docstring)."""
     path = Path(path)
-    # A third-party project's reports name the project's own views and
-    # dashboards, which live beside its PROJECT.yaml (the core loader's
-    # default, None here). Against content/ under the working directory a
-    # project report that names its own view or dashboard could never
-    # resolve (found by the offline importer, import-local, 2026-11-13).
-    # A bundles/*.yaml manifest lists factory content and keeps content/.
-    is_project = path.name == "PROJECT.yaml"
-    return _core.load_bundle(
-        path,
-        repo_root=_find_repo_root(path.parent),
-        report_views_dir=None if is_project else Path("content/views"),
-        report_dashboards_dir=None if is_project else Path("content/dashboards"),
-        on_missing_id=_mint_id_into_file,
-        provenance_of=_provenance_of,
-    )
+    kwargs = dict(repo_root=_find_repo_root(path.parent), on_missing_id=_mint_id_into_file,
+                  provenance_of=_provenance_of)
+    if path.name != "PROJECT.yaml":
+        return _core.load_bundle(path, report_views_dir=Path("content/views"),
+                                 report_dashboards_dir=Path("content/dashboards"), **kwargs)
+    # A third-party project's report names its own views and dashboards
+    # (beside PROJECT.yaml) or factory content it cross-links (content/
+    # under the working directory, as before). Own first: a project report
+    # naming its own view could not resolve against content/ alone (found
+    # by import-local, 2026-11-13). The index is built after the project's
+    # views and dashboards load, so an id minted into one is seen.
+    index = Path(tempfile.mkdtemp(prefix="vcfcf-report-names-"))
+
+    def report_dirs():
+        _write_name_index([path.parent / "views", Path("content/views")], index / "views", False)
+        _write_name_index([path.parent / "dashboards", Path("content/dashboards")], index / "dashboards", True)
+        return index / "views", index / "dashboards"
+    try:
+        return _core.load_bundle(path, report_dirs=report_dirs, **kwargs)
+    finally:
+        shutil.rmtree(index, ignore_errors=True)
 
 
 def load_all_bundles(bundles_dir: str | Path = "bundles") -> List[Bundle]:

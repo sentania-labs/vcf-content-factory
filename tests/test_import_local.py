@@ -488,13 +488,18 @@ def test_verify_round_trip_identical_through_layout_loader(source, tmp_path, cap
     # documented non-differences are counted, not hidden
     assert "renumbered ids (widget)" in text
     if layout == "pak":
-        # Section needs 9.1.1; the pak gate says so (reported, not converted away)
+        # Section needs 9.1.1; the pak gate says so (reported, not converted
+        # away), and a pak check failure is never accepted: nothing written.
         assert "PAK CHECK" in text and "Section" in text
-        assert (out / "import-report" / "bundled_content.yaml").exists()
         assert rc == 1
+        assert not out.exists() and "nothing written to" in text
+        rc, text = _run(source, out, capsys, "--layout", layout, "--ids", "keep", "--naming", "unprefixed",
+                        "--allow-partial")
+        assert rc == 1 and not out.exists(), "--allow-partial does not accept a pak check failure"
     else:
         assert rc == 0, text
         assert (out / "PROJECT.yaml").exists()
+        assert (out / ".vcfcf-import-local").exists()
 
 
 def test_verify_reports_differences_and_presence(tmp_path, capsys):
@@ -530,16 +535,22 @@ def test_verify_reports_differences_and_presence(tmp_path, capsys):
                     "unprefixed", "--verify")
     assert rc == 1
     assert "LOSS view 'Probe Lossy': column 0: empty preferredUnitId is not modeled" in text
-    assert "preferredUnitId [missing]" in text
-    assert "0 identical" in text
+    # the loss is recorded at its exact path and accepted only there
+    assert "Property{preferredUnitId}]" in text
+    assert "0 identical" in text and "1 differ only at recorded losses" in text
+    assert "ONLY RECORDED LOSSES views/probe-lossy.yaml" in text
+    assert not (tmp_path / "o").exists()
 
 
 def test_compare_counts_fields_and_presence_one_side():
     c = compare.Comparison()
-    compare.diff({"a": 1, "b": {"c": 2}}, {"a": 1, "b": {}, "d": 3}, "x", c)
+    compare.diff_flat({"x.a": 1, "x.b.c": 2}, {"x.a": 1, "x.d": 3}, c, xml=False)
     assert c.fields == 3
-    assert ("x.b.c", "missing on render") in c.differences
-    assert ("x.d", "extra on render") in c.differences
+    assert [(d.path, d.kind) for d in c.differences] == [("x.b.c", "missing"), ("x.d", "extra")]
+    # exact: whitespace counts, a string is not a number, true is not 1
+    c = compare.Comparison()
+    compare.diff_flat({"a": "X ", "b": "1", "c": True}, {"a": "X", "b": 1, "c": 1}, c, xml=False)
+    assert len(c.differences) == 3
 
 
 def test_verify_exits_4_when_nothing_was_compared(tmp_path, capsys):
@@ -564,17 +575,18 @@ def test_ids_keep_on_stock_id_fails_and_writes_nothing(tmp_path, capsys):
     assert rc == 3
     assert f"view id {STOCK_VIEW_ID}" in text and "--ids mint" in text
     assert not out.exists()
-    rc, text = _run(src, out, capsys, "--layout", "pak", "--ids", "mint", "--naming", "unprefixed")
+    rc, text = _run(src, out, capsys, "--layout", "pak", "--ids", "mint", "--mint-namespace", "probe", "--naming",
+                    "unprefixed")
     assert rc == 0, text
     assert _yaml(out, "views/probe-unreferenced.yaml")["id"] != STOCK_VIEW_ID
 
 
 def test_ids_mint_rewrites_every_reference_and_writes_the_map(source, tmp_path, capsys):
     out = tmp_path / "out"
-    rc, text = _run(source, out, capsys, "--layout", "third-party", "--ids", "mint", "--naming", "unprefixed",
-                    "--verify")
+    rc, text = _run(source, out, capsys, "--layout", "third-party", "--ids", "mint", "--mint-namespace", "probe",
+                    "--naming", "unprefixed", "--verify")
     assert rc == 0, text
-    rows = [r.split("\t") for r in (out / "import-report" / "id_map.tsv").read_text().splitlines()[1:]]
+    rows = [r.split("\t") for r in (out / "import-report" / "id_map.tsv").read_text().splitlines()[2:]]
     assert len(rows) == 14
     new = {r[1]: r[2] for r in rows}
     old_ids = {SM1, SM2, V_HOST, V_DIST, V_TREND, V_LONE, D_A, D_B, D_BARE, R_1}
@@ -651,7 +663,7 @@ def test_content_layout_refuses_unprefixed_names(source, tmp_path, capsys):
 
 def test_prefixed_dashboard_name_over_50_fails_with_rename_hint(source, tmp_path, capsys):
     r = tmp_path / "rename.tsv"
-    r.write_text("Probe Bare\tProbe Bare With A Very Long Name That Will Not Fit\n")
+    r.write_text("dashboard\tProbe Bare\tProbe Bare With A Very Long Name That Will Not Fit\n")
     rc, text = _run(source, tmp_path / "o", capsys, "--layout", "third-party", "--ids", "keep", "--naming",
                     "factory-prefixed", "--rename", r)
     assert rc == 1
@@ -660,7 +672,7 @@ def test_prefixed_dashboard_name_over_50_fails_with_rename_hint(source, tmp_path
 
 def test_rename_by_name_and_by_id_applies_to_references(source, tmp_path, capsys):
     r = tmp_path / "rename.tsv"
-    r.write_text(f"old\tnew\nProbe Host List\tProbe Hosts Renamed\n{D_B}\tProbe Second\n")
+    r.write_text(f"type\told\tnew\nview\tProbe Host List\tProbe Hosts Renamed\ndashboard\t{D_B}\tProbe Second\n")
     out = tmp_path / "out"
     rc, text = _run(source, out, capsys, "--layout", "third-party", "--ids", "keep", "--naming", "unprefixed",
                     "--rename", r, "--verify")
@@ -673,7 +685,7 @@ def test_rename_by_name_and_by_id_applies_to_references(source, tmp_path, capsys
 
 def test_two_objects_sharing_a_name_fail_naming_both(source, tmp_path, capsys):
     r = tmp_path / "rename.tsv"
-    r.write_text(f"{V_LONE}\tProbe Trend\n")
+    r.write_text(f"view\t{V_LONE}\tProbe Trend\n")
     rc, text = _run(source, tmp_path / "o", capsys, "--layout", "third-party", "--ids", "keep", "--naming",
                     "unprefixed", "--rename", r)
     assert rc == 1
@@ -696,6 +708,14 @@ def test_differing_copies_stop_and_name_both_files_unless_told(source, tmp_path,
     rc, text = _run(src, tmp_path / "o2", capsys, "--layout", "third-party", "--ids", "keep", "--naming",
                     "unprefixed", "--prefer-source", "b/second")
     assert rc == 0, text
+    # matched against the path relative to the input root: a fragment of
+    # the input root itself matches both files and is an error
+    rc, text = _run(src, tmp_path / "o3", capsys, "--layout", "third-party", "--ids", "keep", "--naming",
+                    "unprefixed", "--prefer-source", ".xml")
+    assert rc == 2 and "matches 2 of the files" in text
+    rc, text = _run(src, tmp_path / "o4", capsys, "--layout", "third-party", "--ids", "keep", "--naming",
+                    "unprefixed", "--prefer-source", "src/b")
+    assert rc == 2 and "matches none of the files" in text
     assert _yaml(tmp_path / "o2", "views/probe-changed.yaml")["id"] == V_LONE
 
 
@@ -704,13 +724,22 @@ def test_target_min_drops_newer_omit_and_lists_the_deviation(source, tmp_path, c
     out = tmp_path / "out"
     rc, text = _run(source, out, capsys, "--layout", "third-party", "--ids", "keep", "--naming", "unprefixed",
                     "--target-min", "8.18.7", "--verify")
+    # A Section dashboard is converted, not deliverable to 8.18.7 (W2): the
+    # run exits non-zero and writes nothing; --allow-partial accepts it in a
+    # third-party layout (never in a pak layout, test above).
+    assert rc == 1 and not out.exists()
+    assert "NOT DELIVERABLE to 8.18.7: dashboards/probe-dashboard-b.yaml" in text
+    assert "widget w0 (Section) needs VCF Operations 9.1.1" in text
+    rc, text = _run(source, out, capsys, "--layout", "third-party", "--ids", "keep", "--naming", "unprefixed",
+                    "--target-min", "8.18.7", "--allow-partial")
+    assert rc == 0, text
     assert "omit" not in _yaml(out, "dashboards/probe-dashboard-a.yaml")
     assert "TARGET 8.18.7: dashboards/probe-dashboard-a.yaml" in text and "omit: temporary not emitted" in text
+    assert "set aside only at dashboard.temporary" in text
     assert "dashboard: dashboard.temporary [extra]" in text  # forced, listed under deviations
+    assert "1 identical apart from keys forced by --target-min" in text
     # Section is reported, not converted away
-    assert "widget w0 (Section): needs VCF Operations 9.1.1" in text
     assert any(w["type"] == "Section" for w in _yaml(out, "dashboards/probe-dashboard-b.yaml")["widgets"])
-    assert rc == 0, text
 
 
 def test_without_target_reproduces_source_and_warns(source, tmp_path, capsys):
@@ -723,16 +752,31 @@ def test_without_target_reproduces_source_and_warns(source, tmp_path, capsys):
 
 
 # -------------------------------------------------------------- safety
-def test_refuses_non_empty_target_without_force_and_lists_overwrites(source, tmp_path, capsys):
+def test_refuses_non_empty_target_and_force_replaces_only_its_own_tree(source, tmp_path, capsys):
+    """W7: --force replaces only a directory carrying the importer's marker,
+    whole (no file of an earlier run is left behind); anything else is
+    refused, with or without --force."""
     out = tmp_path / "out"
     (out / "views").mkdir(parents=True)
     (out / "views" / "probe-host-list.yaml").write_text("keep me\n")
-    rc, text = _run(source, out, capsys, "--layout", "third-party", "--ids", "keep", "--naming", "unprefixed")
-    assert rc == 2 and "not empty" in text
-    assert (out / "views" / "probe-host-list.yaml").read_text() == "keep me\n"
-    rc, text = _run(source, out, capsys, "--layout", "third-party", "--ids", "keep", "--naming", "unprefixed", "--force")
+    for extra in ((), ("--force",)):
+        rc, text = _run(source, out, capsys, "--layout", "third-party", "--ids", "keep", "--naming", "unprefixed",
+                        *extra)
+        assert rc == 2 and "not empty" in text
+        assert (out / "views" / "probe-host-list.yaml").read_text() == "keep me\n"
+    assert "was not written by import-local" in text
+    out2 = tmp_path / "out2"
+    rc, text = _run(source, out2, capsys, "--layout", "third-party", "--ids", "keep", "--naming", "unprefixed")
     assert rc == 0, text
-    assert "OVERWROTE" in text and "probe-host-list.yaml" in text
+    (out2 / "views" / "stale.yaml").write_text("id: x\nname: stale\n")
+    (out2 / "PROJECT.yaml").write_text((out2 / "PROJECT.yaml").read_text() + "# edited attribution\n")
+    rc, text = _run(source, out2, capsys, "--layout", "third-party", "--ids", "keep", "--naming", "unprefixed")
+    assert rc == 2 and "--force" in text
+    rc, text = _run(source, out2, capsys, "--layout", "third-party", "--ids", "keep", "--naming", "unprefixed",
+                    "--force")
+    assert rc == 0, text
+    assert not (out2 / "views" / "stale.yaml").exists()
+    assert "# edited attribution" in (out2 / "PROJECT.yaml").read_text() and "KEPT" in text
 
 
 def test_refuses_output_inside_input(source, tmp_path, capsys):
@@ -848,8 +892,9 @@ def test_written_yaml_a_loader_refuses_fails_and_cascades(source, tmp_path, caps
     (src / "dashboards" / "Both.json").write_text((source / "dashboards" / "Both.json").read_text())
     (src / "sms.json").write_text((source / "supermetrics" / "SMs.json").read_text())
     out = tmp_path / "o"
-    rc, text = _run(src, out, capsys, "--layout", "third-party", "--ids", "keep", "--naming", "unprefixed", "--verify")
-    assert rc == 1
+    rc, text = _run(src, out, capsys, "--layout", "third-party", "--ids", "keep", "--naming", "unprefixed", "--verify",
+                    "--allow-partial")
+    assert rc == 0, text
     assert f"FAILED view {V_HOST} 'Probe Host List': the written YAML does not load" in text
     assert f"FAILED dashboard {D_A} 'Probe Dashboard A': the written YAML does not load" in text
     assert "probe-host-list.yaml" not in _files(out, "views")

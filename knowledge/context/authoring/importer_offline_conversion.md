@@ -6,16 +6,18 @@ layout the factory loaders read. No live instance, no network. Use it to port
 a third-party pak or a lab export into the factory, or to bring existing
 content under factory management.
 
-Code: `src/vcfcf_core/importer/` (scan, per-type mapping, conversion plan,
-comparison: location-agnostic) and `src/vcfcf_extractor/importer.py` (CLI,
-writing, stock-id guard, verification through the real loaders). Tests:
-`tests/test_import_local.py`.
+Code: `src/vcfcf_core/importer/` (scan, per-type mapping, source accounting,
+flat forms, conversion plan, comparison: location-agnostic) and
+`src/vcfcf_extractor/importer.py` (CLI, staged writing, stock-id guard,
+verification through the real loaders). Tests: `tests/test_import_local.py`,
+`tests/test_import_local_fidelity.py` (the review fixes and the mutation
+self-test).
 
 ## Which command
 
 | Command | Use it for |
 |---|---|
-| `import-local` | Whole content trees: every view (referenced or not), dashboard, report template, alert, symptom, recommendation and super metric, every field of the current schema, explicit id and naming decisions, verification |
+| `import-local` | Whole content trees: every view (referenced or not), dashboard, report template, alert, symptom, recommendation and super metric, every source key accounted for, explicit id and naming decisions, verification |
 | `reverse-local` | One dashboard JSON and the views it references, with the old output shape (kept for its users, unchanged) |
 | `extract dashboard` (`/extract`) | A dashboard from a live lab, with its dependency walk and enablements (unchanged) |
 
@@ -43,46 +45,82 @@ Archives are read with the stock-id guard's limits and "cannot check"
 discipline (`stock_id_guard.md`): more than 6 nested archives, a member over
 512 MB, an encrypted member, an unreadable compression method or a zip that
 does not open is `CANNOT READ`, and the run exits 1 whatever else happens
-(`--allow-partial` does not cover it). Everything else that is not a content
-definition (an XSD, `configuration.json`, the marker file, a pak's
-`files/solutionconfig/*.xml` check lists, `.properties` bundles, policy
-exports) is listed as *passed over* with the reason. Every definition the
-stock-id guard's own scanner finds must be one the converter read, or the run
-reports `MISSED` and exits 1.
+(`--allow-partial` does not cover it). The same holds for an XML file with a
+DOCTYPE or entity declaration (refused before parsing: product exports carry
+neither, so entity-expansion safety does not depend on the host's libexpat),
+a JSON file with the same key twice in one object (which value the product
+used cannot be known), and text that does not decode. Text is decoded by
+byte-order mark, else by an XML declaration's `encoding`, else as UTF-8.
 
-The same id in several files is one object when the copies are the same once
-renumbered ids and whitespace are set aside (`merged:` lines). When copies
-differ the object fails, naming every file, until `--prefer-source
-<path fragment>` names the copy that wins (repeatable, first match wins).
+**Unsupported types** are listed per object as `NOT CONVERTED (unsupported
+type)` and make the run exit 1 unless `--allow-partial`: custom groups (an
+export `customGroups` list, or a pak custom group JSON with
+`membershipDefinition`) and policies (each `<Policy>` of a policy export).
+Everything else that is not a content definition (an XSD,
+`configuration.json`, the marker file, a pak's `files/solutionconfig/*.xml`
+check lists, `.properties` bundles, dashboard sharings, user mappings) is
+listed as *passed over* with the reason. Every definition the stock-id
+guard's own scanner finds must be one the converter read, or the run reports
+`MISSED` and exits 1.
+
+The same id in several files is one object when the comparator finds no
+difference between the copies (the same flat form, below; only the ids the
+product renumbers are left out) (`merged:` lines). When copies differ in
+anything else the object fails, naming every file, until `--prefer-source
+<fragment>` picks one: the fragment is matched against each file's path
+relative to the input it was found under, must match exactly one of the
+files that define that object, and is a usage error (exit 2) when it matches
+two of them, picks a different copy than another fragment, or matches no
+file of any differing duplicate.
 
 ## Command and options
 
 ```
 python3 -m vcfcf_extractor import-local INPUT... \
   --out DIR --layout content|third-party|pak \
-  --ids keep|mint | --id-map TSV [--id-map TSV ...] \
+  --ids keep | --ids mint [--mint-namespace TEXT] | --id-map TSV [--id-map TSV ...] \
   --naming unprefixed|factory-prefixed \
   [--rename TSV] [--drop TSV ...] [--target-min 8.18.7|9.0.2|9.1.1] \
   [--prefer-source FRAGMENT ...] [--project-name NAME] [--report-dir DIR] \
-  [--verify] [--allow-partial] [--force] [--dry-run]
+  [--no-verify] [--allow-partial] [--force] [--dry-run]
 ```
 
-| Layout | Writes | Loader `--verify` uses |
+| Layout | Writes | Loader verification uses |
 |---|---|---|
 | `content` | `<out>/{supermetrics,views,dashboards,reports,symptoms,recommendations,alerts}/` (a factory `content/` tree; every name must carry `[VCF CF] `) | the factory per-type loaders |
 | `third-party` | the same folders plus a `PROJECT.yaml` (`factory_native: false`), i.e. a `third_party/<project>/` | the factory bundle loader on `PROJECT.yaml` |
 | `pak` | the same folders relative to an SDK adapter project, plus `import-report/bundled_content.yaml` to merge into `adapter.yaml`; its header names the other settings the content needs (`content_naming: unprefixed` for unprefixed names, `content_foreign_adapter_kinds` for symptoms and alerts on another adapter kind) | `sdk_builder._load_bundled_content`, then the pak version-floor and reference checks |
 
 Output: one YAML per object, named from the object's name, each with a
-comment naming its source file. `--report-dir` (default
-`<out>/import-report/`) receives `report.json` (everything below, per
-object), `id_map.tsv` (type, old id, new id, name, file for every object) and,
-for a pak, the `bundled_content` snippet.
+comment naming its source file. A name that slugs to a file name Windows
+reserves (`con`, `nul`, `aux`, `com1` ...) is written as `<slug>-<type>.yaml`
+(noted); colliding slugs get `-2`, `-3`. `id_map.tsv` records the file of
+every object. `--report-dir` (default `<out>/import-report/`) receives
+`report.json` (everything below, per object), `id_map.tsv` (type, old id,
+new id, name, the source name when it differs, file) and, for a pak, the
+`bundled_content` snippet. An explicit `--report-dir` outside `--out` that
+holds those files without import-local's marker is refused; one it wrote
+before is rewritten.
 
-Exit status: 0 success; 1 a failure, a loss, a verification difference
-(`--allow-partial` accepts these) or an unreadable input (never accepted);
-2 a usage or safety refusal; 3 the stock-id guard refused the result; 4
-`--verify` compared nothing. Nothing is written on 2 or 3.
+**Writing is staged.** The tree is written into a temporary sibling of
+`--out`, verified there, and moved into place only when the run succeeds
+(exit 0, which includes partial results `--allow-partial` accepted). On any
+other outcome `--out` is untouched and the run says `nothing written to
+<out>` (an explicit `--report-dir` outside `--out` still receives the
+report). `--out` must be absent or empty; `--force` replaces a non-empty
+`--out` only when it carries `.vcfcf-import-local` (written by an earlier
+run), whole, so no file of the earlier run is left behind; its
+`PROJECT.yaml`, which may carry edited attribution, is kept (`KEPT` line).
+Any other non-empty `--out` is refused with or without `--force`.
+
+Exit status: 0 success; 1 a failure, a loss, an unsupported object, a
+dashboard not deliverable to `--target-min`, or a verification difference
+(`--allow-partial` accepts these, except in the pak layout a pak check
+failure or a not-deliverable dashboard), or an unreadable input (never
+accepted); 2 a usage or safety refusal, or the tree could not be written; 3
+the stock-id guard refused the result; 4 verification compared nothing; 5 an
+internal error in the converter on at least one object (never accepted).
+Nothing is written on any non-zero exit.
 
 ## Ids: an explicit decision
 
@@ -90,21 +128,35 @@ One of these is required:
 
 - `--ids keep`: the source ids. Right only for content that never shipped
   under someone else's id.
-- `--ids mint`: a new UUID for every object (a recommendation gets
-  `Recommendation-<uuid>`); every reference is rewritten consistently,
-  including super metric wire keys inside dashboard widgets and ids in
-  `view_details`, TextDisplay HTML and metric links. `id_map.tsv` records old
-  to new. An old id that survives anywhere in the output (free text the
-  converter does not rewrite) is a `WARNING` naming the file.
+- `--ids mint`: a new id for every object, UUID version 5 from a namespace
+  (`--mint-namespace TEXT`, default `project:<--project-name>`; one of the two
+  is required) and the object's type and source id, so a rerun with the same
+  namespace gives the same ids and a second import updates rather than
+  duplicates (RULE-007). A recommendation gets `Recommendation-<uuid>`.
+  `id_map.tsv` records old to new and, in its first line, the namespace.
 - `--id-map TSV` (repeatable): `old_id<TAB>new_id` rows (a header row and
   extra columns are allowed) for some objects; the rest keep their ids. An
   entry that matches nothing is a warning.
+
+With `mint` or a map, every reference follows: by name inside the set
+(below), and in every string of every type the old id of a re-identified
+object in the set becomes its new id. Super metric keys (`sm_<uuid>`,
+`Super Metric|sm_<uuid>`) take the name form where the schema has one
+(view columns and additional columns `supermetric:"<name>"`, formulas
+`@supermetric:"<name>"`) and the new id everywhere else (symptom conditions,
+including an alert file's inline symptoms, view subject filters, dashboard
+widget metric entries, Pareto additional columns, Heatmap metrics, HTML,
+`view_details`, metric links). After the rewrite every written object is
+scanned for any old id of a re-identified object in the set, in any letter
+case, keys included; a hit fails that object, naming the field (an object
+that names it then fails too). A dropped object's id is not re-identified,
+so it remains, which is the point of `--drop`.
 
 Whatever the mode, the stock-id guard runs on the result before anything is
 written: a definition under a VCF Operations stock id fails the run (exit 3),
 listing each id with the hint to mint, map or drop. So `--ids keep` on content
 that copied product ids fails loudly, which is the correct result. The guard
-runs again on the loaded tree under `--verify`.
+runs again on the loaded tree during verification.
 
 `--drop TSV` (repeatable): ids (first column) not to emit, so the content can
 reference the product object in place instead of shipping a copy. References
@@ -120,85 +172,96 @@ prefix that derived id changes, so such an object needs `--ids mint`.
 
 ## Names
 
-- `--naming unprefixed`: names as in the source.
+Every change the converter makes to a name is a recorded rename (`RENAMED`
+line, report, `source_name` column of `id_map.tsv`), including surrounding
+whitespace the factory loaders strip. Two objects of one type whose final
+names are equal once stripped both fail, naming both sources (dashboards
+included: `X` and `X ` collide).
+
+- `--naming unprefixed`: names as in the source (stripped).
 - `--naming factory-prefixed`: `[VCF CF] ` on every name (the legacy
   `[VCF Content Factory] ` is replaced), and every by-name reference follows.
   Each dashboard's name length is printed; a prefixed dashboard name over 50
   characters fails (the factory loader refuses it) with the hint to rename.
-- `--rename TSV`: `old name<TAB>new name` rows, applied before `--naming` to
-  names and references alike. A row keyed by an id renames that one object,
-  which is how two objects sharing a name are told apart.
+- `--rename TSV`: `type<TAB>old name or id<TAB>new name` rows (`type` is
+  `view`, `dashboard`, `report`, `symptom`, `alert`, `recommendation` or
+  `supermetric`), applied before `--naming` to names and references alike.
+  The type keeps a rename from touching another type's object of the same
+  name; a row keyed by an id renames that one object, which is how two
+  objects sharing a name are told apart.
 
 Cross-references inside the set are by NAME (the factory convention): a
 dashboard View widget's `view:`, report sections, navigation targets, alert
 symptoms and recommendations, `supermetric:"<name>"` in view columns and
 additional columns, `@supermetric:"<name>"` in formulas. Outside the set, by
 raw id where the schema has a raw-id form (a note names each one: it must
-exist on the target). Dashboard widget metric keys keep the wire form
-`Super Metric|sm_<uuid>` (the dashboard schema has no name form; dashboard
-fidelity doc). Two objects of one type with the same final name both fail,
-naming both sources.
+exist on the target).
 
-## What is read, per type
+## Every source key is accounted for
 
-Every field of the current YAML schema, including the 2026-11-12 fidelity
-fields; the wire-format docs are the mapping: views
-(`../wire-formats/view_fidelity_wire_format.md`, `view_column_wire_format.md`),
-dashboards (`dashboard_fidelity_wire_format.md`), report templates
-(`template_fidelity_wire_format.md`), alerts, symptoms and recommendations
-(`alert_fidelity_wire_format.md`). In short:
+Each object is reduced to its **flat form** (`vcfcf_core/importer/flat.py`):
+every attribute, element text, JSON key and list position, by an exact path
+(`ViewDef/Controls/Control{attributes-selector}/Property{attributeInfos}/List/Item[3]/Value/Property{displayName}@value`,
+`widget[2:View].config.refreshInterval`). After a mapper has built the YAML,
+the source accounting (`accounting.py`) classifies every key of the flat
+form by an explicit per-type table:
 
-- **Views**: list, distribution, trend; subjects and `types:`, the subject
-  filter, `group_by`, `usage`, every column Property (property and string
-  flags, sort, roll-up type, unit and count, bounds and `ascending_range`,
-  `use_symptom_thresholds`, timestamps, transformations with `percentile`,
-  `transform_expression` and the TIME_POINT siblings, instanced-group
-  drivers, time segments), `omit:` wherever the source leaves out a Property
-  the renderer writes, summary rows, buckets (ranges, `is_sum`, count, calc
-  function), `additional_columns`, `distribution_color`, `top_n`,
-  `page_size`, `max_points_count`, `include_resource_creation_time`,
-  `forecast_days`. Instanced-group member columns are written as plain
-  columns with their sampled key; the render is the same.
-- **Dashboards**: `name_path`, `hidden`, `shared`, `disabled`, `summary_for`,
-  `time_range`, `edit_allowed`, `doc_center_key`, column layout, `omit:`,
-  interactions, navigations; every widget type the schema has (View,
-  TextDisplay, Scoreboard in both metric modes, MetricChart, HealthChart,
-  ParetoAnalysis, Heatmap, ResourceRelationshipAdvanced, AlertList,
-  ProblemAlertsList, PropertyList, ResourceList, AlertVolume, Section) with
-  `ui:` (states with `{self}`, height, the editor residue keys), `description`,
-  `title_localized`, `collapsed`, `view_details`, and the per-type fidelity
-  fields.
-- **Report templates**: subject types (an empty list written explicitly),
-  sections by name or `view_id` / `dashboard_id`, CoverPage formatting,
-  `omit: [formatting]`, orientation, settings.
-- **Alerts / symptoms / recommendations**: explicit ids, names,
-  `disable_in_base_policy`, wait and cancel cycles, impact, symptom sets
-  (`ANY` / `ALL` aggregation), recommendations with priority; symptom
-  conditions (static metric, property, dynamic), `symptom_def_type`,
-  `omit:`.
-- **Super metrics**: id, name, formula, description, unit, resource kinds.
+- **converted**: the mapper carries it into the YAML (and refuses a value it
+  cannot carry);
+- **renumbered by the product**: not in the flat form at all, counted (view
+  control and data-provider ids, the column `Item`'s `id` Property; widget
+  ids, compared as position tokens `w<i>`; `entries` internal ids, resolved
+  to adapter, kind and name; `extModel` ids; the View pin's Ext resource id;
+  dashboard creation and update times and user ids; super metric
+  `modificationTime` / `modifiedBy`);
+- **constant**: a value the renderer always writes, with the renderer
+  function named on the row (`refreshInterval: 300`, `Control visible`, the
+  `customFilter` default, CoverPage `ContentKey` ...), or a value it derives
+  (a widget's `config.title` is its `title`, a tag filter's `path` comes from
+  its kinds, a Heatmap `groupBy.id` from its kind): the source must hold
+  exactly that value;
+- **recorded loss**: a class the fidelity docs list as not modeled (below);
+- **GAP**: anything else, including a key no row matches. The object stops
+  with the key named and a `TOOLSET GAP` block, so a key a future product
+  version adds cannot vanish.
 
-## What is not converted, and how it is reported
+**Documented losses** (`model.DOCUMENTED_NOT_MODELED`, each with the doc that
+lists it) convert, and each is recorded per object at the exact path(s) it
+alters (`LOSS ... [at <path>]`): `localizationKey` on a view's or template's
+Title or Description (template fidelity doc, DEF-018); a buckets-control on a
+list view, an empty `preferredUnitId`, per-SubjectType filters that differ,
+filter `values` lists and `conditionId`, `startSubUnit`,
+`BlacklistResourceKind`, `includeNotExistingResources`, `cellLink`,
+related-object columns, `objectType=POLICY`, per-column transformations on a
+trend view (view fidelity doc); `adapterName`, the absolute-date time range,
+`ext-element` UI residue states and navigation entries keyed by a widget that
+is not on the dashboard (dashboard fidelity doc).
 
-- **A documented loss** converts, and the loss is listed (`LOSS ...`): the
-  features the fidelity docs list as deliberately not modeled, which are the
-  `localizationKey` on a Title or Description (no localization bundle ships
-  with the YAML; DEF-018), an empty `preferredUnitId`, a buckets-control on a
-  list view, subject-filter `values` lists and `conditionId`, different
-  filters per SubjectType, `startSubUnit`, `BlacklistResourceKind`,
-  `includeNotExistingResources`, `cellLink`, related-object columns,
-  `objectType=POLICY` and the absolute-date dashboard time range. The list is
-  `vcfcf_core.importer.model.DOCUMENTED_NOT_MODELED`.
-- **Anything else the schema cannot carry stops that object** with the
-  reason and a `TOOLSET GAP` block; everything else converts. Examples seen
-  on a 9.1.1 export: a time selector without `count`, a column without
-  `isStringAttribute`, a fractional `percentile` (99.9), text and image
-  views, a SymptomSet `aggregationOperator`.
-- **A written YAML a loader refuses** is not written: each object is staged
-  and loaded with the layout's loader first; one it refuses fails with the
-  loader's message, and so does every object that names it.
-- A reference to an object that failed fails the referencing object (named
-  as a cascade, never downgraded to a raw id).
+**GAPs seen on real content** (not documented, so the object stops):
+`localizationKey` on a column or summary-row `displayName` (the renderer
+deliberately writes none; not in a fidelity doc's Not-modeled list); a view,
+template, dashboard, alert, recommendation or super metric description with
+leading or trailing whitespace, and a dashboard `namePath` with it (every
+factory loader strips them); a super metric formula with whitespace the
+bundle renderer collapses; a `config.widgetId` naming another widget; a
+value other than the renderer's constant (an AlertList or View with
+`refreshContent: true`, a HealthChart unit other than `Default Unit`); 9.1.1
+shapes the schema does not have (AlertList `alertDefinitions` as bare id
+strings, MetricChart `relationshipMode` as a list); a time selector without
+`count`, a column without `isStringAttribute`, a fractional `percentile`
+(99.9), text and image views, a SymptomSet `aggregationOperator`, widget
+types the schema does not model.
+
+A mapper exception that is not a mapping refusal fails that one object as
+`INTERNAL ERROR` (object, source file, exception type; counted in its own
+summary column) and the run exits 5; the other objects are converted and
+reported as usual.
+
+A written YAML a loader refuses is not written: each object is staged and
+loaded with the layout's loader first; one it refuses fails with the
+loader's message, and so does every object that names it. A reference to an
+object that failed fails the referencing object (named as a cascade, never
+downgraded to a raw id).
 
 ## Target versions
 
@@ -207,83 +270,135 @@ entry whose proven floor is above 8.18.7 (the oldest export read) or unknown
 is a `VERSION:` warning, as is every widget that needs a newer product
 (Section needs 9.1.1). With `--target-min <version>` an `omit:` entry whose
 floor is above the target is not emitted (the key renders, as on every
-export of that version), and each such deviation is listed as `TARGET`;
-`folder_in_name` has no known floor, so dropping it also puts the folder back
-into the dashboard name. Widgets needing a newer product are reported, never
-converted away. Floors: `widget_versions.py`, `reports/loader.py`,
+export of that version). Each such deviation is listed as `TARGET` with the
+one path and kind of difference it sets aside: `dashboard.temporary` (extra),
+`dashboard.namePath` (extra), `dashboard.name` (value; `folder_in_name`
+then puts the folder back into the name, said on that line),
+`dashboard.widgetInteractions` (extra, and only as an empty list: an
+interaction under it is a difference). Everything else in that object is
+compared normally.
+
+A dashboard carrying a widget type that needs a newer product than the
+target (Section on 8.18.7 or 9.0.2) is **converted, not deliverable to the
+stated target** (`NOT DELIVERABLE` line): the run exits 1. `--allow-partial`
+accepts it in the content and third-party layouts (the dashboard is written;
+it imports on the newer lines only), never in the pak layout (the pak build
+refuses it). The caller's options: raise `--target-min` to the widget's
+floor, drop the dashboard (`--drop`), or remove the widget from the source
+before converting. Floors: `widget_versions.py`, `reports/loader.py`,
 `symptoms/loader.py` (dashboard fidelity doc §Omit version floors).
 
-## Verification (`--verify`) and its limits
+## Verification and its limits
 
-After writing, the tree is loaded through the real loader of the layout
-(table above; if that loader refuses the tree as a whole, verification stops
-and says so), each object is rendered with the factory renderer, and the
-render is compared semantically with the source object after the intended
-changes (new ids and names) are applied to the source. Per object:
-identical, or the list of differences. The summary states how many objects
-and fields were compared, per type how many are identical and how many differ
-only where the object lists a documented loss, and every difference class
-with the objects and occurrences it covers. A key, attribute, Property or
-element present on one side only is always a difference. Exit 4 when nothing
-was compared.
+Verification runs by default (`--no-verify` skips it and says that nothing
+was checked; a run that recorded a loss still exits 1 without
+`--allow-partial`). The staged tree is loaded through the real loader of the
+layout (table above; if that loader refuses the tree as a whole,
+verification stops and says so), each object is rendered with the factory
+renderer, and the render's flat form is compared key by key with the
+source's after the intended changes (new ids, names, the old-to-new id
+rewrites) are applied to the source. A key on one side only is always a
+difference; values are compared verbatim, whitespace included.
 
-Set aside, each counted and printed as a documented non-difference: ids the
-product renumbers (view control, data-provider and column Item ids;
-dashboard widget ids mapped by position, entries-table ids, extModel ids,
-the pin's Ext resource id; dashboard creation and update times and user ids;
-super metric `modificationTime` / `modifiedBy`), `adapterName`, navigation
-entries keyed by a widget that is not on the dashboard, whitespace
-(collapsed, which also hides a whitespace-only change), number spelling, and
-attribute / Property / JSON-key order.
+Per object the result is one of: **identical**; **identical apart from keys
+forced by `--target-min`** (only at the recorded deviation paths); **differs
+only at N recorded losses** (every difference is at a path the mapper
+recorded when it dropped or altered something; the losses are listed); or
+**differs** (the differences are listed). The summary states objects and
+fields compared, these four counts per type, every difference class with
+its objects and occurrences, the differences at recorded losses per loss
+class, the forced target keys, and what was set aside.
 
-Limits: the SDK pak build's owning-SubjectType injection on views is not
-rendered (a pak build adds one SubjectType per view; view fidelity doc), nor
-is the pak builder's `adapterName`; verification says nothing about how an
-instance imports the content (install and look); the staged load and the
-layout loader do not run the factory's repo-wide checks, so validate the
-written tree as any authored content: the seven-package chain for `content/`
-and a third-party project (whose views and dashboards it walks, including the
-project-boundary check that refuses a super metric the project does not
-ship), the bundle loader for a project's reports, alerts and symptoms (which
-`--verify` uses), and `validate-sdk` for a pak.
+Set aside, each counted and printed by class: the renumbered ids above;
+**number spelling** (an XML value `70` equals `70.0` when both are plain
+decimal numbers; a JSON `1` equals `1.0`; a string never equals a number,
+`true` never `1`); and order where the product keys an element by identity
+(SubjectType, SubjectsGroupBy and Usage elements of a view, Controls by
+type, Properties by name, JSON object keys, dashboard and widget `states` by
+key). Every other list is compared by position.
+
+Limits, each a place a difference can still pass or a check the run does not
+make:
+
+- The accounting classifies source keys that are present. A key the source
+  leaves out and the renderer writes anyway (an `extra on render`), and a
+  converted string a loader alters other than names and descriptions (the
+  loaders strip many strings, such as a Heatmap tab name), are caught by
+  verification, not before; with `--no-verify` they pass.
+- A **converted** row trusts the mapper to carry the key; verification
+  proves it. The tables were cross-checked against the mappers (no key the
+  tables call converted goes unread, on the third-party pack, the 9.1.1
+  export and the factory corpus), but with `--no-verify` a mapper bug on a
+  converted key is not caught.
+- Changes a loader makes that leave the render unchanged cannot be seen:
+  two trailing spaces added to a name in the written YAML are stripped by
+  the loader and the render is byte-identical.
+- Unused rows of a dashboard file's shared `entries` table (no dashboard in
+  the file references them) are not compared; they have no effect.
+- The SDK pak build's owning-SubjectType injection on views is not rendered
+  (a pak build adds one SubjectType per view; view fidelity doc), nor is the
+  pak builder's `adapterName` (recorded as a loss).
+- Verification says nothing about how an instance imports the content
+  (install and look). The staged load and the layout loader do not run the
+  factory's repo-wide checks, so validate the written tree as any authored
+  content: the seven-package chain for `content/` and a third-party project
+  (whose views and dashboards it walks, including the project-boundary check
+  that refuses a super metric the project does not ship), and `validate-sdk`
+  for a pak.
+
+The mutation self-test (`tests/test_import_local_fidelity.py`) applies one
+change at a time to the synthetic sources or to their written YAML and
+requires every one to be reported: on the YAML side column, filter, unit,
+sort, threshold, time window, widget position, title, HTML, navigation,
+interaction (also on a dashboard with a target deviation), unit beside a
+recorded loss, internal whitespace in a name and a display name, alert,
+symptom, super metric and report fields; on the source side attributes on
+ViewDef, DataProvider, a column Item, Usage and Title, a Property attribute
+other than `value` (a column `displayName` `localizationKey`), a control
+Property attribute, Control `visible`, a second control of one type,
+description whitespace, widget `refreshInterval`, `isUpdatedView`,
+`config.title`, `config.widgetId`, navigation `interactionType`, a
+`customFilter` resource, an unknown dashboard key, a CoverPage `ContentKey`,
+a symptom Condition attribute and an unknown super metric key.
 
 ## Results on real content (2026-11-13)
 
 Third-party pak (not in the repo): 255 ViewDef copies of 189 unique views,
 52 dashboards (one file of 34), 16 report templates, 4 alerts, 10 symptoms
 (9 inline, 2 standalone, one shared), 1 recommendation, 2 super metrics; 22
-files passed over (6 check-list XML, 2 XSD, 14 empty markers).
+files passed over (6 check-list XML, 2 XSD, 14 empty markers). Same id
+defined differently: one view (its copy in `View - Set 4.xml` is the
+superset and was preferred) and one symptom (the alert file and the
+standalone file give it different names; the alert file's copy was
+preferred). Each run takes 2 to 4 seconds.
 
-- Same id defined differently: one view (two view files) and one symptom (the
-  alert file and the standalone symptom file give it different names); both
-  stop, naming the files, until `--prefer-source`.
-- `--ids keep`: refused by the stock-id guard, 120 view ids (117 stock on
-  every version, 3 on 9.1.1), nothing written.
-- With the 101-entry id map and the 19-entry drop list, pak layout,
-  `--target-min 8.18.7`, `--verify`: 255 objects, 32,499 fields compared;
-  249 identical, and the other 6 (views) differ only at their listed
-  documented losses (5 list views with a buckets-control, 1 empty
-  `preferredUnitId` that also carries a Title / Description
-  `localizationKey`). Dashboards 52 of 52 with `adapterName` (34) and 5 stale
-  navigation entries set aside. Target deviations: `temporary` on 11
-  dashboards, `widget_interactions` on 1, `folder_in_name` on 1 (its name
-  then carries the folder). Two dashboards with Section widgets are
-  reported; `validate-sdk` refuses exactly those two (version floor), and
-  nothing else once the snippet's settings are applied.
-- The same as a third-party project without a target: the same 249 + 6. The
-  seven-package chain passes except the project-boundary check on the two
-  dashboards that reference a super metric the pack does not ship (the
-  converter's note names them).
+- `--ids keep`: refused by the stock-id guard, 70 stock ids among the
+  objects that convert, nothing written.
+- With the 101-entry id map and the 19-entry drop list, third-party layout:
+  117 views, 22 dashboards, 1 template, 10 symptoms, 4 alerts, 1
+  recommendation and 1 super metric convert; 156 objects and 26,065 fields
+  compared: 141 identical, 14 differ only at recorded losses (`adapterName`
+  on 11 dashboards; a buckets-control on 3 list views), 1 differs (a Heatmap
+  tab named `"CPU "`, which the dashboard loader strips). 8 view names lose
+  trailing whitespace (recorded renames). The GAPs, each counted once per
+  object it affects: description whitespace (54 views, 11 templates),
+  `displayName` `localizationKey` (9 views), a `config.widgetId` naming
+  another widget (3 dashboards), a second column `displayName` (1 view),
+  formula whitespace (1 super metric); 30 dashboards and 15 templates
+  cascade from them.
+- The same as a pak with `--target-min 8.18.7`: the same objects; 136
+  identical, 5 identical apart from `temporary` forced on 5 dashboards, 14
+  differ only at recorded losses, 1 differs.
 - `content/` layout with `--naming factory-prefixed`: 4 dashboards fail the
-  50-character limit with the prefix (named, with the `--rename` hint), and
-  one report that has one of them as a section fails with it; the rest
-  verify as above and the chain passes.
+  50-character limit with the prefix; 151 compared, 138 identical.
 
-9.1.1 built-in export, views and report templates (851 + 62), `--ids mint`,
-third-party layout: 757 views and 58 templates converted, all 815 identical
-(59) or different only at their listed documented losses (mostly the
-`localizationKey`); 94 views stop on a named gap (12 text or image views, 25
-time selectors without `count`, 21 columns without `isStringAttribute`, 7
-metadata controls without `hideObjectNameColumn`, 6 fractional percentiles,
-the rest smaller classes and loader refusals) and 4 templates fail because a
-section names one of them. The chain passes on the written project.
+9.1.1 built-in export, views, report templates and dashboards (851 + 62 +
+179), `--ids mint`, third-party layout: no internal error (the export crashed
+the run before). 204 views and 10 dashboards convert (214 compared: 62
+identical, 152 differ only at recorded losses, mostly the Title /
+Description `localizationKey` and empty `preferredUnitId`); 530 views stop on
+a column `displayName` `localizationKey`, the rest on the gaps listed above,
+and the 62 templates and most dashboards cascade from failed views. The
+dashboards alone: 46 of 179 convert (4 identical, 34 only at recorded
+losses, 8 differ at real mismatches verification reports); 26 stop on widget
+types the schema does not model.

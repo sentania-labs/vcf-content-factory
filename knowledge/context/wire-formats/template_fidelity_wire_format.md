@@ -113,6 +113,12 @@ third-party templates). An absent or null `subject_types` is still the
   `localizationKey` fails import on 8.18 (DEF-018). With these two
   attributes set aside, all 62 built-in 9.1.1 templates round-trip.
 
+CoverPage and TableOfContents `ContentKey` is the renderer's constant
+(`COVER_PAGE`, `TABLE_OF_CONTENTS`; `reports.loader._STATIC_CONTENT_KEYS`);
+`import-local` stops a template carrying another value with a TOOLSET GAP,
+and one whose `Description` has leading or trailing whitespace (the report
+loader strips it; 11 vCommunity templates).
+
 ## Round trip
 
 16 third-party templates (34 Dashboard sections and 11 View sections

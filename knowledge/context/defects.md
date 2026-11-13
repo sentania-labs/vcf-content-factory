@@ -1165,9 +1165,14 @@ reused. Field lines are `- **Field:** value` (parsed by
   `python3 -m vcfcf_extractor import-local`
   (`knowledge/context/authoring/importer_offline_conversion.md`) carries
   `filter=` into `subject.filter`, instanced-group member `isProperty`,
-  summary rows and every other ViewDef field with a YAML form, and its
-  `--verify` reports any remaining difference per view (tests:
-  `tests/test_import_local.py`). The defect now covers only the two older
+  summary rows and every other ViewDef field with a YAML form. It classifies
+  every source attribute, text and key of a view (converted, renumbered,
+  renderer constant, documented loss), stops a view with any other one as a
+  TOOLSET GAP, and its verification (on by default) compares the render with
+  the source key by key, exactly, setting aside only the ids the product
+  renumbers and the documented losses at their recorded paths (tests:
+  `tests/test_import_local.py`, `tests/test_import_local_fidelity.py`; limits
+  in the how-to §Verification and its limits). The defect now covers only the two older
   reverse writers, `extract dashboard` (`/extract`) and `reverse-local`, which
   were left unchanged because they have users; the close condition applies to
   them as written.

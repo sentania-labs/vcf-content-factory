@@ -342,11 +342,37 @@ are raw dashboard ids too and are still unchecked.
 The dependency walker `common/dep_walker.collect_deps` (the third-party
 project-boundary check in `vcfcf_dashboards validate`, discrete builds, the
 bundle composer, navigation targets) records such an id as external
-(`DepGraph.external_views`): nothing to bundle and no error. Before
-2026-11-13 it reported it as an unknown view name, so a third-party project
-could not use the passthrough at all (found running the validation chain on
-`import-local` output). A raw id that is one of the corpus's own views is an
-error there: reference it by name so it is bundled.
+(`DepGraph.external_views`, `(content_type, id, where)`): nothing to bundle
+and no error. Before 2026-11-13 it reported it as an unknown view name, so a
+third-party project could not use the passthrough at all (found running the
+validation chain on `import-local` output). A raw id that is one of the
+corpus's own views is an error there: reference it by name so it is bundled.
+Every caller that builds something deliverable (the bundle builder, the
+discrete builder and so the release builder, the composer, the navigation
+closure) prints a `PREREQUISITE:` line per external view and runs the same
+stock-id baseline check as validate and the report `view_id` check
+(`vcfcf_packaging.navigation.print_external_view_prerequisites`): a warning
+when the id is not a known product view, or is absent on a supported line.
+
+## Shapes found by `import-local` (2026-11-13)
+
+Read off the 9.1.1 built-in export and the 52 third-party dashboards with the
+offline converter's source accounting (`authoring/importer_offline_conversion.md`);
+none has a YAML form today, so a dashboard carrying one stops with a TOOLSET
+GAP rather than converting changed:
+
+- AlertList `config.alertDefinitions` as bare id strings
+  (`["AlertDefinition-..."]`, "License Server Health", "vSAN Snapshots and
+  Replica"); the renderer writes `[{"id": ...}]` objects.
+- MetricChart `config.relationshipMode.relationshipMode` as a list
+  (`[1, -1, 0]`, "vSAN Performance"); the renderer writes a scalar.
+- Values other than the renderer's constants: `refreshContent: true` on 18
+  View widgets and on AlertLists, a HealthChart `metricUnit` other than
+  `{-1, "Default Unit"}`, `relationshipMode` other than 0 on a Scoreboard, a
+  ParetoAnalysis pinned through `config.resource[]`, a `config.widgetId`
+  naming another widget (3 third-party dashboards).
+- A `description` or `namePath` with leading or trailing whitespace: the
+  dashboard loader strips both, so the value cannot be carried.
 
 ## Keys an older loader ignored
 
