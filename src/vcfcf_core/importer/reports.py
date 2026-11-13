@@ -5,8 +5,9 @@ A View or Dashboard section names an object in the conversion set by name
 (``view:`` / ``dashboard:``) and anything else by raw id (``view_id:`` /
 ``dashboard_id:``, the product-shipped form). ``localizationKey`` on the
 Title and Description is not modeled (it points at a localization bundle the
-factory does not ship; DEF-018) and is recorded as a documented loss at its
-exact path; anything else the YAML cannot carry stops the template with a
+factory does not ship; DEF-018), nor is surrounding whitespace on the
+Description (the loader strips it); each is recorded as a documented loss at
+its exact path; anything else the YAML cannot carry stops the template with a
 TOOLSET GAP, and ``accounting.account`` classifies every source key.
 """
 from __future__ import annotations
@@ -35,7 +36,11 @@ def map_report(rd, location: str) -> MappedObject:
     y["name"] = rd.findtext("Title") or ""
     desc = rd.findtext("Description") or ""
     if desc != desc.strip():
-        issues.append("Description with leading or trailing whitespace (the report loader strips it)")
+        # Accepted only where the render is exactly the source stripped.
+        documented_loss(losses, "Description surrounding whitespace",
+                        "Description leading or trailing whitespace is not modeled (the report loader strips it; "
+                        "template fidelity doc §Not modeled)",
+                        [Mark("ReportDef/Description#text", "value", cond="surrounding whitespace only")])
     y["description"] = desc
     for tag in ("Title", "Description"):
         el = rd.find(tag)

@@ -16,11 +16,13 @@ id, and a verification maps the source widget ids by position.
 Documented as not modeled (dashboard fidelity doc), recorded as losses at
 their exact flat paths: ``adapterName`` (install ownership, set by the pak
 builder), navigation entries keyed by a widget that is not on the dashboard
-(no widget can fire them), the absolute-date time range and ``ext-element``
-UI residue states. Anything else the schema cannot carry stops the
-dashboard with a TOOLSET GAP; ``accounting.account`` classifies every
-source key after mapping (the constants the renderer writes are rows
-there).
+(no widget can fire them), the absolute-date time range, ``ext-element``
+UI residue states, a ``config.widgetId`` naming no widget of the dashboard
+(clone residue; ``accounting``) and a Heatmap tab name with surrounding
+whitespace (accepted only where the render is the source stripped).
+Anything else the schema cannot carry stops the dashboard with a TOOLSET
+GAP; ``accounting.account`` classifies every source key after mapping (the
+constants the renderer writes are rows there).
 """
 from __future__ import annotations
 
@@ -391,6 +393,7 @@ class _DashMapper:
         elif nav == []:
             ui["empty_navigations"] = True
 
+        self.wbase = _flat.widget_path(idx, str(w.get("type")))
         getattr(self, f"w_{t}")(w, c, y, ui, sp, where)
         if ui:
             y["ui"] = ui
@@ -615,6 +618,13 @@ class _DashMapper:
         tabs = []
         for ti, tb in enumerate(c.get("configs") or []):
             twhere = f"{where} tab {ti}"
+            tname = tb.get("name")
+            if isinstance(tname, str) and tname != tname.strip():
+                # Accepted only where the render is exactly the source stripped.
+                self.doc("Heatmap tab name surrounding whitespace",
+                         f"{twhere}: name leading or trailing whitespace is not modeled (the dashboard loader "
+                         f"strips it; dashboard fidelity doc §Per type, Heatmap)",
+                         [Mark(f"{self.wbase}.config.configs[{ti}].name", "value", cond="surrounding whitespace only")])
             tak, tk = self.kind(tb.get("resourceKind"), twhere)
             gb = tb.get("groupBy") or {}
             gak, gk = self.kind(gb.get("typeId"), twhere)

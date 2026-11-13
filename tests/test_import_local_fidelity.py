@@ -194,13 +194,30 @@ def test_b1_an_old_id_that_survives_fails_its_object_naming_the_field(source, tm
 
 
 # ======================================================================= B3
-def test_b3_column_localization_key_is_a_gap_not_a_silent_drop(source, tmp_path, capsys):
+def test_b3_column_localization_key_is_a_recorded_loss_not_a_silent_drop(source, tmp_path, capsys):
+    # Ruled 2026-11-13: the renderer deliberately writes none (DEF-018,
+    # test_renderer_regression_phase16 B), so it converts as a recorded loss
+    # at its exact path; a run that records a loss exits 1 without
+    # --allow-partial.
     src = _copy(source, tmp_path)
     _sub(src / "reports" / "View - Set.xml", r'(<ViewDef id="%s".*?)<Property name="displayName"' % V_TREND,
          r'\1<Property localizationKey="probeKey" name="displayName"')
     rc, text = _run(src, tmp_path / "o", capsys, "--layout", "third-party", "--ids", "keep", "--naming", "unprefixed")
     assert rc == 1
-    assert f"FAILED view {V_TREND}" in text and "Property{displayName}@localizationKey" in text
+    assert f"FAILED view {V_TREND}" not in text
+    assert re.search(r"LOSS view 'Probe Trend': displayName localizationKey is not modeled .*"
+                     r"\[at ViewDef/Controls/Control\{attributes-selector\}/Property\{attributeInfos\}/List/Item\[0\]/"
+                     r"Value/Property\{displayName\}@localizationKey\]", text), text
+    assert "ONLY RECORDED LOSSES views/probe-trend.yaml" in text
+
+
+def test_b3_localization_key_on_another_property_is_still_a_gap(source, tmp_path, capsys):
+    src = _copy(source, tmp_path)
+    _sub(src / "reports" / "View - Set.xml", r'(<ViewDef id="%s".*?)<Property name="attributeKey"' % V_TREND,
+         r'\1<Property localizationKey="probeKey" name="attributeKey"')
+    rc, text = _run(src, tmp_path / "o", capsys, "--layout", "third-party", "--ids", "keep", "--naming", "unprefixed")
+    assert rc == 1
+    assert f"FAILED view {V_TREND}" in text and "Property{attributeKey}@localizationKey" in text
     assert "TOOLSET GAP" in text
 
 
@@ -511,17 +528,19 @@ def test_nit_widget_id_placeholder_is_counted(source, tmp_path, capsys):
 
 # ====================================================== mutation self-test
 def _lossy_view_xml(name: str, vid: str) -> str:
-    """A list view whose column 0 has an empty preferredUnitId (a recorded
-    loss) and whose column 1 has a unit."""
+    """A list view with recorded losses: a Description with surrounding
+    whitespace; column 0 has an empty preferredUnitId and a second
+    displayName Property; column 1 has a unit and a displayName
+    ``localizationKey``."""
     col = ('<Item><Value><Property name="objectType" value="RESOURCE"/><Property name="attributeKey" value="{k}"/>'
            '<Property name="preferredUnitId" value="{u}"/><Property name="isStringAttribute" value="false"/>'
            '<Property name="adapterKind" value="VMWARE"/><Property name="resourceKind" value="HostSystem"/>'
            '<Property name="rollUpType" value="AVG"/><Property name="rollUpCount" value="1"/>'
            '<Property name="transformations"><List><Item value="CURRENT"/></List></Property>'
-           '<Property name="isProperty" value="false"/><Property name="displayName" value="{d}"/>'
+           '<Property name="isProperty" value="false"/><Property {lk}name="displayName" value="{d}"/>{x}'
            '<Property name="addTimestampAsColumn" value="false"/><Property name="isShowRelativeTimestamp" value="false"/>'
            '</Value></Item>')
-    return (f'<Content><Views><ViewDef id="{vid}"><Title>{name}</Title><Description/>'
+    return (f'<Content><Views><ViewDef id="{vid}"><Title>{name}</Title><Description> Probe lossy </Description>'
             '<SubjectType adapterKind="VMWARE" resourceKind="HostSystem" type="descendant"/>'
             '<SubjectType adapterKind="VMWARE" resourceKind="HostSystem" type="self"/>'
             '<Usage>dashboard</Usage><Usage>report</Usage><Usage>details</Usage><Usage>content</Usage>'
@@ -529,7 +548,8 @@ def _lossy_view_xml(name: str, vid: str) -> str:
             '<Property name="advancedTimeMode" value="false"/><Property name="unit" value="HOURS"/>'
             '<Property name="count" value="24"/></Control>'
             '<Control id="a" type="attributes-selector" visible="false"><Property name="attributeInfos"><List>'
-            + col.format(k="cpu|x", u="", d="X") + col.format(k="cpu|y", u="percent", d="Y") +
+            + col.format(k="cpu|x", u="", d="X", lk="", x='<Property name="displayName" value="X2"/>')
+            + col.format(k="cpu|y", u="percent", d="Y", lk='localizationKey="probeY" ', x="") +
             '</List></Property></Control>'
             '<Control id="p" type="pagination-control" visible="true"><Property name="start" value="0"/>'
             '<Property name="size" value="500"/></Control>'
@@ -542,16 +562,70 @@ def _lossy_view_xml(name: str, vid: str) -> str:
 
 LOSSY = "7a000000-0000-4000-8000-0000000000c0"
 D_NOINT = "1d000000-0000-4000-8000-0000000000c0"
+D_HEAT = "1d000000-0000-4000-8000-0000000000c1"
+SM_WHERE = "5e000000-0000-4000-8000-0000000000c0"
+#: a widget id that is on no dashboard of the source (clone residue)
+FOREIGN_WIDGET = "9e000000-0000-4000-8000-0000000000aa"
+#: whitespace the bundle renderer collapses, outside the quoted literal only
+WHERE_FORMULA = ('count(${adaptertype=VMWARE, objecttype=HostSystem, attribute=badge|health, depth=1, '
+                 'where="summary|version contains 8.0"})  *\n 1 ')
+
+
+def _heat_env(tmp: Path) -> dict:
+    p = _load_yaml(f"""
+        id: {D_HEAT}
+        name: Probe Heat
+        description: heat
+        name_path: ""
+        shared: false
+        widgets:
+          - id: heat
+            type: Heatmap
+            title: Heat
+            coords: {{x: 1, y: 1, w: 12, h: 6}}
+            mode: all
+            depth: 1
+            configs:
+              - name: Probe Tab
+                adapter_kind: VMWARE
+                resource_kind: HostSystem
+                color_by: {{metric_key: cpu|usage_average, label: CPU}}
+                size_by: {{metric_key: mem|usage_average, label: Mem}}
+                group_by: {{adapter_kind: VMWARE, resource_kind: ClusterComputeResource, text: Cluster}}
+                color:
+                  min_value: 0
+                  max_value: 100
+                  thresholds: {{values: [0, 100], colors: ["#74B43B", "#DE3F30"]}}
+                solid_coloring: false
+                focus_on_groups: false
+    """, tmp, "heat.yaml")
+    return json.loads(render_dashboards_bundle_json([load_dashboard(p, enforce_framework_prefix=False,
+                                                                    default_name_path="")], {}, "0"))
 
 
 @pytest.fixture(scope="module")
 def mutation_source(tmp_path_factory) -> Path:
-    """The shared source, plus a view with a recorded loss and a dashboard
-    with no widgetInteractions key (a target-version deviation under
-    --target-min 8.18.7)."""
+    """The shared source, plus a dashboard with no widgetInteractions key (a
+    target-version deviation under --target-min 8.18.7) and one object per
+    ruled loss class (2026-11-13): a view with a Description with
+    surrounding whitespace, a second column displayName and a displayName
+    localizationKey (and an empty preferredUnitId); a template Description
+    with surrounding whitespace; a Heatmap tab name with surrounding
+    whitespace; a ``config.widgetId`` naming a widget on no dashboard; a
+    super metric formula with whitespace outside its quoted literal."""
     tmp = tmp_path_factory.mktemp("import_local_mutations")
     src = _build_source(tmp)
     (src / "reports" / "Lossy.xml").write_text(_lossy_view_xml("Probe Lossy", LOSSY))
+    _sub(src / "reports" / "Report.xml", r"<Description>report</Description>", "<Description>report </Description>")
+    _dash_json(src, lambda d: d["widgets"][2]["config"].__setitem__("widgetId", FOREIGN_WIDGET))
+    heat = _heat_env(tmp)
+    heat["dashboards"][0]["widgets"][0]["config"]["configs"][0]["name"] = "Probe Tab "
+    (src / "dashboards" / "Heat.json").write_text(json.dumps(heat))
+    smp = src / "supermetrics" / "SMs.json"
+    sms = json.loads(smp.read_text())
+    sms[SM_WHERE] = {"name": "Probe SM Where", "formula": WHERE_FORMULA, "description": "where", "unitId": "",
+                     "resourceKinds": [{"resourceKindKey": "HostSystem", "adapterKindKey": "VMWARE"}]}
+    smp.write_text(json.dumps(sms, indent=2))
     p = _load_yaml(f"""
         id: {D_NOINT}
         name: Probe No Interactions
@@ -657,6 +731,26 @@ YAML_MUTATIONS = [
      _y(lambda d: d["sections"][2].update(colorize=False))),
     ("report: swap a section's view", "reports/probe-report.yaml",
      _y(lambda d: d["sections"][2].update(view="Probe Trend"))),
+    # One step beyond each ruled loss (2026-11-13): the loss is accepted only
+    # at its path and condition, so a change next to it is still reported.
+    ("view with a Description whitespace loss: change the description inside", "views/probe-lossy.yaml",
+     _y(lambda d: d.update(description=" Probe lossx "))),
+    ("view with a Description whitespace loss: add interior whitespace", "views/probe-lossy.yaml",
+     _y(lambda d: d.update(description=" Probe  lossy "))),
+    ("view with a second-displayName loss: change the kept display_name", "views/probe-lossy.yaml",
+     _y(lambda d: d["columns"][0].update(display_name="X2"))),
+    ("view with a displayName localizationKey loss: change that display_name", "views/probe-lossy.yaml",
+     _y(lambda d: d["columns"][1].update(display_name="Z"))),
+    ("report with a Description whitespace loss: change the description inside", "reports/probe-report.yaml",
+     _y(lambda d: d.update(description="reporx "))),
+    ("dashboard with a Heatmap tab name whitespace loss: change the name inside", "dashboards/probe-heat.yaml",
+     _y(lambda d: d["widgets"][0]["configs"][0].update(name="Probe  Tab "))),
+    ("dashboard with a widgetId loss: drop the widgetId", "dashboards/probe-dashboard-a.yaml",
+     _y(lambda d: d["widgets"][2].pop("ui"))),
+    ("super metric with a formula whitespace loss: change the literal", "supermetrics/probe-sm-where.yaml",
+     _y(lambda d: d.update(formula=d["formula"].replace("contains 8.0", "contains 9.0")))),
+    ("super metric with a formula whitespace loss: change a token outside the literal",
+     "supermetrics/probe-sm-where.yaml", _y(lambda d: d.update(formula=d["formula"].replace("*\n 1", "*\n 2")))),
 ]
 
 
@@ -691,8 +785,6 @@ SOURCE_MUTATIONS = [
      _view_xml(r'(<Property name="attributeInfos"><List>)<Item>', r'\2<Item extra="1">'.replace(r"\2", r"\2"))),
     ("view: extra attribute on a Usage element", ("view", V_DIST), _view_xml(r"<Usage>", '<Usage extra="1">')),
     ("view: extra attribute on Title", ("view", V_DIST), _view_xml(r"<Title>", '<Title extra="1">')),
-    ("view: localizationKey on a column displayName Property", ("view", V_DIST),
-     _view_xml(r'<Property name="displayName"', '<Property localizationKey="k" name="displayName"')),
     ("view: an attribute other than value on a control Property", ("view", V_DIST),
      _view_xml(r'<Property name="unit"', '<Property extra="1" name="unit"')),
     ("view: Control visible flipped", ("view", V_DIST),
@@ -701,8 +793,6 @@ SOURCE_MUTATIONS = [
      _view_xml(r"(<Controls>)", r'\2<Control id="x" type="time-interval-selector" visible="false">'
                                 '<Property name="unit" value="DAYS"/><Property name="count" value="3"/>'
                                 '<Property name="advancedTimeMode" value="false"/></Control>')),
-    ("view: Description with trailing whitespace", ("view", V_DIST),
-     _view_xml(r"<Description>dist</Description>", "<Description>dist </Description>")),
     ("dashboard: widget config.refreshInterval", ("dashboard", D_A),
      _dash(lambda d: d["widgets"][0]["config"].update(refreshInterval=999))),
     ("dashboard: View widget config.isUpdatedView", ("dashboard", D_A),
@@ -741,6 +831,143 @@ def test_mutation_of_a_source_is_reported(mutation_source, tmp_path, label, obj,
         return
     e = next(e for e in plan.emitted if e.type == t and norm_id(t, e.source_id) == norm_id(t, oid))
     assert _status(plan, tree, e.relpath) not in ("identical", "identical apart from forced target keys"), label
+
+
+# The ruled loss classes (2026-11-13), from the source side: each tolerated
+# shape converts as exactly that recorded loss, and one step beyond it stops
+# the object with a TOOLSET GAP.
+def _both_view_files(pattern: str, repl: str):
+    """V_HOST is defined in two files (identical copies): change both."""
+    def m(root):
+        for f in (root / "reports" / "View - Set.xml", root / "resources" / "nested" / "extra.xml"):
+            _sub(f, pattern, repl)
+    return m
+
+
+def _sm(sid: str, fn):
+    def m(root):
+        p = root / "supermetrics" / "SMs.json"
+        j = json.loads(p.read_text())
+        j[sid]["formula"] = fn(j[sid]["formula"])
+        p.write_text(json.dumps(j))
+    return m
+
+
+def _widget_id_of_dashboard_b(root):
+    p = root / "dashboards" / "Both.json"
+    env = json.loads(p.read_text())
+    a = next(d for d in env["dashboards"] if d["id"] == D_A)
+    b = next(d for d in env["dashboards"] if d["id"] == D_B)
+    a["widgets"][0]["config"]["widgetId"] = b["widgets"][1]["id"]
+    p.write_text(json.dumps(env, indent=2))
+
+
+#: (label, object, mutation, the loss class it must be recorded as)
+TOLERATED_SOURCE = [
+    ("view: Description with trailing whitespace", ("view", V_DIST),
+     _view_xml(r"<Description>dist</Description>", "<Description>dist </Description>"),
+     "Description surrounding whitespace"),
+    ("view: localizationKey on a column displayName Property", ("view", V_DIST),
+     _view_xml(r'<Property name="displayName"', '<Property localizationKey="k" name="displayName"'),
+     "displayName localizationKey"),
+    ("view: localizationKey on a summary-row displayName Property", ("view", V_HOST),
+     _both_view_files(r'<Property name="displayName" value="Total"/>',
+                      '<Property localizationKey="k" name="displayName" value="Total"/>'),
+     "displayName localizationKey"),
+    ("view: a second displayName Property in a column", ("view", V_DIST),
+     _view_xml(r'(<Property name="displayName" value="CPU"/>)', r'\2<Property name="displayName" value="CPU two"/>'),
+     "second displayName in a column"),
+    ("dashboard: config.widgetId naming a widget of another dashboard", ("dashboard", D_A),
+     _widget_id_of_dashboard_b, "config.widgetId naming no widget of the dashboard"),
+    ("super metric: formula whitespace outside literals", ("supermetric", SM1),
+     _sm(SM1, lambda f: f.replace("this, ", "this,\t ") + "\n"), "formula whitespace outside string literals"),
+]
+
+
+@pytest.mark.parametrize("label,obj,mutate,cls", TOLERATED_SOURCE, ids=[m[0] for m in TOLERATED_SOURCE])
+def test_ruled_loss_converts_as_exactly_that_recorded_loss(mutation_source, tmp_path, label, obj, mutate, cls):
+    from vcfcf_core.importer.convert import norm_id
+    src = tmp_path / "src"
+    shutil.copytree(mutation_source, src)
+    mutate(src)
+    plan, tree = _convert(src, tmp_path)
+    t, oid = obj
+    assert not [f for f in plan.failures if f.type == t and norm_id(t, f.id) == norm_id(t, oid)], label
+    e = next(e for e in plan.emitted if e.type == t and norm_id(t, e.source_id) == norm_id(t, oid))
+    assert cls in [x.cls for x in e.losses], label
+    assert _status(plan, tree, e.relpath) == "differs only at recorded losses", label
+
+
+#: (label, object, mutation, text the TOOLSET GAP must carry)
+BEYOND_SOURCE = [
+    ("view: localizationKey on a column attributeKey Property", ("view", V_DIST),
+     _view_xml(r'<Property name="attributeKey"', '<Property localizationKey="k" name="attributeKey"'),
+     "Property{attributeKey}@localizationKey"),
+    ("view: localizationKey on an additional column displayName", ("view", V_DIST),
+     _view_xml(r'(<Property name="distributionAdditionalColumns">.*?)<Property name="displayName"',
+               r'\2<Property localizationKey="k" name="displayName"'),
+     "Property{displayName}@localizationKey"),
+    ("view: a second displayName Property in a summary row", ("view", V_HOST),
+     _both_view_files(r'(<Property name="displayName" value="Total"/>)',
+                      r'\1<Property name="displayName" value="T2"/>'),
+     "Property{summaryInfos}"),
+    ("view: a second attributeKey Property in a column", ("view", V_DIST),
+     _view_xml(r'(<Property name="attributeKey" value="cpu\|usage_average"/>)',
+               r'\2<Property name="attributeKey" value="cpu|other"/>'),
+     "Property{attributeKey}~1"),
+    ("dashboard: config.widgetId naming another widget of the same dashboard", ("dashboard", D_A),
+     _dash(lambda d: d["widgets"][0]["config"].update(widgetId=d["widgets"][1]["id"])),
+     "names widget 1 of this dashboard"),
+    ("dashboard: config.widgetId that is not a widget id", ("dashboard", D_A),
+     _dash(lambda d: d["widgets"][0]["config"].update(widgetId="not-a-widget")), "config.widgetId"),
+    ("super metric: formula whitespace inside a quoted literal", ("supermetric", SM_WHERE),
+     _sm(SM_WHERE, lambda f: f.replace("contains 8.0", "contains  8.0")), "inside a quoted string literal"),
+    ("super metric: formula whitespace beside an unbalanced quote", ("supermetric", SM1),
+     _sm(SM1, lambda f: f + '  "'), "inside a quoted string literal"),
+    ("super metric: formula whitespace beside a backslash", ("supermetric", SM1),
+     _sm(SM1, lambda f: f + "  \\"), "inside a quoted string literal"),
+]
+
+
+@pytest.mark.parametrize("label,obj,mutate,text", BEYOND_SOURCE, ids=[m[0] for m in BEYOND_SOURCE])
+def test_one_step_beyond_a_ruled_loss_is_a_gap(mutation_source, tmp_path, label, obj, mutate, text):
+    from vcfcf_core.importer.convert import norm_id
+    src = tmp_path / "src"
+    shutil.copytree(mutation_source, src)
+    mutate(src)
+    plan, _tree = _convert(src, tmp_path)
+    t, oid = obj
+    failed = [f for f in plan.failures if f.type == t and norm_id(t, f.id) == norm_id(t, oid)]
+    assert failed, f"{label}: converted"
+    assert failed[0].kind == "failed" and failed[0].gap, f"{label}: failed without a TOOLSET GAP: {failed[0].reason}"
+    assert text in failed[0].reason, f"{label}: {failed[0].reason}"
+
+
+def test_mark_conditions_hold_only_for_the_ruled_shape():
+    from vcfcf_core.importer.compare import Difference
+    from vcfcf_core.importer.model import Mark, ws_outside_literals_only
+    desc = Mark("ViewDef/Description#text", "value", cond="surrounding whitespace only")
+    v = lambda a, b: Difference("ViewDef/Description#text", "value", "", a, b)  # noqa: E731
+    assert desc.matches(v(" a b ", "a b")) and desc.matches(v("a\n", "a"))
+    assert not desc.matches(v(" a b ", "a c")) and not desc.matches(v(" a  b ", "a b"))
+    assert not desc.matches(v("a b", "a b ")) and not desc.matches(Difference("ViewDef/Description#text", "missing"))
+    wid = Mark("widget[2:View].config.widgetId", "value", cond="render writes the widget's own id")
+    w = lambda a, b: Difference("widget[2:View].config.widgetId", "value", "", a, b)  # noqa: E731
+    assert wid.matches(w(FOREIGN_WIDGET, "w2"))
+    assert not wid.matches(w("w1", "w2")) and not wid.matches(w(FOREIGN_WIDGET, "w1"))
+    assert not wid.matches(w("not-a-widget", "w2"))
+    # formula: whitespace outside literals only
+    assert ws_outside_literals_only('a  + "x y"\n') and ws_outside_literals_only("sum(a)\t* 2")
+    assert not ws_outside_literals_only('a + "x  y"') and not ws_outside_literals_only('a + "x\ty"')
+    assert not ws_outside_literals_only("a + b")  # nothing to collapse
+    assert not ws_outside_literals_only('a  + "x')  # unbalanced
+    assert not ws_outside_literals_only('a  + "x\\" y"')  # a backslash
+    fm = Mark("supermetric.formula", "value", cond="formula whitespace outside literals only")
+    f = lambda a, b: Difference("supermetric.formula", "value", "", a, b)  # noqa: E731
+    assert fm.matches(f('a  + "x y" ', 'a + "x y"'))
+    assert not fm.matches(f('a  + "x y" ', 'a + "x z"')) and not fm.matches(f('a + "x  y"', 'a + "x y"'))
+    with pytest.raises(ValueError):
+        Mark("p", "missing", cond="surrounding whitespace only")
 
 
 def test_mutation_source_name_whitespace_is_a_recorded_rename(mutation_source, tmp_path):

@@ -430,21 +430,34 @@ exactly this one SubjectType.
 - Per-column transformations on a trend view: trend columns still take
   the view-level `transformations:` list (all vCommunity trend columns
   carry `[NONE]`, which `transformations: [NONE]` expresses).
+- `localizationKey` on a column or summary-row `displayName` Property (545
+  of the 756 9.1.1 built-in views that convert, 9 vCommunity views): the renderer deliberately
+  writes none (`render.py`, the displayName note: keys collide between
+  transformed columns, and no localization bundle ships;
+  `tests/test_renderer_regression_phase16.py` B). An additional column's
+  `displayName` is not covered.
+- A second `displayName` Property in one column (one view, "Windows Network
+  Adapter", in both vCommunity and the 9.1.1 built-ins: the two carry the
+  same value, the second with a `localizationKey`). The first is rendered
+  and the second dropped; which one the product shows when they differ is
+  not known. A repeat of any other Property, or in a summary row, is not
+  covered.
+- Leading or trailing whitespace on the `Description` (54 vCommunity views,
+  22 of the converted 9.1.1 built-in views): the view loader strips it. Interior whitespace is
+  carried.
+
+`import-local` records each as a loss at its exact path: the whitespace one
+only where the render is the source stripped, nothing else.
 
 ## Found by `import-local` (2026-11-13)
 
 The offline converter classifies every ViewDef attribute and text
-(`authoring/importer_offline_conversion.md`). Two classes with no YAML form
-and no Not-modeled entry above, so a view carrying one stops with a TOOLSET
-GAP:
-
-- `localizationKey` on a column or summary-row `displayName` Property (530
-  of the 851 9.1.1 built-ins stop on it first, 9 vCommunity views). The renderer
-  deliberately writes none (`render.py`, the displayName note: collisions
-  between transformed columns, no localization bundle ships).
-- A `Description` with leading or trailing whitespace (54 vCommunity views):
-  the view loader strips it. The Title gets the same strip, which the
-  converter records as a rename instead.
+(`authoring/importer_offline_conversion.md`). It found three classes with no
+YAML form: a column or summary-row `displayName` `localizationKey`, a
+second column `displayName` and Description surrounding whitespace. They
+stopped views as TOOLSET GAPs until they were ruled not modeled
+(2026-11-13, §Not modeled). The Title gets the same strip, which the
+converter records as a rename.
 
 Control `visible` is a renderer constant per control type (`false` on the
 time selector, attributes selector, buckets and metadata controls, `true` on

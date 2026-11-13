@@ -233,18 +233,31 @@ list view, an empty `preferredUnitId`, per-SubjectType filters that differ,
 filter `values` lists and `conditionId`, `startSubUnit`,
 `BlacklistResourceKind`, `includeNotExistingResources`, `cellLink`,
 related-object columns, `objectType=POLICY`, per-column transformations on a
-trend view (view fidelity doc); `adapterName`, the absolute-date time range,
-`ext-element` UI residue states and navigation entries keyed by a widget that
-is not on the dashboard (dashboard fidelity doc).
+trend view, `localizationKey` on a column or summary-row `displayName`, a
+second `displayName` in one column (the first is rendered; the dropped value
+is in the loss line) (view fidelity doc); leading or trailing whitespace on a
+view or template `Description` (view and template fidelity docs);
+`adapterName`, the absolute-date time range, `ext-element` UI residue
+states, navigation entries keyed by a widget that is not on the dashboard, a
+`config.widgetId` naming no widget of its dashboard, leading or trailing
+whitespace on a Heatmap tab name (dashboard fidelity doc); super metric
+formula whitespace outside quoted literals (`supermetric_authoring.md`
+§Formula whitespace).
 
-**GAPs seen on real content** (not documented, so the object stops):
-`localizationKey` on a column or summary-row `displayName` (the renderer
-deliberately writes none; not in a fidelity doc's Not-modeled list); a view,
-template, dashboard, alert, recommendation or super metric description with
-leading or trailing whitespace, and a dashboard `namePath` with it (every
-factory loader strips them); a super metric formula with whitespace the
-bundle renderer collapses; a `config.widgetId` naming another widget; a
-value other than the renderer's constant (an AlertList or View with
+Some of these hold only under a condition the mark carries, so the loss
+cannot cover more than the ruled shape: a whitespace loss is accepted only
+where the render is exactly the source stripped (an interior change is a
+difference); a formula loss only where the render is exactly the source with
+its whitespace collapsed and every quoted literal unchanged (whitespace the
+collapse would change inside a literal, or literals that cannot be
+delimited, is a GAP before rendering); a `config.widgetId` loss only where
+the source id is none of the dashboard's widget ids and the render writes
+the widget's own (one naming another widget of the same dashboard is a GAP).
+
+**GAPs seen on real content** (not documented, so the object stops): a
+dashboard, alert, recommendation or super metric description with leading
+or trailing whitespace, and a dashboard `namePath` with it (every factory
+loader strips them); a value other than the renderer's constant (an AlertList or View with
 `refreshContent: true`, a HealthChart unit other than `Default Unit`); 9.1.1
 shapes the schema does not have (AlertList `alertDefinitions` as bare id
 strings, MetricChart `relationshipMode` as a list); a time selector without
@@ -322,9 +335,10 @@ make:
 
 - The accounting classifies source keys that are present. A key the source
   leaves out and the renderer writes anyway (an `extra on render`), and a
-  converted string a loader alters other than names and descriptions (the
-  loaders strip many strings, such as a Heatmap tab name), are caught by
-  verification, not before; with `--no-verify` they pass.
+  converted string a loader alters other than names, descriptions and
+  Heatmap tab names (the loaders strip many strings, such as a Scoreboard
+  metric `label`), are caught by verification, not before; with
+  `--no-verify` they pass.
 - A **converted** row trusts the mapper to carry the key; verification
   proves it. The tables were cross-checked against the mappers (no key the
   tables call converted goes unread, on the third-party pack, the 9.1.1
@@ -353,13 +367,27 @@ sort, threshold, time window, widget position, title, HTML, navigation,
 interaction (also on a dashboard with a target deviation), unit beside a
 recorded loss, internal whitespace in a name and a display name, alert,
 symptom, super metric and report fields; on the source side attributes on
-ViewDef, DataProvider, a column Item, Usage and Title, a Property attribute
-other than `value` (a column `displayName` `localizationKey`), a control
-Property attribute, Control `visible`, a second control of one type,
-description whitespace, widget `refreshInterval`, `isUpdatedView`,
-`config.title`, `config.widgetId`, navigation `interactionType`, a
-`customFilter` resource, an unknown dashboard key, a CoverPage `ContentKey`,
-a symptom Condition attribute and an unknown super metric key.
+ViewDef, DataProvider, a column Item, Usage and Title, a control Property
+attribute, Control `visible`, a second control of one type, widget
+`refreshInterval`, `isUpdatedView`, `config.title`, `config.widgetId`,
+navigation `interactionType`, a `customFilter` resource, an unknown
+dashboard key, a CoverPage `ContentKey`, a symptom Condition attribute and an
+unknown super metric key.
+
+Each conditional or ruled loss is tested from both sides: the tolerated
+shape converts as exactly that recorded loss (Description and tab-name
+whitespace, a column and a summary-row `displayName` `localizationKey`, a
+second column `displayName`, a `config.widgetId` naming a widget of another
+dashboard, formula whitespace outside literals), and one step beyond it is
+still caught. On the YAML side: an interior change to a description or tab
+name carrying a whitespace loss, the kept `display_name` beside a
+`displayName` loss, a dropped `widgetId`, a changed literal or token in a
+formula carrying a whitespace loss. On the source side (each a GAP): a
+`localizationKey` on a column `attributeKey` or an additional column's
+`displayName`, a second `displayName` in a summary row, a second
+`attributeKey` in a column, a `config.widgetId` naming another widget of the
+same dashboard or not a widget id, formula whitespace inside a quoted
+literal or beside an unbalanced quote or a backslash.
 
 ## Results on real content (2026-11-13)
 
@@ -374,31 +402,42 @@ preferred). Each run takes 2 to 4 seconds.
 
 - `--ids keep`: refused by the stock-id guard, 70 stock ids among the
   objects that convert, nothing written.
+- `--ids keep`: every one of the 274 objects maps (no GAP); the stock-id
+  guard refuses 120 stock ids among them, nothing written.
 - With the 101-entry id map and the 19-entry drop list, third-party layout:
-  117 views, 22 dashboards, 1 template, 10 symptoms, 4 alerts, 1
-  recommendation and 1 super metric convert; 156 objects and 26,065 fields
-  compared: 141 identical, 14 differ only at recorded losses (`adapterName`
-  on 11 dashboards; a buckets-control on 3 list views), 1 differs (a Heatmap
-  tab named `"CPU "`, which the dashboard loader strips). 8 view names lose
-  trailing whitespace (recorded renames). The GAPs, each counted once per
-  object it affects: description whitespace (54 views, 11 templates),
-  `displayName` `localizationKey` (9 views), a `config.widgetId` naming
-  another widget (3 dashboards), a second column `displayName` (1 view),
-  formula whitespace (1 super metric); 30 dashboards and 15 templates
-  cascade from them.
-- The same as a pak with `--target-min 8.18.7`: the same objects; 136
-  identical, 5 identical apart from `temporary` forced on 5 dashboards, 14
-  differ only at recorded losses, 1 differs.
+  every object that is not dropped converts (170 views, 52 dashboards, 16
+  templates, 10 symptoms, 4 alerts, 1 recommendation, 2 super metrics; no
+  GAP, no cascade); 255 objects and 46,117 fields compared: 152 identical,
+  101 differ only at recorded losses (Description whitespace on 51 views and
+  11 templates, `adapterName` on 34 dashboards, a buckets-control on 5 list
+  views, a `config.widgetId` naming no widget of its dashboard on 3, stale
+  navigations on 3, one each of tab-name whitespace, formula whitespace,
+  `displayName` `localizationKey`, Title / Description `localizationKey` and
+  empty `preferredUnitId`), 2 differ: 11 Scoreboard metric labels with a
+  trailing space (`"Read Latency "`) on "VM Performance 2.0" and "vSphere
+  Cluster Performance 2.0", which the loader strips and no row checks
+  before rendering (not ruled). 11 view names lose trailing whitespace
+  (recorded renames). The run exits 1 on those 2.
+- The same as a pak with `--target-min 8.18.7`: the same objects; 146
+  identical, 6 identical apart from forced keys (`temporary` is forced on 11
+  dashboards, the folder in the name and `widgetInteractions` on one each),
+  101 differ only at recorded losses, 2 differ; "Overall Daily Check" and
+  "vSphere Cluster Capacity 2.0" carry Sections and are not deliverable to
+  8.18.7.
 - `content/` layout with `--naming factory-prefixed`: 4 dashboards fail the
-  50-character limit with the prefix; 151 compared, 138 identical.
+  50-character limit with the prefix and one template that names one of them
+  cascades; 250 compared, 149 identical, 2 differ (the labels above).
 
 9.1.1 built-in export, views, report templates and dashboards (851 + 62 +
-179), `--ids mint`, third-party layout: no internal error (the export crashed
-the run before). 204 views and 10 dashboards convert (214 compared: 62
-identical, 152 differ only at recorded losses, mostly the Title /
-Description `localizationKey` and empty `preferredUnitId`); 530 views stop on
-a column `displayName` `localizationKey`, the rest on the gaps listed above,
-and the 62 templates and most dashboards cascade from failed views. The
-dashboards alone: 46 of 179 convert (4 identical, 34 only at recorded
-losses, 8 differ at real mismatches verification reports); 26 stop on widget
-types the schema does not model.
+179), `--ids mint`, third-party layout: no internal error. 756 views, 56
+templates and 43 dashboards convert (855 compared: 62 identical, 786 differ
+only at recorded losses, mostly the Title / Description and `displayName`
+`localizationKey` and empty `preferredUnitId`, 7 dashboards differ); 95
+views stop on the gaps listed above (fractional `percentile`, text views,
+`relatedAdapterKind` columns, a metadata control without
+`hideObjectNameColumn` ...), 134 dashboards on their own gaps (unmodeled
+widget types, renderer constants) and 2 dashboards and 6 templates cascade.
+The dashboards alone: 46 of 179 convert (4 identical, 34 only at recorded
+losses, 8 differ at real mismatches verification reports, among them
+Scoreboard label whitespace on 2); 133 stop, 26 of them on widget types the
+schema does not model.

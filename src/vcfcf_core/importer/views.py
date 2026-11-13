@@ -12,8 +12,11 @@ empty ``preferredUnitId``, filter ``values`` lists and ``conditionId``, a
 different filter per SubjectType, ``startSubUnit``,
 ``BlacklistResourceKind``, ``includeNotExistingResources``, ``cellLink``,
 related-object columns, ``objectType=POLICY``, per-column transformations
-on a trend view, and the Title / Description ``localizationKey``): the view
-converts and the loss is recorded at its exact flat path. Anything else
+on a trend view, the Title / Description ``localizationKey``, a column or
+summary-row ``displayName`` ``localizationKey``, a second ``displayName``
+Property in one column, and Description surrounding whitespace, accepted
+only where the render is the source stripped): the view converts and the
+loss is recorded at its exact flat path. Anything else
 stops the view with a TOOLSET GAP. After mapping, ``accounting.account``
 classifies every source key.
 """
@@ -78,6 +81,11 @@ def _item_props(item) -> Dict[str, object]:
     if val is None:
         return out
     for p in val.findall("Property"):
+        if p.get("name") in out:
+            # A repeated Property: the first is the one the flat form keys
+            # without a ``~n`` suffix, so it is the one carried; a repeat is
+            # a recorded loss (displayName) or unclassified (a GAP).
+            continue
         if p.get("value") is not None:
             out[p.get("name")] = p.get("value")
         else:
@@ -374,6 +382,20 @@ class _ViewMapper:
             col["omit"] = omit
         return col
 
+    def _extra_display_names(self, item, idx: int) -> None:
+        """A second (third ...) ``displayName`` Property in one column: the
+        first is rendered, each later one is a recorded loss with its value
+        (view fidelity doc §Not modeled). Any other repeated Property stays
+        unclassified (a GAP)."""
+        val = item.find("Value")
+        dns = [p for p in (val.findall("Property") if val is not None else []) if p.get("name") == "displayName"]
+        for n, p in enumerate(dns[1:], start=1):
+            attrs = {k: v for k, v in p.attrib.items() if k != "name"}
+            self.doc("second displayName in a column",
+                     f"column {idx}: displayName Property {n + 1} ({attrs!r}) is not modeled and is dropped; the "
+                     f"first ({dns[0].get('value')!r}) is rendered (view fidelity doc §Not modeled)",
+                     [Mark(f"{_flat.view_column(idx, 'displayName')}~{n}", "missing", subtree=True)])
+
     # ------------------------------------------------------------ view
     def map(self) -> Dict[str, object]:
         v = self.v
@@ -385,7 +407,11 @@ class _ViewMapper:
         y["name"] = v.findtext("Title") or ""
         desc = v.findtext("Description") or ""
         if desc != desc.strip():
-            self.loss("Description with leading or trailing whitespace (the view loader strips it)")
+            # Accepted only where the render is exactly the source stripped.
+            self.doc("Description surrounding whitespace",
+                     "Description leading or trailing whitespace is not modeled (the view loader strips it; "
+                     "view fidelity doc §Not modeled)",
+                     [Mark(f"{_flat.VIEW}/Description#text", "value", cond="surrounding whitespace only")])
         y["description"] = desc
         for el, label in ((title, "Title"), (v.find("Description"), "Description")):
             if el is not None and el.get("localizationKey") is not None:
@@ -516,6 +542,7 @@ class _ViewMapper:
         cols = []
         lst = attr.find("Property[@name='attributeInfos']/List")
         for i, it in enumerate(lst if lst is not None else []):
+            self._extra_display_names(it, i)
             cols.append(self._column(_item_props(it), kinds, dt, trend_tx, forecast, i))
         if dt == "trend" and trend_tx:
             first = trend_tx[0][1]

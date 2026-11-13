@@ -107,6 +107,17 @@ YAML cannot claim it.
 | `view_details: ""` | `config.viewDetails: ""` | the empty string every 9.x export writes is accepted |
 | `omit:` | drops a default key | per type, see below |
 
+Not modeled: a `config.widgetId` that names no widget of its own dashboard
+(23 widgets on 3 third-party dashboards, none of the 179 9.1.1 built-ins,
+which write the widget's own id on 123 widgets and nothing else). 22 of the
+23 ids are on no dashboard of the pack and one is a widget of a sibling
+dashboard the page was copied from; none is referenced anywhere else in its
+dashboard (no interaction, navigation or state), so it is clone residue
+with no effect. `ui.widget_id: true` renders the widget's own id instead.
+`import-local` records it as a loss at that key only when the id is none of
+the dashboard's widget ids; one naming another widget of the same dashboard
+stays a TOOLSET GAP (no export shows one).
+
 ### `ui:` (UI persistence the product writes)
 
 Carried for fidelity. An author writing new content leaves `ui:` out.
@@ -216,6 +227,10 @@ tab's `extModel` id), `tag_filter:` (or null), `filter_mode: customFilter`,
 `custom_filter:` (or null), `group_by.parent_text:` (historically the
 adapter kind key; exports carry `vCenter` or `vCenter Adapter`), and
 `omit: [tag_filter, custom_filter, group_by_kind_keys, color_min_value]`.
+Not modeled: leading or trailing whitespace on a tab `name` (one
+third-party tab, `"CPU "`): the dashboard loader strips it. `import-local`
+records it as a loss, accepted only where the render is the source name
+stripped.
 
 ```yaml
 custom_filter:
@@ -370,9 +385,15 @@ GAP rather than converting changed:
   View widgets and on AlertLists, a HealthChart `metricUnit` other than
   `{-1, "Default Unit"}`, `relationshipMode` other than 0 on a Scoreboard, a
   ParetoAnalysis pinned through `config.resource[]`, a `config.widgetId`
-  naming another widget (3 third-party dashboards).
+  naming another widget of the same dashboard (none seen; one naming no
+  widget of the dashboard is a recorded loss, §Widget fields common to
+  every type).
 - A `description` or `namePath` with leading or trailing whitespace: the
   dashboard loader strips both, so the value cannot be carried.
+- A Scoreboard metric `label` with trailing whitespace (11 labels on 2
+  third-party dashboards, `"Read Latency "`): the loader strips it. Not
+  checked before rendering, so verification reports these two dashboards
+  as differing; no ruling yet.
 
 ## Keys an older loader ignored
 

@@ -21,7 +21,8 @@ equivalences that are counted too when they decide a comparison:
 ``Difference.kind`` is ``missing`` (on the source only), ``extra`` (on
 the render only) or ``value``. A caller that sets a difference aside (a
 recorded loss, a target-version deviation) matches it by exact path and
-kind (``model.Mark``); nothing here sets one aside.
+kind, and where the mark names a condition by the two values
+(``model.Mark``); nothing here sets one aside.
 """
 from __future__ import annotations
 
@@ -40,9 +41,14 @@ NUMBER_SPELLING = "number spelling (equal numbers written differently)"
 
 
 class Difference(NamedTuple):
+    """``a`` / ``b``: the two raw values of a ``value`` difference (a mark
+    with a condition tests them; ``detail`` is the printed form)."""
+
     path: str
     kind: str      # missing | extra | value
     detail: str = ""
+    a: object = None
+    b: object = None
 
     def __str__(self) -> str:
         return f"{self.path}: {self.kind}{(' ' + self.detail) if self.detail else ''}"
@@ -102,7 +108,7 @@ def diff_flat(a: Leaves, b: Leaves, out: Comparison, xml: bool) -> None:
         elif k not in a:
             out.differences.append(Difference(k, "extra", _short(b[k])))
         elif not same(a[k], b[k], xml, out.set_aside):
-            out.differences.append(Difference(k, "value", f"{_short(a[k])} vs {_short(b[k])}"))
+            out.differences.append(Difference(k, "value", f"{_short(a[k])} vs {_short(b[k])}", a[k], b[k]))
 
 
 # ----------------------------------------------------------------- views

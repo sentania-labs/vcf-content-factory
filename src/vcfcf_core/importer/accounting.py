@@ -17,7 +17,9 @@ table below:
   widget, ``..key`` is a sibling. The source must hold the same value.
 - ``check <name>``: a derived value the renderer computes (a tag filter's
   ``path`` list from its kinds, a Heatmap ``groupBy.id``); the named check
-  recomputes it with the renderer's own helper.
+  recomputes it with the renderer's own helper. A check may instead find a
+  documented loss at the key (``LossAt``: a ``config.widgetId`` naming no
+  widget of the dashboard).
 - ``loss <class>``: a documented not-modeled class
   (``model.DOCUMENTED_NOT_MODELED``): recorded as a LOSS at this exact key.
 
@@ -116,7 +118,7 @@ _PG = "ViewDef/Controls/Control{pagination-control}"
 VIEW_TABLE = parse_table(f"""
 ViewDef@id                                         conv
 ViewDef/Title#text                                 conv
-ViewDef/Description#text                           conv
+ViewDef/Description#text                           conv   # whitespace: the mapper records the documented loss
 ViewDef/(Title|Description)@localizationKey       conv   # the mapper records the documented loss
 ViewDef/SubjectType{{*}}#text                      const ""   # render._render_view_def_fragment: empty element
 ViewDef/SubjectType{{*}}@filter[][].(condition|transform|metricKey|filterType|businessHours|conditionId)  conv
@@ -140,7 +142,11 @@ ViewDef/Controls/Control{{metadata}}@visible                const "false"   # re
 {_TIS}/Property{{(advancedTimeMode|unit|count|startPeriod|endPeriod|startSubUnit)}}@value  conv
 {_COL}/Property{{({_COLUMN_CONV})}}@value          conv
 {_COL}/Property{{transformations}}/List/Item[]@value  conv
+{_COL}/Property{{displayName}}@localizationKey     loss displayName localizationKey
+{_COL}/Property{{displayName}}~*(@value|@localizationKey)  conv   # the mapper records the documented loss (a second displayName)
+{_COL}/Property{{displayName}}~*#text              const ""   # an empty element (dropped with the repeat)
 {_SUM}/Property{{(displayName|aggregation)}}@value  conv
+{_SUM}/Property{{displayName}}@localizationKey     loss displayName localizationKey
 {_SUM}/Property{{attributeIndexes}}/List/Item[]@value  conv
 {_BKT}/Property{{(isDynamic|dynamicCalcFunction|bucketCount|minValue|maxValue|isSum)}}@value  conv
 {_BKT}/Property{{bucketInfos}}/List/Item[]/Value/Property{{(startValue|endValue|bucketColor)}}@value  conv
@@ -159,7 +165,7 @@ _VIEW_TEXT_RX = re.compile(r"ViewDef/Controls/Control\{[^}]*\}(?:/[^#@]*)?/(?:Pr
 # ----------------------------------------------------------- reports etc.
 REPORT_TABLE = parse_table("""
 ReportDef@id                                    conv
-ReportDef/(Title|Description)#text              conv
+ReportDef/(Title|Description)#text              conv   # whitespace: the mapper records the documented loss
 ReportDef/(Title|Description)@localizationKey   conv   # the mapper records the documented loss
 ReportDef/isTenant#text                         conv
 ReportDef/SubjectType[](@adapterKind|@resourceKind|@type|@filter)  conv
@@ -527,12 +533,36 @@ def _check_metric_bound(path, value, leaves):
     return f"the renderer writes null here when colorMethod is {cm!r} (the bounds apply to colorMethod 0 only)"
 
 
+class LossAt:
+    """What a check returns for a value that is a documented loss at its
+    path (rather than ``None``, accepted, or a string, a GAP)."""
+
+    def __init__(self, cls: str, text: str, mark: Mark):
+        self.cls, self.text, self.mark = cls, text, mark
+
+
+_OWN_TOKEN = re.compile(r"w\d+")
+
+
 def _check_widget_id_self(path, value, leaves):
+    """The renderer writes the widget's own id. A source value naming no
+    widget of this dashboard (in the flat form each of its widgets' ids is
+    the position token ``w<j>``, so such a value is still a raw UUID) is
+    clone residue: a documented loss. One naming another widget of this
+    dashboard, or any other shape, is a GAP."""
     m = re.match(r"^widget\[(\d+):", path)
     want = f"w{m.group(1)}" if m else None
-    if value != want:
-        return "the renderer writes the widget's own id (config.widgetId of another widget is not modeled)"
-    return None
+    if value == want:
+        return None
+    if m and isinstance(value, str) and re.fullmatch(_flat.UUID, value) and not _OWN_TOKEN.fullmatch(value):
+        cls = "config.widgetId naming no widget of the dashboard"
+        return LossAt(cls, f"{cls} is not modeled: the renderer writes the widget's own id "
+                           f"({DOCUMENTED_NOT_MODELED[cls]})",
+                      Mark(path, "value", cond="render writes the widget's own id"))
+    if isinstance(value, str) and _OWN_TOKEN.fullmatch(value):
+        return (f"it names widget {value[1:]} of this dashboard; the renderer writes the widget's own id "
+                f"(config.widgetId of another widget on the dashboard is not modeled)")
+    return "the renderer writes the widget's own id (config.widgetId of another shape is not modeled)"
 
 
 def _check_report_content_key(path, value, leaves):
@@ -610,6 +640,9 @@ def account(type_: str, leaves: _flat.Leaves, losses: List[Loss]) -> None:
         if rule.kind == "check":
             name, *rest = rule.arg.split()
             why = CHECKS[name](path, value, leaves, *rest)
+            if isinstance(why, LossAt):
+                documented_loss(losses, why.cls, why.text, [why.mark])
+                continue
             if why:
                 raise _gap(type_, path, f"the source has {json.dumps(value, default=str)[:80]}; {why}")
             continue

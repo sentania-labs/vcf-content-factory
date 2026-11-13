@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import contextlib
 import copy
+import dataclasses
 import io
 import json
 import os
@@ -515,7 +516,7 @@ def _translate(mark: Mark, rewrites: Dict[str, str]) -> Mark:
     """A mark recorded on the source (old ids) as the expected side spells
     it (intended id rewrites applied, lower case)."""
     path = _UUID.sub(lambda m: rewrites.get(m.group(0).lower(), m.group(0).lower()), mark.path)
-    return Mark(path, mark.kind, mark.subtree, mark.empty_only) if path != mark.path else mark
+    return dataclasses.replace(mark, path=path) if path != mark.path else mark
 
 
 def _verify(plan: Plan, out: Path, layout: str):
@@ -650,11 +651,11 @@ def _verify(plan: Plan, out: Path, layout: str):
             res["classes"][cls] += 1
             res["class_objects"][cls].add(e.relpath)
         detail["fields"] = c.fields
-        detail["differences"] = [list(d) for d in differences]
-        detail["at_recorded_losses"] = [list(d) for d in at_losses]
+        detail["differences"] = [list(d[:3]) for d in differences]
+        detail["at_recorded_losses"] = [list(d[:3]) for d in at_losses]
         detail["recorded_losses"] = [x.text for x in e.losses]
         detail["target_deviations"] = [d.text for d in e.deviations]
-        detail["at_target_deviations"] = [list(d) for d in at_devs]
+        detail["at_target_deviations"] = [list(d[:3]) for d in at_devs]
         pt = res["per_type"][e.type]
         pt["compared"] += 1
         if differences:
