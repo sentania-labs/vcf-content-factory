@@ -142,8 +142,10 @@ discover, so stitching onto foreign resources goes through the Suite
 API. Hold a `SuiteApiStitcher` (`SuiteApiStitcher.create(this, logger)`
 in `configureAdapter`, `discard()` in `onDiscard`). Surface:
 `pushProperties`, `pushStats`, the batch pushes (`pushBatch`,
-`pushPropertiesBatch`, `pushStatsBatch`), `addChild` / `addChildren`,
-`findSingletonResourceId`, `get`, `close` / `isClosed`. The push,
+`pushPropertiesBatch`, `pushStatsBatch`), the typed batch pushes
+(`pushTypedBatch`, `pushTypedPropertiesBatch`: property values `String`
+or `Number`), `pushEvents`, `addChild` / `addChildren`,
+`findSingletonResourceId`, `get`, `post`, `close` / `isClosed`. The push,
 relationship and lookup calls log and swallow failures and never throw
 into the collect cycle: a failed push is one WARN line per cycle, with
 the stack trace at DEBUG, except that the first time a client sees an
@@ -205,6 +207,54 @@ scope, so removal is the pak's job. Edges in the
 adapter's own collect result still go through `RelationshipBuilder`. Do
 not mix the two routes on one parent until a live install proves it
 safe. Contract: `knowledge/context/tier2_architecture.md`.
+
+**Read-style queries: `post(path, jsonBody)`.** For the queries the Suite
+API only offers as POST (`/api/resources/query`,
+`/api/resources/stats/latest/query`,
+`/api/resources/properties/latest/query`, `/api/resources/stats/query`).
+It throws exactly like `get`, so catch at the call site. Only a path of
+`/`-separated `[A-Za-z0-9_-]` segments whose last segment is exactly
+`query`, with at most one `?key=value&...` query string, is accepted;
+anything else (a `#` fragment, `;`, `%`, `\`, `.` or `..` segments,
+whitespace) is refused with `IllegalArgumentException` before anything is
+sent: it is not a write path. The response is read whole into memory, up
+to 8 MiB (`post(path, jsonBody, maxResponseBytes)` sets another cap; over
+it throws `ResponseTooLargeException`), with a 30 s read timeout: bound
+the resource ids per query and use `page`/`pageSize` where the endpoint
+takes them.
+
+**Events: `pushEvents`, DIAGNOSTIC only.** Build `SuiteApiEvent`s
+(`SuiteApiEvent.builder(Type.DIAGNOSTIC, resourceId, message, now)
+.severity(...).diagnosticSubType(LOG)`) and call
+`stitcher.pushEvents(list)` (`POST /api/events/bulk`). A `NOTIFICATION`
+event on another adapter's object is answered 200 and silently discarded,
+so the framework refuses it everywhere (dropped, counted, WARN; whether it
+is also discarded on a pak's own object is untested). The REST event has
+no auto-cancel or watch/cancel cycle counts: use `managedExternally(false)`
+and stop re-pushing (whether a GENERAL adapter's event is cancelled this
+way is untested), or `managedExternally(true)` and `event.cancelledAt(t)`
+after your own count of quiet cycles. A cancel time of 0 or less means
+not cancelled. A 2xx means accepted, not landed. Never throws.
+
+**Numeric properties: `pushTypedBatch`.** Put a `Number` in the property
+map and it is sent as a numeric property (`"data":[1.0]`); a `String` is
+sent as before. Every number is sent as a double: `5` goes out as `5.0`, a
+`BigDecimal` with a fractional part is rounded, and an integer whose
+magnitude exceeds 2^53 (a byte counter, a microsecond epoch) is dropped
+and counted rather than sent as a different number, so send a `String`
+when the exact value matters. Null, NaN and infinite values are dropped
+and counted. Keep one type per key: what a numeric sample does to a key
+whose earlier samples are strings, or the reverse, is untested.
+
+**Key differential.** `python3 -m vcfcf_common keydiff` compares the keys
+a pak pushes across two instances or saved snapshots (GETs, plus each live
+side's token acquire and release). VMWARE objects match on vCenter UUID
+plus MOID, never on name. Use it for a port's parity check: it exits 0
+only when objects and keys were compared and nothing differs; 4 means
+nothing was compared (wrong scope or prefix, or everything stale), 5 means
+some objects could not be identified. Numbers are compared exactly (no float
+rounding); 6 means an internal arithmetic error, never a match. Snapshot files carry object names
+and values from the instance, never credentials.
 
 ## Logging: what reaches the per-instance log
 

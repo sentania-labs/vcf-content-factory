@@ -366,7 +366,8 @@ All components compile against the 9.0.2 SDK jar
 | `SimpleJson` | `com.vcfcf.adapter.json` | Zero-dep recursive-descent JSON parser. |
 | `AmbientCredential` | `com.vcfcf.adapter.stitch` | Reads `/usr/lib/vmware-vcops/user/conf/maintenanceuser.properties`; decrypts via SDK `Crypt.getDefaultCrypt().decrypt()` — the only FIPS-safe path under `-Dorg.bouncycastle.fips.approved_only=true` (9.1+). Path resolution order: (1) system property `vcfcf.suiteapi.credential.path` if set; (2) hard-wired default `/usr/lib/vmware-vcops/user/conf/maintenanceuser.properties`. **`CommonConstants.VCOPS` is NOT used** — it is a product display-name string (`"VCF Ops"`), not a filesystem path. See `knowledge/lessons/sdk-constants-are-display-names.md`. Never hand-roll the cipher. |
 | `SuiteApiStitchClient` | `com.vcfcf.adapter.stitch` | Framework REST transport for Suite API stitching. Token cached per instance; re-acquired on 401; released on `close()` / `discard()`, after which the client refuses every call. Credential resolution: explicit adapter-config fields > ambient `maintenanceuser.properties` > fail with actionable message. **Unified transport:** ALL calls go through `VcfCfAdapter.openPlatformConnection` (`HttpsURLConnection` mirroring the vendor `SuiteAPIClient`: trust-all + ignore-hostname, or cluster truststore + ignore-hostname when `IS_FIPS=true`; see "SSL / hostname verification" below). No `java.net.http.HttpClient` path. source-11 baseline. |
-| `SuiteApiStitcher` | `com.vcfcf.adapter.stitch` | Thin facade adapter authors hold as a field. Factory methods: `SuiteApiStitcher.create(adapter, logger)` (ambient) and `SuiteApiStitcher.createExplicit(adapter, logger, host, user, pass)` (remote-collector fallback). No transport code required in the adapter. Surface: `pushProperties`, `pushStats`, `addChild` / `addChildren` (additive Suite API relationship POST, never PUT), `findSingletonResourceId`, `get` (and `get(path, accept)`), `discard`. A non-2xx GET throws `SuiteApiHttpException` (status, `apiErrorCode`, body excerpt). |
+| `SuiteApiStitcher` | `com.vcfcf.adapter.stitch` | Thin facade adapter authors hold as a field. Factory methods: `SuiteApiStitcher.create(adapter, logger)` (ambient) and `SuiteApiStitcher.createExplicit(adapter, logger, host, user, pass)` (remote-collector fallback). No transport code required in the adapter. Surface: `pushProperties`, `pushStats`, the batch pushes (`pushPropertiesBatch`, `pushStatsBatch`, `pushBatch`), the typed batch pushes (`pushTypedPropertiesBatch`, `pushTypedBatch`: property values `String` or `Number`), `pushEvents`, `addChild` / `addChildren` (additive Suite API relationship POST, never PUT), `findSingletonResourceId`, `get` (and `get(path, accept)`), `post(path, jsonBody[, maxResponseBytes])` (read-style query endpoints only, response capped at 8 MiB by default), `discard` / `close` / `isClosed`. A non-2xx `get` or `post` throws `SuiteApiHttpException` (status, `apiErrorCode`, body excerpt); the pushes never throw. Contract for the post, events and numeric-property additions: "Stitcher reads, events and numeric properties" below. |
+| `SuiteApiEvent` | `com.vcfcf.adapter.stitch` | Immutable event for `pushEvents` (type, resource UUID, message, start time; optional severity, DIAGNOSTIC subtype, `managedExternally`, cancel time). `NOTIFICATION` is refused by `pushEvents`. |
 
 ## Pak format — hard-won lessons (2026-05-19)
 
@@ -1576,10 +1577,141 @@ routes on one parent until a live install shows it is safe.
 Empirical basis: `knowledge/context/investigations/suiteapi_ambient_auth_devel_2026_06_09.md`
 (devel 9.0.2 + prod 9.1 confirmation). Remote-collector caveat documented in that file.
 
+### Stitcher reads, events and numeric properties
+
+Three additive calls, written for a port of a third-party Python pack to the
+Java framework; no existing call changed. Guards:
+`adapter_framework/test/com/vcfcf/adapter/stitch/SuiteApiStitchQueryEventsTest.java`
+and the golden String bodies in `SuiteApiStitchBatchTest.java` (both run by
+`run_stitch_tests.sh`, green on the 8.18.7, 9.0.2 and 9.1.1 jars at
+`--release 11`).
+
+**`post(path, jsonBody)`: read-style POST queries only.** Returns the body.
+For the queries the Suite API only offers as POST: `/api/resources/query`,
+`/api/resources/stats/latest/query`, `/api/resources/properties/latest/query`,
+`/api/resources/stats/query` (body shapes `resource-query`,
+`latest-stat-query`, `properties-query`, `stat-query`, identical in the
+8.18, 9.0 and 9.1 specs). The path is checked against an allowlist before a
+token is fetched or a connection is opened: one or more `/`-separated
+segments of `[A-Za-z0-9_-]` (a UUID segment fits), the last exactly `query`,
+then at most one query string of `key=value` pairs joined by `&` (keys
+`[A-Za-z0-9_]`, values `[A-Za-z0-9_.,:-]`). Anything else is
+`IllegalArgumentException`: a `#` fragment (the old suffix check let
+`/api/events/bulk#/query` through, and the fragment never reaches the wire,
+so the request went to `/api/events/bulk`), `;`, `%`, `\`, a `.` or `..`
+segment, an empty segment, whitespace, a control character, an absolute
+URL. It is not a write path; pushes keep their own calls, which never throw
+and isolate bad entries.
+
+The response body is read whole into memory, up to a cap:
+`POST_MAX_RESPONSE_BYTES_DEFAULT`, 8 MiB, or the `post(path, jsonBody,
+maxResponseBytes)` overload. A larger body throws
+`SuiteApiStitchClient.ResponseTooLargeException` (an `IOException`; the
+message names the cap and the URL, never any of the body). The default comes
+from the one collector heap measured
+(`investigations/2026-11-06-collector-jvm-sizing.md`: `-Xmx1024m`, about
+65 MB for a new adapter instance): decoding costs about three times the body,
+so 8 MiB keeps one query under half that budget. A Cloud Proxy's heap is not
+measured. The connect and read timeouts are 30 s each, shorter than the 120 s
+the batch pushes allow. A query over many resources can exceed both: bound
+the resource ids per query and use `page`/`pageSize` where the endpoint takes
+them (`/api/resources/query` does).
+
+Otherwise `get`'s contract exactly: cached token, one re-acquire and retry
+on 401, the `openPlatformConnection` transport, `Accept: application/json`,
+no other retry, a non-2xx answer as `SuiteApiHttpException` (message
+`Suite API POST <url> HTTP <status>[ apiErrorCode <n>]`, the shape
+compliance's `OverridesStore` regex depends on for GET), a closed client as
+an `IOException` without a token. Neither body is logged (nothing is logged
+on success) or put in an exception message; only the server's sanitized
+error excerpt rides the exception. Whether these endpoints answer the ambient
+identity on 8.18.7 and on a Cloud Proxy is untested; the compliance pak's
+ambient session already called `/api/resources/properties/latest/query` and
+`/api/resources/query` on devel 9.0.2
+(`investigations/suiteapi_ambient_auth_devel_2026_06_09.md`).
+
+**`pushEvents(Collection<SuiteApiEvent>)`.** `POST /api/events/bulk`,
+body `{"event":[...]}`, fields in the spec example's order, optional ones
+omitted when unset. Never the `/adapterkinds/{kind}` variant (400,
+`apiErrorCode 1514` for GENERAL kinds). Known
+(`investigations/vcommunity-notification-events-foreign-vm.md`, 9.x devel,
+2026-06-22): 200 with an empty body; `DIAGNOSTIC` onto another adapter's VM
+lands on its timeline about 45 s later; `NOTIFICATION` in the same shape is
+answered 200 and silently discarded. So `pushEvents` refuses `NOTIFICATION`
+(not sent, counted dropped, one WARN pointing at `DIAGNOSTIC`). Whether it is
+also discarded on a pak's own resource is untested; it is refused on every
+resource because the facade cannot tell a pak's own resource from a foreign
+one. The investigation saw no `NOTIFICATION` event anywhere on the instance,
+which supports refusing it by default. Also refused and counted: null event,
+non-UUID id, null or blank message, a start time before 2000-01-01 (the
+spec's floor for `startTimeUTC`; start is always sent, so an event never
+silently starts in 2000), and a set cancel time before 2000-01-01. The
+cancel-time floor is the framework's rule, not the spec's: the spec floors
+only `startTimeUTC`, and its examples send `"cancelTimeUTC":0` for an event
+that is not cancelled, so a cancel time of 0 or less is treated as unset and
+not sent. `SuiteApiEvent` offers the spec's types minus `HARD_THRESHOLD`
+(needs `key`/`htType`/`value`), its seven severities (XML name `severity` on
+8.18, `criticality` on 9.0 and 9.1; JSON `severity` everywhere), and the six
+diagnostic subtypes all three lines list (9.0 adds `TROUBLESHOOT`, 9.1
+more). The REST event has no auto-cancel or watch/cancel cycle counts: those
+are the Python SDK collect result's; the analogues are
+`managedExternally(false)` and not re-pushing (whether a GENERAL adapter's
+event is cancelled this way is untested), or `managedExternally(true)` and
+`cancelledAt(t)` (same message plus `cancelTimeUTC`, the spec's cancel).
+Chunked at 100 events and about 1 MB (conservative, not measured); never
+throws; a 401 is retried once; any other failure is one WARN naming each
+target resource once (first three) and stops the call (no per-event re-send:
+events are validated, so a refusal is more likely the request's than one
+entry's). Message text never reaches a log line. **Unknown:** a per-request
+limit, whether one bad event fails the whole request (the answer has no
+per-event result), and the lifecycle of a `managedExternally:false` event
+from a GENERAL adapter.
+
+**Numeric properties: `pushTypedPropertiesBatch`, `pushTypedBatch`.** Values
+`String` or `Number`. A string is sent as `"values":["..."]`, a number as
+`"data":[<double>]`, the `property-content` schema's two mutually exclusive
+arrays and the spec's own example (`"statKey":"config|num|processes",
+"data":[93.0]`, 8.18, 9.0 and 9.1). **Every number is sent as a double**
+(`format: double` in the schema on all three lines), written as
+`Double.toString(n.doubleValue())`: `5` goes out as `5.0`, `0.1f` as
+`0.10000000149011612`, and a `BigDecimal` with a fractional part is rounded
+to the nearest double. An integer value whose magnitude exceeds 2^53
+(9007199254740992), a `Long` byte counter or a microsecond epoch for
+example, has no exact double, so it is dropped and counted rather than sent
+as a different number (`Long`, `Integer`, `Short`, `Byte`, the atomic and
+adder longs, `BigInteger`, and a `BigDecimal` with no fractional part). Send
+a `String` when the exact value matters. Null, NaN, infinite (after
+`doubleValue()`, so a too-large `BigDecimal` too) and any other type
+(`Boolean` included) are dropped and counted, never sent. `pushPropertiesBatch`
+and `pushBatch` are unchanged and stay `String`-only (a raw map smuggling a
+number into them is still dropped, never sent as `data`); they pass the
+serializer's `typed` flag as `false` and keep the String-only entry builder
+they had before. With string values the typed calls produce byte-identical
+bodies. Same endpoint, chunking, id handling and failure rules as the string
+batch. Keep one type per key: what a numeric sample does to a key whose
+earlier samples are strings, or the reverse, is untested.
+
+**Compatibility proof (2026-11-12).** `SuiteApiStitchBatchTest`'s golden
+test pins the exact requests `pushPropertiesBatch`, `pushBatch` and the 400
+per-id fallback send, for a map carrying `""`, control characters, `"`,
+`\`, a non-BMP character, U+2028 and a key needing escapes. The expected
+bodies were captured from `origin/main` before typed properties existed, and
+the same test passes against that tree and against this change. Earlier, the
+calls compliance and vsanperf make (`create`, `get`, `get(path, accept)`,
+`pushProperties`, `pushStats`, the three batch pushes with chunking and the
+400 per-id fallback, `addChild(ren)`, `findSingletonResourceId`, `discard`)
+were also driven through both trees against one scripted server (22
+requests, every method, URL, header and body, and every log line identical;
+a scratch harness, not committed). Both paks' scratch copies pass
+`validate-sdk --require-sdk-compat` (9.0.2, 8.18.7, 9.1.1 legs) and
+`build-sdk` (zero pak-compare BLOCKINGs, stock-id guard passed) on a kit
+built from the change.
+
 ## Changelog
 
 | Date | Change |
 |---|---|
+| 2026-11-12 | **Buildkit 1.0.29: stitcher `post`, `pushEvents`, numeric properties; icon hints; key differential.** `SuiteApiStitchClient` and `SuiteApiStitcher` gain `post(path, jsonBody)` and `post(path, jsonBody, maxResponseBytes)` (read-style query paths only, checked against an allowlist before any request; response read whole up to 8 MiB by default, else `ResponseTooLargeException`; `get`'s error contract), `pushEvents` (with the new `SuiteApiEvent`; `NOTIFICATION` refused; a cancel time of 0 or less is unset) and `pushTypedPropertiesBatch` / `pushTypedBatch` (numeric property values as `data`, every number a double, integers beyond 2^53 dropped and counted); contract and evidence in "Stitcher reads, events and numeric properties". Internals: the batch code's `boolean stats` became a package-private `Kind` enum; the string pushes keep their String-only serializer, pinned by golden bodies captured from `origin/main` (`SuiteApiStitchBatchTest`). Icon library: `content_library`, `library_item`, `vm_template` (`knowledge/context/mpb/mp_icon_library.md`). New read-only CLI `python3 -m vcfcf_common keydiff` compares two instances or snapshots (GETs plus each live side's token acquire and release; per-request timeout; exit 4 when nothing was compared, 5 when some objects were not, 6 on an internal error; numbers and tolerances compare exactly in `Decimal`, rounding trapped); see `vcfcf_common/keydiff.py`. Review: `reviews/framework/stitch-post-events-numeric-keydiff-2026-11-12.md`, every finding fixed. **Versioning:** ships in 1.0.29 (`BUILDKIT_VERSION` already 1.0.29 from the stock-id guard; not bumped again). **Adapter adoption:** additive; no pak changes until it calls the new methods. |
 | 2026-11-12 | **Buildkit 1.0.29: the factory content-name prefix is `[VCF CF] ` (was `[VCF Content Factory] `), with a pak transition rule.** The kit ships `naming.py` (the factory's `vcfcf_core/naming.py`, the one definition of the prefix). For a `factory_prefixed` pak (declared or default), validate-sdk and build-sdk accept a pak whose prefixed names are all in the old spelling with one warning naming `python3 -m vcfcf_common migrate-prefix <pak dir>`, reject the two spellings mixed in one pak (an error per old-spelled name), and pass a pak in the new spelling silently; `unprefixed` paks reject either spelling. A factory-prefixed dashboard name over 50 characters is a build error. Ids derived from names, the in-pak paths (`content/dashboards/<dir>/`, `content/reports/<dir>/`, the supermetrics, symptomdefs and alertdefs file names) and the `dashboards.properties` Summary binding key are computed from the old spelling (`id_basis_name`), so they do not change. Reference: §Bundled content naming and `authoring/prefix_migration.md`. **Versioning:** `BUILDKIT_VERSION` 1.0.29, the same kit as the stock-id guard below. **Adapter adoption:** none required during the transition (old-spelled paks build with a warning); a migrated pak's display names and localization strings change. |
 | 2026-11-12 | **Buildkit 1.0.29: validate-sdk and build-sdk refuse bundled content under VCF Operations stock ids (factory #345).** The kit ships `stock_ids.py` (the factory's `vcfcf_core/stock_ids/guard.py`, byte for byte) and `stock_ids_baseline.json`; build-sdk checks the bundled content before the compile and every definition in the built pak after it (a `--release` build deletes a failing pak). Fail closed: no baseline, or a pak member the scanner cannot read, fails the build. The pass line names what was compared and the types the baseline has no ids for (super metrics, recommendations). New `python3 -m sdk_buildkit stock-id-check` (exit 0 clean, 2 stock ids, 1 cannot check). Escape hatch: adapter.yaml `stock_id_allowlist`. Reference: §Stock content id guard and `stock_id_guard.md`. **Versioning:** `BUILDKIT_VERSION` 1.0.29. **Adapter adoption:** none for a pak whose content carries no stock id (all six registered paks pass); the guard changes no pak bytes. Repos on the floating `sdk-buildkit-v1` tag get the guard on their next CI run; exact-pinned repos bump their pin to get it. |
 | 2026-11-11 | **Buildkit 1.0.28: the pak-root `resources.properties` writes `VENDOR=` as raw UTF-8, like `DISPLAY_NAME=` and `DESCRIPTION=`.** The file's reader is the pak manager's Python `configparser` on UTF-8 text (byte-identical `vc_ops_resource_bundle.py` on all three lab lines), which knows no `\uXXXX`; 1.0.26 and 1.0.27 wrote a non-ASCII vendor as `\uXXXX`, which that reader would show literally. Name and description were already right, so the `§` in the Synology description stays as it is. Evidence and consequences: "Who reads the pak-root `resources.properties`". `_prop_value_escape` removed (its only caller). Other properties writers unchanged (Java readers). Pak bytes change only for a non-ASCII `vendor`; no registered adapter sets `vendor`, so no registered pak changes. **Versioning:** `BUILDKIT_VERSION` 1.0.28. **Adapter adoption:** none. |

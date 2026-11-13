@@ -81,6 +81,41 @@ Portable Tier 2 SDK adapter build toolchain (jar-free).
 - Kit contents: `naming.py` (the factory's `vcfcf_core/naming.py`, the one
   definition of the prefix).
 
+- `SuiteApiStitcher.post(path, jsonBody)` for the Suite API's read-style POST
+  queries (`/api/resources/query`, `/api/resources/stats/latest/query`,
+  `/api/resources/properties/latest/query`, `/api/resources/stats/query`).
+  It throws like `get` (`SuiteApiHttpException` on a non-2xx, one 401
+  retry). Only a path of `[A-Za-z0-9_-]` segments whose last segment is
+  exactly `query`, with at most one `?key=value&...` query string, is
+  accepted; anything else (a `#` fragment, `;`, `%`, `\`, `.` or `..`
+  segments, whitespace) is refused before a token is fetched or a
+  connection is opened. The response is read whole into memory, up to
+  8 MiB by default (`post(path, jsonBody, maxResponseBytes)` sets another
+  cap); a larger body throws `ResponseTooLargeException`, without any of
+  the body. Read timeout 30 s: bound the resource ids per query and use
+  `page`/`pageSize` where the endpoint takes them. Bodies are never logged.
+- `SuiteApiStitcher.pushEvents(events)` with the new `SuiteApiEvent` pushes
+  events onto any resource, foreign ones included, through
+  `POST /api/events/bulk`. `NOTIFICATION` events are refused, not sent: the
+  Suite API answers 200 and silently discards them on another adapter's
+  resource (untested on a pak's own resource; refused everywhere because
+  the call cannot tell the two apart). Send `DIAGNOSTIC`. A cancel time of
+  0 or less is unset; a set cancel time before 2000-01-01 is refused (the
+  framework's rule; the spec floors only the start time). Never throws;
+  count from the returned `SuiteApiBatchResult` (events, not resources).
+- Numeric property values: `pushTypedPropertiesBatch` and `pushTypedBatch`
+  take `String` or `Number` values and send numbers as `"data":[...]`.
+  Every number is sent as a double (`5` as `5.0`; a fractional `BigDecimal`
+  is rounded), and an integer whose magnitude exceeds 2^53 is dropped and
+  counted rather than sent as a different number: send a `String` when the
+  exact value matters. Null, NaN and infinite values are dropped and
+  counted, never sent. Keep one type per key (numeric samples on a key with
+  string history are untested). `pushPropertiesBatch` and `pushBatch` are
+  unchanged and send the same bytes as before (pinned by golden bodies).
+- Icon hints `content_library`, `library_item`, `vm_template`.
+- No pak changes behaviour until it calls the new methods; a rebuild alone
+  changes nothing on the wire.
+
 ## Behavior since 1.0.28
 
 - Release builds accept only SDK jars the kit knows (factory issue #343). A

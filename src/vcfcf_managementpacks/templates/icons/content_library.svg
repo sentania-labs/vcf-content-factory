@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400">
+  <!-- Content library: three book spines standing on a shelf -->
+  <!-- Spine 1 -->
+  <rect x="84" y="108" width="64" height="200" rx="8" fill="#0098c7" opacity="0.18"/>
+  <rect x="84" y="108" width="64" height="200" rx="8"
+        fill="none" stroke="#0098c7" stroke-width="14" stroke-linejoin="round"/>
+  <line x1="100" y1="148" x2="132" y2="148" stroke="#005c8a" stroke-width="10" stroke-linecap="round"/>
+  <line x1="100" y1="268" x2="132" y2="268" stroke="#005c8a" stroke-width="10" stroke-linecap="round"/>
+  <!-- Spine 2 (tallest) -->
+  <rect x="168" y="68" width="64" height="240" rx="8"
+        fill="none" stroke="#0098c7" stroke-width="14" stroke-linejoin="round"/>
+  <line x1="184" y1="108" x2="216" y2="108" stroke="#005c8a" stroke-width="10" stroke-linecap="round"/>
+  <line x1="184" y1="132" x2="216" y2="132" stroke="#005c8a" stroke-width="10" stroke-linecap="round"/>
+  <line x1="184" y1="268" x2="216" y2="268" stroke="#005c8a" stroke-width="10" stroke-linecap="round"/>
+  <!-- Spine 3 -->
+  <rect x="252" y="128" width="64" height="180" rx="8" fill="#0098c7" opacity="0.18"/>
+  <rect x="252" y="128" width="64" height="180" rx="8"
+        fill="none" stroke="#0098c7" stroke-width="14" stroke-linejoin="round"/>
+  <line x1="268" y1="168" x2="300" y2="168" stroke="#005c8a" stroke-width="10" stroke-linecap="round"/>
+  <line x1="268" y1="268" x2="300" y2="268" stroke="#005c8a" stroke-width="10" stroke-linecap="round"/>
+  <!-- Shelf board -->
+  <line x1="56" y1="326" x2="344" y2="326" stroke="#005c8a" stroke-width="16" stroke-linecap="round"/>
+  <!-- Shelf brackets -->
+  <line x1="96" y1="334" x2="96" y2="352" stroke="#005c8a" stroke-width="10" stroke-linecap="round"/>
+  <line x1="304" y1="334" x2="304" y2="352" stroke="#005c8a" stroke-width="10" stroke-linecap="round"/>
+</svg>
