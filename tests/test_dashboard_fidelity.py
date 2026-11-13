@@ -10,6 +10,7 @@ group proves the two new metric surfaces reach every dependency walker.
 """
 from __future__ import annotations
 
+import dataclasses
 import json
 import sys
 import warnings
@@ -42,14 +43,36 @@ def _dash(widgets, **extra):
     return {"id": DASH_ID, "name": "Fidelity Probe", "description": "", "widgets": widgets, **extra}
 
 
-def _load(tmp_path, data, name="d.yaml"):
-    p = tmp_path / name
-    p.write_text(yaml.safe_dump(data, sort_keys=False))
+def _load_one(p, **kw):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        d = load_dashboard(p, enforce_framework_prefix=False, default_name_path="")
-        d.validate({}, enforce_framework_prefix=False)
-    return d
+        try:
+            d = load_dashboard(p, enforce_framework_prefix=False, **kw)
+            d.validate({}, enforce_framework_prefix=False)
+            return d
+        except DashboardValidationError as exc:
+            return exc
+
+
+def _load(tmp_path, data, name="d.yaml"):
+    """Load under both folder defaults the production callers pass: ""
+    (third-party bundles, the corpus walkers) and the loader's own
+    "VCF Content Factory" (factory validate, a factory bundle file, a pak's
+    _load_bundled_content). Every fidelity case must come out the same under
+    both, apart from the folder an absent name_path takes (Codex P2 on PR
+    356: a test that only passes under the convenient default hides a pak
+    failure)."""
+    p = tmp_path / name
+    p.write_text(yaml.safe_dump(data, sort_keys=False))
+    bundle, production = _load_one(p, default_name_path=""), _load_one(p)
+    if isinstance(bundle, Exception) or isinstance(production, Exception):
+        assert type(bundle) is type(production) and str(bundle) == str(production), (bundle, production)
+        raise bundle
+    if not isinstance(data.get("name_path"), str):
+        assert bundle.name_path == "" and production.name_path == "VCF Content Factory"
+        production = dataclasses.replace(production, name_path="")
+    assert production == bundle
+    return bundle
 
 
 def _render(tmp_path, data):
@@ -130,8 +153,11 @@ def test_dashboard_level_fields_render(tmp_path):
 
 
 def test_name_path_omit_and_folder_in_name(tmp_path):
-    _, doc = _render(tmp_path, _dash([_view()], omit=["name_path"]))
+    _, doc = _render(tmp_path, _dash([_view()], name_path="", omit=["name_path"]))
     assert "namePath" not in doc["dashboards"][0] and doc["dashboards"][0]["name"] == "Fidelity Probe"
+    # name_path: "" alone is no folder too, with the key kept.
+    _, doc = _render(tmp_path, _dash([_view()], name_path=""))
+    assert doc["dashboards"][0]["namePath"] == "" and doc["dashboards"][0]["name"] == "Fidelity Probe"
     _, doc = _render(tmp_path, _dash([_view()], name_path="Folder", omit=["folder_in_name"]))
     assert doc["dashboards"][0]["name"] == "Fidelity Probe"
     assert doc["dashboards"][0]["namePath"] == "Folder"
@@ -145,7 +171,11 @@ def test_name_path_omit_and_folder_in_name(tmp_path):
     ({"column_count": 7}, "column_count"),
     ({"omit": ["shared"]}, "not supported here"),
     ({"omit": ["name_path"], "name_path": "Folder"}, "omit name_path needs an empty folder"),
+    ({"omit": ["name_path"]}, "omit name_path needs an empty folder"),
+    ({"omit": ["name_path"], "name_path": None}, "omit name_path needs an empty folder"),
     ({"omit": ["folder_in_name"]}, "omit folder_in_name needs a name_path"),
+    ({"omit": ["folder_in_name"], "name_path": ""}, "omit folder_in_name needs a name_path"),
+    ({"omit": ["folder_in_name", "name_path"], "name_path": ""}, "together is meaningless"),
     ({"omit": ["widget_interactions"], "interactions": [{"from": "v", "to": "v"}]}, "contradicts interactions"),
 ])
 def test_dashboard_level_negatives(tmp_path, extra, match):
@@ -234,7 +264,7 @@ def test_view_type_rejected_beside_a_non_list_factory_view(tmp_path):
     from types import SimpleNamespace
     p = tmp_path / "d.yaml"
     p.write_text(yaml.safe_dump(_dash([{**_view(ui={"view_type": "LIST"}), "view": "Trend V"}])))
-    d = load_dashboard(p, enforce_framework_prefix=False, default_name_path="")
+    d = load_dashboard(p, enforce_framework_prefix=False)
     with pytest.raises(DashboardValidationError, match="names a trend view"):
         d.validate({"Trend V": SimpleNamespace(data_type="trend", usage=None)}, enforce_framework_prefix=False)
 

@@ -287,7 +287,9 @@ def _dash_file(tmp_path, **extra):
 def _load_dash(path):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        return load_dashboard(path, enforce_framework_prefix=False, default_name_path="")
+        # The loader's own folder default, which factory validate and a pak's
+        # _load_bundled_content also use (Codex P2 on PR 356).
+        return load_dashboard(path, enforce_framework_prefix=False)
 
 
 def test_omit_temporary_floor_is_9_1_1(tmp_path):
@@ -299,7 +301,17 @@ def test_omit_temporary_floor_is_9_1_1(tmp_path):
 
 
 def test_omit_entries_proven_on_8_18_7_pass_the_pak_gate(tmp_path):
-    d = _load_dash(_dash_file(tmp_path, omit=["name_path"]))
+    # Through the pak's own loader, with its own folder default: the gate
+    # the test name claims (Codex P2 on PR 356).
+    from vcfcf_managementpacks.sdk_builder import _load_bundled_content, check_bundled_version_floors
+    _dash_file(tmp_path, name_path="", omit=["name_path"])
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        bundled = _load_bundled_content({"bundled_content": {"dashboards": ["dashboards/d.yaml"]}},
+                                        tmp_path, tmp_path)
+    d = bundled[1][0]
+    assert d.name_path == "" and d.omit == ["name_path"]
+    assert check_bundled_version_floors(bundled) == []
     assert d.omit_version_problems("8.18.7") == []
     assert d.omit_version_problems() == []
 
@@ -544,3 +556,239 @@ def test_resource_kind_name_rejected_in_resource_mode(tmp_path):
     p = _write(tmp_path / "d.yaml", {"id": DASH_ID, "name": "N1 Probe", "description": "", "widgets": [w]})
     with pytest.raises(DashboardValidationError, match="resource_kind_name is not rendered with metric_mode: resource"):
         load_dashboard(p, enforce_framework_prefix=False)
+
+
+# ---------------------------------------------------------------------------
+# Codex P2 on PR 356: name_path: "" with omit: [name_path] through every real
+# entry point, each with its own folder default; an absent name_path keeps
+# that default.
+# ---------------------------------------------------------------------------
+
+_NP_DASH_ID = "7b2e3f40-5c6d-4e7f-8091-a2b3c4d5e6f7"
+
+
+def _np_dash(name, **extra):
+    return {"id": _NP_DASH_ID, "name": name, "description": "",
+            "widgets": [{"id": "t", "type": "TextDisplay", "title": "T",
+                         "coords": {"x": 1, "y": 1, "w": 4, "h": 2}, "text": "hi"}],
+            "interactions": [], **extra}
+
+
+_NO_FOLDER = {"name_path": "", "omit": ["name_path"]}
+
+
+def _rendered(dashboard_json: str) -> dict:
+    import json
+    return json.loads(dashboard_json)["dashboards"][0]
+
+
+def _pak_render(tmp_path, data):
+    """The pak path: _load_bundled_content, then the dashboard.json and
+    resources.properties _write_outer_pak writes (no Java, stub adapters.zip)."""
+    import io
+    import zipfile
+    from vcfcf_managementpacks.sdk_builder import _load_bundled_content, _write_outer_pak
+    from vcfcf_managementpacks.sdk_project import SdkProjectDef, _derive_entry_class
+    _write(tmp_path / "dashboards" / "d.yaml", data)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        v, d, sm, sy, al, rp, rc = _load_bundled_content(
+            {"bundled_content": {"dashboards": ["dashboards/d.yaml"]}}, tmp_path, tmp_path)
+    project = SdkProjectDef(
+        name="VCF Content Factory Test", version="1.0.0", build_number=1, adapter_kind="test_adapter",
+        description="Test", tier=2, dependencies=[], entry_class=_derive_entry_class("test_adapter"),
+        source_path=tmp_path / "adapter.yaml",
+    )
+    stub = io.BytesIO()
+    with zipfile.ZipFile(stub, "w") as z:
+        z.writestr("stub.txt", "stub")
+    out = tmp_path / "dist"
+    out.mkdir()
+    pak = _write_outer_pak(project, stub.getvalue(), out, tmp_path, views=v, dashboards=d,
+                           owning_adapter_kind="test_adapter", owning_resource_kind="TestWorld")
+    with zipfile.ZipFile(pak) as zf:
+        dj = [n for n in zf.namelist() if n.endswith("/dashboard.json")]
+        props = [n for n in zf.namelist() if n.startswith("content/dashboards/") and n.endswith("resources.properties")]
+        assert len(dj) == 1 and len(props) == 1
+        return d[0], _rendered(zf.read(dj[0]).decode()), zf.read(props[0]).decode()
+
+
+def test_pak_build_loads_and_renders_an_explicitly_empty_omitted_folder(tmp_path):
+    d, db, props = _pak_render(tmp_path, _np_dash("Folderless Probe", **_NO_FOLDER))
+    assert d.name_path == ""
+    assert "namePath" not in db and db["name"] == "Folderless Probe"
+    assert "VCF Content Factory=" not in props
+
+
+def test_pak_build_keeps_the_default_folder_for_an_absent_name_path(tmp_path):
+    d, db, props = _pak_render(tmp_path, _np_dash("Foldered Probe"))
+    assert d.name_path == "VCF Content Factory"
+    assert db["namePath"] == "VCF Content Factory" and db["name"] == "VCF Content Factory/Foldered Probe"
+    assert "VCF\\ Content\\ Factory=VCF Content Factory" in props
+
+
+def test_pak_build_refuses_omit_name_path_without_the_explicit_empty_folder(tmp_path):
+    from vcfcf_managementpacks.sdk_builder import SdkBuildError
+    with pytest.raises(SdkBuildError, match="omit name_path needs an empty folder"):
+        _pak_render(tmp_path, _np_dash("Folderless Probe", omit=["name_path"]))
+
+
+def test_pak_gate_for_folder_omits_is_unchanged(tmp_path):
+    # name_path is proven on 8.18.7 (passes the pak gate); folder_in_name has
+    # no floor and still fails it.
+    from vcfcf_managementpacks.sdk_builder import _load_bundled_content, check_bundled_version_floors
+    for i, extra in enumerate((_NO_FOLDER, {"name_path": "Folder", "omit": ["folder_in_name"]})):
+        root = tmp_path / str(i)
+        _write(root / "dashboards" / "d.yaml", _np_dash("Gate Probe", **extra))
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            bundled = _load_bundled_content({"bundled_content": {"dashboards": ["dashboards/d.yaml"]}}, root, root)
+        errors = check_bundled_version_floors(bundled)
+        if i == 0:
+            assert errors == []
+        else:
+            assert len(errors) == 1 and "folder_in_name" in errors[0]
+
+
+def test_factory_loader_and_validate_accept_an_explicitly_empty_omitted_folder(tmp_path):
+    # The factory wrapper the dashboards CLI validate calls (load_all with
+    # the "VCF Content Factory" default), on a file under content/.
+    from vcfcf_dashboards import loader as factory
+    content = tmp_path / "content"
+    _write(content / "dashboards" / "none.yaml", _np_dash(_PREFIX + "Folderless Probe", **_NO_FOLDER))
+    _write(content / "dashboards" / "dflt.yaml",
+           {**_np_dash(_PREFIX + "Foldered Probe"), "id": "8c3f4051-6d7e-4f80-9102-b3c4d5e6f708"})
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        _, dashes = factory.load_all(content / "views", content / "dashboards")
+    by = {d.name: d for d in dashes}
+    assert by[_PREFIX + "Folderless Probe"].name_path == ""
+    assert by[_PREFIX + "Folderless Probe"].provenance == "factory"
+    assert by[_PREFIX + "Foldered Probe"].name_path == "VCF Content Factory"
+
+
+def test_dashboards_cli_validate_accepts_an_explicitly_empty_omitted_folder(tmp_path, monkeypatch, capsys):
+    from vcfcf_dashboards import cli
+    content = tmp_path / "content"
+    _write(content / "dashboards" / "none.yaml", _np_dash(_PREFIX + "Folderless Probe", **_NO_FOLDER))
+    (content / "views").mkdir(parents=True)
+    monkeypatch.chdir(tmp_path)
+    rc = cli.main(["--views-dir", str(content / "views"),
+                   "--dashboards-dir", str(content / "dashboards"), "validate"])
+    out = capsys.readouterr()
+    assert rc == 0, out
+
+
+def _bundle_repo(tmp_path, dash_rel, data, factory_native=True):
+    root = tmp_path / "repo"
+    _write(root / dash_rel, data)
+    (root / "content").mkdir(parents=True, exist_ok=True)
+    _write(root / "bundles" / "np-probe.yaml", {
+        "name": "np-probe", "description": "probe", "factory_native": factory_native,
+        "supermetrics": [], "views": [], "dashboards": [dash_rel], "customgroups": [], "reports": [],
+    })
+    return root
+
+
+@pytest.mark.parametrize("dash_rel,name,factory_native", [
+    ("content/dashboards/d.yaml", _PREFIX + "Folderless Probe", True),
+    ("third_party/probe/dashboards/d.yaml", "Folderless Probe", False),
+])
+def test_bundle_render_honours_an_explicitly_empty_omitted_folder(tmp_path, monkeypatch, dash_rel, name,
+                                                                   factory_native):
+    from vcfcf_core.packaging.assembly import render_bundle_payloads
+    from vcfcf_packaging.loader import load_bundle
+    root = _bundle_repo(tmp_path, dash_rel, _np_dash(name, **_NO_FOLDER), factory_native)
+    monkeypatch.chdir(root)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        bundle = load_bundle(root / "bundles" / "np-probe.yaml")
+        db = _rendered(render_bundle_payloads(bundle, sm_map={}, bundle_context="np").dashboard_json)
+    assert "namePath" not in db and db["name"] == name
+
+
+@pytest.mark.parametrize("dash_rel,name,factory_native,folder", [
+    ("content/dashboards/d.yaml", _PREFIX + "Foldered Probe", True, "VCF Content Factory"),
+    ("third_party/probe/dashboards/d.yaml", "Foldered Probe", False, ""),
+])
+def test_bundle_render_keeps_each_default_for_an_absent_name_path(tmp_path, monkeypatch, dash_rel, name,
+                                                                   factory_native, folder):
+    from vcfcf_core.packaging.assembly import render_bundle_payloads
+    from vcfcf_packaging.loader import load_bundle
+    root = _bundle_repo(tmp_path, dash_rel, _np_dash(name), factory_native)
+    monkeypatch.chdir(root)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        bundle = load_bundle(root / "bundles" / "np-probe.yaml")
+        db = _rendered(render_bundle_payloads(bundle, sm_map={}, bundle_context="np").dashboard_json)
+    assert db["namePath"] == folder
+    assert db["name"] == (f"{folder}/{name}" if folder else name)
+
+
+def test_discrete_build_honours_an_explicitly_empty_omitted_folder(tmp_path):
+    import json
+    import zipfile
+    from vcfcf_packaging.discrete_builder import build_discrete
+    proj = tmp_path / "third_party" / "probe"
+    _write(proj / "dashboards" / "d.yaml", _np_dash(_PREFIX + "Folderless Discrete Probe", **_NO_FOLDER))
+    out = tmp_path / "discrete"
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        z = build_discrete("dashboard", _PREFIX + "Folderless Discrete Probe", out,
+                           extra_search_dirs=[proj], live_describe=False, skip_audit=True)
+    with zipfile.ZipFile(z) as zf:
+        dj = [n for n in zf.namelist() if n.endswith("dashboard.json")]
+        assert dj
+        db = json.loads(zf.read(dj[0]))["dashboards"][0]
+    assert "namePath" not in db and db["name"] == _PREFIX + "Folderless Discrete Probe"
+
+
+def test_buildkit_copy_loads_and_renders_an_explicitly_empty_omitted_folder(tmp_path):
+    """The kit's vendored loader and sdk_builder, imported with the factory
+    packages off the path, as pak CI runs them."""
+    import json
+    import os
+    import subprocess
+    from vcfcf_managementpacks.buildkit import (
+        _FACTORY_SOURCES, _IMPORT_REWRITES, _KIT_INIT, _KIT_MAIN, _apply_rewrites,
+    )
+    pkg = tmp_path / "kit" / "sdk_buildkit"
+    pkg.mkdir(parents=True)
+    (pkg / "__init__.py").write_text(_KIT_INIT, encoding="utf-8")
+    (pkg / "__main__.py").write_text(_KIT_MAIN, encoding="utf-8")
+    for dest, src in _FACTORY_SOURCES.items():
+        if src.is_file():
+            rules = _IMPORT_REWRITES.get(dest, [])
+            if rules:
+                (pkg / dest).write_text(_apply_rewrites(src.read_text(encoding="utf-8"), rules), encoding="utf-8")
+            else:
+                (pkg / dest).write_bytes(src.read_bytes())
+    proj = tmp_path / "proj"
+    _write(proj / "dashboards" / "a.yaml", _np_dash("Folderless Probe", **_NO_FOLDER))
+    _write(proj / "dashboards" / "b.yaml",
+           {**_np_dash("Foldered Probe"), "id": "8c3f4051-6d7e-4f80-9102-b3c4d5e6f708"})
+    script = textwrap.dedent(f"""
+        import json, sys, warnings
+        from pathlib import Path
+        warnings.simplefilter("ignore")
+        from sdk_buildkit.sdk_builder import _load_bundled_content
+        from sdk_buildkit.dashboard_render import render_dashboards_bundle_json
+        root = Path({str(proj)!r})
+        _, ds, *_ = _load_bundled_content(
+            {{"bundled_content": {{"dashboards": ["dashboards/a.yaml", "dashboards/b.yaml"]}}}}, root, root)
+        out = [json.loads(render_dashboards_bundle_json([d], {{}}, "0", known_dashboards=ds))["dashboards"][0]
+               for d in ds]
+        assert not any(m.startswith("vcfcf_") for m in sys.modules), "factory package imported"
+        print(json.dumps([{{"name": o["name"], "namePath": o.get("namePath", "<absent>")}} for o in out]))
+    """)
+    repo_root = REPO_ROOT.resolve()
+    pp = [e for e in os.environ.get("PYTHONPATH", "").split(os.pathsep)
+          if e and Path(e).resolve() not in {repo_root, repo_root / "src"}]
+    env = {**os.environ, "PYTHONPATH": os.pathsep.join([str(tmp_path / "kit"), *pp])}
+    res = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True,
+                         cwd=str(tmp_path), env=env, timeout=60)
+    assert res.returncode == 0, res.stderr
+    assert json.loads(res.stdout.strip().splitlines()[-1]) == [
+        {"name": "Folderless Probe", "namePath": "<absent>"},
+        {"name": "VCF Content Factory/Foldered Probe", "namePath": "VCF Content Factory"},
+    ]

@@ -2657,6 +2657,9 @@ class Dashboard:
     # Ops dashboard folder path, lands in the Ops UI's dashboard
     # sidebar under this folder. Default is the framework folder; can
     # be overridden per-dashboard if an author has a specific reason.
+    # The loader sets it to the YAML string when one is given ("" is no
+    # folder) and to the caller's default_name_path only when the key is
+    # absent.
     name_path: str = "VCF Content Factory"
     # Whether the dashboard is shared with other Ops users. Defaults
     # to True, a dashboard nobody else can see defeats the purpose
@@ -5250,7 +5253,17 @@ def _load_dashboard(
     name = str(data.get("name", "")).strip()
     for w in widgets:
         w.dashboard_name = name
-    name_path = str(data.get("name_path", "") or "").strip()
+    # name_path: a YAML string, even "", is the author's folder and wins
+    # over default_name_path; only an absent (or null) key takes the
+    # caller's default. Every entry point (factory validate, bundles, paks,
+    # the buildkit) passes its own default, so an explicit "" is the one way
+    # to say "no folder" that renders the same through all of them.
+    name_path_raw = data.get("name_path")
+    name_path_explicit = isinstance(name_path_raw, str)
+    if name_path_explicit:
+        name_path = name_path_raw.strip()
+    else:
+        name_path = str(name_path_raw or "").strip() or default_name_path
     shared_raw = data.get("shared")
     shared = True if shared_raw is None else bool(shared_raw)
     hidden_raw = data.get("hidden")
@@ -5297,16 +5310,24 @@ def _load_dashboard(
     if column_count is not None and (isinstance(column_count, bool) or column_count not in _COLUMN_COUNTS):
         raise DashboardValidationError(f"{path}: column_count must be one of {sorted(_COLUMN_COUNTS)}; got {column_count!r}")
     dash_omit = _parse_omit_list(data.get("omit"), DASHBOARD_OMIT_KEYS, str(path))
-    if "folder_in_name" in dash_omit and not (name_path or default_name_path):
-        raise DashboardValidationError(f"{path}: omit folder_in_name needs a name_path")
-    if "widget_interactions" in dash_omit and interactions:
-        raise DashboardValidationError(f"{path}: omit widget_interactions contradicts interactions")
+    # The two folder omits are checked against the YAML alone, never the
+    # caller's default folder, so a file loads the same way in every entry
+    # point (Codex P2 on PR 356).
     if "folder_in_name" in dash_omit and "name_path" in dash_omit:
         raise DashboardValidationError(f"{path}: omit folder_in_name and name_path together is meaningless")
-    if "name_path" in dash_omit and (name_path or default_name_path):
+    if "folder_in_name" in dash_omit and not (name_path_explicit and name_path):
         raise DashboardValidationError(
-            f"{path}: omit name_path needs an empty folder (name_path: \"\"); the dashboard "
-            f"would otherwise be placed in {(name_path or default_name_path)!r}"
+            f"{path}: omit folder_in_name needs a name_path set in the YAML (the folder the "
+            f"name leaves out); the loader's default folder differs between entry points"
+        )
+    if "widget_interactions" in dash_omit and interactions:
+        raise DashboardValidationError(f"{path}: omit widget_interactions contradicts interactions")
+    if "name_path" in dash_omit and not (name_path_explicit and not name_path):
+        where = (f"would otherwise be placed in {name_path!r}" if name_path_explicit
+                 else "takes the entry point's default folder when name_path is absent")
+        raise DashboardValidationError(
+            f"{path}: omit name_path needs an empty folder (name_path: \"\") in the YAML; "
+            f"the dashboard {where}"
         )
 
     return Dashboard(
@@ -5322,7 +5343,7 @@ def _load_dashboard(
         description=str(data.get("description", "") or "").strip(),
         widgets=widgets,
         interactions=interactions,
-        name_path=name_path or default_name_path,
+        name_path=name_path,
         shared=shared,
         hidden=hidden,
         source_path=path,

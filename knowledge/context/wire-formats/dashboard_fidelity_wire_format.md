@@ -54,9 +54,29 @@ and the per-type renderers). Tests: `tests/test_dashboard_fidelity.py`.
 | `column_proportion: "1-1"` | `columnProportion` | legacy layout; values seen `1`, `1-1`, `0.5`, `0.5-0.5`, `0.333-0.334-0.333`, `0.95`, `0` |
 | `column_count: 0` | `columnCount` | values seen -1, 0, 1, 2, 3 |
 | `omit: [temporary]` | no `temporary` | 9.1.1 exports drop it. Floor 9.1.1 (§Omit version floors): a Tier 2 pak build fails on it |
-| `omit: [name_path]` | no `namePath` | needs `name_path: ""` |
-| `omit: [folder_in_name]` | `name` without the `<name_path>/` prefix, `namePath` kept | one third-party dashboard; such a dashboard is not placed in the folder. No product export shows it: a Tier 2 pak build fails on it |
+| `name_path: ""` | `namePath: ""`, `name` without a folder prefix | no folder, whatever the entry point's default (below) |
+| `omit: [name_path]` | no `namePath` | needs `name_path: ""` written in the YAML: an absent `name_path` is a load error, as is a non-empty one. Floor 8.18.7: passes the Tier 2 pak gate |
+| `omit: [folder_in_name]` | `name` without the `<name_path>/` prefix, `namePath` kept | needs a non-empty `name_path` written in the YAML. One third-party dashboard; such a dashboard is not placed in the folder. No product export shows it: a Tier 2 pak build fails on it |
 | `omit: [widget_interactions]` | no `widgetInteractions` | error with `interactions:` set. Floor 9.1.1: a Tier 2 pak build fails on it |
+
+**`name_path`: absent versus empty.** A string, `""` included, is the
+author's folder and is never replaced. Only an absent (or `null`)
+`name_path` takes the entry point's default folder, and the defaults differ:
+`VCF Content Factory` for factory validate, a factory-provenance file in a
+bundle, a discrete or release build of factory content, and every dashboard
+a pak's `_load_bundled_content` loads (the buildkit's vendored copy
+included); `""` for a third-party file in a bundle and the corpus walkers.
+So the two folder omits are checked against the YAML alone, never the
+default: the same file loads the same way through every entry point. Before
+2026-11-12 (Codex P2 on PR 356) an explicit `""` fell back to the default,
+so `name_path: "", omit: [name_path]` failed in a pak and a factory load
+and only loaded where the default happened to be `""`. Product exports
+never write `namePath: ""`: in every export read (the built-in corpora,
+the third-party paks) a folderless dashboard leaves the key out. The renderer has always written
+`namePath: ""` for a folderless dashboard and still does for `name_path: ""`
+without the omit. That shape is the factory's long-standing folderless
+render, not one copied from an export; add `omit: [name_path]` to match an
+export exactly.
 
 `hidden` and `summary_for` already existed and round-trip: 30 hidden
 third-party dashboards and the six per-folder Summary dashboards render
@@ -330,7 +350,8 @@ ships the dashboard disabled (above), and, on alerts and recommendations,
 `template_fidelity_wire_format.md`, `alert_fidelity_wire_format.md`.
 
 - Dashboard: `time_range`, `disabled`, `edit_allowed`, `doc_center_key`,
-  `column_proportion`, `column_count`, `omit`.
+  `column_proportion`, `column_count`, `omit`; and `name_path: ""`, which
+  took the entry point's default folder and now means no folder.
 - Widget, any type: `description`, `title_localized`, `ui` (and under it
   `states`, `height`, `state`, `tab_id`, `widget_id`, `config_key`,
   `legacy_xy`, `view_type`, `undefined`, `custom_filter_mode`,
