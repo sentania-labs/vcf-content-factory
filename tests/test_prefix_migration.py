@@ -622,7 +622,7 @@ def _cleanup_tree(tmp_path):
 
 def _digest_from(out: str) -> str:
     import re
-    return re.search(r"plan digest: ([0-9a-f]+)", out).group(1)
+    return re.search(r"plan digest: ([0-9a-f-]+)", out).group(1)
 
 
 def test_run_dry_run_names_target_backup_and_digest(tmp_path, capsys):
@@ -671,6 +671,143 @@ def test_run_apply_stops_at_the_first_failure(tmp_path, capsys):
     assert "stopped at the first failure" in err
     assert "deleted      dashboard d-old" in err
     assert "not deleted  alert a-old" in err and "not deleted  symptom s-old" in err
+
+
+def _cli_env(monkeypatch, inst, env_profile=None):
+    """Route main() at *inst* with two fake profiles and no real .env."""
+    from vcfcf_common import _env
+    from vcfcf_common import legacy_cleanup as lc
+    monkeypatch.setattr(_env, "_LOADED", True)
+    for p in ("DEVEL", "LAB"):
+        monkeypatch.setenv(f"VCFOPS_{p}_HOST", f"{p.lower()}.example.invalid")
+        monkeypatch.setenv(f"VCFOPS_{p}_USER", "u")
+        monkeypatch.setenv(f"VCFOPS_{p}_PASSWORD", "p")
+    if env_profile:
+        monkeypatch.setenv("VCFOPS_PROFILE", env_profile)
+    else:
+        monkeypatch.delenv("VCFOPS_PROFILE", raising=False)
+    inst.close = lambda: None
+    monkeypatch.setattr(lc, "Instance", lambda *a, **k: inst)
+
+
+def _printed_apply_argv(out: str):
+    """The argv of the apply command the dry run printed, after the command name."""
+    import shlex
+    from vcfcf_core.naming import CLEANUP_COMMAND
+    line = next(l for l in out.splitlines() if "to delete exactly this plan:" in l)
+    cmd = line.split("to delete exactly this plan:", 1)[1].strip()
+    assert cmd.startswith(CLEANUP_COMMAND + " ")
+    return shlex.split(cmd[len(CLEANUP_COMMAND):])
+
+
+def test_printed_apply_command_keeps_the_types_filter(tmp_path, monkeypatch, capsys):
+    """Codex P2 on #354: a dry run with --types symptom, beside legacy alert
+    pairs, prints a command that applies exactly that plan."""
+    from vcfcf_common.legacy_cleanup import main
+    inst = _FakeInstance(_cleanup_tree(tmp_path))
+    _cli_env(monkeypatch, inst)
+    assert main([str(tmp_path), "--profile", "devel", "--types", "symptom"]) == 0
+    out = capsys.readouterr().out
+    argv = _printed_apply_argv(out)
+    assert argv[argv.index("--types") + 1] == "symptom"
+    assert inst.deleted == []
+    assert main(argv) == 0
+    assert inst.deleted == [("symptom", "s-old")]  # the alert pair is left alone
+
+
+def test_printed_types_are_canonical(tmp_path, monkeypatch, capsys):
+    from vcfcf_common.legacy_cleanup import main
+    inst = _FakeInstance(_cleanup_tree(tmp_path))
+    _cli_env(monkeypatch, inst)
+    assert main([str(tmp_path), "--profile", "devel", "--types", "symptom,alert,symptom"]) == 0
+    argv = _printed_apply_argv(capsys.readouterr().out)
+    assert argv[argv.index("--types") + 1] == "alert,symptom"
+    assert main(argv) == 0
+    assert inst.deleted == [("alert", "a-old"), ("symptom", "s-old")]
+
+
+def test_printed_apply_command_round_trips_a_root_with_a_space(tmp_path, monkeypatch, capsys):
+    from vcfcf_common.legacy_cleanup import main
+    root = tmp_path / "my repo"
+    inst = _FakeInstance(_cleanup_tree(root))
+    _cli_env(monkeypatch, inst)
+    assert main([str(root), "--profile", "devel"]) == 0
+    out = capsys.readouterr().out
+    import shlex
+    assert shlex.quote(str(root.resolve())) in out  # shell-quoted
+    argv = _printed_apply_argv(out)
+    assert argv[0] == str(root.resolve())
+    assert "--types" not in argv  # not given, the default
+    assert main(argv) == 0
+    assert inst.deleted == [("dashboard", "d-old"), ("alert", "a-old"), ("symptom", "s-old")]
+
+
+def test_printed_apply_command_names_a_profile_taken_from_the_environment(
+        tmp_path, monkeypatch, capsys):
+    from vcfcf_common.legacy_cleanup import main
+    inst = _FakeInstance(_cleanup_tree(tmp_path))
+    _cli_env(monkeypatch, inst, env_profile="lab")
+    assert main([str(tmp_path)]) == 0
+    argv = _printed_apply_argv(capsys.readouterr().out)
+    assert argv[argv.index("--profile") + 1] == "lab"
+    # The apply does not depend on the environment: another VCFOPS_PROFILE
+    # in the shell does not change the target.
+    monkeypatch.setenv("VCFOPS_PROFILE", "devel")
+    assert main(argv) == 0
+    assert inst.deleted == [("dashboard", "d-old"), ("alert", "a-old"), ("symptom", "s-old")]
+
+
+def _changed(err: str):
+    """The parts a refused apply says changed."""
+    import re
+    m = re.search(r"changed since the dry run: (.*?)\. Run the dry run", err)
+    return m.group(1).split("; ") if m else []
+
+
+def test_digest_from_one_scope_is_refused_for_another(tmp_path, capsys):
+    from vcfcf_common.legacy_cleanup import KINDS, run
+    inst = _FakeInstance(_cleanup_tree(tmp_path))
+    run(tmp_path, inst, ["symptom"], apply=False, target=_TARGET, types_given=True)
+    digest = _digest_from(capsys.readouterr().out)
+    for kinds in (["alert"], KINDS):
+        assert run(tmp_path, inst, kinds, apply=True, target=_TARGET,
+                   expected_digest=digest) == 2
+        err = capsys.readouterr().err
+        assert "REFUSED" in err and _changed(err)[0].startswith("scope")
+        assert "host" not in _changed(err)
+    # Same delete list from another ROOT is still another scope.
+    other_root = tmp_path / "other"
+    _cleanup_tree(other_root)
+    assert run(other_root, inst, ["symptom"], apply=True, target=_TARGET,
+               expected_digest=digest) == 2
+    err = capsys.readouterr().err
+    assert [c.split(" ")[0] for c in _changed(err)] == ["scope"]
+    assert inst.deleted == []
+    assert run(tmp_path, inst, ["symptom"], apply=True, target=_TARGET,
+               expected_digest=digest) == 0
+    assert inst.deleted == [("symptom", "s-old")]
+
+
+def test_refusal_names_what_changed_without_object_names(tmp_path, capsys):
+    from vcfcf_common.legacy_cleanup import KINDS, run
+    live = _cleanup_tree(tmp_path)
+    inst = _FakeInstance(live)
+    run(tmp_path, inst, KINDS, apply=False, target=_TARGET)
+    digest = _digest_from(capsys.readouterr().out)
+    other = ("devel", "other.example.invalid", "from --profile")
+    assert run(tmp_path, inst, KINDS, apply=True, target=other, expected_digest=digest) == 2
+    err = capsys.readouterr().err
+    assert _changed(err) == ["host"]
+    live["symptom"].append(_live("s-old2", OLD + "S", adapter_kind="AK", resource_kind="RK"))
+    assert run(tmp_path, inst, KINDS, apply=True, target=_TARGET, expected_digest=digest) == 2
+    err = capsys.readouterr().err
+    assert [c.split(" ")[0] for c in _changed(err)] == ["plan"]
+    assert "REFUSED" in err and OLD not in err and "s-old2" not in err
+    # An old-format (pre-scope) digest is named as such.
+    assert run(tmp_path, inst, KINDS, apply=True, target=_TARGET,
+               expected_digest="0" * 16) == 2
+    assert "older dry runs" in capsys.readouterr().err
+    assert inst.deleted == []
 
 
 def test_cleanup_cli_rejects_unknown_kind():

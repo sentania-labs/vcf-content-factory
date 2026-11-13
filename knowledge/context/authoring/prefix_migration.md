@@ -152,7 +152,7 @@ so after an upgrade check for an old-named dashboard beside the new one.
 
 ```
 python3 -m vcfcf_common cleanup-legacy-prefix [ROOT] --profile NAME [--types k1,k2]
-python3 -m vcfcf_common cleanup-legacy-prefix [ROOT] --profile NAME --apply --plan-digest DIGEST
+python3 -m vcfcf_common cleanup-legacy-prefix [ROOT] [--types k1,k2] --profile NAME --apply --plan-digest DIGEST
 ```
 
 `ROOT` is the factory checkout or pak repo whose content defines the names
@@ -189,10 +189,22 @@ An object is deleted only when all of these hold:
 The dry run ends with what to back up: a content export of the profile
 (Administration > Content > Export, all content types) or a snapshot of the
 instance, and the list of objects to be deleted. It then prints a plan
-digest (over the profile, host and every listed verdict). `--apply` needs
-`--plan-digest` with that digest: it recomputes the plan and deletes nothing
-unless the digest matches, so it deletes exactly what was reviewed, on the
-instance it was reviewed on.
+digest and the exact apply command to run. The digest has three dash-joined
+parts: the scope (profile, resolved ROOT, selected kinds in canonical
+order), the host, and every listed verdict. `--apply` needs `--plan-digest`
+with that digest: it recomputes the plan and deletes nothing unless the
+digest matches, so it deletes exactly what was reviewed, in the scope and on
+the instance it was reviewed in. A refusal says which of scope, host or plan
+changed, and names no object.
+
+Run the printed command, not a hand-written one. It repeats every input that
+shapes the plan: ROOT as an absolute path (omitted only when it is the
+current directory), `--types` in canonical order when the dry run was given
+it, and `--profile` always, even when the dry run took the profile from
+`VCFOPS_PROFILE`, so the apply does not depend on the environment. Arguments
+are shell-quoted (a ROOT with a space works). Dropping `--types` from it
+widens the scope, and the apply is refused. Digests printed before the scope
+was added (16 hex characters, no dashes) no longer match: dry-run again.
 
 Deletes run dependents first (dashboards, alerts, symptoms, custom groups)
 and stop at the first failure, listing what was deleted and what was not.

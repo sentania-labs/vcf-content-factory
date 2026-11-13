@@ -46,9 +46,11 @@ Safety rules, all of which must hold before an object is deleted:
    different object from the twin (different id).
 
 The default is a dry run. It names the profile and host first, ends with
-what to back up and a plan digest, and ``--apply`` needs
-``--plan-digest <digest>``: the plan is recomputed and nothing is deleted
-unless it is the plan that was reviewed. Deletion runs dependents first
+what to back up, a plan digest and the exact apply command (every input
+that shapes the plan: ROOT, ``--types``, ``--profile``), and ``--apply``
+needs ``--plan-digest <digest>``: the plan is recomputed and nothing is
+deleted unless its scope (profile, ROOT, kinds), host and verdicts are the
+ones reviewed. Deletion runs dependents first
 (dashboards, alerts, symptoms, custom groups) and stops at the first
 failure.
 """
@@ -58,6 +60,8 @@ import argparse
 import hashlib
 import json
 import os
+import re
+import shlex
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -323,17 +327,68 @@ def plan_cleanup(items: Iterable[RepoItem], live: Dict[str, List[dict]],
     return plan
 
 
-def plan_digest(plan: CleanupPlan, profile: str, host: str) -> str:
-    """A short digest of *plan* on one target, for ``--apply --plan-digest``.
+def canonical_kinds(kinds: Iterable[str]) -> List[str]:
+    """*kinds* deduplicated, in :data:`KINDS` order."""
+    chosen = set(kinds)
+    return [k for k in KINDS if k in chosen]
 
-    Covers the target and every action (kind, verdict, id, name), so a
-    different instance, a new leftover or a changed verdict changes it.
+
+#: The digest's three parts, in order, as the refusal names them.
+_DIGEST_PARTS = ("scope (profile, ROOT or selected kinds)", "host",
+                 "plan (an object to delete, or a verdict)")
+_DIGEST_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{8}-[0-9a-f]{8}$")
+
+
+def _h8(obj) -> str:
+    body = json.dumps(obj, sort_keys=True)
+    return hashlib.sha256(body.encode("utf-8")).hexdigest()[:8]
+
+
+def plan_digest(plan: CleanupPlan, profile: str, host: str, root: Path,
+                kinds: Iterable[str]) -> str:
+    """A digest of *plan* in one scope on one target, for ``--apply --plan-digest``.
+
+    Three dash-joined parts: the scope (profile, resolved ROOT, selected
+    kinds in canonical order), the host, and every action (kind, verdict,
+    id, name). Another scope, another instance, a new leftover or a changed
+    verdict changes it, and a refused apply can say which part moved.
     """
-    body = json.dumps({
-        "profile": profile.lower(), "host": host.lower(),
-        "actions": sorted([a.kind, a.verdict, a.id or "", a.name] for a in plan.actions),
-    }, sort_keys=True)
-    return hashlib.sha256(body.encode("utf-8")).hexdigest()[:16]
+    scope = {"profile": profile.lower(), "root": str(Path(root).resolve()),
+             "kinds": canonical_kinds(kinds)}
+    actions = sorted([a.kind, a.verdict, a.id or "", a.name] for a in plan.actions)
+    return "-".join((_h8(scope), _h8({"host": host.lower()}), _h8(actions)))
+
+
+def _digest_mismatch(expected: Optional[str], digest: str) -> str:
+    """Which parts of the reviewed plan differ, without naming any object."""
+    if not expected:
+        return "no digest was given"
+    if not _DIGEST_RE.match(expected.strip().lower()):
+        return ("the digest given is not one this version prints (digests from "
+                "older dry runs no longer match)")
+    given = expected.strip().lower().split("-")
+    changed = [part for part, a, b in zip(_DIGEST_PARTS, given, digest.split("-")) if a != b]
+    return "changed since the dry run: " + "; ".join(changed)
+
+
+def apply_command(root: Path, profile: str, kinds: Sequence[str], digest: str,
+                  types_given: bool = False) -> str:
+    """The shell command that applies exactly the plan a dry run printed.
+
+    Carries every input that shapes the plan: ROOT (absolute, unless it is
+    the current directory, the default), ``--types`` when it was given or
+    narrows the default, and ``--profile`` always, so the apply does not
+    depend on ``VCFOPS_PROFILE``. Each argument is shell-quoted.
+    """
+    args = []
+    resolved = Path(root).resolve()
+    if resolved != Path.cwd().resolve():
+        args.append(str(resolved))
+    chosen = canonical_kinds(kinds)
+    if types_given or chosen != list(KINDS):
+        args += ["--types", ",".join(chosen)]
+    args += ["--profile", profile, "--apply", "--plan-digest", digest]
+    return CLEANUP_COMMAND + " " + " ".join(shlex.quote(a) for a in args)
 
 
 # ---------------------------------------------------------------------------
@@ -471,13 +526,14 @@ def _backup_advice(plan: CleanupPlan, profile: str, host: str) -> List[str]:
 
 def run(root: Path, instance, kinds: Sequence[str], apply: bool, out=None, *,
         target: Optional[Tuple[str, str, str]] = None,
-        expected_digest: Optional[str] = None) -> int:
+        expected_digest: Optional[str] = None, types_given: bool = False) -> int:
     """List, or with *apply* delete, the legacy-named leftovers for *root*.
 
     *target* is ``(profile, host, how the profile was chosen)``, printed
     first. With *apply*, *expected_digest* must equal the digest of the plan
     recomputed now; otherwise nothing is deleted (rc 2). The first failed
-    delete stops the run (rc 2).
+    delete stops the run (rc 2). *types_given*: ``--types`` was on the
+    command line, so the printed apply command repeats it.
     """
     out = out or sys.stdout
     profile, host, how = target or ("?", "?", "unknown")
@@ -492,7 +548,7 @@ def run(root: Path, instance, kinds: Sequence[str], apply: bool, out=None, *,
         get_owner = getattr(instance, "dashboard_owner", None)
         owner = get_owner() if get_owner else None
     plan = plan_cleanup(items, live, dashboard_owner=owner)
-    digest = plan_digest(plan, profile, host)
+    digest = plan_digest(plan, profile, host, root, kinds)
     print(f"  {len(items)} prefixed object(s) in {root}; "
           f"checked {', '.join(wanted) or 'nothing'}", file=out)
     if owner:
@@ -522,14 +578,16 @@ def run(root: Path, instance, kinds: Sequence[str], apply: bool, out=None, *,
             for line in _backup_advice(plan, profile, host):
                 print(line, file=out)
             print(f"  plan digest: {digest}", file=out)
-            print(f"  to delete exactly this plan: {CLEANUP_COMMAND} {root} "
-                  f"--profile {profile} --apply --plan-digest {digest}", file=out)
+            cmd = apply_command(root, profile, kinds, digest, types_given=types_given)
+            print(f"  to delete exactly this plan: {cmd}", file=out)
         return 1 if conflicts else 0
 
     if expected_digest != digest:
         print(f"  REFUSED: the plan is not the one reviewed (digest now {digest}, "
-              f"given {expected_digest or 'none'}). Run the dry run again, review "
-              f"it, and pass its digest. Nothing was deleted.", file=sys.stderr)
+              f"given {expected_digest or 'none'}): "
+              f"{_digest_mismatch(expected_digest, digest)}. Run the dry run again, "
+              f"review it, and run the command it prints. Nothing was deleted.",
+              file=sys.stderr)
         return 2
     done: List[Action] = []
     for i, a in enumerate(deletes):
@@ -591,15 +649,20 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                       help="delete the objects marked WOULD DELETE; needs --plan-digest")
     ap.add_argument("--plan-digest", metavar="DIGEST", default=None,
                     help="the digest the dry run printed; --apply deletes only if the "
-                         "recomputed plan has the same digest")
-    ap.add_argument("--types", default=",".join(KINDS),
-                    help=f"comma-separated kinds to check (default: {','.join(KINDS)})")
+                         "plan recomputed now has the same scope (profile, ROOT, "
+                         "--types), host and verdicts. Run the apply command the dry "
+                         "run prints: it repeats every one of those inputs")
+    ap.add_argument("--types", default=None,
+                    help=f"comma-separated kinds to check (default: {','.join(KINDS)}); "
+                         f"part of the plan, so --apply must repeat it")
     ap.add_argument("--profile", metavar="NAME", default=None,
                     help="credential profile (VCFOPS_<NAME>_HOST/USER/PASSWORD in .env). "
                          "Required unless VCFOPS_PROFILE is set; no default")
     args = ap.parse_args(list(argv) if argv is not None else None)
 
-    kinds = [k.strip() for k in args.types.split(",") if k.strip()]
+    types_given = args.types is not None
+    raw_types = args.types if types_given else ",".join(KINDS)
+    kinds = [k.strip() for k in raw_types.split(",") if k.strip()]
     bad = [k for k in kinds if k not in KINDS]
     if bad:
         print(f"ERROR: unknown kind(s) {bad}; choose from {list(KINDS)}", file=sys.stderr)
@@ -613,7 +676,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         inst = Instance(target[0], target[0])
         try:
             return run(Path(args.root), inst, kinds, args.apply, target=target,
-                       expected_digest=args.plan_digest)
+                       expected_digest=args.plan_digest, types_given=types_given)
         finally:
             inst.close()
     except ValueError as e:
