@@ -21,9 +21,11 @@ from __future__ import annotations
 from .guard import (  # noqa: F401
     BASELINE_FILE_NAME,
     CONTENT_TYPES,
+    KNOWN_HOLES_POINTER,
     AllowlistEntry,
     Definition,
     GuardResult,
+    PathCheck,
     StockBaseline,
     StockIdAllowlistError,
     StockIdBaselineError,
@@ -31,6 +33,7 @@ from .guard import (  # noqa: F401
     bundled_definitions,
     check_definitions,
     check_paths,
+    coverage_text,
     default_baseline_path,
     guard_failure_text,
     definitions_from_objects,
@@ -40,4 +43,8 @@ from .guard import (  # noqa: F401
     parse_allowlist,
     scan_bytes,
     scan_path,
+    standalone_check,
+    unchecked_types,
+    Unreadable,
+    unreadable_failure_text,
 )

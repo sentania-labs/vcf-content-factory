@@ -25,16 +25,30 @@ How an id is decided (per content type and id):
    - an excluded adapter kind (the factory's and registered paks' kinds);
    - a factory id: the id appears in the factory tree, its history, its
      registered paks or its built artifacts (``factory_ids``);
-   - a custom-scope export lists it: the product itself calls it custom.
+   - a custom-scope export lists it: the product itself calls it custom;
+   - excluded content defines it (``excluded_groups``: content whose ids are
+     known never to be stock, such as the registered third-party forks the
+     factory re-identified). No presence threshold decides them. When an id
+     excluded this way would have been stock had the package only been a
+     known package (rule 3), the build counts it per package
+     (``BaselineBuild.masked``) so the caller can warn: a fork checkout that
+     still carries copied stock ids would hide them, and so would a fork
+     that drifted under the threshold.
 
-3. Explained presence. Each known third-party package (a pak, a fork, a
+3. Explained presence. Each known third-party package (a released pak, a
    reference content repo) is a group of ids. A group counts as installed
    on an instance when at least ``installed_threshold`` of its ids (of the
    types that instance's sources cover) are present there. Presence of an
    id on an instance where a group holding it is installed is explained by
    that package and is not evidence. This is what keeps the content of a
    pak installed on every lab out, while a package that merely copied stock
-   ids (and is not installed) does not hide them.
+   ids (and is not installed) does not hide them. The rule is a threshold,
+   so it fails in two directions: a package installed everywhere that
+   drifts under the threshold (one more view in it) stops explaining its
+   ids, which then become evidence; a package that copied stock ids and is
+   installed everywhere explains those stock ids away. Every ratio is
+   returned (``BaselineBuild.presence``) for the caller to print and to
+   flag when it sits near the threshold.
 
 4. Evidence. The instances where the id is present and not explained:
    - two or more: stock;
@@ -47,8 +61,9 @@ How an id is decided (per content type and id):
    - otherwise: candidate, not included.
 
 The versions an id is stock in are the versions of its evidence instances;
-its display name is the most common name among them (latest version wins a
-tie).
+its display name is the name seen on the most evidence instances (one vote
+per instance, however many of its exports carry the id; the latest version
+wins a tie, then the name).
 """
 from __future__ import annotations
 
@@ -102,9 +117,28 @@ class Candidate:
 
 
 @dataclass
+class Presence:
+    """How much of one known package one instance holds."""
+
+    package: str
+    instance: str
+    present: int
+    total: int
+    installed: bool
+    excluded: bool = False   # excluded content: the threshold decides nothing
+
+    @property
+    def ratio(self) -> float:
+        return self.present / self.total if self.total else 0.0
+
+
+@dataclass
 class BaselineBuild:
     baseline: dict
     candidates: List[Candidate]
+    presence: List[Presence] = field(default_factory=list)
+    #: excluded package -> ids it kept out that would otherwise be stock
+    masked: Dict[str, int] = field(default_factory=dict)
 
 
 def observations_from_definitions(
@@ -152,6 +186,7 @@ def build_baseline(
     observations: Iterable[Observation],
     *,
     known_groups: Optional[Mapping[str, Iterable[Definition]]] = None,
+    excluded_groups: Optional[Mapping[str, Iterable[Definition]]] = None,
     custom_ids: Iterable[_Key] = (),
     factory_ids: Iterable[str] = (),
     exclude_name_markers: Sequence[str] = DEFAULT_NAME_MARKERS,
@@ -181,28 +216,49 @@ def build_baseline(
     factory = {normalize_id(i) for i in factory_ids}
     adapter_prefixes = [p.lower() for p in exclude_adapter_kind_prefixes if p]
 
+    def _id_sets(src: Optional[Mapping[str, Iterable[Definition]]]) -> Dict[str, Set[_Key]]:
+        out: Dict[str, Set[_Key]] = {}
+        for label, defs in (src or {}).items():
+            ids = set()
+            for d in defs:
+                if d.attrs.get("in_policy") or d.type not in CONTENT_TYPES:
+                    continue
+                ids.add((d.type, normalize_id(d.id)))
+            if ids:
+                out[label] = ids
+        return out
+
     # Known third-party packages: id sets and where each counts as installed.
-    groups: Dict[str, Set[_Key]] = {}
-    for label, defs in (known_groups or {}).items():
-        ids = set()
-        for d in defs:
-            if d.attrs.get("in_policy") or d.type not in CONTENT_TYPES:
-                continue
-            k = (d.type, normalize_id(d.id))
-            ids.add(k)
-        if ids:
-            groups[label] = ids
+    groups = _id_sets(known_groups)
+    # Excluded content: ids that are never stock, no threshold.
+    excluded = _id_sets(excluded_groups)
+    excluded_by: Dict[_Key, List[str]] = defaultdict(list)
+    for label in sorted(excluded):
+        for k in excluded[label]:
+            excluded_by[k].append(label)
+    # Excluded content takes part in the presence rule only to answer "would
+    # this id have been stock had the package merely been known?" for the
+    # masking count; its own ids are excluded whatever the answer, and it
+    # explains nothing about any id it does not define.
+    explaining = dict(groups)
+    explaining.update({label: ids for label, ids in excluded.items() if label not in groups})
     installed: Dict[str, Set[str]] = defaultdict(set)  # group -> instances
-    for label, ids in groups.items():
-        for inst, types in inst_types.items():
+    presence: List[Presence] = []
+    for label in sorted(explaining):
+        ids = explaining[label]
+        for inst in sorted(inst_types):
+            types = inst_types[inst]
             denom = [k for k in ids if k[0] in types]
             if not denom:
                 continue
             hit = sum(1 for k in denom if k in present[inst])
-            if hit / len(denom) >= installed_threshold:
+            is_installed = hit / len(denom) >= installed_threshold
+            if is_installed:
                 installed[label].add(inst)
+            presence.append(Presence(label, inst, hit, len(denom), is_installed,
+                                     excluded=label not in groups))
     groups_of: Dict[_Key, Set[str]] = defaultdict(set)
-    for label, ids in groups.items():
+    for label, ids in explaining.items():
         for k in ids:
             groups_of[k].add(label)
 
@@ -228,8 +284,41 @@ def build_baseline(
                 if o.attrs.get("adapterName"):
                     stock_dash_adapters.add(o.attrs["adapterName"])
 
+    def stock_verdict(key: _Key) -> Optional[str]:
+        """None when the evidence shows the id is stock, else why not."""
+        ctype = key[0]
+        obs = obs_by_key[key]
+        ev, notes = decided[key]
+        if len(ev) >= 2:
+            return None  # corroborated: stock
+        if len(ev) == 1:
+            inst = ev[0]
+            here = [o for o in obs if o.instance == inst]
+            independent = sorted(g for g in groups_of.get(key, ()) if inst not in installed[g])
+            if ctype in ("view", "report"):
+                signal = any(o.attrs.get("localized") for o in here)
+                what = "a product localizationKey"
+            elif ctype == "dashboard":
+                signal = any(o.attrs.get("adapterName") in stock_dash_adapters for o in here)
+                what = "a stock dashboard adapterName"
+            else:
+                signal, what = False, None
+            if signal and independent:
+                return None
+            why = [f"seen on one clean instance only ({inst})"]
+            if what is None:
+                why.append(f"type {ctype} has no single-instance signal, so it needs two")
+            else:
+                if not signal:
+                    why.append(f"without {what}")
+                if not independent:
+                    why.append("and no independent third-party copy")
+            return ", ".join(why) + ("; " + "; ".join(notes) if notes else "")
+        return "; ".join(notes) or "no evidence instance"
+
     ids_out: Dict[str, Dict[str, dict]] = {t: {} for t in CONTENT_TYPES}
     candidates: List[Candidate] = []
+    masked: Dict[str, int] = {label: 0 for label in sorted(excluded)}
     for key in sorted(obs_by_key):
         ctype, nid = key
         obs = obs_by_key[key]
@@ -255,45 +344,34 @@ def build_baseline(
         if key in custom:
             cand("a custom-scope export lists it")
             continue
-        ev, notes = decided[key]
-        if len(ev) >= 2:
-            pass  # corroborated: stock
-        elif len(ev) == 1:
-            inst = ev[0]
-            here = [o for o in obs if o.instance == inst]
-            independent = sorted(g for g in groups_of.get(key, ()) if inst not in installed[g])
-            if ctype in ("view", "report"):
-                signal = any(o.attrs.get("localized") for o in here)
-                what = "a product localizationKey"
-            elif ctype == "dashboard":
-                signal = any(o.attrs.get("adapterName") in stock_dash_adapters for o in here)
-                what = "a stock dashboard adapterName"
+        verdict = stock_verdict(key)
+        if key in excluded_by:
+            by = excluded_by[key]
+            if verdict is None:
+                for label in by:
+                    masked[label] += 1
+                cand(f"excluded content {by[0]!r} defines it (it would otherwise be stock)")
             else:
-                signal, what = False, None
-            if not (signal and independent):
-                why = [f"seen on one clean instance only ({inst})"]
-                if what is None:
-                    why.append(f"type {ctype} has no single-instance signal, so it needs two")
-                else:
-                    if not signal:
-                        why.append(f"without {what}")
-                    if not independent:
-                        why.append("and no independent third-party copy")
-                cand(", ".join(why) + ("; " + "; ".join(notes) if notes else ""))
-                continue
-        else:
-            cand("; ".join(notes) or "no evidence instance")
+                cand(f"excluded content {by[0]!r} defines it")
             continue
-        ev_obs = [o for o in obs if o.instance in ev]
+        if verdict is not None:
+            cand(verdict)
+            continue
+        ev = decided[key][0]
         versions = sorted({inst_version[i] for i in ev}, key=version_sort_key)
-        counts = Counter(o.name for o in ev_obs if o.name)
-        if counts:
-            top = max(counts.values())
-            best = [n for n, c in counts.items() if c == top]
-            latest = {}
-            for o in ev_obs:
-                if o.name in best:
-                    latest[o.name] = max(latest.get(o.name, (0,)), version_sort_key(o.version))
+        # One vote per evidence instance, however many of its exports
+        # carry the id (review N1): an instance with more exports must not
+        # outvote one with fewer.
+        votes: Counter = Counter()
+        latest: Dict[str, Tuple] = {}
+        for inst in ev:
+            here = {o.name for o in obs if o.instance == inst and o.name}
+            for n in here:
+                votes[n] += 1
+                latest[n] = max(latest.get(n, (0,)), version_sort_key(inst_version[inst]))
+        if votes:
+            top = max(votes.values())
+            best = [n for n, c in votes.items() if c == top]
             name = sorted(best, key=lambda n: (latest[n], n))[-1]
         else:
             name = ""
@@ -326,13 +404,14 @@ def build_baseline(
             "installed_threshold": installed_threshold,
             "factory_ids_considered": len(factory),
             "known_packages": sorted(groups),
+            "excluded_packages": sorted(excluded),
         },
         "sources": list(sources),
         "counts": counts_out,
         "candidates_not_included": {t: cand_counts.get(t, 0) for t in CONTENT_TYPES},
         "ids": {t: dict(sorted(ids_out[t].items())) for t in CONTENT_TYPES if ids_out[t]},
     }
-    return BaselineBuild(baseline, candidates)
+    return BaselineBuild(baseline, candidates, presence, masked)
 
 
 def render_baseline_json(baseline: dict) -> str:

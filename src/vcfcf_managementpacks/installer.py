@@ -1099,7 +1099,8 @@ def _preflight_stock_ids(pak_path: Path, allow: bool) -> None:
     object with the pak's copy, and uninstalling the pak deletes it. A pak
     the factory built passed this check in build-sdk; a third-party pak did
     not. ``allow`` (``--allow-stock-ids``) installs anyway with a warning.
-    The check fails closed: no baseline, no install.
+    The check fails closed: no baseline, or a pak member the scanner cannot
+    read, no install (``allow`` does not cover either).
     """
     from vcfcf_core.stock_ids import guard as _stock_ids
 
@@ -1107,10 +1108,19 @@ def _preflight_stock_ids(pak_path: Path, allow: bool) -> None:
         baseline = _stock_ids.load_baseline()
     except _stock_ids.StockIdBaselineError as exc:
         _abort(f"stock-id guard cannot run, install refused: {exc}")
-    lines, total = _stock_ids.check_paths([pak_path], baseline)
+    check = _stock_ids.check_paths([pak_path], baseline)
+    report = "\n".join(check.lines)
+    if check.unreadable:
+        # Unread is not checked, and --allow-stock-ids does not cover it:
+        # the same fail-closed posture as a missing baseline.
+        _abort(
+            f"{pak_path.name}: the stock-id guard cannot read "
+            f"{len(check.unreadable)} item(s) in the pak, so it cannot check them; "
+            f"install refused:\n{report}"
+        )
+    total = check.hits
     if not total:
         return
-    report = "\n".join(lines)
     if allow:
         _warn(
             f"{pak_path.name} defines {total} definition(s) under VCF Operations "

@@ -24,9 +24,14 @@ an id is shown to be stock). Fail closed: a missing, unreadable, malformed or
 empty baseline raises ``StockIdBaselineError``, and every caller turns that
 into a failed build rather than skipping the check.
 
+Content the scanner cannot read (``Unreadable``) is never reported clean:
+every gate refuses it, as it refuses an unloadable baseline.
+
 The escape hatch is an explicit allowlist (``stock_id_allowlist:`` in
-adapter.yaml or a bundle manifest), one entry per id with a required reason.
-An allowlisted hit is a warning on every run, never silent.
+adapter.yaml, a bundle manifest or a third-party ``PROJECT.yaml``), one
+entry per id with a required reason. An entry covers only content its own
+manifest owns; the factory side does that scoping. An allowlisted hit is a
+warning on every run, never silent.
 
 This file is self-contained (stdlib only, no package-relative import) so the
 sdk-buildkit ships it verbatim as ``sdk_buildkit/stock_ids.py`` next to the
@@ -39,9 +44,10 @@ import json
 import re
 import xml.etree.ElementTree as ET
 import zipfile
+import zlib
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
 # ---------------------------------------------------------------------------
 # Content types
@@ -75,7 +81,8 @@ BASELINE_FILE_NAME = "stock_ids_baseline.json"
 #: Nested archives deeper than this are not opened (a pak is
 #: pak > adapters.zip > views.zip, an export dashboards zip is two deep).
 _MAX_ZIP_DEPTH = 6
-#: A zip member larger than this is skipped with a note (zip-bomb guard).
+#: A zip member larger than this is not read (zip-bomb guard); it is
+#: recorded as unreadable, so a gate refuses rather than passing it.
 _MAX_MEMBER_BYTES = 512 * 1024 * 1024
 
 
@@ -192,15 +199,28 @@ def bundled_definitions(
 # Artifact scanner: paks, content zips, exports, directories, single files
 # ---------------------------------------------------------------------------
 
-_XML_TOKENS = (b"ViewDef", b"ReportDef", b"SymptomDefinition", b"AlertDefinition",
-               b"Recommendation", b"superMetric")
-_JSON_TOKENS = (b'"dashboards"', b'"formula"')
+_XML_TOKENS = ("ViewDef", "ReportDef", "SymptomDefinition", "AlertDefinition",
+               "Recommendation", "superMetric")
+_JSON_TOKENS = ('"dashboards"', '"formula"')
 _XML_DEF_TAGS = {
     "ViewDef": "view",
     "ReportDef": "report",
     "SymptomDefinition": "symptom",
     "AlertDefinition": "alert",
 }
+
+
+@dataclass(frozen=True)
+class Unreadable:
+    """Content the scanner could not read, so could not check.
+
+    Unreadable is never compliant: every gate that sees one refuses (a
+    build fails, an import or install is refused, the standalone check
+    exits 1), the same posture as an unloadable baseline.
+    """
+
+    location: str
+    reason: str
 
 
 def _local(tag) -> str:
@@ -211,10 +231,15 @@ def _is_zip(data: bytes) -> bool:
     return data[:4] in (b"PK\x03\x04", b"PK\x05\x06")
 
 
-def _strip_lead(data: bytes) -> bytes:
-    if data.startswith(b"\xef\xbb\xbf"):
-        data = data[3:]
-    return data.lstrip()
+#: Byte-order marks, longest first (the UTF-32-LE mark starts with the
+#: UTF-16-LE one).
+_BOMS: Tuple[Tuple[bytes, str], ...] = (
+    (b"\xff\xfe\x00\x00", "utf-32-le"),
+    (b"\x00\x00\xfe\xff", "utf-32-be"),
+    (b"\xef\xbb\xbf", "utf-8"),
+    (b"\xff\xfe", "utf-16-le"),
+    (b"\xfe\xff", "utf-16-be"),
+)
 
 
 def _child_text(elem, tag: str) -> Optional[str]:
@@ -224,11 +249,28 @@ def _child_text(elem, tag: str) -> Optional[str]:
     return None
 
 
-def _xml_definitions(data: bytes, location: str) -> List[Definition]:
+_RE_XML_ENCODING = re.compile(rb'^<\?xml[^>]*?\bencoding\s*=\s*["\']([A-Za-z0-9._:-]+)["\']')
+
+
+def _xml_definitions(body, location: str, skip: Callable[[str, str], None]) -> List[Definition]:
+    """Definitions in one XML document (``bytes`` or already-decoded ``str``)."""
     try:
-        root = ET.fromstring(data)
+        root = ET.fromstring(body)
     except ET.ParseError:
-        return _xml_definitions_by_regex(data, location)
+        return _xml_definitions_by_regex(body, location)
+    except (ValueError, LookupError) as exc:
+        # The declared encoding is one expat cannot read itself
+        # (multi-byte or unknown). Decode it here; if Python cannot
+        # either, the file cannot be checked.
+        m = _RE_XML_ENCODING.match(body) if isinstance(body, bytes) else None
+        try:
+            if m is None:
+                raise LookupError(str(exc))
+            text = body.decode(m.group(1).decode("ascii"))
+        except (LookupError, UnicodeDecodeError) as exc2:
+            skip(location, f"XML in an encoding the scanner cannot decode ({exc2})")
+            return _xml_definitions_by_regex(body, location)
+        return _xml_definitions(text, location, skip)
     out: List[Definition] = []
     # Iterative walk (an explicit stack, not recursion): a deeply nested
     # third-party file must not turn into a RecursionError.
@@ -276,12 +318,14 @@ _RE_DEF_TAG = re.compile(rb"<(ViewDef|ReportDef|SymptomDefinition|AlertDefinitio
 _RE_ATTR = re.compile(rb'\b(id|key|ref|name)\s*=\s*"([^"]*)"')
 
 
-def _xml_definitions_by_regex(data: bytes, location: str) -> List[Definition]:
+def _xml_definitions_by_regex(data, location: str) -> List[Definition]:
     """Fallback for XML that does not parse: still report its definitions.
 
     A malformed file must not hide a definition from the guard (the
     importer may be more lenient than ElementTree).
     """
+    if isinstance(data, str):
+        data = data.encode("utf-8")
     out: List[Definition] = []
     for m in _RE_DEF_TAG.finditer(data):
         tag = m.group(1).decode("ascii")
@@ -299,11 +343,15 @@ def _xml_definitions_by_regex(data: bytes, location: str) -> List[Definition]:
     return out
 
 
-def _json_definitions(data: bytes, location: str) -> List[Definition]:
+def _json_definitions(text: str, location: str, skip: Callable[[str, str], None]) -> List[Definition]:
     try:
-        obj = json.loads(data.decode("utf-8-sig"))
-    except (UnicodeDecodeError, ValueError, RecursionError):
-        return []  # not JSON the importer could read either
+        obj = json.loads(text)
+    except (ValueError, RecursionError) as exc:
+        # It carries a definition marker but does not parse: it cannot be
+        # checked, so it is not reported clean.
+        reason = "nested too deeply to parse" if isinstance(exc, RecursionError) else f"does not parse ({exc})"
+        skip(location, f"JSON with a content-definition key that {reason}")
+        return []
     out: List[Definition] = []
 
     def _sm(oid, v) -> None:
@@ -335,53 +383,141 @@ def _json_definitions(data: bytes, location: str) -> List[Definition]:
     return out
 
 
-def scan_bytes(data: bytes, location: str, _depth: int = 0) -> List[Definition]:
+def _utf16_without_bom(data: bytes) -> Optional[str]:
+    """The UTF-16 codec a BOM-less file starting with ``<``, ``{`` or ``[``
+    plainly uses (every other byte NUL), or None."""
+    if len(data) < 4:
+        return None
+    lead = data[:4]
+    if lead[1] == 0 and lead[3] == 0 and lead[0] != 0 and lead[2] != 0:
+        return "utf-16-le"
+    if lead[0] == 0 and lead[2] == 0 and lead[1] != 0 and lead[3] != 0:
+        return "utf-16-be"
+    return None
+
+
+def _scan_text(data: bytes, location: str, skip: Callable[[str, str], None]) -> List[Definition]:
+    """A non-zip file: XML or JSON in UTF-8, or UTF-16/32 by byte-order mark."""
+    encoding = None
+    for bom, enc in _BOMS:
+        if data.startswith(bom):
+            encoding, data = enc, data[len(bom):]
+            break
+    if encoding is None:
+        guess = _utf16_without_bom(data)
+        if guess is not None:
+            try:
+                text = data.decode(guess)
+            except UnicodeDecodeError:
+                text = None
+            if text is not None and text.lstrip()[:1] in ("<", "{", "["):
+                encoding = guess
+            elif text is None and data.lstrip(b"\x00 \t\r\n")[:1] in (b"<", b"{", b"["):
+                skip(location, f"looks like {guess} text without a byte-order mark but does not decode")
+                return []
+    if encoding in (None, "utf-8"):
+        body = data.lstrip()
+        if body[:1] == b"<":
+            if any(tok.encode() in body for tok in _XML_TOKENS):
+                return _xml_definitions(body, location, skip)
+            return []
+        if body[:1] in (b"{", b"["):
+            if any(tok.encode() in body for tok in _JSON_TOKENS):
+                try:
+                    text = body.decode("utf-8")
+                except UnicodeDecodeError as exc:
+                    skip(location, f"JSON with a content-definition key that is not valid UTF-8 ({exc})")
+                    return []
+                return _json_definitions(text, location, skip)
+        return []
+    try:
+        text = data.decode(encoding)
+    except UnicodeDecodeError as exc:
+        skip(location, f"starts with a {encoding} byte-order mark but does not decode as {encoding} ({exc})")
+        return []
+    body = text.lstrip()
+    if body[:1] == "<":
+        if any(tok in body for tok in _XML_TOKENS):
+            return _xml_definitions(body, location, skip)
+        return []
+    if body[:1] in ("{", "["):
+        if any(tok in body for tok in _JSON_TOKENS):
+            return _json_definitions(body, location, skip)
+    return []
+
+
+def scan_bytes(
+    data: bytes, location: str, _depth: int = 0, *,
+    unreadable: Optional[List[Unreadable]] = None,
+) -> List[Definition]:
     """Every content definition in ``data`` (a zip, an XML or a JSON file).
 
     Zips are opened recursively (a .pak, an adapters.zip, a views.zip, a
     content-export zip and the per-owner dashboard zips inside it). The
     location of a definition inside an archive is ``outer!member``.
+
+    Anything that cannot be read (a nested archive past the depth limit, a
+    zip or member that does not open, an oversized, encrypted or
+    unsupported-compression member, text that does not decode, JSON with a
+    definition key that does not parse) is appended to ``unreadable`` when
+    a list is given. Callers that gate on the result must pass one and
+    refuse when it is not empty: what could not be read was not checked.
     """
-    if _is_zip(data):
-        if _depth >= _MAX_ZIP_DEPTH:
-            return []
-        out: List[Definition] = []
-        try:
-            zf = zipfile.ZipFile(io.BytesIO(data))
-        except zipfile.BadZipFile:
-            return []
-        with zf:
-            for info in zf.infolist():
-                if info.is_dir() or info.file_size > _MAX_MEMBER_BYTES:
-                    continue
-                try:
-                    member = zf.read(info)
-                except (zipfile.BadZipFile, RuntimeError, NotImplementedError, OSError):
-                    continue
-                out.extend(scan_bytes(member, f"{location}!{info.filename}", _depth + 1))
-        return out
-    body = _strip_lead(data)
-    if body[:1] == b"<":
-        if any(tok in body for tok in _XML_TOKENS):
-            return _xml_definitions(body, location)
+    def skip(loc: str, reason: str) -> None:
+        if unreadable is not None:
+            unreadable.append(Unreadable(loc, reason))
+
+    if not _is_zip(data):
+        return _scan_text(data, location, skip)
+    if _depth >= _MAX_ZIP_DEPTH:
+        skip(location, f"archive nested more than {_MAX_ZIP_DEPTH} levels deep, not opened")
         return []
-    if body[:1] in (b"{", b"["):
-        if any(tok in body for tok in _JSON_TOKENS):
-            return _json_definitions(body, location)
+    out: List[Definition] = []
+    try:
+        zf = zipfile.ZipFile(io.BytesIO(data))
+    except (zipfile.BadZipFile, zipfile.LargeZipFile, OSError, ValueError, EOFError) as exc:
+        skip(location, f"looks like a zip archive but does not open ({exc})")
         return []
-    return []
+    with zf:
+        for info in zf.infolist():
+            if info.is_dir():
+                continue
+            loc = f"{location}!{info.filename}"
+            if info.flag_bits & 0x1:
+                skip(loc, "encrypted archive member")
+                continue
+            if info.file_size > _MAX_MEMBER_BYTES:
+                skip(loc, f"archive member of {info.file_size} bytes, over the "
+                          f"{_MAX_MEMBER_BYTES // (1024 * 1024)} MB limit (zip-bomb guard)")
+                continue
+            try:
+                member = zf.read(info)
+            except (zipfile.BadZipFile, RuntimeError, NotImplementedError, OSError,
+                    EOFError, ValueError, zlib.error) as exc:
+                skip(loc, f"archive member does not read ({type(exc).__name__}: {exc})")
+                continue
+            out.extend(scan_bytes(member, loc, _depth + 1, unreadable=unreadable))
+    return out
 
 
-def scan_path(path) -> List[Definition]:
-    """Every content definition under ``path``: a file, a zip or a directory."""
+def scan_path(path, *, unreadable: Optional[List[Unreadable]] = None) -> List[Definition]:
+    """Every content definition under ``path``: a file, a zip or a directory.
+
+    ``unreadable`` as for ``scan_bytes``; a file that cannot be read from
+    disk is recorded there too.
+    """
     path = Path(path)
-    if path.is_dir():
-        out: List[Definition] = []
-        for p in sorted(path.rglob("*")):
-            if p.is_file():
-                out.extend(scan_bytes(p.read_bytes(), str(p)))
-        return out
-    return scan_bytes(path.read_bytes(), str(path))
+    files = sorted(p for p in path.rglob("*") if p.is_file()) if path.is_dir() else [path]
+    out: List[Definition] = []
+    for p in files:
+        try:
+            data = p.read_bytes()
+        except OSError as exc:
+            if unreadable is not None:
+                unreadable.append(Unreadable(str(p), f"file does not read ({exc})"))
+            continue
+        out.extend(scan_bytes(data, str(p), unreadable=unreadable))
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -666,18 +802,97 @@ def guard_failure_text(result: GuardResult, what: str) -> str:
     return "\n".join([head] + [f"  {e}" for e in result.errors])
 
 
-def check_paths(paths: Sequence, baseline: StockBaseline) -> Tuple[List[str], int]:
+#: Where the guard's known holes are written down. The kit ships without
+#: the factory's docs, so the pointer names the repo as well as the file.
+KNOWN_HOLES_POINTER = (
+    "Known holes (what this check cannot see): knowledge/context/stock_id_guard.md "
+    "section 'Known holes' in the VCF Content Factory repo."
+)
+
+
+def unchecked_types(baseline: StockBaseline) -> List[str]:
+    """Content types the baseline holds no ids for: never checked."""
+    return [t for t in CONTENT_TYPES if baseline.count(t) == 0]
+
+
+def coverage_text(defs: Iterable[Definition], baseline: StockBaseline) -> str:
+    """What a passing check actually compared, without overclaiming.
+
+    Names how many distinct definitions of which types met the baseline,
+    the baseline's size and versions, and the types it has no ids for
+    (definitions of those types were scanned but could not be compared).
+    """
+    distinct: Dict[str, Set[str]] = {}
+    for d in defs:
+        distinct.setdefault(d.type, set()).add(normalize_id(d.id))
+    gaps = unchecked_types(baseline)
+    compared = {t: len(ids) for t, ids in distinct.items() if t not in gaps}
+    n = sum(compared.values())
+    per = ", ".join(f"{type_label(t)} {c}" for t, c in
+                    sorted(compared.items(), key=lambda kv: CONTENT_TYPES.index(kv[0])))
+    text = (
+        f"{n} distinct definition(s) compared ({per or 'none'}); none uses one of the "
+        f"baseline's {baseline.count()} stock ids (versions {', '.join(baseline.versions())})"
+    )
+    if gaps:
+        not_compared = []
+        for t in gaps:
+            c = len(distinct.get(t, ()))
+            not_compared.append(f"{type_label(t)}" + (f" ({c} scanned)" if c else ""))
+        text += (
+            f"; not checked, the baseline has no ids for: {', '.join(not_compared)}"
+        )
+    return text
+
+
+def unreadable_failure_text(unreadable: Sequence[Unreadable], what: str) -> str:
+    """One error block for content the scanner could not read (fail closed)."""
+    head = (
+        f"stock-id guard: {what} cannot be checked: {len(unreadable)} item(s) could "
+        f"not be read, and what is not read is not reported clean (issue #345):"
+    )
+    return "\n".join([head] + [f"  {u.location}: {u.reason}" for u in unreadable])
+
+
+@dataclass
+class PathCheck:
+    """The standalone check's result over a set of paths."""
+
+    lines: List[str]
+    hits: int                      # distinct (type, id) under a stock id, per path
+    unreadable: List[Unreadable]
+    scanned: int                   # distinct definitions read, summed per path
+    definitions: List[Definition] = field(default_factory=list)
+
+    @property
+    def exit_code(self) -> int:
+        """0 clean, 2 stock ids found, 1 cannot check (unreadable content,
+        or nothing to check)."""
+        if self.hits:
+            return 2
+        if self.unreadable or not self.scanned:
+            return 1
+        return 0
+
+
+def check_paths(paths: Sequence, baseline: StockBaseline) -> PathCheck:
     """Read-only report for the standalone check (third-party paks, exports).
 
-    Returns ``(lines, hit_count)``: every distinct definition id in each of
-    ``paths`` that is in the baseline (one line per id, naming every file
-    that defines it), with per-type totals. ``hit_count`` counts distinct
-    ``(type, id)`` per path.
+    One line per distinct definition id in each of ``paths`` that is in the
+    baseline (naming every file that defines it), per-type totals, and one
+    ``CANNOT CHECK`` line per item that could not be read. ``hits`` counts
+    distinct ``(type, id)`` per path.
     """
     lines: List[str] = []
     total = 0
+    scanned = 0
+    all_unreadable: List[Unreadable] = []
+    all_defs: List[Definition] = []
     for p in paths:
-        defs = scan_path(p)
+        unreadable: List[Unreadable] = []
+        defs = scan_path(p, unreadable=unreadable)
+        all_unreadable.extend(unreadable)
+        all_defs.extend(defs)
         distinct: Dict[Tuple[str, str], List[Definition]] = {}
         for d in defs:
             distinct.setdefault((d.type, normalize_id(d.id)), []).append(d)
@@ -690,9 +905,16 @@ def check_paths(paths: Sequence, baseline: StockBaseline) -> Tuple[List[str], in
         summary = ", ".join(
             f"{type_label(t)}: {sum(1 for k in hits if k[0] == t)} stock of "
             f"{sum(1 for k in distinct if k[0] == t)}"
+            + (" (not checked: no baseline ids)" if baseline.count(t) == 0 else "")
             for t in CONTENT_TYPES if any(k[0] == t for k in distinct)
         )
-        lines.append(f"  distinct definition ids scanned: {summary or 'none'}")
+        if summary:
+            lines.append(f"  distinct definition ids scanned: {summary}")
+        else:
+            lines.append(
+                "  nothing to check: no content definitions found (a YAML source tree "
+                "is checked by validate / validate-sdk, not by this command)"
+            )
         for t in CONTENT_TYPES:
             rows = sorted(((k, v) for k, v in hits.items() if k[0] == t),
                           key=lambda kv: (kv[1][0].name, kv[0][1]))
@@ -705,5 +927,38 @@ def check_paths(paths: Sequence, baseline: StockBaseline) -> Tuple[List[str], in
                     f"  STOCK {type_label(t)} {ds[0].id} {s.name!r} "
                     f"[{_versions_text(s.versions)}]{as_text} in {where[0]}{more}"
                 )
+        for u in unreadable:
+            lines.append(f"  CANNOT CHECK {u.location}: {u.reason}")
         total += len(hits)
-    return lines, total
+        scanned += len(distinct)
+    return PathCheck(lines, total, all_unreadable, scanned, all_defs)
+
+
+def standalone_check(paths: Sequence, baseline: StockBaseline,
+                     emit: Callable[[str], None] = print) -> int:
+    """The ``stock-id-check`` command body, shared by the factory and the kit.
+
+    Exit 0: every definition read was compared and none is stock. 2: stock
+    ids found. 1: something could not be read, or nothing was found to
+    check (the caller handles a missing baseline or path, also 1).
+    """
+    emit(
+        f"stock-id baseline: {baseline.source} ({baseline.count()} ids; "
+        f"versions {', '.join(baseline.versions())})"
+    )
+    result = check_paths(paths, baseline)
+    for line in result.lines:
+        emit(line)
+    if result.hits:
+        emit(f"stock-id check: {result.hits} definition(s) under stock ids")
+    if result.unreadable:
+        emit(
+            f"stock-id check: cannot check {len(result.unreadable)} item(s) that could "
+            f"not be read (listed above as CANNOT CHECK); not reported clean"
+        )
+    if not result.scanned:
+        emit("stock-id check: nothing to check, no content definitions found")
+    elif not result.hits and not result.unreadable:
+        emit(f"stock-id check: {coverage_text(result.definitions, baseline)}")
+    emit(KNOWN_HOLES_POINTER)
+    return result.exit_code

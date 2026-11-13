@@ -5087,20 +5087,30 @@ def _gate_built_pak_stock_ids(pak_path: Path, project: SdkProjectDef, *,
     deleted, a dev build's is left for inspection and must not be
     installed.
     """
+    defs: list = []
     try:
         baseline = _stock_ids.load_baseline()
         allow = _stock_id_allowlist(project)
-        result = _stock_ids.check_definitions(
-            _stock_ids.scan_path(pak_path), baseline=baseline, allowlist=allow,
-        )
-        failure = (
-            _stock_ids.guard_failure_text(result, f"built pak {pak_path.name}")
-            if result.errors else None
-        )
+        unreadable: list = []
+        defs = _stock_ids.scan_path(pak_path, unreadable=unreadable)
+        if unreadable:
+            # Unread is not checked: fail closed, as for no baseline.
+            failure = _stock_ids.unreadable_failure_text(unreadable, f"built pak {pak_path.name}")
+        else:
+            result = _stock_ids.check_definitions(defs, baseline=baseline, allowlist=allow)
+            failure = (
+                _stock_ids.guard_failure_text(result, f"built pak {pak_path.name}")
+                if result.errors else None
+            )
     except (_stock_ids.StockIdBaselineError, _stock_ids.StockIdAllowlistError) as exc:
         failure = f"stock-id guard: {exc}"
     if failure is None:
-        print("  stock-id guard: no bundled definition uses a stock id", file=sys.stderr)
+        if defs:
+            print(f"  stock-id guard: built pak: {_stock_ids.coverage_text(defs, baseline)}",
+                  file=sys.stderr)
+        else:
+            print("  stock-id guard: built pak carries no content definitions; nothing to check",
+                  file=sys.stderr)
         return
     if release_build:
         pak_path.unlink(missing_ok=True)

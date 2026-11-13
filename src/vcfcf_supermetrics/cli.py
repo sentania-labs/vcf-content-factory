@@ -40,14 +40,15 @@ def cmd_validate(args) -> int:
     except SuperMetricValidationError as e:
         print(f"INVALID: {e}", file=sys.stderr)
         return 1
-    print(f"OK: {len(defs)} super metric(s) valid")
-    for d in defs:
-        print(f"  - {d.name}  ({d.source_path})")
-
     # Stock content ids (#345): no super metric may ship under a stock id.
+    # Checked before the OK line, which prints only when it passes.
     from vcfcf_core.stock_ids.guard import definitions_from_objects
     from vcfcf_packaging.stock_ids import report_stock_ids
     stock_rc = report_stock_ids(definitions_from_objects("supermetric", defs), "super metrics")
+    if stock_rc == 0:
+        print(f"OK: {len(defs)} super metric(s) valid")
+        for d in defs:
+            print(f"  - {d.name}  ({d.source_path})")
 
     # Slug-uniqueness check across content/ and third_party/*/
     if not args.paths:

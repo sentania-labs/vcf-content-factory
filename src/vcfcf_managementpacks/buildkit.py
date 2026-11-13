@@ -94,7 +94,7 @@ from typing import Optional
 # Version constant: bump when kit contents change in a meaningful way
 # ---------------------------------------------------------------------------
 
-BUILDKIT_VERSION = "1.0.28"
+BUILDKIT_VERSION = "1.0.29"
 
 # ---------------------------------------------------------------------------
 # Source paths (relative to this file's parent = vcfcf_managementpacks/)
@@ -377,14 +377,17 @@ factory's own implementation (exit 0 clean, 1 unusable registry, 2 refused):
     python3 sdk_buildkit/defect_gate.py --pak <name> --registry <defects.md> --require-registry
 
 The stock content id guard (kit 1.0.29+, factory issue #345): validate-sdk
-and build-sdk refuse a pak whose bundled content defines a view, dashboard,
-report template, super metric, symptom, alert or recommendation under an id
-VCF Operations ships as its own (installing would overwrite the stock
+and build-sdk refuse a pak whose bundled content defines content under an
+id VCF Operations ships as its own (installing would overwrite the stock
 object, uninstalling would delete it). The ids are in
-stock_ids_baseline.json beside stock_ids.py; without that file every build
-fails. References to stock ids are fine. The escape hatch is adapter.yaml
+stock_ids_baseline.json beside stock_ids.py. A type the baseline holds no
+ids for is scanned but not checked, and the success line names it (in the
+1.0.29 baseline: super metrics and recommendations). Without that file, or
+when a member of the built pak cannot be read, every build fails.
+References to stock ids are fine. The escape hatch is adapter.yaml
 stock_id_allowlist (type, id, reason per entry; a warning on every build).
-Read-only check of any pak, content zip or export:
+Read-only check of any pak, content zip or export (exit 0 clean, 2 stock
+ids found, 1 cannot check):
     python3 -m sdk_buildkit stock-id-check <path> [<path> ...]
 
 ## Consumer contract
@@ -688,7 +691,8 @@ def _build_parser() -> argparse.ArgumentParser:
         help=(
             "read-only: list every definition in a .pak (packed or unpacked), "
             "content zip or export whose id is a VCF Operations stock id "
-            "(exit 0 none, 2 found, 1 cannot check)"
+            "(exit 0 none, 2 found, 1 cannot check: unreadable content or "
+            "nothing to check)"
         ),
     )
     psic.add_argument("paths", nargs="+", metavar="PATH")
@@ -783,14 +787,7 @@ def main() -> int:
             print(f"ERROR: not found: {p}", file=sys.stderr)
         if missing:
             return 1
-        lines, total = stock_ids.check_paths(args.paths, baseline)
-        for line in lines:
-            print(line)
-        if total:
-            print(f"stock-id check: {total} definition(s) under stock ids")
-            return 2
-        print("stock-id check: no definition uses a stock id")
-        return 0
+        return stock_ids.standalone_check(args.paths, baseline)
 
     elif args.cmd == "pak-compare":
         # Exit status is the gate (#181): 0 only when the comparison ran

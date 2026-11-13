@@ -111,6 +111,20 @@ def test_kit_ships_guard_and_baseline_byte_for_byte(kit):
     assert (pkg / "stock_ids_baseline.json").read_bytes() == (core / "stock_ids_baseline.json").read_bytes()
 
 
+def test_kit_archive_carries_guard_and_baseline(kit):
+    """Review W7: the published tarball itself (not only an extraction of
+    it) carries both files, the baseline byte-equal to src/."""
+    (tarball,) = sorted((kit.parent / "out").glob("*.tgz"))
+    core = SRC / "vcfcf_core" / "stock_ids"
+    with tarfile.open(tarball) as tf:
+        names = {m.name: m for m in tf.getmembers()}
+        for member, src in (("sdk_buildkit/stock_ids_baseline.json", core / "stock_ids_baseline.json"),
+                            ("sdk_buildkit/stock_ids.py", core / "guard.py")):
+            match = [n for n in names if n == member or n.endswith("/" + member)]
+            assert match, f"{member} is not in {tarball.name}"
+            assert tf.extractfile(names[match[0]]).read() == src.read_bytes()
+
+
 def test_kit_validate_sdk_refuses_bundled_stock_id(kit, tmp_path):
     (kit / "sdk_buildkit" / "stock_ids_baseline.json").write_text(_synthetic_baseline(), encoding="utf-8")
     project = _adapter(tmp_path, STOCK_VIEW)
@@ -161,5 +175,12 @@ def test_kit_stock_id_check(kit, tmp_path):
     r = _run_kit(kit, "stock-id-check", str(pak))
     assert r.returncode == 2, r.stdout + r.stderr
     assert f"STOCK view {STOCK_VIEW} 'Stock Probe View'" in r.stdout
+    assert "Known holes" in r.stdout
     r = _run_kit(kit, "stock-id-check", str(pak), "--baseline", str(tmp_path / "missing.json"))
     assert r.returncode == 1
+    # Unreadable content is not clean in the kit either.
+    bad = tmp_path / "bad.pak"
+    with zipfile.ZipFile(bad, "w") as zf:
+        zf.writestr("adapters.zip", b"PK\x03\x04 not a zip")
+    r = _run_kit(kit, "stock-id-check", str(bad))
+    assert r.returncode == 1 and "CANNOT CHECK" in r.stdout, r.stdout + r.stderr
