@@ -2,6 +2,36 @@ Portable Tier 2 SDK adapter build toolchain (jar-free).
 
 <!-- Order: "Behavior since" sections newest first, so the latest release is at the top. Add a new release's section directly below this comment. The standing reference sections (Consumer contract, Version pinning, Checksum) stay at the end. -->
 
+## Behavior since 1.0.29
+
+- `validate-sdk` and `build-sdk` refuse bundled content under VCF
+  Operations stock ids (factory issue #345). A view, dashboard, report
+  template, super metric, symptom, alert or recommendation whose id is in
+  the kit's `stock_ids_baseline.json` (4282 ids from clean 8.18.7, 9.0.2
+  and 9.1.1 exports) is an error naming the YAML file, the id, the type,
+  the stock object's name and the versions it is stock in: installing such
+  a pak overwrites the stock object and uninstalling it deletes it.
+  `build-sdk` checks the bundled content before the compile and every
+  definition in the built pak after it; a `--release` build deletes a pak
+  that fails. References to stock ids (a dashboard widget pointing at a
+  stock view) are fine.
+- Fail closed: without `stock_ids_baseline.json` beside `stock_ids.py`
+  every `validate-sdk` and `build-sdk` fails.
+- Escape hatch: adapter.yaml `stock_id_allowlist`, a list of entries with
+  exactly `type`, `id` and a non-blank `reason`. An allowlisted hit is a
+  warning on every build; an entry that matches nothing is a warning too.
+  Absent by default.
+- New `python3 -m sdk_buildkit stock-id-check <path> [...]`: read-only list
+  of every definition in a packed or unpacked pak, content zip or export
+  whose id is a stock id (exit 0 none, 2 found, 1 cannot check).
+- Kit contents: `stock_ids.py` (the factory's
+  `vcfcf_core/stock_ids/guard.py`, byte for byte) and
+  `stock_ids_baseline.json`.
+- Adoption: a pak whose bundled content carries a stock id (a port of
+  third-party content that kept its ids) fails its next build. Mint new ids
+  for that content; a pak with no such content builds as before. Pak bytes
+  do not change.
+
 ## Behavior since 1.0.28
 
 - Release builds accept only SDK jars the kit knows (factory issue #343). A

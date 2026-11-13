@@ -33,6 +33,22 @@ lab export (`/api/content/operations/export`, scope `ALL`). For an installed
 third-party pak, check its content the same way before anyone uninstalls it:
 prod's upstream vCommunity carries the same 64 ids.
 
+**Enforced since issue #345 (build time and content import).** The
+stock-id guard (`knowledge/context/stock_id_guard.md`) refuses any
+definition under an id in the committed stock-id baseline
+(`src/vcfcf_core/stock_ids/stock_ids_baseline.json`, 4282 ids from clean
+8.18.7, 9.0.2 and 9.1.1 exports): `validate-sdk` and `build-sdk` in the
+factory and the sdk-buildkit (bundled content, then the built pak), the
+bundle, discrete and release builders, the per-type `validate` commands,
+every factory content-zip import, and `vcfcf_managementpacks install`
+(unless `--allow-stock-ids`). `stock-id-check <pak>` lists the stock ids
+in any pak or export, read-only: run it on a third-party pak before anyone
+installs or uninstalls it. It reports 117 view ids in upstream vCommunity
+0.3.1 and 120 in the e1 0.8.1 build. The deliberate case is an explicit
+`stock_id_allowlist` entry with a reason, warned on every build. Not
+covered yet: the install-time check against the target's existing ids and
+the uninstall check from issue #345 (wanted items 2 to 4).
+
 **Not enough on its own.** `content_naming: factory_prefixed` checks names,
 not ids. Ports run `unprefixed` by design (#229). The `isUnremovable` guard in
 `uninstall_pak` protects built-in paks, not built-in content shipped inside a
