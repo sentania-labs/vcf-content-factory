@@ -1,5 +1,5 @@
 id: e2560d5e-7379-4731-a102-11100c8647eb
-name: "[VCF Content Factory] VCF Total License Capacity (cores)"
+name: "[VCF CF] VCF Total License Capacity (cores)"
 resource_kinds:
   - resource_kind_key: LICENSE_USAGE_WORLD
     adapter_kind_key: VMWARE_INFRA_HEALTH

@@ -1,4 +1,4 @@
-name: "[VCF Content Factory] VMs - Undersized Only"
+name: "[VCF CF] VMs - Undersized Only"
 description: >
   Dynamic group of VMs currently flagged undersized by VCF Ops right-sizing
   analysis (built-in metric summary|undersized == 1). Exists to scope the

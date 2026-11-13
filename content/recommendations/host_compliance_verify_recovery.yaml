@@ -1,4 +1,4 @@
-name: "[VCF Content Factory] Host Compliance Verify Score Recovery"
+name: "[VCF CF] Host Compliance Verify Score Recovery"
 description: |
   After remediating failing controls, wait for the next compliance adapter
   collection cycle (default 60 minutes) to confirm the score recovers above

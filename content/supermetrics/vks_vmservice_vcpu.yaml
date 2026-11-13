@@ -1,5 +1,5 @@
 id: 2308ba66-91c6-43c8-95e3-33fd2ee51f73
-name: "[VCF Content Factory] VM Service vCPU (count)"
+name: "[VCF CF] VM Service vCPU (count)"
 resource_kinds:
   - resource_kind_key: ClusterComputeResource
     adapter_kind_key: VMWARE
@@ -20,7 +20,7 @@ description: >
 
   Formula: sum(all VMOperator VMs) - VKS Node Image vCPU
     - Inline sum: all VMs where summary|config|type equals VMOperator
-    - [VCF Content Factory] VKS Node Image vCPU (count)  -> sm_dd8a6df8-7454-4b8e-a6fe-65a662f9cbd4
+    - [VCF CF] VKS Node Image vCPU (count)  -> sm_dd8a6df8-7454-4b8e-a6fe-65a662f9cbd4
 
   VKS cluster VMs (both control plane and worker) are typed VMOperator AND
   carry the node image productName. Subtracting the node image SM removes them

@@ -9,7 +9,7 @@ description: 'Single-dashboard capacity review for a VCF Ops admin. Top section 
 
   '
 id: 46f75705-4da9-4fb9-b2d6-9569ce628790
-name: '[VCF Content Factory] Capacity Assessment & Right-Sizing'
+name: '[VCF CF] Capacity Assessment & Right-Sizing'
 released: true
 widgets:
 - coords:
@@ -132,7 +132,7 @@ widgets:
   self_provider: true
   title: Cluster capacity overview
   type: View
-  view: '[VCF Content Factory] Cluster Capacity Overview'
+  view: '[VCF CF] Cluster Capacity Overview'
 - coords:
     h: 2
     w: 12
@@ -247,4 +247,4 @@ widgets:
   self_provider: true
   title: VM right-sizing candidates
   type: View
-  view: '[VCF Content Factory] VM Right-Sizing Candidates'
+  view: '[VCF CF] VM Right-Sizing Candidates'

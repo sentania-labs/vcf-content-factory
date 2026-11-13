@@ -1,5 +1,5 @@
 id: 9d2add95-df25-490d-b9f2-6f5576b078bf
-name: "[VCF Content Factory] vSAN Total License Usage (TiB)"
+name: "[VCF CF] vSAN Total License Usage (TiB)"
 resource_kinds:
   - resource_kind_key: LICENSE_USAGE_WORLD
     adapter_kind_key: VMWARE_INFRA_HEALTH

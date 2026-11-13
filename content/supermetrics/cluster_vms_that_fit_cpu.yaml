@@ -1,5 +1,5 @@
 id: 8d6ca90f-9710-4f5d-b180-cb46a483d65e
-name: "[VCF Content Factory] Cluster - VMs That Fit (CPU, demand-based)"
+name: "[VCF CF] Cluster - VMs That Fit (CPU, demand-based)"
 resource_kinds:
   - resource_kind_key: ClusterComputeResource
     adapter_kind_key: VMWARE

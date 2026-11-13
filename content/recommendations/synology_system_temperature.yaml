@@ -1,4 +1,4 @@
-name: "[VCF Content Factory] Synology System Temperature Remediation"
+name: "[VCF CF] Synology System Temperature Remediation"
 description: |
   Elevated or critical system temperature indicates inadequate cooling.
   Prolonged high temperature causes hardware damage and shortened component

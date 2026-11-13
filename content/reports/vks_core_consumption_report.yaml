@@ -6,7 +6,7 @@ description: 'Printable/exportable summary of VKS vCPU consumption across a VCF 
 
   '
 id: 4dc83a79-5686-4a01-98b8-a19ae4ac08b2
-name: '[VCF Content Factory] VKS Core Consumption Report'
+name: '[VCF CF] VKS Core Consumption Report'
 released: true
 sections:
 - type: CoverPage
@@ -14,7 +14,7 @@ sections:
 - colorize: true
   orientation: Landscape
   type: View
-  view: '[VCF Content Factory] VKS Core Consumption by vCenter'
+  view: '[VCF CF] VKS Core Consumption by vCenter'
 settings:
   output_formats:
   - pdf

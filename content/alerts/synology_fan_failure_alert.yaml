@@ -1,4 +1,4 @@
-name: "[VCF Content Factory] Synology Fan Failure Alert"
+name: "[VCF CF] Synology Fan Failure Alert"
 description: >
   Alerts when the DiskStation system fan is not confirmed to be spinning
   normally (fan_status not equal to "yes"). Fan failure rapidly leads to
@@ -28,8 +28,8 @@ symptom_sets:
     - defined_on: SELF
       operator: ALL
       symptoms:
-        - name: "[VCF Content Factory] Synology Fan Failure"
+        - name: "[VCF CF] Synology Fan Failure"
 
 recommendations:
-  - name: "[VCF Content Factory] Synology Fan Failure Remediation"
+  - name: "[VCF CF] Synology Fan Failure Remediation"
     priority: 1

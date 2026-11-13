@@ -1,5 +1,5 @@
 id: 3110b13c-d3c8-4bda-bedc-e6064510c0cf
-name: "[VCF Content Factory] Cluster - Idle VM Count"
+name: "[VCF CF] Cluster - Idle VM Count"
 resource_kinds:
   - resource_kind_key: ClusterComputeResource
     adapter_kind_key: VMWARE

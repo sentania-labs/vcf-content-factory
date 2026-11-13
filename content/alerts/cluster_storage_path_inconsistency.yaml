@@ -1,4 +1,4 @@
-name: "[VCF Content Factory] Storage Path Inconsistency in Cluster"
+name: "[VCF CF] Storage Path Inconsistency in Cluster"
 description: >
   Alerts when hosts in a cluster have inconsistent active storage path counts.
   Uses a variance-based approach (max minus min of host path counts) rather than
@@ -26,8 +26,8 @@ symptom_sets:
     - defined_on: SELF
       operator: ALL
       symptoms:
-        - name: "[VCF Content Factory] Cluster Storage Paths Inconsistent"
+        - name: "[VCF CF] Cluster Storage Paths Inconsistent"
 
 recommendations:
-  - name: "[VCF Content Factory] Investigate Storage Path Degradation"
+  - name: "[VCF CF] Investigate Storage Path Degradation"
     priority: 1

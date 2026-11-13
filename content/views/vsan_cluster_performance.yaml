@@ -1,5 +1,5 @@
 id: 4ff4bcf1-4e4a-4bae-b5f4-3a3e4bd8d7dc
-name: "[VCF Content Factory] vSAN Cluster Performance"
+name: "[VCF CF] vSAN Cluster Performance"
 description: >
   Front-end vSAN performance detail view for demand-driven capacity planning dashboards.
   Shows 24-hour average IOPS (read, write, total), P95 read and write latency, and

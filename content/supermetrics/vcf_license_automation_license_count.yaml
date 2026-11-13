@@ -1,5 +1,5 @@
 id: 2f9fa681-2625-4aeb-a2f4-90df2aea2321
-name: "[VCF Content Factory] Automation Licensed Cores"
+name: "[VCF CF] Automation Licensed Cores"
 resource_kinds:
   - resource_kind_key: CAS World
     adapter_kind_key: CASAdapter
@@ -9,7 +9,7 @@ description: >
   Assigned to the CAS World rollup resource ("Automation World" display
   name; resource kind schema confirmed on ro818, but 0 live objects -
   no CASAdapter instance configured on either recon target) and sums
-  the per-host "[VCF Content Factory] Host VCF Licensed Cores
+  the per-host "[VCF CF] Host VCF Licensed Cores
   (16-core minimum)" super metric over VMWARE/HostSystem objects reached
   from CAS World at depth=10.
 
@@ -23,7 +23,7 @@ description: >
   relationship path is otherwise reproduced exactly - a single
   adaptertype=VMWARE, objecttype=HostSystem, depth=10 walk from the
   CAS World assignment object, the same shape as the sibling
-  "[VCF Content Factory] NSX Licensed Cores" SM's walk from NSXT World.
+  "[VCF CF] NSX Licensed Cores" SM's walk from NSXT World.
 
   No-CAS-objects caveat: recon found 0 CASAdapter resources of any kind
   on both ro818 and prod (no CASAdapter instance is even configured) -
@@ -47,4 +47,4 @@ description: >
   Feeds Automation Usage Insights (Automation License Consumption),
   Automation Consumption Trend, and Automation Licensing Overtime.
 formula: |
-  sum(${adaptertype=VMWARE, objecttype=HostSystem, metric=@supermetric:"[VCF Content Factory] Host VCF Licensed Cores (16-core minimum)", depth=10})
+  sum(${adaptertype=VMWARE, objecttype=HostSystem, metric=@supermetric:"[VCF CF] Host VCF Licensed Cores (16-core minimum)", depth=10})

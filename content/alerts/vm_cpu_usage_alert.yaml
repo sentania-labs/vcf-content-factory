@@ -1,4 +1,4 @@
-name: "[VCF Content Factory] VM CPU Utilization Alert"
+name: "[VCF CF] VM CPU Utilization Alert"
 description: >
   Alerts when a virtual machine's CPU utilization exceeds safe operating
   thresholds for a sustained period. Uses a tiered severity model: WARNING
@@ -31,17 +31,17 @@ symptom_sets:
     - defined_on: SELF
       operator: ALL
       symptoms:
-        - name: "[VCF Content Factory] VM CPU Usage Warning"
+        - name: "[VCF CF] VM CPU Usage Warning"
 
     - defined_on: SELF
       operator: ALL
       symptoms:
-        - name: "[VCF Content Factory] VM CPU Usage Immediate"
+        - name: "[VCF CF] VM CPU Usage Immediate"
 
     - defined_on: SELF
       operator: ALL
       symptoms:
-        - name: "[VCF Content Factory] VM CPU Usage Critical"
+        - name: "[VCF CF] VM CPU Usage Critical"
 
 recommendations:
   - description: >

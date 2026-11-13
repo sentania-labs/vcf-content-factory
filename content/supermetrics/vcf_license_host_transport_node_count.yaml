@@ -1,5 +1,5 @@
 id: c9c793cf-5ff6-4a9f-8077-2607e11b9d16
-name: "[VCF Content Factory] NSX Host Transport Node Count"
+name: "[VCF CF] NSX Host Transport Node Count"
 resource_kinds:
   - resource_kind_key: NSXT World
     adapter_kind_key: NSXTAdapter

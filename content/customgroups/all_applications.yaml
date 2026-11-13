@@ -1,4 +1,4 @@
-name: "[VCF Content Factory] All Applications"
+name: "[VCF CF] All Applications"
 description: >
   Helper group listing every (Custom) Application group on the instance,
   wherever it sits. Serves as the source for the Application Allocation

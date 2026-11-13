@@ -1,5 +1,5 @@
 id: 020cf289-b254-4d8c-9e36-f0925c36e3d8
-name: "[VCF Content Factory] vCLS vCPU (count)"
+name: "[VCF CF] vCLS vCPU (count)"
 resource_kinds:
   - resource_kind_key: ClusterComputeResource
     adapter_kind_key: VMWARE

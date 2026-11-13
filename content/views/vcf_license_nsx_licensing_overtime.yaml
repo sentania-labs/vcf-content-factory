@@ -1,5 +1,5 @@
 id: 66a9987f-8373-4254-8bdc-6f32429d5f4a
-name: "[VCF Content Factory] NSX Licensing by Month"
+name: "[VCF CF] NSX Licensing by Month"
 description: >
   Month-by-month NSX prepared host count and licensed cores, one row per month over the
   trailing year. Targets VCF Operations 8.x (validated against Aria Operations 8.18.7
@@ -24,10 +24,10 @@ columns:
       starting_on_unit: WEEKS
       starting_on_count: 1
 
-  - attribute: 'supermetric:"[VCF Content Factory] NSX Host Transport Node Count"'
+  - attribute: 'supermetric:"[VCF CF] NSX Host Transport Node Count"'
     display_name: "NSX Prepared Host Count"
     transformation: CURRENT
 
-  - attribute: 'supermetric:"[VCF Content Factory] NSX Licensed Cores"'
+  - attribute: 'supermetric:"[VCF CF] NSX Licensed Cores"'
     display_name: "NSX License Consumption"
     transformation: CURRENT

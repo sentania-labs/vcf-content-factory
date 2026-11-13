@@ -1,5 +1,5 @@
 id: 4b12808a-1002-4146-b16f-38fc999f3634
-name: "[VCF Content Factory] Undersized VMs, Add Resources"
+name: "[VCF CF] Undersized VMs, Add Resources"
 description: >
   Per-VM resource-addition list for undersized virtual machines. Shows the
   parent cluster, vCPUs to add, and memory to add (KB source, displayed in GB)
@@ -15,7 +15,7 @@ subject:
   adapter_kind: VMWARE
   resource_kind: VirtualMachine
 
-customgroup: "[VCF Content Factory] VMs - Undersized Only"
+customgroup: "[VCF CF] VMs - Undersized Only"
 
 summary: false
 

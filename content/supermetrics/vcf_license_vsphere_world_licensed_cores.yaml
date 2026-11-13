@@ -1,5 +1,5 @@
 id: 1691cba3-ab0c-465a-8352-e93d99ce3de3
-name: "[VCF Content Factory] vSphere World VCF Licensed Cores"
+name: "[VCF CF] vSphere World VCF Licensed Cores"
 resource_kinds:
   - resource_kind_key: vSphere World
     adapter_kind_key: VMWARE
@@ -8,7 +8,7 @@ description: >
   under Broadcom's per-core licensing model with the 16-core-per-socket
   minimum. Assigned to the vSphere World rollup resource (1 live object
   per instance) and sums the per-host
-  "[VCF Content Factory] Host VCF Licensed Cores (16-core minimum)"
+  "[VCF CF] Host VCF Licensed Cores (16-core minimum)"
   super metric over every HostSystem descendant (depth=10, walks
   vSphere World > vCenter > Datacenter > Cluster > Host and standalone
   hosts).
@@ -37,4 +37,4 @@ description: >
   Exists only to feed VCF License Potential Cores (this on vSphere
   World); not shown directly on any dashboard.
 formula: |
-  sum(${adaptertype=VMWARE, objecttype=HostSystem, metric=@supermetric:"[VCF Content Factory] Host VCF Licensed Cores (16-core minimum)", depth=10})
+  sum(${adaptertype=VMWARE, objecttype=HostSystem, metric=@supermetric:"[VCF CF] Host VCF Licensed Cores (16-core minimum)", depth=10})

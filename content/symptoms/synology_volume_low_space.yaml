@@ -1,4 +1,4 @@
-name: "[VCF Content Factory] Synology Volume Low Space"
+name: "[VCF CF] Synology Volume Low Space"
 # TODO: verify resource kind prefix at install-verification time
 # (MPB may expose this as mpb_synology_dsm_volume rather than volume)
 adapter_kind: mpb_synology_dsm

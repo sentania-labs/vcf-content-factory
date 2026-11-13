@@ -1,4 +1,4 @@
-name: "[VCF Content Factory] VMs - Right-Sizing Candidates"
+name: "[VCF CF] VMs - Right-Sizing Candidates"
 description: >
   Dynamic group targeting virtual machines flagged by the VCF Ops capacity
   engine as right-sizing candidates. Membership is the OR of three capacity

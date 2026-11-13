@@ -1,10 +1,10 @@
 id: 98fe4737-bd29-46d6-9f47-27c26f12d0de
-name: "[VCF Content Factory] Cluster CPU Support Worst Status (KB318697)"
+name: "[VCF CF] Cluster CPU Support Worst Status (KB318697)"
 resource_kinds:
   - resource_kind_key: ClusterComputeResource
     adapter_kind_key: VMWARE
 description: >
-  Rolls up the host-level "[VCF Content Factory] CPU Support Status
+  Rolls up the host-level "[VCF CF] CPU Support Status
   (KB318697)" super metric (sm_a7becc4c-22f4-4946-acf9-6cb559672544) to the
   cluster by taking the worst (max) coded tier among the cluster's child
   hosts, per Broadcom KB 318697
