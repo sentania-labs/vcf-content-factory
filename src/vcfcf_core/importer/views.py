@@ -14,8 +14,8 @@ different filter per SubjectType, ``startSubUnit``,
 related-object columns, ``objectType=POLICY``, per-column transformations
 on a trend view, the Title / Description ``localizationKey``, a column or
 summary-row ``displayName`` ``localizationKey``, a second ``displayName``
-Property in one column, and Description surrounding whitespace, accepted
-only where the render is the source stripped): the view converts and the
+Property in one column, and surrounding whitespace on the display strings
+the loader strips, ``accounting.STRIPPED_TEXT``): the view converts and the
 loss is recorded at its exact flat path. Anything else
 stops the view with a TOOLSET GAP. After mapping, ``accounting.account``
 classifies every source key.
@@ -405,14 +405,8 @@ class _ViewMapper:
         # The name exactly as the source has it: the planner records any
         # change (whitespace the loader strips) as a rename.
         y["name"] = v.findtext("Title") or ""
-        desc = v.findtext("Description") or ""
-        if desc != desc.strip():
-            # Accepted only where the render is exactly the source stripped.
-            self.doc("Description surrounding whitespace",
-                     "Description leading or trailing whitespace is not modeled (the view loader strips it; "
-                     "view fidelity doc §Not modeled)",
-                     [Mark(f"{_flat.VIEW}/Description#text", "value", cond="surrounding whitespace only")])
-        y["description"] = desc
+        # Surrounding whitespace the loader strips: accounting.STRIPPED_TEXT.
+        y["description"] = v.findtext("Description") or ""
         for el, label in ((title, "Title"), (v.find("Description"), "Description")):
             if el is not None and el.get("localizationKey") is not None:
                 self.doc("Title/Description localizationKey",

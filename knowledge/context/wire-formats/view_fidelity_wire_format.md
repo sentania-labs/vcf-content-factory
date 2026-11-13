@@ -443,11 +443,19 @@ exactly this one SubjectType.
   not known. A repeat of any other Property, or in a summary row, is not
   covered.
 - Leading or trailing whitespace on the `Description` (54 vCommunity views,
-  22 of the converted 9.1.1 built-in views): the view loader strips it. Interior whitespace is
-  carried.
+  22 of the converted 9.1.1 built-in views): the view loader strips it.
+  Interior whitespace is carried.
+- Leading or trailing whitespace on the column labels the loader strips: a
+  column's `displayName`, `instanceGroupName` and
+  `localizedMetricToRelateWith`, an additional column's `displayName` and
+  `localizedAttributeName`, a summary row's `displayName` (none seen in
+  either source). Keys the loader strips (`attributeKey`, kinds,
+  `metricToRelateWith`, `transformExpression`, unit ids, string bounds)
+  are not covered and stay a difference.
 
 `import-local` records each as a loss at its exact path: the whitespace one
-only where the render is the source stripped, nothing else.
+only where the render is the source stripped, nothing else
+(`importer/accounting.py` `STRIPPED_TEXT` lists the keys).
 
 ## Found by `import-local` (2026-11-13)
 

@@ -530,8 +530,8 @@ def test_nit_widget_id_placeholder_is_counted(source, tmp_path, capsys):
 def _lossy_view_xml(name: str, vid: str) -> str:
     """A list view with recorded losses: a Description with surrounding
     whitespace; column 0 has an empty preferredUnitId and a second
-    displayName Property; column 1 has a unit and a displayName
-    ``localizationKey``."""
+    displayName Property; column 1 has a unit and a displayName with a
+    ``localizationKey`` and a trailing space."""
     col = ('<Item><Value><Property name="objectType" value="RESOURCE"/><Property name="attributeKey" value="{k}"/>'
            '<Property name="preferredUnitId" value="{u}"/><Property name="isStringAttribute" value="false"/>'
            '<Property name="adapterKind" value="VMWARE"/><Property name="resourceKind" value="HostSystem"/>'
@@ -549,7 +549,7 @@ def _lossy_view_xml(name: str, vid: str) -> str:
             '<Property name="count" value="24"/></Control>'
             '<Control id="a" type="attributes-selector" visible="false"><Property name="attributeInfos"><List>'
             + col.format(k="cpu|x", u="", d="X", lk="", x='<Property name="displayName" value="X2"/>')
-            + col.format(k="cpu|y", u="percent", d="Y", lk='localizationKey="probeY" ', x="") +
+            + col.format(k="cpu|y", u="percent", d="Y ", lk='localizationKey="probeY" ', x="") +
             '</List></Property></Control>'
             '<Control id="p" type="pagination-control" visible="true"><Property name="start" value="0"/>'
             '<Property name="size" value="500"/></Control>'
@@ -603,6 +603,17 @@ def _heat_env(tmp: Path) -> dict:
                                                                     default_name_path="")], {}, "0"))
 
 
+def _stripped_display_strings(d: dict) -> None:
+    """Dashboard A: surrounding whitespace on display strings the loader
+    strips (the description, a widget title, a metric entry label, the
+    TextDisplay HTML)."""
+    d["description"] = "first dashboard "
+    note = d["widgets"][2]
+    note["title"] = note["config"]["title"] = "Note "
+    note["config"]["editorData"] = "<b>probe</b>\n"
+    d["widgets"][1]["config"]["metric"]["resourceKindMetrics"][0]["label"] = "Probe label "
+
+
 @pytest.fixture(scope="module")
 def mutation_source(tmp_path_factory) -> Path:
     """The shared source, plus a dashboard with no widgetInteractions key (a
@@ -612,17 +623,22 @@ def mutation_source(tmp_path_factory) -> Path:
     localizationKey (and an empty preferredUnitId); a template Description
     with surrounding whitespace; a Heatmap tab name with surrounding
     whitespace; a ``config.widgetId`` naming a widget on no dashboard; a
-    super metric formula with whitespace outside its quoted literal."""
+    super metric formula with whitespace outside its quoted literal; and
+    surrounding whitespace on a dashboard and a super metric description, a
+    widget title, a metric label, TextDisplay HTML and a view column
+    display name."""
     tmp = tmp_path_factory.mktemp("import_local_mutations")
     src = _build_source(tmp)
     (src / "reports" / "Lossy.xml").write_text(_lossy_view_xml("Probe Lossy", LOSSY))
     _sub(src / "reports" / "Report.xml", r"<Description>report</Description>", "<Description>report </Description>")
     _dash_json(src, lambda d: d["widgets"][2]["config"].__setitem__("widgetId", FOREIGN_WIDGET))
+    _dash_json(src, _stripped_display_strings)
     heat = _heat_env(tmp)
     heat["dashboards"][0]["widgets"][0]["config"]["configs"][0]["name"] = "Probe Tab "
     (src / "dashboards" / "Heat.json").write_text(json.dumps(heat))
     smp = src / "supermetrics" / "SMs.json"
     sms = json.loads(smp.read_text())
+    sms[SM2]["description"] = "second "
     sms[SM_WHERE] = {"name": "Probe SM Where", "formula": WHERE_FORMULA, "description": "where", "unitId": "",
                      "resourceKinds": [{"resourceKindKey": "HostSystem", "adapterKindKey": "VMWARE"}]}
     smp.write_text(json.dumps(sms, indent=2))
@@ -751,7 +767,45 @@ YAML_MUTATIONS = [
      _y(lambda d: d.update(formula=d["formula"].replace("contains 8.0", "contains 9.0")))),
     ("super metric with a formula whitespace loss: change a token outside the literal",
      "supermetrics/probe-sm-where.yaml", _y(lambda d: d.update(formula=d["formula"].replace("*\n 1", "*\n 2")))),
+    ("dashboard with a description whitespace loss: change the description inside", "dashboards/probe-dashboard-a.yaml",
+     _y(lambda d: d.update(description="first  dashboard "))),
+    ("dashboard with a widget title whitespace loss: change the title inside", "dashboards/probe-dashboard-a.yaml",
+     _y(lambda d: d["widgets"][2].update(title="Notes "))),
+    ("dashboard with a metric label whitespace loss: change the label inside", "dashboards/probe-dashboard-a.yaml",
+     _y(lambda d: d["widgets"][1]["metrics"][0].update(label="Probe  label "))),
+    ("dashboard with a TextDisplay HTML whitespace loss: change the HTML inside", "dashboards/probe-dashboard-a.yaml",
+     _y(lambda d: d["widgets"][2].update(html="<b>probe!</b>\n"))),
+    ("view with a column label whitespace loss: change the display_name inside", "views/probe-lossy.yaml",
+     _y(lambda d: d["columns"][1].update(display_name="Y y "))),
+    ("super metric with a description whitespace loss: change the description inside",
+     "supermetrics/probe-sm-two.yaml", _y(lambda d: d.update(description="secont "))),
 ]
+
+#: (written file, the stripped-display-string loss class it carries)
+STRIPPED_FIXTURES = [
+    ("views/probe-lossy.yaml", "Description surrounding whitespace"),
+    ("views/probe-lossy.yaml", "view column label surrounding whitespace"),
+    ("reports/probe-report.yaml", "Description surrounding whitespace"),
+    ("dashboards/probe-dashboard-a.yaml", "Description surrounding whitespace"),
+    ("dashboards/probe-dashboard-a.yaml", "widget title surrounding whitespace"),
+    ("dashboards/probe-dashboard-a.yaml", "dashboard label surrounding whitespace"),
+    ("dashboards/probe-dashboard-a.yaml", "TextDisplay HTML surrounding whitespace"),
+    ("dashboards/probe-heat.yaml", "Heatmap tab name surrounding whitespace"),
+    ("supermetrics/probe-sm-two.yaml", "Description surrounding whitespace"),
+]
+
+
+@pytest.mark.parametrize("rel,cls", STRIPPED_FIXTURES, ids=[f"{r} {c}" for r, c in STRIPPED_FIXTURES])
+def test_stripped_display_string_converts_as_exactly_that_loss(converted, rel, cls):
+    """Each field class the loaders strip: recorded as that loss at the exact
+    key, and the object differs only there (the YAML_MUTATIONS above change
+    each one step further and are caught)."""
+    plan, _tree, base = converted
+    e = next(e for e in plan.emitted if e.relpath == rel)
+    loss = next((x for x in e.losses if x.cls == cls), None)
+    assert loss is not None, [x.cls for x in e.losses]
+    assert loss.marks and all(m.cond == "surrounding whitespace only" and m.kind == "value" for m in loss.marks)
+    assert base[rel] == "differs only at recorded losses"
 
 
 @pytest.mark.parametrize("label,rel,mutate", YAML_MUTATIONS, ids=[m[0] for m in YAML_MUTATIONS])
@@ -941,6 +995,19 @@ def test_one_step_beyond_a_ruled_loss_is_a_gap(mutation_source, tmp_path, label,
     assert failed, f"{label}: converted"
     assert failed[0].kind == "failed" and failed[0].gap, f"{label}: failed without a TOOLSET GAP: {failed[0].reason}"
     assert text in failed[0].reason, f"{label}: {failed[0].reason}"
+
+
+def test_a_stripped_key_that_is_not_a_display_string_is_still_a_difference(mutation_source, tmp_path):
+    """The loader strips a metric key too, but a key is not display text: no
+    loss is recorded and verification reports the dashboard as differing."""
+    src = tmp_path / "src"
+    shutil.copytree(mutation_source, src)
+    _dash_json(src, lambda d: d["widgets"][1]["config"]["metric"]["resourceKindMetrics"][0].update(
+        metricKey="cpu|usage_average "))
+    plan, tree = _convert(src, tmp_path)
+    e = next(e for e in plan.emitted if e.source_id == D_A)
+    assert not [m for x in e.losses for m in x.marks if m.path.endswith(".metricKey")]
+    assert _status(plan, tree, e.relpath) == "differs"
 
 
 def test_mark_conditions_hold_only_for_the_ruled_shape():

@@ -90,6 +90,10 @@ the same). A source file that carries several dashboards (the third-party
 dashboard; each renders alone, and the shared `entries` table is rebuilt per
 dashboard with only the kinds it uses.
 
+Not modeled: leading or trailing whitespace on the dashboard `description`
+(the loader strips it); `import-local` records it as a loss, accepted only
+where the render is the source stripped.
+
 Not modeled: `adapterName`. Exports write the owning solution's name
 (`VMware vSphere` on 84 built-ins; our own compliance pak, built with
 `adapterName: vcfcf_compliance`, comes back as `VCF Content Factory
@@ -106,6 +110,22 @@ YAML cannot claim it.
 | `collapsed: true` | widget `collapsed` | TextDisplay, View, MetricChart, Scoreboard, ResourceList, AlertList (the types an export carries it on); Section keeps its own |
 | `view_details: ""` | `config.viewDetails: ""` | the empty string every 9.x export writes is accepted |
 | `omit:` | drops a default key | per type, see below |
+
+Not modeled: leading or trailing whitespace on the display strings the
+dashboard loader strips. `import-local` records each as a loss at its key,
+accepted only where the render is exactly the source stripped (an interior
+change is a difference), in three classes: the widget `title` (and
+`config.title`, which is the title); labels, meaning a Scoreboard,
+MetricChart or PropertyList metric entry's `label`, `metricName` and `unit`
+(11 Scoreboard labels on 2 third-party dashboards, `"Read Latency "`; 9
+9.1.1 built-ins carry some, 7 labels on the 2 of them that convert), a HealthChart `metricName` / `metricFullName`, a
+ParetoAnalysis `metricName` / `metric.name`, and a Heatmap tab's
+`colorBy.value`, `sizeBy.value` and `groupBy.text` / `originalText`; and the
+TextDisplay HTML (`config.editorData`). `labelLocalized`, `labelOrig`,
+`description` and `titleLocalized` are kept verbatim by the loader. Strings
+the loader strips that are keys or references (metric keys, kinds, a pinned
+resource's name, a view name, `viewDetails` routes, enumerations) are not
+covered: stripping one changes what it names, so it stays a difference.
 
 Not modeled: a `config.widgetId` that names no widget of its own dashboard
 (23 widgets on 3 third-party dashboards, none of the 179 9.1.1 built-ins,
@@ -388,12 +408,9 @@ GAP rather than converting changed:
   naming another widget of the same dashboard (none seen; one naming no
   widget of the dashboard is a recorded loss, §Widget fields common to
   every type).
-- A `description` or `namePath` with leading or trailing whitespace: the
-  dashboard loader strips both, so the value cannot be carried.
-- A Scoreboard metric `label` with trailing whitespace (11 labels on 2
-  third-party dashboards, `"Read Latency "`): the loader strips it. Not
-  checked before rendering, so verification reports these two dashboards
-  as differing; no ruling yet.
+- A `namePath` with leading or trailing whitespace: the loader strips it.
+  It is the dashboard's folder (a name, not display text), and it is not
+  recorded as a rename, so it stays a GAP (none seen).
 
 ## Keys an older loader ignored
 

@@ -180,7 +180,12 @@ DOCUMENTED_NOT_MODELED: Dict[str, str] = {
     "objectType POLICY": "view_fidelity_wire_format.md §Not modeled",
     "per-column transformations on a trend view": "view_fidelity_wire_format.md §Not modeled",
     "Description surrounding whitespace":
-        "view_fidelity_wire_format.md §Not modeled; template_fidelity_wire_format.md §Not modeled",
+        "view_fidelity_wire_format.md §Not modeled; template_fidelity_wire_format.md §Not modeled; "
+        "dashboard_fidelity_wire_format.md §Dashboard level; supermetric_authoring.md §Formula whitespace",
+    "view column label surrounding whitespace": "view_fidelity_wire_format.md §Not modeled",
+    "widget title surrounding whitespace": "dashboard_fidelity_wire_format.md §Widget fields common to every type",
+    "dashboard label surrounding whitespace": "dashboard_fidelity_wire_format.md §Widget fields common to every type",
+    "TextDisplay HTML surrounding whitespace": "dashboard_fidelity_wire_format.md §Widget fields common to every type",
     "displayName localizationKey": "view_fidelity_wire_format.md §Not modeled",
     "second displayName in a column": "view_fidelity_wire_format.md §Not modeled",
     "Heatmap tab name surrounding whitespace": "dashboard_fidelity_wire_format.md §Per type, Heatmap",

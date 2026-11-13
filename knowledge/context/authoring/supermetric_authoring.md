@@ -216,7 +216,10 @@ non-space whitespace. `import-local` records a source formula whose
 whitespace differs only outside its quoted literals as a loss (accepted
 only where the render is exactly the collapsed source), and stops one where
 the collapse would change a literal, or where the literals cannot be
-delimited (an unbalanced quote, a backslash), with a TOOLSET GAP.
+delimited (an unbalanced quote, a backslash), with a TOOLSET GAP. The
+loader also strips the `description`; `import-local` records surrounding
+whitespace there as a loss, accepted only where the render is the source
+stripped.
 
 ## 4. Validate locally
 

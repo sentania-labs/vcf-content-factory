@@ -50,8 +50,9 @@ def map_supermetric(sid: str, sm: dict, location: str) -> MappedObject:
     y["name"] = sm.get("name", "")
     y["formula"] = FormulaRef(str(sm["formula"]))
     y["description"] = sm.get("description", "") or ""
-    if not isinstance(y["description"], str) or y["description"] != y["description"].strip():
-        _gap("description with leading or trailing whitespace (the super metric loader strips it)")
+    if not isinstance(y["description"], str):
+        _gap("description that is not a string")
+    # Surrounding whitespace the loader strips: accounting.STRIPPED_TEXT.
     y["unit_id"] = sm.get("unitId", "") or ""
     rks = []
     for r in sm.get("resourceKinds") or []:

@@ -23,6 +23,10 @@ table below:
 - ``loss <class>``: a documented not-modeled class
   (``model.DOCUMENTED_NOT_MODELED``): recorded as a LOSS at this exact key.
 
+On a converted or derived key, a display string the loader strips
+(``STRIPPED_TEXT``) with surrounding whitespace is also recorded as a LOSS
+there, conditional on the render being the source stripped.
+
 Keys the product renumbers are not in the flat form at all (they are
 removed and counted there). Any key no row matches is **unclassified**:
 the object stops with a TOOLSET GAP naming the key, so a key a future
@@ -118,7 +122,7 @@ _PG = "ViewDef/Controls/Control{pagination-control}"
 VIEW_TABLE = parse_table(f"""
 ViewDef@id                                         conv
 ViewDef/Title#text                                 conv
-ViewDef/Description#text                           conv   # whitespace: the mapper records the documented loss
+ViewDef/Description#text                           conv   # surrounding whitespace: STRIPPED_TEXT
 ViewDef/(Title|Description)@localizationKey       conv   # the mapper records the documented loss
 ViewDef/SubjectType{{*}}#text                      const ""   # render._render_view_def_fragment: empty element
 ViewDef/SubjectType{{*}}@filter[][].(condition|transform|metricKey|filterType|businessHours|conditionId)  conv
@@ -165,7 +169,7 @@ _VIEW_TEXT_RX = re.compile(r"ViewDef/Controls/Control\{[^}]*\}(?:/[^#@]*)?/(?:Pr
 # ----------------------------------------------------------- reports etc.
 REPORT_TABLE = parse_table("""
 ReportDef@id                                    conv
-ReportDef/(Title|Description)#text              conv   # whitespace: the mapper records the documented loss
+ReportDef/(Title|Description)#text              conv   # Description surrounding whitespace: STRIPPED_TEXT
 ReportDef/(Title|Description)@localizationKey   conv   # the mapper records the documented loss
 ReportDef/isTenant#text                         conv
 ReportDef/SubjectType[](@adapterKind|@resourceKind|@type|@filter)  conv
@@ -434,6 +438,69 @@ DASHBOARD_TABLE = DASHBOARD_TABLE + [
     for t in _CF_TYPES for k, v in _CF_DEFAULT.items()
 ]
 
+# ------------------------------------------------- stripped display text
+#: Display strings the factory loaders strip of surrounding whitespace, by
+#: the source key that carries each (class, generic pattern, the loader
+#: line). A source value with surrounding whitespace at one of these keys is
+#: a documented loss there, accepted by a verification only where the render
+#: is exactly the source stripped (``model.MARK_CONDITIONS``); any other
+#: change at that key is still a difference. Names are not here: the planner
+#: records a stripped name as a rename. Keys, references (a pinned resource's
+#: name, a view's name in a widget), enumerations, URLs and expressions are
+#: not here either: stripping one changes what it means, so it stays a
+#: difference.
+_DLBL = "dashboard label surrounding whitespace"
+_VLBL = "view column label surrounding whitespace"
+_DESC = "Description surrounding whitespace"
+_METRICS = "widget:(Scoreboard|MetricChart|PropertyList).config.metric.(resourceKindMetrics|resourceMetrics)[]"
+STRIPPED_TEXT = {
+    "view": [
+        (_DESC, "ViewDef/Description#text", "dashboards.loader._load_view: description"),
+        (_VLBL, f"{_COL}/Property{{(displayName|instanceGroupName|localizedMetricToRelateWith)}}@value",
+         "dashboards.loader._load_column: display_name, instanced_group.name, localized_metric_to_relate_with"),
+        (_VLBL, f"{_ADD}/Property{{(displayName|localizedAttributeName)}}@value",
+         "dashboards.loader._load_column: display_name, localized_name"),
+        (_VLBL, f"{_SUM}/Property{{displayName}}@value", "dashboards.loader._load_summary: display_name"),
+    ],
+    "report": [
+        (_DESC, "ReportDef/Description#text", "reports.loader: description"),
+    ],
+    "supermetric": [
+        (_DESC, "supermetric.description", "supermetrics.loader: description"),
+    ],
+    "dashboard": [
+        (_DESC, "dashboard.description", "dashboards.loader.load_dashboard: description"),
+        ("widget title surrounding whitespace", "widget:*.(title|config.title)",
+         "dashboards.loader.load_dashboard: widget title (config.title is the title)"),
+        ("Heatmap tab name surrounding whitespace", "widget:Heatmap.config.configs[].name",
+         "dashboards.loader: Heatmap tab name"),
+        (_DLBL, f"{_METRICS}.(label|metricName|unit)", "dashboards.loader: metric entry label, metric_name, unit"),
+        (_DLBL, "widget:HealthChart.config.(metricName|metricFullName)",
+         "dashboards.loader: HealthChart metric_name, metric_full_name"),
+        (_DLBL, "widget:ParetoAnalysis.config.(metricName|metric.name)",
+         "dashboards.loader: ParetoAnalysis metric_name"),
+        (_DLBL, "widget:Heatmap.config.configs[].(colorBy.value|sizeBy.value|groupBy.text|groupBy.originalText)",
+         "dashboards.loader: Heatmap color_by / size_by label, group_by text (originalText is the text)"),
+        ("TextDisplay HTML surrounding whitespace", "widget:TextDisplay.config.editorData",
+         "dashboards.loader: TextDisplay html"),
+    ],
+}
+_STRIPPED_RX = {t: [(cls, re.compile(_pattern_rx(pat)), ev) for cls, pat, ev in rows]
+                for t, rows in STRIPPED_TEXT.items()}
+for _rows in STRIPPED_TEXT.values():
+    for _cls, _pat, _ev in _rows:
+        if _cls not in DOCUMENTED_NOT_MODELED:
+            raise ValueError(f"stripped text row {_pat}: {_cls!r} is not a documented class")
+
+
+def _stripped_text(type_: str, path: str):
+    g = _flat.generic(path)
+    for cls, rx, ev in _STRIPPED_RX.get(type_, ()):
+        if rx.fullmatch(g):
+            return cls, ev
+    return None
+
+
 TABLES = {"view": VIEW_TABLE, "report": REPORT_TABLE, "alert": ALERT_TABLE, "symptom": SYMPTOM_TABLE,
           "recommendation": RECOMMENDATION_TABLE, "supermetric": SUPERMETRIC_TABLE, "dashboard": DASHBOARD_TABLE}
 
@@ -623,6 +690,11 @@ def account(type_: str, leaves: _flat.Leaves, losses: List[Loss]) -> None:
         if rule is None:
             raise _gap(type_, path, "unclassified: no rule says the YAML carries it, the renderer writes it as "
                                     "a constant or derives it, or that it is a documented loss")
+        st = _stripped_text(type_, path) if rule.kind in ("conv", "same") else None
+        if st and isinstance(value, str) and value != value.strip():
+            cls, ev = st
+            documented_loss(losses, cls, f"{cls} is not modeled: the loader strips it ({DOCUMENTED_NOT_MODELED[cls]})",
+                            [Mark(path, "value", cond="surrounding whitespace only")])
         if rule.kind == "conv":
             continue
         if rule.kind == "const":
