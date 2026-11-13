@@ -27,8 +27,8 @@ import pytest
 import yaml
 
 from test_import_local import (  # the shared synthetic source and CLI driver
-    A_1, D_A, D_B, SM1, SM2, SOURCE_YAML, STOCK_VIEW_ID, V_DIST, V_HOST, V_LONE, V_TREND, Y_1,
-    _build_source, _cli, _files, _run, _yaml,
+    D_A, D_B, SM1, SM2, SOURCE_YAML, STOCK_VIEW_ID, V_DIST, V_HOST, V_LONE, V_TREND,
+    _build_source, _files, _run, _yaml,
 )
 from vcfcf_core.alerts.render import render_alert_content_xml
 from vcfcf_core.dashboards.loader import load_dashboard, load_view
