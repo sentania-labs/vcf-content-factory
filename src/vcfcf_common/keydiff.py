@@ -46,10 +46,33 @@ where one exists:
 Results per (object, key): ``only_a``, ``only_b``, ``differ``, ``match``,
 ``stale`` (a stat whose sample on either side is older than ``--stale-hours``
 before that side's capture), plus ``object_only_a`` / ``object_only_b`` rows
-for objects present on one side. Numbers compare within ``--tolerance``
-(absolute) or ``--rel-tolerance`` (relative to the larger magnitude),
-whichever is wider; property values compare as strings, or as numbers when both
-parse as finite numbers (``"1"`` equals ``"1.0"``), without tolerance.
+for objects present on one side.
+
+How values compare. Every numeric comparison is exact, in ``Decimal``; no value
+is rounded through a binary float on its way to a verdict or to the output:
+  * A value is numeric when it is a JSON number (not a boolean) or a string
+    that is a plain decimal: an optional sign, digits, and optionally a point
+    and more digits (``5``, ``-5.0``, ``+0.25``). A JSON integer is exact at any
+    size; a JSON fraction is the double the instance sent (Suite API stat
+    values are doubles) and compares as that double's shortest decimal
+    (``repr``), so two different doubles never compare equal.
+  * Everything else compares as itself, exactly: other strings, ``true`` /
+    ``false`` (a JSON boolean never equals a number), empty strings,
+    ``NaN`` / ``Infinity`` in any spelling, exponent forms (``1E3``), values
+    with leading or trailing whitespace, thousands separators (``1,000``), and
+    ``null``. ``"NaN"`` equals ``"NaN"``; ``"1E3"`` does not equal ``"1000"``;
+    ``" 5"`` does not equal ``"5"``.
+  * Properties: equal when the strings are identical or both are plain
+    decimals with the same value (``"5"`` equals ``"5.0"``;
+    ``"9007199254740992"`` does not equal ``"9007199254740993"``). No tolerance
+    ever applies to a property.
+  * Stats: equal when numerically equal, or when the exact difference is
+    within ``--tolerance`` (absolute) or ``--rel-tolerance`` (of the larger
+    magnitude), whichever is wider. A row matched within tolerance is still a
+    ``match``; its ``delta`` column shows the nonzero difference, which is how
+    to tell it from an identical value.
+  * ``delta`` is B minus A, exact. ``value_a`` and ``value_b`` are the values
+    as read, never re-rendered through a float.
 
 Every run reports what it compared: objects on each side and on both, keys
 on each side and on both (and how many of those were stale), and objects not
@@ -81,9 +104,11 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import re
 import sys
 import time
 import unicodedata
+from decimal import Decimal, localcontext
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
 SNAPSHOT_FORMAT = "vcfcf-keydiff-snapshot/1"
@@ -349,23 +374,75 @@ def write_snapshot(doc: dict, path: str) -> None:
 # Compare
 # ---------------------------------------------------------------------------
 
-def _as_number(v: Any) -> Optional[float]:
+# A plain decimal: optional sign, digits, optionally a point and digits. No
+# whitespace, exponent, separator, or NaN/Infinity spelling (those compare as
+# strings; module docstring, "How values compare").
+_PLAIN_DECIMAL = re.compile(r"[+-]?[0-9]+(?:\.[0-9]+)?")
+
+
+def _as_decimal(v: Any) -> Optional[Decimal]:
+    """The exact numeric value of ``v``, or None when it is not numeric.
+
+    ints are exact; a float (a double from the JSON) becomes its shortest
+    round-trip decimal, so distinct doubles stay distinct; a string counts only
+    when it is a plain decimal (``_PLAIN_DECIMAL``, ASCII digits only)."""
     if isinstance(v, bool):
         return None
-    if isinstance(v, (int, float)):
-        f = float(v)
-    elif isinstance(v, str):
-        try:
-            f = float(v.strip())
-        except ValueError:
-            return None
-    else:
-        return None
-    return f if math.isfinite(f) else None
+    if isinstance(v, int):
+        return Decimal(v)
+    if isinstance(v, float):
+        return Decimal(repr(v)) if math.isfinite(v) else None
+    if isinstance(v, str) and _PLAIN_DECIMAL.fullmatch(v):
+        return Decimal(v)
+    return None
 
 
-def _numbers_close(a: float, b: float, tol: float, rel: float) -> bool:
-    return abs(a - b) <= max(tol, rel * max(abs(a), abs(b)))
+def _exact_context_prec(*values: Decimal) -> int:
+    """Digits enough for a sum or difference of ``values`` to be exact."""
+    finite = [v for v in values if v]
+    if not finite:
+        return 28
+    top = max(v.adjusted() for v in finite)
+    bottom = min(v.as_tuple().exponent for v in finite)
+    return max(28, top - bottom + 3)
+
+
+def _delta(a: Decimal, b: Decimal) -> Decimal:
+    """``b - a``, exact (the context is widened to every digit involved)."""
+    with localcontext() as ctx:
+        ctx.prec = _exact_context_prec(a, b)
+        return b - a
+
+
+def _within(a: Decimal, b: Decimal, tol: Decimal, rel: Decimal) -> bool:
+    """``|b - a| <= max(tol, rel * max(|a|, |b|))``, computed exactly."""
+    if a == b:
+        return True
+    diff = abs(_delta(a, b))
+    big = max(abs(a), abs(b))
+    with localcontext() as ctx:
+        # A product needs at most the digits of both factors to be exact.
+        ctx.prec = len(rel.as_tuple().digits) + len(big.as_tuple().digits) + 2
+        allowed = max(tol, rel * big)
+    return diff <= allowed
+
+
+def _same_raw(va: Any, vb: Any) -> bool:
+    """Equality for values that are not both numeric: same type family and
+    equal (a boolean never equals a number; non-finite floats compare by
+    spelling, so NaN equals NaN)."""
+    if isinstance(va, bool) or isinstance(vb, bool):
+        return isinstance(va, bool) and isinstance(vb, bool) and va == vb
+    if isinstance(va, float) and isinstance(vb, float):
+        return repr(va) == repr(vb)
+    return type(va) is type(vb) and va == vb
+
+
+def _tol_decimal(v: Any) -> Decimal:
+    d = _as_decimal(v) if not isinstance(v, Decimal) else v
+    if d is None:
+        raise ValueError(f"tolerance must be a finite number, not {v!r}")
+    return d
 
 
 def _index(doc: dict, label: str) -> Tuple[Dict[Tuple[str, ...], dict], List[dict]]:
@@ -387,10 +464,17 @@ def _index(doc: dict, label: str) -> Tuple[Dict[Tuple[str, ...], dict], List[dic
     return unique, ambiguous
 
 
-def compare(a: dict, b: dict, *, tolerance: float = 0.0, rel_tolerance: float = 0.0,
+def compare(a: dict, b: dict, *, tolerance: Any = 0.0, rel_tolerance: Any = 0.0,
             stale_hours: Optional[float] = None,
             key_prefixes: Sequence[str] = ()) -> dict:
-    """Compare two snapshots. Returns ``{"rows", "counts", "unidentified"}``."""
+    """Compare two snapshots. Returns ``{"rows", "counts", "unidentified"}``.
+
+    ``tolerance`` and ``rel_tolerance`` (int, float or Decimal; a float is
+    taken as its shortest decimal, so 0.1 is exactly 0.1) apply to stats only.
+    ``delta`` in each row is a Decimal (module docstring, "How values compare").
+    """
+    tol = _tol_decimal(tolerance)
+    rel = _tol_decimal(rel_tolerance)
     ia, amb_a = _index(a, "a")
     ib, amb_b = _index(b, "b")
     window_ms = None if stale_hours is None else stale_hours * 3600_000.0
@@ -400,7 +484,7 @@ def compare(a: dict, b: dict, *, tolerance: float = 0.0, rel_tolerance: float = 
 
     def row(category: str, ident: Tuple[str, ...], oa: Optional[dict], ob: Optional[dict],
             kind: str = "", key: str = "", va: Any = None, vb: Any = None,
-            delta: Optional[float] = None, ts_a: Any = None, ts_b: Any = None) -> None:
+            delta: Optional[Decimal] = None, ts_a: Any = None, ts_b: Any = None) -> None:
         rows.append({
             "category": category,
             "kind": kind,
@@ -439,16 +523,20 @@ def compare(a: dict, b: dict, *, tolerance: float = 0.0, rel_tolerance: float = 
                 if eb is None:
                     row("only_a", ident, oa, ob, kind, key, va, None, None, ta, None)
                     continue
-                na, nb = _as_number(va), _as_number(vb)
+                na, nb = _as_decimal(va), _as_decimal(vb)
                 delta = None
-                if na is not None and nb is not None:
-                    delta = nb - na
+                if va == vb and type(va) is type(vb) and not isinstance(va, float):
+                    same = True  # identical (strings, ints, booleans, null)
+                    if na is not None:
+                        delta = Decimal(0)
+                elif na is not None and nb is not None:
+                    delta = _delta(na, nb)
                     if kind == "stat":
-                        same = _numbers_close(na, nb, tolerance, rel_tolerance)
+                        same = _within(na, nb, tol, rel)
                     else:
                         same = na == nb
                 else:
-                    same = va == vb
+                    same = _same_raw(va, vb)
                 stale = (kind == "stat" and window_ms is not None
                          and ((isinstance(ta, (int, float)) and now_a - ta > window_ms)
                               or (isinstance(tb, (int, float)) and now_b - tb > window_ms)))
@@ -546,7 +634,10 @@ def _cell(v: Any) -> str:
     if v is None:
         return ""
     if isinstance(v, float):
-        return repr(v)
+        return repr(v)  # the double as read: shortest round-trip, never rounded
+    if isinstance(v, Decimal):
+        # A delta: exact, positional notation, no float in between.
+        return "0" if v == 0 else format(v, "f")
     s = str(v)
     # One row per line, one cell per tab, and nothing the terminal would act
     # on: never let a value from the instance break the shape or the screen.
@@ -631,7 +722,17 @@ def build_parser() -> argparse.ArgumentParser:
                 "  0  objects and keys compared, nothing differs, every object compared\n"
                 "\n"
                 "Every run prints what it compared (objects and keys on each side and on\n"
-                "both); with --format tsv that summary goes to stderr."),
+                "both); with --format tsv that summary goes to stderr.\n"
+                "\n"
+                "values compare exactly (Decimal, never a rounded float):\n"
+                "  numeric = a JSON number, or a string that is a plain decimal\n"
+                "  ([+-]digits[.digits]); anything else (exponent forms, NaN, Infinity,\n"
+                "  whitespace, thousands separators, booleans, empty) compares as a string\n"
+                "  properties: identical strings, or plain decimals of equal value ('5'\n"
+                "  equals '5.0'); no tolerance ever\n"
+                "  stats: equal, or the exact difference within --tolerance or\n"
+                "  --rel-tolerance; a tolerated match shows its nonzero delta\n"
+                "  delta is B minus A, exact; values are shown as read"),
     )
     p.add_argument("--profile", action=_SideAction, dest="sides", metavar="NAME",
                    help="a live side: credential profile from .env (VCFOPS_<NAME>_*)."
@@ -654,10 +755,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--key-prefix", action="append", default=[], metavar="PREFIX",
                    help="only keys starting with PREFIX (repeatable), e.g. 'vCommunity|'")
     p.add_argument("--tolerance", type=float, default=0.0,
-                   help="absolute tolerance for numeric stats (default 0)")
+                   help="absolute tolerance for numeric stats only (default 0). Never"
+                        " applies to properties")
     p.add_argument("--rel-tolerance", type=float, default=0.0,
-                   help="relative tolerance for numeric stats, of the larger magnitude"
-                        " (default 0)")
+                   help="relative tolerance for numeric stats only, of the larger"
+                        " magnitude (default 0). Never applies to properties")
     p.add_argument("--stale-hours", type=float, default=None,
                    help="a stat sampled longer ago than this before its side's capture"
                         " is reported stale, not compared (properties are exempt: they"

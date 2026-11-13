@@ -9,6 +9,7 @@ read-only.
 from __future__ import annotations
 
 import json
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
@@ -185,7 +186,7 @@ def test_tolerances():
         return rows[0]
 
     assert cat()["category"] == "differ"
-    assert cat()["delta"] == pytest.approx(0.004)
+    assert cat()["delta"] == Decimal("0.004")  # exact, not a float difference
     assert cat(tolerance=0.01)["category"] == "match"
     assert cat(tolerance=0.001)["category"] == "differ"
     assert cat(rel_tolerance=0.0001)["category"] == "match"  # 0.0001 * 99.004 > 0.004
@@ -201,6 +202,148 @@ def test_property_numbers_compare_exactly_without_tolerance():
     ident = f"vc={VC1} moid=host-12"
     assert by_key[(ident, "vCommunity|Maintenance Mode Required")] == "match"  # "1.0" == "1"
     assert by_key[(ident, "vCommunity|Threshold")] == "differ"  # no tolerance for properties
+
+
+# --- exact numeric comparison (Codex PR 355: no float rounding) -------------
+
+def _doc(props=None, stats=None):
+    """A one-object snapshot (a non-VMWARE object, matched on kind plus name)."""
+    return {"format": keydiff.SNAPSHOT_FORMAT, "captured_at": NOW, "source": {},
+            "scope": {}, "unidentified": [], "objects": [{
+                "name": "obj", "adapter_kind": "X", "resource_kind": "K",
+                "resource_id": "r1", "identity": ["kind_name", "K", "obj"],
+                "properties": {k: {"value": v} for k, v in (props or {}).items()},
+                "stats": {k: {"value": v, "ts": NOW} for k, v in (stats or {}).items()}}]}
+
+
+def _prop_row(va, vb, **kw):
+    res = keydiff.compare(_doc(props={"p": va}), _doc(props={"p": vb}), **kw)
+    (row,) = res["rows"]
+    return row, keydiff.exit_code(res)
+
+
+def _stat_row(va, vb, **kw):
+    res = keydiff.compare(_doc(stats={"s": va}), _doc(stats={"s": vb}), **kw)
+    (row,) = res["rows"]
+    return row, keydiff.exit_code(res)
+
+
+def test_reviewer_example_large_integers_differ(tmp_path, capsys):
+    row, code = _prop_row("9007199254740992", "9007199254740993")
+    assert row["category"] == "differ" and code == keydiff.EXIT_DIFFER == 1
+    assert row["delta"] == 1
+    # Through the CLI, both output formats, the values shown as read.
+    sa, sb = tmp_path / "a.json", tmp_path / "b.json"
+    keydiff.write_snapshot(_doc(props={"p": "9007199254740992"}), str(sa))
+    keydiff.write_snapshot(_doc(props={"p": "9007199254740993"}), str(sb))
+    assert keydiff.main(["--snapshot-in", str(sa), "--snapshot-in", str(sb),
+                         "--format", "tsv"]) == 1
+    (r,) = _rows(capsys.readouterr().out)
+    assert (r["category"], r["value_a"], r["value_b"], r["delta"]) == (
+        "differ", "9007199254740992", "9007199254740993", "1")
+    assert keydiff.main(["--snapshot-in", str(sa), "--snapshot-in", str(sb)]) == 1
+    table = capsys.readouterr().out
+    assert "9007199254740992" in table and "9007199254740993" in table
+
+
+def test_equal_plain_decimals_match():
+    assert _prop_row("5", "5.0")[0]["category"] == "match"
+    assert _prop_row("-0.50", "-0.5")[0]["category"] == "match"
+    assert _stat_row(5, 5.0)[0]["category"] == "match"
+
+
+def test_thirty_digit_integers_differing_in_last_digit():
+    a, b = "123456789012345678901234567890", "123456789012345678901234567891"
+    row, code = _prop_row(a, b)
+    assert row["category"] == "differ" and code == 1 and row["delta"] == 1
+    # As JSON integers (stats): exact too, at any size.
+    row, code = _stat_row(int(a), int(b))
+    assert row["category"] == "differ" and code == 1 and row["delta"] == 1
+    assert _stat_row(int(a), int(a))[0]["category"] == "match"
+
+
+def test_high_precision_decimals_differ_past_17_significant_digits():
+    a, b = "0.123456789012345678901", "0.123456789012345678902"
+    assert float(a) == float(b)  # the bug: a float comparison calls these equal
+    row, code = _prop_row(a, b)
+    assert row["category"] == "differ" and code == 1
+    assert row["delta"] == Decimal("1E-21")
+    assert keydiff._cell(row["delta"]) == "0.000000000000000000001"
+
+
+def test_stat_tolerance_at_large_magnitude():
+    a = 10 ** 20
+    # Absolute tolerance 5: a difference of 5 is within it, 6 is not.
+    row, _ = _stat_row(a, a + 5, tolerance=5)
+    assert row["category"] == "match" and row["delta"] == 5  # tolerated, not identical
+    row, code = _stat_row(a, a + 6, tolerance=5)
+    assert row["category"] == "differ" and code == 1
+    # Relative 1e-19 of the larger magnitude (1e20 + 10) allows 10.000...001.
+    assert _stat_row(a, a + 10, rel_tolerance=1e-19)[0]["category"] == "match"
+    assert _stat_row(a, a + 11, rel_tolerance=1e-19)[0]["category"] == "differ"
+    # Without tolerance the same large pair is never an exact match.
+    assert _stat_row(a, a + 1)[0]["category"] == "differ"
+    # Distinct doubles stay distinct.
+    assert _stat_row(2.0 ** 53, 2.0 ** 53 + 2)[0]["category"] == "differ"
+
+
+def test_tolerance_never_applies_to_properties():
+    assert _prop_row("100", "100.5", tolerance=1)[0]["category"] == "differ"
+    assert _prop_row("100", "101", rel_tolerance=0.5)[0]["category"] == "differ"
+
+
+@pytest.mark.parametrize("va,vb,category", [
+    ("abc", "abc", "match"),
+    ("abc", "abd", "differ"),
+    ("", "", "match"),
+    ("", "0", "differ"),
+    ("true", "true", "match"),
+    ("true", "1", "differ"),
+    ("NaN", "NaN", "match"),
+    ("NaN", "nan", "differ"),
+    ("Infinity", "inf", "differ"),
+    ("1E3", "1000", "differ"),      # exponent forms are strings
+    ("1e3", "1e3", "match"),
+    (" 5", "5", "differ"),          # whitespace makes a string
+    ("5 ", "5 ", "match"),
+    ("1,000", "1000", "differ"),    # thousands separators make a string
+    ("1,000", "1,000", "match"),
+    ("\u0665", "5", "differ"),      # non-ASCII digits are not plain decimals
+    (None, None, "match"),
+    (None, "", "differ"),
+])
+def test_non_plain_decimals_compare_as_strings(va, vb, category):
+    assert _prop_row(va, vb)[0]["category"] == category
+
+
+def test_json_booleans_and_non_finite_floats():
+    assert _stat_row(True, 1)[0]["category"] == "differ"
+    assert _stat_row(True, True)[0]["category"] == "match"
+    assert _stat_row(float("nan"), float("nan"))[0]["category"] == "match"
+    assert _stat_row(float("inf"), float("-inf"))[0]["category"] == "differ"
+
+
+def test_large_value_displayed_unchanged_in_both_formats():
+    big = "123456789012345678901234567890.123456789"
+    res = keydiff.compare(_doc(props={"p": big}), _doc(props={"p": big}))
+    (r,) = _rows(keydiff.to_tsv(res))
+    assert r["value_a"] == r["value_b"] == big and r["delta"] == "0"
+    table = keydiff.to_table(res, show_matches=True, width=200)
+    assert big in table and "1.2345678901234568e+29" not in table
+    # A JSON integer stat beyond 2^53 too.
+    n = 2 ** 64 + 1
+    res = keydiff.compare(_doc(stats={"s": n}), _doc(stats={"s": n}))
+    (r,) = _rows(keydiff.to_tsv(res))
+    assert r["value_a"] == str(n) and r["category"] == "match"
+    assert str(n) in keydiff.to_table(res, show_matches=True, width=200)
+
+
+def test_help_describes_exact_comparison(capsys):
+    assert keydiff.main(["--help"]) == 0
+    out = capsys.readouterr().out
+    assert "values compare exactly" in out
+    assert "no tolerance ever" in out
+    assert "stats only" in out
 
 
 def test_staleness_window_applies_to_stats_only():
