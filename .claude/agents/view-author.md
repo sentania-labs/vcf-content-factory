@@ -54,6 +54,9 @@ Track-specific examples:
   `use_symptom_thresholds`):
   `knowledge/context/wire-formats/view_fidelity_wire_format.md`. Use
   `omit:` only to reproduce a source view, never on a new one.
+  SDK-adapter pak views that use any of these fields need a buildkit
+  cut after this change: pak CI pins the kit by tag, and kit 1.0.28 and
+  earlier carry the old loader, which rejects them.
 - Subject resource kind when the user names a class of object
   unambiguously ("hosts" → HostSystem; "VMs" → VirtualMachine).
 - Mix of built-in vs super metric columns: prefer built-ins where
