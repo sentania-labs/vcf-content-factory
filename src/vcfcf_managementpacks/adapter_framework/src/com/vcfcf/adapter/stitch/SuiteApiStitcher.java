@@ -52,6 +52,15 @@ import java.util.Map;
  * // Many objects per cycle (1.0.24): two calls per batch, not two per object.
  * // Properties go first. A 2xx means "accepted", not "every id landed".
  * SuiteApiBatchResult r = stitcher.pushBatch(propsByUuid, statsByUuid, ts);
+ *
+ * // Numeric properties: values String or Number ("data":[1.0] on the wire).
+ * stitcher.pushTypedBatch(typedPropsByUuid, statsByUuid, ts);
+ *
+ * // Events onto foreign resources: DIAGNOSTIC (NOTIFICATION is refused).
+ * stitcher.pushEvents(events);
+ *
+ * // Read-style POST queries (path must end in /query); throws like get().
+ * String json = stitcher.post("/api/resources/properties/latest/query", query);
  * }</pre>
  *
  * <h3>What this wraps</h3>
@@ -310,6 +319,112 @@ public final class SuiteApiStitcher {
     }
 
     /**
+     * Push properties whose values may be strings or numbers onto many
+     * foreign resources, with the default caps. A {@link String} is sent
+     * exactly as {@link #pushPropertiesBatch(Map, long)} sends it
+     * ({@code "values":["..."]}); a {@link Number} is sent as a numeric
+     * property ({@code "data":[<double>]}). {@code null}, NaN, infinite and
+     * any other value type are dropped and counted, never sent. Never throws.
+     * Full contract:
+     * {@link SuiteApiStitchClient#pushTypedPropertiesBatch(Map, long, int, int)}.
+     *
+     * @param byResource resource UUID to (statKey to {@link String} or {@link Number})
+     * @param timestamp  sample timestamp in epoch milliseconds, for every value
+     * @return what was sent; never {@code null}
+     */
+    public SuiteApiBatchResult pushTypedPropertiesBatch(
+            Map<String, ? extends Map<String, ?>> byResource, long timestamp) {
+        return client.pushTypedPropertiesBatch(byResource, timestamp);
+    }
+
+    /**
+     * {@link #pushTypedPropertiesBatch(Map, long)} with caller-chosen caps.
+     *
+     * @param byResource   resource UUID to (statKey to {@link String} or {@link Number})
+     * @param timestamp    sample timestamp in epoch milliseconds
+     * @param maxResources most resources per request
+     * @param maxBytes     most bytes of JSON (UTF-8) per request
+     * @return what was sent; never {@code null}
+     */
+    public SuiteApiBatchResult pushTypedPropertiesBatch(
+            Map<String, ? extends Map<String, ?>> byResource, long timestamp,
+            int maxResources, int maxBytes) {
+        return client.pushTypedPropertiesBatch(byResource, timestamp, maxResources, maxBytes);
+    }
+
+    /**
+     * {@link #pushBatch(Map, Map, long)} whose property values may be strings
+     * or numbers (sent as {@link #pushTypedPropertiesBatch(Map, long)} sends
+     * them): properties first, then stats.
+     *
+     * @param propertiesByResource resource UUID to (statKey to {@link String}
+     *                             or {@link Number})
+     * @param statsByResource      resource UUID to (statKey to double value)
+     * @param timestamp            sample timestamp in epoch milliseconds
+     * @return the two calls' results summed; never {@code null}
+     */
+    public SuiteApiBatchResult pushTypedBatch(
+            Map<String, ? extends Map<String, ?>> propertiesByResource,
+            Map<String, ? extends Map<String, Double>> statsByResource,
+            long timestamp) {
+        return client.pushTypedBatch(propertiesByResource, statsByResource, timestamp);
+    }
+
+    /**
+     * {@link #pushTypedBatch(Map, Map, long)} with caller-chosen caps.
+     *
+     * @param propertiesByResource resource UUID to (statKey to {@link String}
+     *                             or {@link Number})
+     * @param statsByResource      resource UUID to (statKey to double value)
+     * @param timestamp            sample timestamp in epoch milliseconds
+     * @param maxResources         most resources per request
+     * @param maxBytes             most bytes of JSON (UTF-8) per request
+     * @return the two calls' results summed; never {@code null}
+     */
+    public SuiteApiBatchResult pushTypedBatch(
+            Map<String, ? extends Map<String, ?>> propertiesByResource,
+            Map<String, ? extends Map<String, Double>> statsByResource,
+            long timestamp, int maxResources, int maxBytes) {
+        return client.pushTypedBatch(propertiesByResource, statsByResource, timestamp,
+                maxResources, maxBytes);
+    }
+
+    /**
+     * Push events onto resources, foreign ones included
+     * ({@code POST /api/events/bulk}), at most
+     * {@link SuiteApiStitchClient#EVENTS_MAX_PER_REQUEST_DEFAULT} events and
+     * about 1 MB per request. Never throws; a failure is one WARN line and
+     * stops the call. Count from the result (events, not resources).
+     *
+     * <p><strong>Use {@code DIAGNOSTIC}.</strong> A {@code NOTIFICATION}
+     * event pushed onto another adapter's resource is answered 200 and
+     * silently discarded, so this call refuses it (dropped, counted, WARN);
+     * {@code DIAGNOSTIC} events onto a foreign VM are proven to land (see
+     * {@link SuiteApiEvent}). A 2xx means "accepted", not "landed". Full
+     * contract: {@link SuiteApiStitchClient#pushEvents(java.util.Collection, int, int)}.
+     *
+     * @param events the events; no-op if {@code null} or empty
+     * @return what was sent; never {@code null}
+     */
+    public SuiteApiBatchResult pushEvents(java.util.Collection<SuiteApiEvent> events) {
+        return client.pushEvents(events);
+    }
+
+    /**
+     * {@link #pushEvents(java.util.Collection)} with caller-chosen caps; a
+     * cap below 1 falls back to its default with a WARN.
+     *
+     * @param events    the events
+     * @param maxEvents most events per request
+     * @param maxBytes  most bytes of JSON (UTF-8) per request
+     * @return what was sent; never {@code null}
+     */
+    public SuiteApiBatchResult pushEvents(java.util.Collection<SuiteApiEvent> events,
+            int maxEvents, int maxBytes) {
+        return client.pushEvents(events, maxEvents, maxBytes);
+    }
+
+    /**
      * Add one child to an existing resource, additively, through the Suite
      * API ({@code POST /api/resources/{parent}/relationships/children}).
      *
@@ -407,6 +522,32 @@ public final class SuiteApiStitcher {
     public String get(String path, String accept)
             throws java.io.IOException, InterruptedException {
         return client.get(path, accept);
+    }
+
+    /**
+     * Authenticated POST of a JSON query to a read-style Suite API endpoint
+     * ({@code /api/resources/query}, {@code /api/resources/stats/latest/query},
+     * {@code /api/resources/properties/latest/query},
+     * {@code /api/resources/stats/query}), returning the response body.
+     *
+     * <p>Not a write path: a path that does not end in {@code /query} is
+     * refused with {@link IllegalArgumentException} before anything is sent.
+     * Otherwise the contract is {@link #get(String)}'s: it throws, so catch at
+     * the call site; a non-2xx answer is a {@link SuiteApiHttpException}
+     * carrying the status, the {@code apiErrorCode} and a body excerpt; one
+     * re-acquire and retry on 401; bodies are never logged.
+     *
+     * @param path     path relative to the Suite API base, ending in {@code /query}
+     * @param jsonBody the query document
+     * @return the response body
+     * @throws java.io.IOException  on HTTP (as {@link SuiteApiHttpException})
+     *                              or network error
+     * @throws InterruptedException if the calling thread is interrupted
+     * @see SuiteApiStitchClient#post(String, String)
+     */
+    public String post(String path, String jsonBody)
+            throws java.io.IOException, InterruptedException {
+        return client.post(path, jsonBody);
     }
 
     /**

@@ -122,6 +122,18 @@ Required fields (9.x schema): `resource-stat-content[].id`;
 together". Timestamps in epoch milliseconds. `resource-stat-content[]`
 also accepts an optional `resourceKey`; not needed when `id` is set.
 
+**Numeric property values** (2026-11-12, from the specs; not yet live
+tested): a property entry carries `data` instead of `values`, as the
+vendor example on `POST /api/resources/properties` and
+`POST /api/resources/{id}/properties` shows in all three specs (8.18,
+9.0, 9.1): `{"statKey":"config|num|processes","timestamps":[...],"data":[93.0]}`
+beside `{"statKey":"system|availability",...,"values":["UP"]}` in one
+`property-content` array. The latest-properties read
+(`POST /api/resources/properties/latest/query`) answers in the same shape.
+The facade's `pushTypedPropertiesBatch` / `pushTypedBatch` emit it
+(`tier2_architecture.md`, "Stitcher reads, events and numeric properties").
+Open: a numeric sample on a key whose history is strings (design E3).
+
 ### 8.18 schema caveat
 
 The 8.18.7 springfox schema names two fields differently from its own
