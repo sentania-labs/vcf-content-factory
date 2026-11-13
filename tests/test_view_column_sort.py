@@ -12,8 +12,9 @@ were parsed nowhere and silently dropped.
 Covers:
   A. render: ``sort: asc|desc`` emits sortCriteria true/false in the vendor
      position, on that column only; no ``sort:`` emits nothing.
-  B. loader: bad values, more than one sorted column, non-list views,
-     time_segment and instanced_group columns are rejected.
+  B. loader: bad values, trend views and time_segment columns are
+     rejected; several sorted columns, distribution views and
+     instanced-group driver/member columns render (widened 2026-11-12).
   C. dashboard loader: sort_by_column / sort_by_dir on a View widget are
      rejected with a pointer to the view column key; HealthChart keeps
      sort_by_dir.
@@ -130,16 +131,9 @@ def _ig_view() -> dict:
          "sort must be 'asc' or 'desc'"),
         (lambda: _view(columns=[{"attribute": "a|b", "display_name": "A", "sort": True}]),
          "sort must be 'asc' or 'desc'; got bool"),
-        (lambda: _view(columns=[
-            {"attribute": "a|b", "display_name": "A", "sort": "asc"},
-            {"attribute": "c|d", "display_name": "B", "sort": "desc"},
-        ]), "sort is set on 2 columns ('A', 'B'); set it on one column"),
         (lambda: _view(data_type="trend",
                        columns=[{"attribute": "a|b", "display_name": "A", "sort": "asc"}]),
-         "only supported on data_type: list"),
-        (lambda: _view(data_type="distribution",
-                       columns=[{"attribute": "a|b", "display_name": "A", "sort": "asc"}]),
-         "only supported on data_type: list"),
+         "not supported on data_type: trend"),
     ],
 )
 def test_loader_rejects_bad_sort(tmp_path, build, needle):
@@ -167,13 +161,46 @@ def test_sort_beside_time_segment_column_rejected(tmp_path):
         load_view(_write(tmp_path, data))
 
 
-def test_sort_on_instanced_group_column_rejected(tmp_path):
-    from vcfcf_dashboards.loader import DashboardValidationError, load_view
+# Widened 2026-11-12 (view schema fidelity): several sorted columns,
+# distribution views and instanced-group columns are the vendor shape.
 
+def test_sort_on_several_columns_renders_each(tmp_path):
+    data = _view()
+    data["columns"][0]["sort"] = "asc"
+    data["columns"][1]["sort"] = "desc"
+    first, second = _items(tmp_path, data)
+    assert '<Property name="sortCriteria" value="true"/><Property name="isProperty" value="true"/>' in first
+    assert '<Property name="sortCriteria" value="false"/><Property name="isProperty" value="false"/>' in second
+
+
+def test_sort_on_distribution_view_column(tmp_path):
+    data = _view(data_type="distribution",
+                 columns=[{"attribute": "a|b", "display_name": "A", "sort": "asc"}])
+    (item,) = _items(tmp_path, data)
+    assert (
+        '<Property name="transformations"><List><Item value="CURRENT"/></List></Property>'
+        '<Property name="sortCriteria" value="true"/><Property name="isProperty" value="false"/>'
+    ) in item
+
+
+def test_sort_on_instanced_group_driver_in_vendor_position(tmp_path):
+    data = _ig_view()
+    data["columns"][0]["sort"] = "asc"
+    driver = _items(tmp_path, data)[0]
+    assert (
+        '<Property name="rollUpCount" value="0"/><Property name="sortCriteria" value="true"/>'
+        '<Property name="isInstancedGroup" value="true"/>'
+    ) in driver
+
+
+def test_sort_on_instanced_group_member_in_vendor_position(tmp_path):
     data = _ig_view()
     data["columns"][1]["sort"] = "desc"
-    with pytest.raises(DashboardValidationError, match="not supported on instanced_group columns"):
-        load_view(_write(tmp_path, data))
+    member = _items(tmp_path, data)[1]
+    assert (
+        '<Property name="transformations"><List><Item value="CURRENT"/></List></Property>'
+        '<Property name="sortCriteria" value="false"/><Property name="isProperty" value="false"/>'
+    ) in member
 
 
 # C. dashboard widget keys ----------------------------------------------------

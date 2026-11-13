@@ -263,10 +263,69 @@ class ViewColumn:
     # Wire format: knowledge/context/wire-formats/
     # dashboard_sort_color_default_summary_rows.md §#175.
     sort: Optional[str] = None
+    # Per-column roll-up (YAML `roll_up_type`, `roll_up_count`,
+    # `roll_up_unit`). None = the renderer's historical default for the
+    # column kind (generic: AVG or NONE for super metrics, count 1;
+    # instanced-group member: NONE, or absent on a property, count 0).
+    # Wire format: knowledge/context/wire-formats/view_fidelity_wire_format.md.
+    roll_up_type: Optional[str] = None
+    roll_up_count: Optional[int] = None
+    roll_up_unit: Optional[str] = None
+    # `useSymptomThresholds` Property. Only `false` is evidenced.
+    use_symptom_thresholds: Optional[bool] = None
+    # addTimestampAsColumn / isShowRelativeTimestamp. None = the historical
+    # `false` on both.
+    add_timestamp_as_column: Optional[bool] = None
+    show_relative_timestamp: Optional[bool] = None
+    # Wire Properties this column must NOT emit (YAML `omit:`), by YAML
+    # field name, from _COLUMN_OMITTABLE. Empty = emit every default.
+    omit: List[str] = field(default_factory=list)
+    # localizedAttributeName, distribution `additional_columns:` only
+    # (YAML `localized_name`).
+    localized_attribute_name: Optional[str] = None
 
 
 # YAML `sort:` value -> sortCriteria wire value.
 _COLUMN_SORT_CRITERIA: dict[str, str] = {"asc": "true", "desc": "false"}
+
+# Roll-up vocabulary, every value in the vendor corpus (vmbro reference
+# pak plus the 9.1.1 and 8.18.7 built-in view exports): rollUpType is AVG
+# or NONE; rollUpUnit appears only beside rollUpType=AVG.
+_VALID_ROLL_UP_TYPES: frozenset[str] = frozenset({"AVG", "NONE"})
+_VALID_ROLL_UP_UNITS: frozenset[str] = frozenset({"MINUTES", "HOURS", "DAYS", "WEEKS", "MONTHS"})
+
+# YAML column `omit:` names -> the wire Property name(s) they suppress.
+# Each entry is a Property the product's own exports carry on some columns
+# and leave out on others; `omit:` reproduces the leave-out exactly.
+_COLUMN_OMITTABLE: dict[str, tuple[str, ...]] = {
+    "roll_up_type": ("rollUpType",),
+    "transformation": ("transformations",),
+    "add_timestamp_as_column": ("addTimestampAsColumn",),
+    "show_relative_timestamp": ("isShowRelativeTimestamp",),
+    "ascending_range": ("ascendingRange",),
+    "display_name": ("displayName",),
+    "is_property": ("isProperty",),
+    "subject": ("adapterKind", "resourceKind"),
+}
+
+# YAML view `omit:` names. `metadata` and `pagination` drop the whole
+# control; `include_resource_creation_time` drops one metadata Property.
+_VIEW_OMITTABLE: frozenset[str] = frozenset(
+    {"metadata", "pagination", "include_resource_creation_time"}
+)
+
+# `<Usage>` values, in the order the product always emits them.
+_USAGE_ORDER: tuple[str, ...] = ("dashboard", "report", "details", "content")
+
+# SubjectType `type=` values.
+_VALID_SUBJECT_TYPES: frozenset[str] = frozenset({"descendant", "self"})
+_DEFAULT_SUBJECT_TYPES: tuple[str, ...] = ("descendant", "self")
+
+_HEX_COLOR_RE = re.compile(r"^[0-9A-Fa-f]{6}$")
+
+# Same wide gate as render._SM_COLUMN_PREFIX_RE: anything shaped like a
+# super metric reference.
+_SM_ADDITIONAL_RE = re.compile(r"(?i:@?supermetric)\s*:")
 
 
 @dataclass
@@ -375,6 +434,26 @@ class BucketsConfig:
     max_value: float = 100.0
     is_dynamic: bool = False
     calc_function: str = "DISCRETE"  # used only when is_dynamic=True
+    # Whether the YAML set `count` / `calc_function` explicitly. The
+    # historical render emits bucketCount only in fixed mode and
+    # dynamicCalcFunction only in dynamic mode; an explicit value is also
+    # emitted in the other mode (vendor shape), an implicit one never is.
+    count_set: bool = False
+    calc_function_set: bool = False
+    # Explicit bucket ranges (YAML `ranges:`) -> bucketInfos. Fixed mode
+    # only; renders dynamicCalcFunction=SIMPLEMAXMIN, the only function
+    # the vendor corpus pairs with bucketInfos.
+    ranges: List["BucketRange"] = field(default_factory=list)
+    # `isSum` Property; None = not emitted (historical).
+    is_sum: Optional[bool] = None
+
+
+@dataclass
+class BucketRange:
+    """One explicit distribution bucket: one ``bucketInfos`` Item."""
+    start: Union[int, float]
+    end: Union[int, float]
+    color: Optional[str] = None  # bucketColor, RRGGBB without '#'
 
 
 @dataclass
@@ -411,8 +490,9 @@ class SubjectFilterCondition:
       - ``filterType``: ``"metrics"`` | ``"properties"``
       - ``metricKey``: the same colon/pipe metric-key syntax used
         elsewhere in this loader (e.g. ``net|usage_average``).
-      - ``condition``: ``"EQUALS"`` | ``"NOT_EQUALS"`` | ``"GREATER_THAN"``
-        (no LESS_THAN or other comparator observed anywhere in corpus).
+      - ``condition``: originally ``"EQUALS"`` | ``"NOT_EQUALS"`` |
+        ``"GREATER_THAN"``; widened 2026-11-12 to the eight comparators
+        the built-in view exports carry (see ``_VALID_CONDITIONS``).
       - ``metricValue``: ``{"isStringMetric": bool, "value": ...}``,
         ``isStringMetric`` is derived from the Python type of ``value``
         (str -> true, int/float -> false); every observed occurrence is
@@ -420,7 +500,8 @@ class SubjectFilterCondition:
         literals (e.g. ``config|extraConfig|vcpu_hotadd == "true"`` has
         ``isStringMetric: true`` despite looking boolean).
       - ``transform`` (optional): ``"AVG"`` | ``"CURRENT"``, omitted
-        entirely in several vendor examples, never any other value.
+        entirely in several vendor examples; widened 2026-11-12 to
+        ``LAST``/``SUM``/``MAX`` from the built-in exports.
       - ``businessHours`` (optional bool), omitted in several vendor
         examples; when present, always paired with a metrics-type,
         transform-bearing condition in the corpus (co-occurrence, not
@@ -438,17 +519,31 @@ class SubjectFilterCondition:
     """
     filter_type: str          # "metrics" | "properties"
     metric_key: str
-    condition: str             # "EQUALS" | "NOT_EQUALS" | "GREATER_THAN"
-    value: Union[str, int, float]
-    transform: Optional[str] = None       # "AVG" | "CURRENT"
+    condition: str             # see _VALID_CONDITIONS
+    value: Union[str, int, float, None]
+    transform: Optional[str] = None       # see _VALID_TRANSFORMS
     business_hours: Optional[bool] = None
+    # Explicit isStringMetric, only for a null value (EXISTS/NOT_EXISTS),
+    # where it cannot be derived from the value's type.
+    string_metric: Optional[bool] = None
 
     _VALID_FILTER_TYPES = {"metrics", "properties"}
-    _VALID_CONDITIONS = {"EQUALS", "NOT_EQUALS", "GREATER_THAN"}
-    _VALID_TRANSFORMS = {"AVG", "CURRENT"}
+    # 2026-11-12 audit of every SubjectType filter in the 9.1.1 and 8.18.7
+    # built-in view exports and the vCommunity 0.8.1 pak (1,161 conditions):
+    # EQUALS, NOT_EQUALS, GREATER_THAN, LESS_THAN, CONTAINS, NOT_CONTAINS,
+    # EXISTS, NOT_EXISTS. No other comparator appears.
+    _VALID_CONDITIONS = {
+        "EQUALS", "NOT_EQUALS", "GREATER_THAN", "LESS_THAN",
+        "CONTAINS", "NOT_CONTAINS", "EXISTS", "NOT_EXISTS",
+    }
+    _VALUELESS_CONDITIONS = {"EXISTS", "NOT_EXISTS"}
+    # Same audit: transform is absent, CURRENT, AVG, LAST, SUM or MAX.
+    _VALID_TRANSFORMS = {"AVG", "CURRENT", "LAST", "SUM", "MAX"}
 
     @property
     def is_string_metric(self) -> bool:
+        if self.value is None:
+            return bool(self.string_metric)
         return isinstance(self.value, str)
 
     def validate(self, view_name: str) -> None:
@@ -475,7 +570,30 @@ class SubjectFilterCondition:
                 "\"false\" literals or numeric thresholds; use a quoted "
                 "string if that's the intent"
             )
-        if not isinstance(self.value, (str, int, float)):
+        if self.value is None:
+            # A null value is the 8.18.7 built-in EXISTS shape
+            # ({"isStringMetric":true,"value":null}); isStringMetric then
+            # cannot be derived, so the author states it.
+            if self.condition not in self._VALUELESS_CONDITIONS:
+                raise DashboardValidationError(
+                    f"view {view_name}: subject_filter.value is required for "
+                    f"condition {self.condition!r}; only "
+                    f"{sorted(self._VALUELESS_CONDITIONS)} accept value: null"
+                )
+            if not isinstance(self.string_metric, bool):
+                raise DashboardValidationError(
+                    f"view {view_name}: subject_filter condition "
+                    f"{self.condition} with value: null needs string_metric: "
+                    "true|false (the wire isStringMetric flag cannot be derived "
+                    "from a null value)"
+                )
+        elif self.string_metric is not None:
+            raise DashboardValidationError(
+                f"view {view_name}: subject_filter.string_metric is only valid "
+                "with value: null; otherwise isStringMetric is derived from the "
+                "value's type"
+            )
+        if self.value is not None and not isinstance(self.value, (str, int, float)):
             raise DashboardValidationError(
                 f"view {view_name}: subject_filter.value must be a string, "
                 f"int, or float; got {type(self.value).__name__}"
@@ -499,6 +617,9 @@ class ViewSubject:
     """One (adapter_kind, resource_kind) subject of a view (``subjects:``)."""
     adapter_kind: str
     resource_kind: str
+    # SubjectType `type=` values for this kind, in emission order (YAML
+    # `types:` on a `subjects:` entry). None = the view-level default.
+    types: Optional[List[str]] = None
 
     @property
     def key(self) -> tuple:
@@ -562,6 +683,31 @@ class ViewDef:
     # Provenance: "factory", a third-party project slug, or "" (unknown).
     # Populated by the loader from source_path; never author-supplied.
     provenance: str = ""
+    # --- Fidelity fields (2026-11-12). Every one defaults to the value
+    # that reproduces the historical render exactly. Wire format:
+    # knowledge/context/wire-formats/view_fidelity_wire_format.md.
+    # SubjectType `type=` set for the scalar `subject:` (YAML
+    # `subject.types`); None = descendant + self.
+    subject_types: Optional[List[str]] = None
+    # `<Usage>` values (YAML `usage:`); None = all four.
+    usage: Optional[List[str]] = None
+    # `<SubjectsGroupBy>` kind (YAML `group_by:`), list views only.
+    group_by: Optional[ViewSubject] = None
+    # pagination-control `size` (YAML `page_size:`); None = 500.
+    page_size: Optional[int] = None
+    # metadata `listTopResultSize` (YAML `top_n:`); None = -1 (all rows).
+    top_n: Optional[int] = None
+    # metadata `maxPointsCount`; None = 5000.
+    max_points_count: Optional[int] = None
+    # metadata `includeResourceCreationTime`; None = false.
+    include_resource_creation_time: Optional[bool] = None
+    # metadata `distributionColor` (RRGGBB); None = not emitted.
+    distribution_color: Optional[str] = None
+    # metadata `distributionAdditionalColumns` (YAML
+    # `additional_columns:`), distribution views only.
+    additional_columns: List[ViewColumn] = field(default_factory=list)
+    # View-level `omit:` names, from _VIEW_OMITTABLE.
+    omit: List[str] = field(default_factory=list)
 
     @property
     def subject_kinds(self) -> List[tuple]:
@@ -570,6 +716,19 @@ class ViewDef:
         if self.subjects:
             return [sub.key for sub in self.subjects]
         return [(self.adapter_kind, self.resource_kind)]
+
+    @property
+    def subject_type_entries(self) -> List[tuple]:
+        """``[(adapter_kind, resource_kind, [types...]), ...]``: the
+        SubjectType elements to emit, in order. Defaults to descendant then
+        self for every kind (the historical shape)."""
+        default = list(self.subject_types or _DEFAULT_SUBJECT_TYPES)
+        if self.subjects:
+            return [
+                (sub.adapter_kind, sub.resource_kind, list(sub.types or default))
+                for sub in self.subjects
+            ]
+        return [(self.adapter_kind, self.resource_kind, default)]
 
     def validate(self, enforce_framework_prefix: bool = True, embedded_in_dashboard: bool = False) -> None:
         import warnings
@@ -621,7 +780,7 @@ class ViewDef:
                 f"view {self.name}: at least one column required"
             )
         for c in self.columns:
-            if not c.attribute or not c.display_name:
+            if not c.attribute or (not c.display_name and "display_name" not in c.omit):
                 raise DashboardValidationError(
                     f"view {self.name}: column requires attribute and display_name"
                 )
@@ -668,6 +827,7 @@ class ViewDef:
                 self._validate_time_segment_column(c)
                 continue
             self._validate_column(c)
+            self._validate_column_fidelity(c)
         # Instanced-group cross-check: every member column's group `name`
         # must have a matching driver column somewhere in the same view.
         # Without the driver, VCF Ops has no isInstancedGroup/instanceGroupName
@@ -689,6 +849,7 @@ class ViewDef:
                     "column first."
                 )
         self._validate_column_sort()
+        self._validate_fidelity()
         # SubjectType metric filter, OR of AND-groups.
         if self.subject_filter is not None:
             if not self.subject_filter:
@@ -872,10 +1033,18 @@ class ViewDef:
                 ("ascending_range", c.ascending_range),
                 ("instanced_group", c.instanced_group),
                 ("sort", c.sort),
+                ("roll_up_type", c.roll_up_type),
+                ("roll_up_count", c.roll_up_count),
+                ("roll_up_unit", c.roll_up_unit),
+                ("use_symptom_thresholds", c.use_symptom_thresholds),
+                ("add_timestamp_as_column", c.add_timestamp_as_column),
+                ("show_relative_timestamp", c.show_relative_timestamp),
             ) if val not in (None, "")
         ]
         if c.is_property or c.is_string_attribute:
             stray.append("is_property/is_string_attribute")
+        if c.omit:
+            stray.append("omit")
         if stray:
             raise DashboardValidationError(
                 f"{name_ctx}: time_segment columns carry no metric fields; "
@@ -883,12 +1052,20 @@ class ViewDef:
             )
 
     def _validate_column_sort(self) -> None:
-        """Column ``sort:`` (issue #175): value, view type, column kind and
-        the one-sorted-column limit. The product accepts several sorted
-        columns, but which one wins is unverified, so the factory allows
-        one. Wire format: knowledge/context/wire-formats/
-        dashboard_sort_color_default_summary_rows.md §#175."""
+        """Column ``sort:`` (issue #175, widened 2026-11-12): value, view
+        type and column kind.
+
+        Several sorted columns per view are the vendor shape (built-in
+        exports carry up to 17 sortCriteria columns in one list view), as
+        is sortCriteria on a distribution view's column and on an
+        instanced-group driver or member column; all are accepted. Trend
+        views carry no sortCriteria in any surveyed export, so sort stays
+        rejected there. Which sorted column takes precedence is the
+        product's behaviour and unverified live. Wire format:
+        knowledge/context/wire-formats/view_fidelity_wire_format.md §Sort.
+        """
         sorted_cols = [c for c in self.columns if c.sort is not None]
+        sorted_cols += [c for c in self.additional_columns if c.sort is not None]
         if not sorted_cols:
             return
         for c in sorted_cols:
@@ -897,33 +1074,353 @@ class ViewDef:
                 raise DashboardValidationError(
                     f"{name_ctx}: sort must be 'asc' or 'desc', got {c.sort!r}"
                 )
-            if c.instanced_group is not None:
-                raise DashboardValidationError(
-                    f"{name_ctx}: sort is not supported on instanced_group columns "
-                    "here. Vendor exports carry sortCriteria on the instanced-group "
-                    "driver column (rollUpCount, sortCriteria, isInstancedGroup), but "
-                    "the factory does not model it yet. Sort on an ordinary column."
-                )
-        if self.data_type != "list":
+        if self.data_type == "trend":
             raise DashboardValidationError(
-                f"view {self.name}: column sort is only supported on data_type: list "
-                f"views (got {self.data_type!r}). Distribution views carry sortCriteria "
-                f"in vendor exports too, but it is only verified on list views; its "
-                f"effect elsewhere is unverified."
-            )
-        if len(sorted_cols) > 1:
-            raise DashboardValidationError(
-                f"view {self.name}: sort is set on {len(sorted_cols)} columns "
-                f"({', '.join(repr(c.display_name) for c in sorted_cols)}); set it on "
-                "one column. Which column wins when several are sorted is unverified."
+                f"view {self.name}: column sort is not supported on data_type: trend "
+                f"views; no surveyed vendor export carries sortCriteria on a trend "
+                f"view column, so its effect is unknown."
             )
         if any(c.time_segment is not None for c in self.columns):
             raise DashboardValidationError(
                 f"view {self.name}: sort cannot be set on column "
                 f"{sorted_cols[0].display_name!r}: the view has a time_segment "
-                "column, which always carries sortCriteria=false (vendor shape), so "
-                "this would make two sorted columns and which one wins is unverified."
+                "column, which always carries sortCriteria=false (vendor shape); no "
+                "export shows a second sorted column beside a time segment."
             )
+
+    def _validate_column_fidelity(self, c: "ViewColumn") -> None:  # noqa: F821
+        """Roll-up, timestamp, useSymptomThresholds and ``omit:`` on one
+        attributeInfos column (not time_segment, validated elsewhere)."""
+        name_ctx = f"view {self.name!r} column {c.display_name or c.attribute!r}"
+        ig = c.instanced_group
+        is_driver = ig is not None and ig.is_driver
+        is_member = ig is not None and not ig.is_driver
+        if is_driver:
+            stray = [
+                label for label, val in (
+                    ("roll_up_type", c.roll_up_type),
+                    ("roll_up_count", c.roll_up_count),
+                    ("roll_up_unit", c.roll_up_unit),
+                    ("use_symptom_thresholds", c.use_symptom_thresholds),
+                    ("add_timestamp_as_column", c.add_timestamp_as_column),
+                    ("show_relative_timestamp", c.show_relative_timestamp),
+                ) if val is not None
+            ]
+            if stray:
+                raise DashboardValidationError(
+                    f"{name_ctx}: an instanced_group driver column (Instance Name) "
+                    f"has a fixed wire shape and cannot set {', '.join(stray)}"
+                )
+        self._validate_roll_up(c, name_ctx)
+        if c.use_symptom_thresholds is not None and c.use_symptom_thresholds is not False:
+            raise DashboardValidationError(
+                f"{name_ctx}: use_symptom_thresholds only accepts false; every "
+                "vendor export carries useSymptomThresholds=false and none carries "
+                "true, so its effect is unverified."
+            )
+        self._validate_column_omit(c, name_ctx, is_driver=is_driver, is_member=is_member)
+
+    def _validate_roll_up(self, c: "ViewColumn", name_ctx: str) -> None:  # noqa: F821
+        if c.roll_up_type is not None and c.roll_up_type not in _VALID_ROLL_UP_TYPES:
+            raise DashboardValidationError(
+                f"{name_ctx}: roll_up_type must be one of "
+                f"{sorted(_VALID_ROLL_UP_TYPES)}, got {c.roll_up_type!r}"
+            )
+        if c.roll_up_count is not None and c.roll_up_count < 0:
+            raise DashboardValidationError(
+                f"{name_ctx}: roll_up_count must be >= 0, got {c.roll_up_count}"
+            )
+        if c.roll_up_unit is not None:
+            if c.roll_up_unit not in _VALID_ROLL_UP_UNITS:
+                raise DashboardValidationError(
+                    f"{name_ctx}: roll_up_unit must be one of "
+                    f"{sorted(_VALID_ROLL_UP_UNITS)}, got {c.roll_up_unit!r}"
+                )
+            if c.roll_up_type != "AVG":
+                raise DashboardValidationError(
+                    f"{name_ctx}: roll_up_unit needs roll_up_type: AVG; every vendor "
+                    "export pairs rollUpUnit with rollUpType=AVG"
+                )
+
+    def _validate_column_omit(
+        self, c: "ViewColumn", name_ctx: str, *, is_driver: bool, is_member: bool,  # noqa: F821
+    ) -> None:
+        """``omit:`` names must exist, be unique, name a Property this column
+        would otherwise emit, and not contradict a field the author set."""
+        if not c.omit:
+            return
+        seen: set = set()
+        for name in c.omit:
+            if name not in _COLUMN_OMITTABLE:
+                raise DashboardValidationError(
+                    f"{name_ctx}: omit entry {name!r} is not omittable; allowed: "
+                    f"{sorted(_COLUMN_OMITTABLE)}"
+                )
+            if name in seen:
+                raise DashboardValidationError(f"{name_ctx}: omit lists {name!r} twice")
+            seen.add(name)
+        if is_driver:
+            bad = sorted(set(c.omit) - {"display_name"})
+            if bad:
+                raise DashboardValidationError(
+                    f"{name_ctx}: an instanced_group driver column emits none of "
+                    f"{bad}; only display_name can be omitted there"
+                )
+
+        def _numeric(v) -> bool:
+            if v is None or isinstance(v, bool):
+                return False
+            try:
+                float(str(v))
+                return True
+            except ValueError:
+                return False
+
+        conflicts = {
+            "roll_up_type": c.roll_up_type is not None or c.roll_up_unit is not None,
+            "transformation": any(v is not None for v in (
+                c.transformation, c.percentile, c.transform_expression,
+                c.metric_to_relate_with, c.localized_metric_to_relate_with,
+                c.operator_to_relate_with,
+            )),
+            "add_timestamp_as_column": c.add_timestamp_as_column is not None,
+            "show_relative_timestamp": c.show_relative_timestamp is not None,
+            "ascending_range": c.ascending_range is not None,
+            "display_name": bool(c.display_name),
+            "is_property": bool(c.is_property),
+            "subject": c.subject is not None,
+        }
+        for name in c.omit:
+            if conflicts[name]:
+                raise DashboardValidationError(
+                    f"{name_ctx}: omit: [{name}] contradicts the column's own "
+                    f"{name} setting; drop one of them"
+                )
+        nothing = []
+        if "roll_up_type" in c.omit and is_member and c.is_property:
+            nothing.append("roll_up_type (a property member column emits no rollUpType)")
+        if "ascending_range" in c.omit and not (
+            _numeric(c.yellow_bound) or _numeric(c.orange_bound) or _numeric(c.red_bound)
+        ):
+            nothing.append("ascending_range (no numeric color bound is set)")
+        if "subject" in c.omit and len(self.subject_kinds) > 1:
+            nothing.append("subject (columns of a multi-subject view are unbound by default)")
+        if nothing:
+            raise DashboardValidationError(
+                f"{name_ctx}: omit names a Property this column does not emit: "
+                + "; ".join(nothing)
+            )
+
+    def _validate_additional_column(self, c: "ViewColumn") -> None:  # noqa: F821
+        """One distribution ``additional_columns:`` entry: the metadata
+        ``distributionAdditionalColumns`` Item shape, which carries no color
+        bounds, time-point siblings, timestamps or group config."""
+        name_ctx = f"view {self.name!r} additional column {c.display_name or c.attribute!r}"
+        if not c.attribute or (not c.display_name and "display_name" not in c.omit):
+            raise DashboardValidationError(
+                f"{name_ctx}: additional column requires attribute and display_name"
+            )
+        if _SM_ADDITIONAL_RE.match(c.attribute) or c.attribute.startswith("sm_"):
+            # The vendor shape carries the full "Super Metric|sm_<uuid>" key
+            # (vCommunity 0.8.1 "vSphere Switch Version"), which passes
+            # through verbatim. Name references are not resolved here: the
+            # dependency walkers only scan `columns:`, so a name in an
+            # additional column would ship without its super metric.
+            raise DashboardValidationError(
+                f"{name_ctx}: additional_columns accept a super metric only as the "
+                f"literal 'Super Metric|sm_<uuid>' key; supermetric:\"<name>\" and "
+                f"bare sm_<uuid> references are not resolved in additional columns"
+            )
+        if not c.localized_attribute_name:
+            raise DashboardValidationError(
+                f"{name_ctx}: localized_name is required; every vendor "
+                "distributionAdditionalColumns Item carries localizedAttributeName "
+                "(the metric's own label, e.g. 'CPU|Usage')"
+            )
+        stray = [
+            label for label, val in (
+                ("yellow_bound", c.yellow_bound), ("orange_bound", c.orange_bound),
+                ("red_bound", c.red_bound), ("ascending_range", c.ascending_range),
+                ("transform_expression", c.transform_expression),
+                ("metric_to_relate_with", c.metric_to_relate_with),
+                ("instanced_group", c.instanced_group), ("time_segment", c.time_segment),
+                ("subject", c.subject), ("roll_up_unit", c.roll_up_unit),
+                ("use_symptom_thresholds", c.use_symptom_thresholds),
+                ("add_timestamp_as_column", c.add_timestamp_as_column),
+            ) if val is not None
+        ]
+        if stray:
+            raise DashboardValidationError(
+                f"{name_ctx}: additional_columns entries do not carry "
+                f"{', '.join(stray)} (not in the vendor distributionAdditionalColumns shape)"
+            )
+        if set(c.omit) - {"display_name"}:
+            raise DashboardValidationError(
+                f"{name_ctx}: additional_columns entries can only omit display_name"
+            )
+        transform = (c.transformation or "CURRENT").upper()
+        if transform not in _VALID_TRANSFORMATIONS or transform in (
+            "TIME_POINT", "TRANSFORM_EXPRESSION", "TREND", "FORECAST",
+        ):
+            raise DashboardValidationError(
+                f"{name_ctx}: transformation {c.transformation!r} is not supported "
+                "on an additional column"
+            )
+        if transform == "PERCENTILE":
+            if c.percentile is None or not (1 <= c.percentile <= 99):
+                raise DashboardValidationError(
+                    f"{name_ctx}: transformation PERCENTILE requires percentile 1..99"
+                )
+        elif c.percentile is not None:
+            raise DashboardValidationError(
+                f"{name_ctx}: percentile is only valid with transformation: PERCENTILE"
+            )
+        self._validate_roll_up(c, name_ctx)
+
+    def _validate_fidelity(self) -> None:
+        """View-level fidelity fields (2026-11-12): SubjectType sets, Usage,
+        group-by, pagination/metadata values, distribution additions,
+        bucket extensions and ``omit:``. Each one a field the renderer
+        honours for this view type, or a load error."""
+        where = f"view {self.name}"
+
+        def _types(types, ctx):
+            if types is None:
+                return
+            if not types or any(t not in _VALID_SUBJECT_TYPES for t in types) \
+                    or len(set(types)) != len(types):
+                raise DashboardValidationError(
+                    f"{where}: {ctx} must be a non-empty list of distinct values from "
+                    f"{sorted(_VALID_SUBJECT_TYPES)}; got {types!r}"
+                )
+
+        _types(self.subject_types, "subject.types")
+        for sub in self.subjects:
+            _types(sub.types, f"subjects entry {sub.adapter_kind}:{sub.resource_kind} types")
+        if self.usage is not None:
+            if not self.usage or any(u not in _USAGE_ORDER for u in self.usage) \
+                    or len(set(self.usage)) != len(self.usage):
+                raise DashboardValidationError(
+                    f"{where}: usage must be a non-empty list of distinct values from "
+                    f"{list(_USAGE_ORDER)}; got {self.usage!r}"
+                )
+        if self.group_by is not None:
+            if self.data_type != "list":
+                raise DashboardValidationError(
+                    f"{where}: group_by is only supported on data_type: list views; "
+                    "every vendor SubjectsGroupBy sits on a list view"
+                )
+            if not self.group_by.adapter_kind or not self.group_by.resource_kind:
+                raise DashboardValidationError(
+                    f"{where}: group_by requires adapter_kind and resource_kind"
+                )
+        seen: set = set()
+        for name in self.omit:
+            if name not in _VIEW_OMITTABLE:
+                raise DashboardValidationError(
+                    f"{where}: omit entry {name!r} is not omittable at view level; "
+                    f"allowed: {sorted(_VIEW_OMITTABLE)}"
+                )
+            if name in seen:
+                raise DashboardValidationError(f"{where}: omit lists {name!r} twice")
+            seen.add(name)
+        if "pagination" in self.omit and self.data_type == "distribution":
+            raise DashboardValidationError(
+                f"{where}: omit: [pagination] on a distribution view, which renders "
+                "no pagination control"
+            )
+        if "metadata" in self.omit and "include_resource_creation_time" in self.omit:
+            raise DashboardValidationError(
+                f"{where}: omit: [metadata] already drops include_resource_creation_time"
+            )
+        for label, val in (("page_size", self.page_size), ("top_n", self.top_n),
+                           ("max_points_count", self.max_points_count)):
+            if val is not None and val <= 0:
+                raise DashboardValidationError(
+                    f"{where}: {label} must be a positive integer, got {val}"
+                )
+        if self.page_size is not None:
+            # Distribution views render no pagination control by default;
+            # page_size adds one (20 built-in 9.1.1 distribution views and 11
+            # in the vCommunity 0.8.1 pak carry it, sizes 25 and 50).
+            if "pagination" in self.omit:
+                raise DashboardValidationError(
+                    f"{where}: page_size and omit: [pagination] contradict each other"
+                )
+        if self.top_n is not None and self.data_type != "list":
+            raise DashboardValidationError(
+                f"{where}: top_n is only supported on data_type: list views; every "
+                "vendor listTopResultSize other than -1 sits on a list view"
+            )
+        if self.distribution_color is not None and not _HEX_COLOR_RE.match(self.distribution_color):
+            raise DashboardValidationError(
+                f"{where}: distribution_color must be six hex digits (RRGGBB, no '#'), "
+                f"got {self.distribution_color!r}"
+            )
+        if self.additional_columns and self.data_type != "distribution":
+            raise DashboardValidationError(
+                f"{where}: additional_columns is only supported on data_type: "
+                "distribution views (metadata distributionAdditionalColumns)"
+            )
+        if "metadata" in self.omit:
+            set_fields = [
+                label for label, val in (
+                    ("top_n", self.top_n), ("max_points_count", self.max_points_count),
+                    ("include_resource_creation_time", self.include_resource_creation_time),
+                    ("distribution_color", self.distribution_color),
+                    ("additional_columns", self.additional_columns or None),
+                    ("hide_object_name", self.hide_object_name or None),
+                ) if val is not None
+            ]
+            if set_fields:
+                raise DashboardValidationError(
+                    f"{where}: omit: [metadata] drops the metadata control, so "
+                    f"{', '.join(set_fields)} would be silently lost; drop one"
+                )
+        if "include_resource_creation_time" in self.omit and \
+                self.include_resource_creation_time is not None:
+            raise DashboardValidationError(
+                f"{where}: include_resource_creation_time and omit: "
+                "[include_resource_creation_time] contradict each other"
+            )
+        for c in self.additional_columns:
+            self._validate_additional_column(c)
+        b = self.buckets
+        if b is not None and (b.ranges or b.is_sum is not None
+                              or (b.is_dynamic and b.count_set)
+                              or (not b.is_dynamic and b.calc_function_set)):
+            if self.data_type != "distribution":
+                raise DashboardValidationError(
+                    f"{where}: buckets ranges / is_sum / explicit count or calc_function "
+                    "only render on data_type: distribution views"
+                )
+        if b is not None and b.count_set and b.count <= 0:
+            raise DashboardValidationError(
+                f"{where}: buckets.count must be a positive integer, got {b.count}"
+            )
+        if b is not None and b.ranges:
+            if b.is_dynamic:
+                raise DashboardValidationError(
+                    f"{where}: buckets.ranges needs dynamic: false; every vendor "
+                    "bucketInfos sits on a fixed (isDynamic=false) buckets control"
+                )
+            if b.calc_function_set and b.calc_function != "SIMPLEMAXMIN":
+                raise DashboardValidationError(
+                    f"{where}: buckets.ranges renders dynamicCalcFunction=SIMPLEMAXMIN "
+                    f"(the only function the vendor pairs with bucketInfos); "
+                    f"calc_function {b.calc_function!r} contradicts it"
+                )
+            for i, r in enumerate(b.ranges):
+                if not r.start < r.end:
+                    raise DashboardValidationError(
+                        f"{where}: buckets.ranges[{i}] start {r.start} must be below "
+                        f"end {r.end}"
+                    )
+                if r.color is not None and not _HEX_COLOR_RE.match(r.color):
+                    raise DashboardValidationError(
+                        f"{where}: buckets.ranges[{i}].color must be six hex digits "
+                        f"(RRGGBB, no '#'), got {r.color!r}"
+                    )
 
     def _validate_column(self, c: "ViewColumn") -> None:  # noqa: F821
         """Per-column validation for transformation and threshold fields."""
@@ -1040,17 +1537,22 @@ class ViewDef:
         has_red = c.red_bound is not None
         red_is_string = has_red and not _is_numeric(c.red_bound)
 
-        # String-only red_bound case: ascending_range must NOT be set
+        # String-only red_bound case (property-match coloring). Vendor
+        # exports carry it both without ascendingRange and, more often, with
+        # ascendingRange=true (22 columns in the vCommunity 0.8.1 pak, 59 in
+        # the 9.1.1 built-ins, 2026-11-12 survey); no export carries false.
+        # So ascending_range is optional here and only true is accepted.
         if red_is_string and not has_yellow and not has_orange:
-            if c.ascending_range is not None:
+            if c.ascending_range is not None and c.ascending_range is not True:
                 raise DashboardValidationError(
-                    f"{name_ctx}: ascending_range must not be set when only "
-                    "red_bound is specified as a string (property-match coloring)."
+                    f"{name_ctx}: with only a string red_bound (property-match "
+                    "coloring) ascending_range may be omitted or true; no vendor "
+                    "export carries ascendingRange=false on such a column."
                 )
         elif has_yellow or has_orange or (has_red and not red_is_string):
             # Numeric bound case: require ascending_range when all three are set
             all_numeric_set = has_yellow and has_orange and has_red and not red_is_string
-            if all_numeric_set and c.ascending_range is None:
+            if all_numeric_set and c.ascending_range is None and "ascending_range" not in c.omit:
                 raise DashboardValidationError(
                     f"{name_ctx}: ascending_range is required when all three "
                     "numeric color bounds (yellow_bound, orange_bound, red_bound) "
@@ -2603,6 +3105,53 @@ def _load_summary_rows(path: Path, raw) -> List[SummaryRow]:
     )
 
 
+def _opt_bool(raw: dict, key: str, ctx: str) -> Optional[bool]:
+    """``raw[key]`` as a bool, or None when absent. A quoted "true" is a
+    load error, never coerced (same posture as subject_filter.business_hours)."""
+    v = raw.get(key)
+    if v is None:
+        return None
+    if not isinstance(v, bool):
+        raise DashboardValidationError(
+            f"{ctx}: {key} must be a bool (unquoted true/false), got "
+            f"{type(v).__name__} {v!r}"
+        )
+    return v
+
+
+def _opt_int(raw: dict, key: str, ctx: str) -> Optional[int]:
+    v = raw.get(key)
+    if v is None:
+        return None
+    if isinstance(v, bool) or not isinstance(v, int):
+        raise DashboardValidationError(
+            f"{ctx}: {key} must be an integer, got {type(v).__name__} {v!r}"
+        )
+    return v
+
+
+def _opt_upper(raw: dict, key: str, ctx: str) -> Optional[str]:
+    v = raw.get(key)
+    if v is None:
+        return None
+    if not isinstance(v, str):
+        raise DashboardValidationError(
+            f"{ctx}: {key} must be a string, got {type(v).__name__} {v!r}"
+        )
+    return v.strip().upper()
+
+
+def _opt_str_list(raw: dict, key: str, ctx: str) -> Optional[List[str]]:
+    v = raw.get(key)
+    if v is None:
+        return None
+    if not isinstance(v, list) or not all(isinstance(x, str) for x in v):
+        raise DashboardValidationError(
+            f"{ctx}: {key} must be a list of strings, got {v!r}"
+        )
+    return [x.strip() for x in v]
+
+
 def load_view(
     path: Path,
     enforce_framework_prefix: bool = True,
@@ -2788,9 +3337,25 @@ def load_view(
             )
         col_sort = sort_raw.strip().lower() if sort_raw is not None else None
 
+        col_ctx = f"{path}: view column {c.get('display_name') or attribute!r}"
+        omit_raw = c.get("omit")
+        if omit_raw is None:
+            col_omit: List[str] = []
+        elif isinstance(omit_raw, list) and all(isinstance(x, str) for x in omit_raw):
+            col_omit = [x.strip() for x in omit_raw]
+        else:
+            raise DashboardValidationError(
+                f"{col_ctx}: omit must be a list of field names, got {omit_raw!r}"
+            )
+        localized_raw = c.get("localized_name")
+        if localized_raw is not None and not isinstance(localized_raw, str):
+            raise DashboardValidationError(
+                f"{col_ctx}: localized_name must be a string, got {localized_raw!r}"
+            )
+
         return ViewColumn(
             attribute=attribute,
-            display_name=str(c["display_name"]).strip(),
+            display_name=str(c.get("display_name", "") or "").strip(),
             unit=str(c.get("unit", "") or "").strip(),
             transformation=transformation,
             percentile=percentile,
@@ -2808,9 +3373,30 @@ def load_view(
             time_segment=time_segment,
             subject=col_subject,
             sort=col_sort,
+            roll_up_type=_opt_upper(c, "roll_up_type", col_ctx),
+            roll_up_count=_opt_int(c, "roll_up_count", col_ctx),
+            roll_up_unit=_opt_upper(c, "roll_up_unit", col_ctx),
+            use_symptom_thresholds=_opt_bool(c, "use_symptom_thresholds", col_ctx),
+            add_timestamp_as_column=_opt_bool(c, "add_timestamp_as_column", col_ctx),
+            show_relative_timestamp=_opt_bool(c, "show_relative_timestamp", col_ctx),
+            omit=col_omit,
+            localized_attribute_name=localized_raw.strip() if localized_raw else None,
         )
 
     cols = [_load_column(c) for c in (data.get("columns") or [])]
+    for c in cols:
+        if c.localized_attribute_name is not None:
+            raise DashboardValidationError(
+                f"{path}: column {c.display_name!r}: localized_name is only valid on "
+                f"additional_columns entries"
+            )
+    addl_raw = data.get("additional_columns")
+    if addl_raw is not None and (not isinstance(addl_raw, list) or not addl_raw
+                                 or not all(isinstance(x, dict) for x in addl_raw)):
+        raise DashboardValidationError(
+            f"{path}: additional_columns must be a non-empty list of column mappings"
+        )
+    additional_columns = [_load_column(c) for c in (addl_raw or [])]
     subj = data.get("subject") or {}
     if not isinstance(subj, dict):
         raise DashboardValidationError(f"{path}: subject must be a mapping")
@@ -2837,7 +3423,7 @@ def load_view(
                 raise DashboardValidationError(
                     f"{path}: subjects entry must be a mapping, got {entry!r}"
                 )
-            unknown = set(entry) - {"adapter_kind", "resource_kind"}
+            unknown = set(entry) - {"adapter_kind", "resource_kind", "types"}
             if unknown:
                 raise DashboardValidationError(
                     f"{path}: subjects entry has unknown key(s) {sorted(unknown)}"
@@ -2845,6 +3431,7 @@ def load_view(
             view_subjects.append(ViewSubject(
                 adapter_kind=str(entry.get("adapter_kind", "") or "").strip(),
                 resource_kind=str(entry.get("resource_kind", "") or "").strip(),
+                types=_opt_str_list(entry, "types", f"{path}: subjects entry"),
             ))
     if view_subjects:
         subject_adapter_kind = view_subjects[0].adapter_kind
@@ -2904,6 +3491,8 @@ def load_view(
             value=raw.get("value"),
             transform=transform,
             business_hours=business_hours,
+            # type preserved; validate() rejects non-bool
+            string_metric=raw.get("string_metric"),
         )
 
     # subject.filter, flat list of condition mappings (single implicit AND
@@ -2947,12 +3536,43 @@ def load_view(
     buckets_raw = data.get("buckets")
     if buckets_raw is not None:
         if isinstance(buckets_raw, dict):
+            b_ctx = f"{path}: buckets"
+            ranges_raw = buckets_raw.get("ranges")
+            ranges: List[BucketRange] = []
+            if ranges_raw is not None:
+                if not isinstance(ranges_raw, list) or not ranges_raw:
+                    raise DashboardValidationError(
+                        f"{b_ctx}.ranges must be a non-empty list of "
+                        f"{{start, end, color}} mappings"
+                    )
+                for i, r in enumerate(ranges_raw):
+                    if not isinstance(r, dict) or set(r) - {"start", "end", "color"}:
+                        raise DashboardValidationError(
+                            f"{b_ctx}.ranges[{i}] must be a mapping of start, end and "
+                            f"optional color; got {r!r}"
+                        )
+                    for k in ("start", "end"):
+                        if isinstance(r.get(k), bool) or not isinstance(r.get(k), (int, float)):
+                            raise DashboardValidationError(
+                                f"{b_ctx}.ranges[{i}].{k} must be a number, got {r.get(k)!r}"
+                            )
+                    color = r.get("color")
+                    if color is not None and not isinstance(color, str):
+                        raise DashboardValidationError(
+                            f"{b_ctx}.ranges[{i}].color must be a quoted RRGGBB string, "
+                            f"got {color!r}"
+                        )
+                    ranges.append(BucketRange(start=r["start"], end=r["end"], color=color))
             buckets = BucketsConfig(
                 count=int(buckets_raw.get("count", 10)),
                 min_value=float(buckets_raw.get("min_value", 0.0)),
                 max_value=float(buckets_raw.get("max_value", 100.0)),
                 is_dynamic=bool(buckets_raw.get("dynamic", False)),
                 calc_function=str(buckets_raw.get("calc_function", "DISCRETE")).strip().upper(),
+                count_set="count" in buckets_raw,
+                calc_function_set="calc_function" in buckets_raw,
+                ranges=ranges,
+                is_sum=_opt_bool(buckets_raw, "is_sum", b_ctx),
             )
     elif data_type == "distribution":
         # Apply sensible defaults when distribution view has no explicit buckets
@@ -3007,6 +3627,25 @@ def load_view(
             f"{hide_object_name_raw!r}"
         )
 
+    ctx = str(path)
+    group_by: Optional[ViewSubject] = None
+    gb_raw = data.get("group_by")
+    if gb_raw is not None:
+        if not isinstance(gb_raw, dict) or set(gb_raw) - {"adapter_kind", "resource_kind"}:
+            raise DashboardValidationError(
+                f"{path}: group_by must be a mapping {{adapter_kind, resource_kind}}, "
+                f"got {gb_raw!r}"
+            )
+        group_by = ViewSubject(
+            adapter_kind=str(gb_raw.get("adapter_kind", "") or "").strip(),
+            resource_kind=str(gb_raw.get("resource_kind", "") or "").strip(),
+        )
+    color_raw = data.get("distribution_color")
+    if color_raw is not None and not isinstance(color_raw, str):
+        raise DashboardValidationError(
+            f"{path}: distribution_color must be a quoted RRGGBB string, got {color_raw!r}"
+        )
+
     v = ViewDef(
         id=view_id,
         name=str(data.get("name", "")).strip(),
@@ -3029,6 +3668,16 @@ def load_view(
         version=version,
         customgroups=view_customgroups,
         provenance=_provenance(path, provenance_of),
+        subject_types=_opt_str_list(subj, "types", f"{ctx}: subject"),
+        usage=_opt_str_list(data, "usage", ctx),
+        group_by=group_by,
+        page_size=_opt_int(data, "page_size", ctx),
+        top_n=_opt_int(data, "top_n", ctx),
+        max_points_count=_opt_int(data, "max_points_count", ctx),
+        include_resource_creation_time=_opt_bool(data, "include_resource_creation_time", ctx),
+        distribution_color=color_raw.strip() if color_raw is not None else None,
+        additional_columns=additional_columns,
+        omit=_opt_str_list(data, "omit", ctx) or [],
     )
     v.validate(enforce_framework_prefix=enforce_framework_prefix, embedded_in_dashboard=embedded_in_dashboard)
     return v
