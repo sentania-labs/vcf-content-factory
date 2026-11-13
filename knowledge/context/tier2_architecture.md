@@ -362,7 +362,8 @@ All components compile against the 9.0.2 SDK jar
 | `SimpleJson` | `com.vcfcf.adapter.json` | Zero-dep recursive-descent JSON parser. |
 | `AmbientCredential` | `com.vcfcf.adapter.stitch` | Reads `/usr/lib/vmware-vcops/user/conf/maintenanceuser.properties`; decrypts via SDK `Crypt.getDefaultCrypt().decrypt()` — the only FIPS-safe path under `-Dorg.bouncycastle.fips.approved_only=true` (9.1+). Path resolution order: (1) system property `vcfcf.suiteapi.credential.path` if set; (2) hard-wired default `/usr/lib/vmware-vcops/user/conf/maintenanceuser.properties`. **`CommonConstants.VCOPS` is NOT used** — it is a product display-name string (`"VCF Ops"`), not a filesystem path. See `knowledge/lessons/sdk-constants-are-display-names.md`. Never hand-roll the cipher. |
 | `SuiteApiStitchClient` | `com.vcfcf.adapter.stitch` | Framework REST transport for Suite API stitching. Token cached per instance; re-acquired on 401; released on `close()` / `discard()`, after which the client refuses every call. Credential resolution: explicit adapter-config fields > ambient `maintenanceuser.properties` > fail with actionable message. **Unified transport:** ALL calls go through `VcfCfAdapter.openPlatformConnection` (`HttpsURLConnection` mirroring the vendor `SuiteAPIClient`: trust-all + ignore-hostname, or cluster truststore + ignore-hostname when `IS_FIPS=true`; see "SSL / hostname verification" below). No `java.net.http.HttpClient` path. source-11 baseline. |
-| `SuiteApiStitcher` | `com.vcfcf.adapter.stitch` | Thin facade adapter authors hold as a field. Factory methods: `SuiteApiStitcher.create(adapter, logger)` (ambient) and `SuiteApiStitcher.createExplicit(adapter, logger, host, user, pass)` (remote-collector fallback). No transport code required in the adapter. Surface: `pushProperties`, `pushStats`, `addChild` / `addChildren` (additive Suite API relationship POST, never PUT), `findSingletonResourceId`, `get` (and `get(path, accept)`), `discard`. A non-2xx GET throws `SuiteApiHttpException` (status, `apiErrorCode`, body excerpt). |
+| `SuiteApiStitcher` | `com.vcfcf.adapter.stitch` | Thin facade adapter authors hold as a field. Factory methods: `SuiteApiStitcher.create(adapter, logger)` (ambient) and `SuiteApiStitcher.createExplicit(adapter, logger, host, user, pass)` (remote-collector fallback). No transport code required in the adapter. Surface: `pushProperties`, `pushStats`, the batch pushes (`pushPropertiesBatch`, `pushStatsBatch`, `pushBatch`), the typed batch pushes (`pushTypedPropertiesBatch`, `pushTypedBatch`: property values `String` or `Number`), `pushEvents`, `addChild` / `addChildren` (additive Suite API relationship POST, never PUT), `findSingletonResourceId`, `get` (and `get(path, accept)`), `post(path, jsonBody)` (read-style `/query` endpoints only), `discard` / `close` / `isClosed`. A non-2xx `get` or `post` throws `SuiteApiHttpException` (status, `apiErrorCode`, body excerpt); the pushes never throw. Contract for the post, events and numeric-property additions: "Stitcher reads, events and numeric properties" below. |
+| `SuiteApiEvent` | `com.vcfcf.adapter.stitch` | Immutable event for `pushEvents` (type, resource UUID, message, start time; optional severity, DIAGNOSTIC subtype, `managedExternally`, cancel time). `NOTIFICATION` is refused by `pushEvents`. |
 
 ## Pak format — hard-won lessons (2026-05-19)
 
@@ -1553,10 +1554,93 @@ routes on one parent until a live install shows it is safe.
 Empirical basis: `knowledge/context/investigations/suiteapi_ambient_auth_devel_2026_06_09.md`
 (devel 9.0.2 + prod 9.1 confirmation). Remote-collector caveat documented in that file.
 
+### Stitcher reads, events and numeric properties (T1 to T3, vCommunity Java port design)
+
+Driver: `knowledge/designs/managementpacks/vcommunity-java-port-design.md`,
+toolset gaps T1 to T3. All three are additive; no existing call changed.
+Guard: `adapter_framework/test/com/vcfcf/adapter/stitch/SuiteApiStitchQueryEventsTest.java`
+(run by `run_stitch_tests.sh`, green on the 8.18.7, 9.0.2 and 9.1.1 jars at
+`--release 11`).
+
+**`post(path, jsonBody)`: read-style POST queries only.** Returns the body.
+For the queries the Suite API only offers as POST: `/api/resources/query`,
+`/api/resources/stats/latest/query`, `/api/resources/properties/latest/query`,
+`/api/resources/stats/query` (body shapes `resource-query`,
+`latest-stat-query`, `properties-query`, `stat-query`, identical in the
+8.18, 9.0 and 9.1 specs). The path, before any `?`, must end in `/query`, or
+the call throws `IllegalArgumentException` before a token is fetched: it is
+not a write path, and pushes keep their own calls, which never throw and
+isolate bad entries. Otherwise `get`'s contract exactly: cached token, one
+re-acquire and retry on 401, the `openPlatformConnection` transport, 30 s
+connect and read timeouts, `Accept: application/json`, no other retry, a
+non-2xx answer as `SuiteApiHttpException` (message
+`Suite API POST <url> HTTP <status>[ apiErrorCode <n>]`, the shape
+compliance's `OverridesStore` regex depends on for GET), a closed client as
+an `IOException` without a token. Neither body is logged (nothing is logged
+on success) or put in an exception message; only the server's sanitized
+error excerpt rides the exception. Whether these endpoints answer the ambient
+identity on 8.18.7 and on a Cloud Proxy is design experiment E4; the
+compliance pak's ambient session already called
+`/api/resources/properties/latest/query` and `/api/resources/query` on devel
+9.0.2 (`investigations/suiteapi_ambient_auth_devel_2026_06_09.md`).
+
+**`pushEvents(Collection<SuiteApiEvent>)`.** `POST /api/events/bulk`,
+body `{"event":[...]}`, fields in the spec example's order, optional ones
+omitted when unset. Never the `/adapterkinds/{kind}` variant (400,
+`apiErrorCode 1514` for GENERAL kinds). Known
+(`investigations/vcommunity-notification-events-foreign-vm.md`, 9.x devel,
+2026-06-22): 200 with an empty body; `DIAGNOSTIC` onto another adapter's VM
+lands on its timeline about 45 s later; `NOTIFICATION` in the same shape is
+answered 200 and silently discarded. So `pushEvents` refuses `NOTIFICATION`
+(not sent, counted dropped, one WARN pointing at `DIAGNOSTIC`); that it is
+also discarded on a pak's own resource is not established, and the refusal
+covers both because the facade cannot tell them apart. Also refused and
+counted: null event, non-UUID id, null or blank message, start or cancel time
+before 2000-01-01 (the spec floor; start is always sent, so an event never
+silently starts in 2000). `SuiteApiEvent` offers the spec's types minus
+`HARD_THRESHOLD` (needs `key`/`htType`/`value`), its seven severities, and
+the six diagnostic subtypes all three lines list (9.0 adds `TROUBLESHOOT`,
+9.1 more). The REST event has no auto-cancel or watch/cancel cycle counts:
+those are the Python SDK collect result's; the analogues are
+`managedExternally(false)` and not re-pushing, or `managedExternally(true)`
+and `cancelledAt(t)` (same message plus `cancelTimeUTC`, the spec's cancel).
+Chunked at 100 events and about 1 MB (conservative, not measured); never
+throws; a 401 is retried once; any other failure is one WARN and stops the
+call (no per-event re-send: events are validated, so a refusal is more likely
+the request's than one entry's). Message text never reaches a log line.
+**Unknown:** a per-request limit, whether one bad event fails the whole
+request (the answer has no per-event result), and the lifecycle of a
+`managedExternally:false` event from a GENERAL adapter (design G5).
+
+**Numeric properties: `pushTypedPropertiesBatch`, `pushTypedBatch`.** Values
+`String` or `Number`. A string is sent as `"values":["..."]`, a number as
+`"data":[<double>]`, the `property-content` schema's two mutually exclusive
+arrays and the spec's own example (`"statKey":"config|num|processes",
+"data":[93.0]`, 8.18, 9.0 and 9.1). Null, NaN, infinite (after
+`doubleValue()`, so a too-large `BigDecimal` too) and any other type
+(`Boolean` included) are dropped and counted, never sent. `pushPropertiesBatch`
+and `pushBatch` are unchanged and stay `String`-only (a raw map smuggling a
+number into them is still dropped, never sent as `data`); with string values
+the typed calls produce byte-identical bodies. Same endpoint, chunking, id
+handling and failure rules as the string batch. Not established: what a
+numeric sample does to a key whose history is strings, or the reverse
+(design E3); keep one type per key.
+
+**Compatibility proof (2026-11-12).** The calls compliance and vsanperf make
+(`create`, `get`, `get(path, accept)`, `pushProperties`, `pushStats`, the
+three batch pushes with chunking and the 400 per-id fallback, `addChild(ren)`,
+`findSingletonResourceId`, `discard`) were driven through the framework at
+`origin/main` and at the change against the same scripted server: 22
+requests, every method, URL, header and body, and every log line identical.
+Both paks' scratch copies pass `validate-sdk --require-sdk-compat` (9.0.2,
+8.18.7, 9.1.1 legs) and `build-sdk` (zero pak-compare BLOCKINGs) on a kit
+built from the change.
+
 ## Changelog
 
 | Date | Change |
 |---|---|
+| 2026-11-12 | **Stitcher `post`, `pushEvents`, numeric properties; icon hints; key differential (vCommunity Java port design T1 to T5).** `SuiteApiStitchClient` and `SuiteApiStitcher` gain `post(path, jsonBody)` (read-style `/query` paths only, `get`'s error contract), `pushEvents` (with the new `SuiteApiEvent`; `NOTIFICATION` refused) and `pushTypedPropertiesBatch` / `pushTypedBatch` (numeric property values as `data`); contract and evidence in "Stitcher reads, events and numeric properties". Internals: the batch code's `boolean stats` became a package-private `Kind` enum and the property serializer takes a `typed` flag; string pushes are byte-identical (proven by request diff against `origin/main`). Icon library: `content_library`, `library_item`, `vm_template` (`knowledge/context/mpb/mp_icon_library.md`). New read-only CLI `python3 -m vcfcf_common keydiff` (GET only) compares two instances or snapshots; see `vcfcf_common/keydiff.py`. **Versioning:** `BUILDKIT_VERSION` not changed here; the release note goes under the next kit version. **Adapter adoption:** additive; no pak changes until it calls the new methods. |
 | 2026-11-11 | **Buildkit 1.0.28: the pak-root `resources.properties` writes `VENDOR=` as raw UTF-8, like `DISPLAY_NAME=` and `DESCRIPTION=`.** The file's reader is the pak manager's Python `configparser` on UTF-8 text (byte-identical `vc_ops_resource_bundle.py` on all three lab lines), which knows no `\uXXXX`; 1.0.26 and 1.0.27 wrote a non-ASCII vendor as `\uXXXX`, which that reader would show literally. Name and description were already right, so the `§` in the Synology description stays as it is. Evidence and consequences: "Who reads the pak-root `resources.properties`". `_prop_value_escape` removed (its only caller). Other properties writers unchanged (Java readers). Pak bytes change only for a non-ASCII `vendor`; no registered adapter sets `vendor`, so no registered pak changes. **Versioning:** `BUILDKIT_VERSION` 1.0.28. **Adapter adoption:** none. |
 | 2026-11-11 | **Buildkit 1.0.28: Test Connection no longer shadows a pak's `conf/logging.properties` (factory #322).** `VcfCfAdapter.raiseToInfo` skips `setLevel(INFO)` when the pak's own file governs the name (the file has a key covering the name that is loaded, an `AdapterLoggerConfig` of exactly that key, or that the SDK will load, the root governing it; an entry from another pak's file does not count, review N1), so a Test Connection no longer leaves an exact-name INFO entry that overrode an operator's DEBUG and copied instance lines into `collector.log` for later accounts. Unchanged: instance loggers, paks without the file, names outside it, and all of 8.18.7 (no `AdapterLoggerConfig`, file never read). Reflection only, no new compile-time dependency; compiles on the 9.0.2 and 8.18.7 jars and passes the compat legs. The file's keys are parsed once per adapter class and file version and the reflective handles looked up once per log4j class loader (review N2). Framework jar members that change: `com/vcfcf/adapter/VcfCfAdapter.class` (the change), the new nested classes `VcfCfAdapter$Log4jHandles` and `$PakKeys`, `VcfCfAdapter$CycleOutcome`, `$Enumerated` and `$VanishEntry` (declared below the new code, so only their line-number tables differ), and `META-INF/MANIFEST.MF` (version, commit, and the #343 `X-Vcfcf-Sdk-Sha256`); every other pak member is byte-identical (verified on compliance, synology, template, unifi, vsanperf before the review fixes, on template and unifi after). Details and harness: §Logging, "Test Connection no longer shadows the pak's entry". **Versioning:** `BUILDKIT_VERSION` 1.0.28. **Adapter adoption:** rebuild on kit 1.0.28; no source change. Test Connection INFO under the pak's entry was already not logged since 1.0.25. |
 | 2026-11-11 | **Buildkit 1.0.28: release builds accept only known SDK jars; hand builds warn (factory #343).** A release build (`build-sdk --release`, or any run with `--require-sdk-compat` / `VCFCF_SDK_COMPAT_REQUIRED=1`) requires the primary jar to be a known 9.0 line jar and every compat jar a known jar, no override (`SdkJarRejected`, a validate-sdk error, exit 3 from `build-framework.sh` and `run_stitch_tests.sh`); a hand build prints one boxed warning and builds, validate-sdk warns and exits 0. Before, any file passed as the primary jar was compiled against and shipped, with only a SKIPPED notice on the 9.0 leg. Rule, shell scripts, test seam and the "Adding an SDK jar" checklist: "Known jars only in a release build" under "SDK jar by platform version". Review fixes (`reviews/framework/managementpacks-sdk-known-jars-343-322-2026-11-11.md`): the shell scripts read the switches as Python does (whitespace stripped, so `"1 "` is a release run, W1), and the framework jar manifest records the compile jar's sha256 (`X-Vcfcf-Sdk-Sha256`), so a release build never reuses a framework jar a hand build compiled against another jar (W2). Pak bytes: the one added manifest line in `lib/vcfcf-adapter-base.jar!/META-INF/MANIFEST.MF`, a member 1.0.28 already changes; nothing else (verified on template and unifi). **Versioning:** `BUILDKIT_VERSION` 1.0.28. **Adapter adoption:** none for a pak built from the known jars; a pak repo whose release workflow passes another jar now fails its tag build. |
