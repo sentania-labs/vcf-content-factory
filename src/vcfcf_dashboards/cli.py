@@ -947,21 +947,12 @@ def _resolve_dashboard_ids(
     return resolved
 
 
-def _resolve_view_ids(
-    ui: VCFOpsUIClient, targets: list[str]
-) -> list[tuple[str, str]]:
-    """Resolve a mixed list of view UUIDs and names to (uuid, name) pairs.
+def flatten_view_groups(groups) -> list[dict]:
+    """Flatten a getGroupedViewDefinitionThumbnails result into view dicts.
 
-    View list comes from Ext.Direct getGroupedViewDefinitionThumbnails.
-    The response is a grouped structure; we flatten it to find all views.
-    Raises SystemExit if any target cannot be resolved.
+    Shared by ``delete-view`` name resolution and
+    ``vcfcf_common cleanup-legacy-prefix``.
     """
-    import re
-    uuid_pat = re.compile(
-        r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I
-    )
-
-    groups = ui.list_views()
     # getGroupedViewDefinitionThumbnails returns a two-level nested dict:
     #   result[viewType][resourceKind] = [view dicts]
     # e.g. {"LIST": {"VirtualMachine": [...], "HostSystem": [...]}, ...}
@@ -994,7 +985,24 @@ def _resolve_view_ids(
                         all_views.append(item)
             elif isinstance(item, list):
                 all_views.extend(item)
+    return all_views
 
+
+def _resolve_view_ids(
+    ui: VCFOpsUIClient, targets: list[str]
+) -> list[tuple[str, str]]:
+    """Resolve a mixed list of view UUIDs and names to (uuid, name) pairs.
+
+    View list comes from Ext.Direct getGroupedViewDefinitionThumbnails.
+    The response is a grouped structure; we flatten it to find all views.
+    Raises SystemExit if any target cannot be resolved.
+    """
+    import re
+    uuid_pat = re.compile(
+        r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I
+    )
+
+    all_views = flatten_view_groups(ui.list_views())
     by_id = {v["id"]: v.get("name", v["id"]) for v in all_views if "id" in v}
     by_name = {v.get("name", ""): v["id"] for v in all_views if "id" in v and v.get("name")}
 
