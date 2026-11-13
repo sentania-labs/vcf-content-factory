@@ -82,6 +82,14 @@ Optional, for reproducing an existing template (wire:
 # subject_types: []   only for a report with no SubjectType
 ```
 
+SDK-adapter pak reports: buildkit 1.0.28 and earlier silently ignore
+CoverPage `colorize`/`font_color` and section `omit:`, so a pak built
+with such a kit renders without them and reports no error; pak CI pins
+the kit by tag, so these fields do not reach an official pak release
+until a newer kit is tagged and the pak bumps its pin. A `view_id:` /
+`dashboard_id:` not in the stock baseline is a validate warning; check
+it is not a typo.
+
 ## Workflow
 
 1. Read brief: title, subject types, views/dashboards, ordering.

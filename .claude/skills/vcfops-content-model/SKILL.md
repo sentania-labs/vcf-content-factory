@@ -97,7 +97,8 @@ Key facts:
 - Time range, widget descriptions, UI persistence (`ui:`) and per-type
   product settings are expressible:
   `knowledge/context/wire-formats/dashboard_fidelity_wire_format.md`.
-  `Section` needs 9.1.1+; Tier 2 pak builds refuse it.
+  `Section` needs 9.1.1+; Tier 2 pak builds refuse it, and refuse an
+  `omit:` entry that is only proven on a newer line than 8.18.7.
 - No REST CRUD: delete only via UI action layer.
 
 ### Symptom definitions

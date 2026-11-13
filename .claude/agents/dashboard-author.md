@@ -111,13 +111,19 @@ Read existing `content/dashboards/*.yaml` and
 `knowledge/context/authoring/view_dashboard_design_guide.md`
 for YAML examples of each type.
 
-Default time range: `time_range: last7Days` (values in
-`knowledge/context/wire-formats/dashboard_fidelity_wire_format.md`).
-Re-expressing an existing dashboard at full fidelity (widget
-descriptions, Pareto bounds, units and additional columns, tag and
-custom filters, `ui:`, `omit:`): same file. Use `ui:` and `omit:` only
-to reproduce a source dashboard, never on a new one. SDK-adapter pak
-dashboards that use any fidelity field need a buildkit cut after 1.0.28.
+To set the dashboard time range: `time_range: <value>` (values in
+`knowledge/context/wire-formats/dashboard_fidelity_wire_format.md`);
+leave it out for the product default. Re-expressing an existing
+dashboard at full fidelity (widget descriptions, Pareto bounds, units
+and additional columns, tag and custom filters, `ui:`, `omit:`): same
+file. Use `ui:`, `omit:` and `disabled:` only to reproduce a source
+dashboard, never on a new one. SDK-adapter pak dashboards: buildkit
+1.0.28 and earlier silently ignore almost all fidelity fields, so a pak
+built with such a kit renders without them and reports no error; pak CI
+pins the kit by tag, so neither these fields nor the Section and `omit:`
+version gates reach an official pak release until a newer kit is tagged
+and the pak bumps its pin. In a pak, `omit: [temporary]`,
+`[widget_interactions]` and `[folder_in_name]` fail the build.
 
 ## Interaction wiring
 
