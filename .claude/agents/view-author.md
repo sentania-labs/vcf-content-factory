@@ -41,11 +41,19 @@ Track-specific examples:
 - Sort key from the verb ("top N by X" → sort by X descending).
 - Default sort direction: descending for metrics (high values
   ranked first); ascending for free-space / capacity (smallest
-  first). The YAML key is `sort: asc | desc` on exactly one column of
-  a `list` view (it renders the view's `sortCriteria`, so every
-  dashboard that embeds the view opens in that order). Widget-level
-  `sort_by_column` / `sort_by_dir` do not exist for View widgets and
-  the dashboard loader rejects them (issue #175).
+  first). The YAML key is `sort: asc | desc` on a column of a `list`
+  or `distribution` view (it renders the view's `sortCriteria`, so
+  every dashboard that embeds the view opens in that order). Sort one
+  column on a new view; several sorted columns are accepted for
+  fidelity but precedence is unverified. Trend views reject sort.
+  Widget-level `sort_by_column` / `sort_by_dir` do not exist for View
+  widgets and the dashboard loader rejects them (issue #175).
+- Re-authoring an existing ViewDef at full fidelity (roll-up, `omit:`,
+  `additional_columns`, bucket `ranges`, `page_size`, `top_n`,
+  `group_by`, subject `types`, `usage`, timestamps,
+  `use_symptom_thresholds`):
+  `knowledge/context/wire-formats/view_fidelity_wire_format.md`. Use
+  `omit:` only to reproduce a source view, never on a new one.
 - Subject resource kind when the user names a class of object
   unambiguously ("hosts" → HostSystem; "VMs" → VirtualMachine).
 - Mix of built-in vs super metric columns: prefer built-ins where
