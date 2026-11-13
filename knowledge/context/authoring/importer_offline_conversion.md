@@ -71,7 +71,7 @@ python3 -m vcfcf_extractor import-local INPUT... \
 |---|---|---|
 | `content` | `<out>/{supermetrics,views,dashboards,reports,symptoms,recommendations,alerts}/` (a factory `content/` tree; every name must carry `[VCF CF] `) | the factory per-type loaders |
 | `third-party` | the same folders plus a `PROJECT.yaml` (`factory_native: false`), i.e. a `third_party/<project>/` | the factory bundle loader on `PROJECT.yaml` |
-| `pak` | the same folders relative to an SDK adapter project, plus `import-report/bundled_content.yaml` to paste into `adapter.yaml` | `sdk_builder._load_bundled_content`, then the pak version-floor and reference checks |
+| `pak` | the same folders relative to an SDK adapter project, plus `import-report/bundled_content.yaml` to merge into `adapter.yaml`; its header names the other settings the content needs (`content_naming: unprefixed` for unprefixed names, `content_foreign_adapter_kinds` for symptoms and alerts on another adapter kind) | `sdk_builder._load_bundled_content`, then the pak version-floor and reference checks |
 
 Output: one YAML per object, named from the object's name, each with a
 comment naming its source file. `--report-dir` (default
@@ -239,25 +239,51 @@ attribute / Property / JSON-key order.
 Limits: the SDK pak build's owning-SubjectType injection on views is not
 rendered (a pak build adds one SubjectType per view; view fidelity doc), nor
 is the pak builder's `adapterName`; verification says nothing about how an
-instance imports the content (install and look); a per-file staged load does
-not run the factory's repo-wide checks (validate the written tree with the
-seven-package chain, or `validate-sdk` for a pak, as for any authored
-content).
+instance imports the content (install and look); the staged load and the
+layout loader do not run the factory's repo-wide checks, so validate the
+written tree as any authored content: the seven-package chain for `content/`
+and a third-party project (whose views and dashboards it walks, including the
+project-boundary check that refuses a super metric the project does not
+ship), the bundle loader for a project's reports, alerts and symptoms (which
+`--verify` uses), and `validate-sdk` for a pak.
 
 ## Results on real content (2026-11-13)
 
-Third-party pak, 189 unique views in 255 copies, 52 dashboards (one file
-of 34), 16 report templates, 4 alerts, 10 symptoms (2 standalone), 1
-recommendation, 2 super metrics; 6 check-list XML passed over. Same id
-defined differently: one view (two pak files) and one symptom (the alert
-file and the standalone symptom file carry different names), both stopped
-until `--prefer-source`. `--ids keep`: refused by the stock-id guard, 120
-view ids (117 stock on every version, 3 on 9.1.1). With the id map (101) and
-the drop list (19): 170 views, 52 dashboards and every report, alert,
-symptom, recommendation and super metric verify identical except the 6
-views carrying documented losses (5 list views with a buckets-control, 1
-empty `preferredUnitId`; one of them also carries a Title / Description
-`localizationKey`); dashboards 52 of 52 once `adapterName` is set aside. A
-9.1.1 built-in views and report templates export (851 + 62, `--ids mint`):
-see the acceptance report of the change for the counts; every view that does
-not convert stops on a named gap.
+Third-party pak (not in the repo): 255 ViewDef copies of 189 unique views,
+52 dashboards (one file of 34), 16 report templates, 4 alerts, 10 symptoms
+(9 inline, 2 standalone, one shared), 1 recommendation, 2 super metrics; 22
+files passed over (6 check-list XML, 2 XSD, 14 empty markers).
+
+- Same id defined differently: one view (two view files) and one symptom (the
+  alert file and the standalone symptom file give it different names); both
+  stop, naming the files, until `--prefer-source`.
+- `--ids keep`: refused by the stock-id guard, 120 view ids (117 stock on
+  every version, 3 on 9.1.1), nothing written.
+- With the 101-entry id map and the 19-entry drop list, pak layout,
+  `--target-min 8.18.7`, `--verify`: 255 objects, 32,499 fields compared;
+  249 identical, and the other 6 (views) differ only at their listed
+  documented losses (5 list views with a buckets-control, 1 empty
+  `preferredUnitId` that also carries a Title / Description
+  `localizationKey`). Dashboards 52 of 52 with `adapterName` (34) and 5 stale
+  navigation entries set aside. Target deviations: `temporary` on 11
+  dashboards, `widget_interactions` on 1, `folder_in_name` on 1 (its name
+  then carries the folder). Two dashboards with Section widgets are
+  reported; `validate-sdk` refuses exactly those two (version floor), and
+  nothing else once the snippet's settings are applied.
+- The same as a third-party project without a target: the same 249 + 6. The
+  seven-package chain passes except the project-boundary check on the two
+  dashboards that reference a super metric the pack does not ship (the
+  converter's note names them).
+- `content/` layout with `--naming factory-prefixed`: 4 dashboards fail the
+  50-character limit with the prefix (named, with the `--rename` hint), and
+  one report that has one of them as a section fails with it; the rest
+  verify as above and the chain passes.
+
+9.1.1 built-in export, views and report templates (851 + 62), `--ids mint`,
+third-party layout: 757 views and 58 templates converted, all 815 identical
+(59) or different only at their listed documented losses (mostly the
+`localizationKey`); 94 views stop on a named gap (12 text or image views, 25
+time selectors without `count`, 21 columns without `isStringAttribute`, 7
+metadata controls without `hideObjectNameColumn`, 6 fractional percentiles,
+the rest smaller classes and loader refusals) and 4 templates fail because a
+section names one of them. The chain passes on the written project.
