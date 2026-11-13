@@ -71,6 +71,18 @@ This rule does NOT apply to:
   metric, swapping a metric key, tightening a threshold, fixing a typo
   — these don't need a re-wireframe. Anything that adds, removes,
   moves, resizes, or changes the *purpose* of a widget does need one.
+- **Faithful conversion of an existing dashboard** (a port or an
+  extract whose goal is to reproduce a source dashboard that already
+  exists). The source dashboard is the approved layout, so there is
+  nothing to wireframe. The acceptance test replaces the approval: the
+  converted dashboard must match its source, checked widget by widget
+  (type, grid placement, title, bound view or metrics, interactions,
+  pins, time range) and then seen rendering on an instance. Every
+  difference is either fixed or listed for the owner. Owner, 2026-11-12,
+  on the 52 dashboards of the vCommunity port: "I'm not going to approve
+  52 dashboards - we have a clear criteria for acceptance... do they
+  match?" A conversion that deliberately changes the layout or adds
+  widgets is new design and needs the wireframe.
 
 It DOES apply to dashboards specifically because a wireframe is the
 cheapest correction loop — re-arranging a wireframe takes seconds; a
