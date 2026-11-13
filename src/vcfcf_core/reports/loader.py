@@ -169,11 +169,12 @@ class ReportDef:
                 f'"[VCF Content Factory]" prefix (see CLAUDE.md §Hard rules #5). For third-party '
                 f"bundle content, ensure the bundle manifest sets factory_native: false."
             )
-        if not self.subject_types and not self.no_subject_types:
-            raise ReportValidationError(
-                f"{self.name}: at least one subject_type is required "
-                f"(or subject_types: [] for a report with no SubjectType)"
-            )
+        if not self.subject_types:
+            if not self.no_subject_types:
+                raise ReportValidationError(
+                    f"{self.name}: at least one subject_type is required "
+                    f"(or subject_types: [] for a report with no SubjectType)"
+                )
         for st in self.subject_types:
             if not st.adapter_kind:
                 raise ReportValidationError(
