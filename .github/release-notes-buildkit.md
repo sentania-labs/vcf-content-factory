@@ -2,6 +2,43 @@ Portable Tier 2 SDK adapter build toolchain (jar-free).
 
 <!-- Order: "Behavior since" sections newest first, so the latest release is at the top. Add a new release's section directly below this comment. The standing reference sections (Consumer contract, Version pinning, Checksum) stay at the end. -->
 
+## Behavior since 1.0.29
+
+- `validate-sdk` and `build-sdk` refuse bundled content under VCF
+  Operations stock ids (factory issue #345). A view, dashboard, report
+  template, symptom or alert whose id is in the kit's
+  `stock_ids_baseline.json` (4282 ids from clean 8.18.7, 9.0.2 and 9.1.1
+  exports) is an error naming the YAML file, the id, the type, the stock
+  object's name and the versions it is stock in: installing such a pak
+  overwrites the stock object and uninstalling it deletes it. The baseline
+  holds no super metric or recommendation ids yet: definitions of those
+  types are scanned but not checked, and the pass line says so.
+  `build-sdk` checks the bundled content before the compile and every
+  definition in the built pak after it; a `--release` build deletes a pak
+  that fails. References to stock ids are fine.
+- Fail closed: without `stock_ids_baseline.json` beside `stock_ids.py`, or
+  when a member of the built pak cannot be read (nested too deep, not a
+  readable zip, oversized, encrypted or unsupported compression, text that
+  does not decode), every `validate-sdk` and `build-sdk` fails.
+- Escape hatch: adapter.yaml `stock_id_allowlist`, a list of entries with
+  exactly `type`, `id` and a non-blank `reason`. An allowlisted hit is a
+  warning on every build; an entry that matches nothing is a warning too.
+  Absent by default.
+- New `python3 -m sdk_buildkit stock-id-check <path> [...]`: read-only list
+  of every definition in a packed or unpacked pak, content zip or export
+  whose id is a stock id. Exit 0 clean, 2 stock ids found, 1 cannot check
+  (unreadable content, nothing to check, or no baseline). The pass line
+  states how many definitions of which types were compared.
+- Kit contents: `stock_ids.py` (the factory's
+  `vcfcf_core/stock_ids/guard.py`, byte for byte) and
+  `stock_ids_baseline.json`.
+- Adoption: a pak whose bundled content carries a stock id fails its next
+  build; mint new ids for that content. A pak with no such content builds
+  as before, and pak bytes do not change. Repos on the floating
+  `sdk-buildkit-v1` tag get the guard on their next CI run (the six
+  registered paks pass it); repos pinned to an exact `sdk-buildkit-v1.0.x`
+  tag must bump their pin to `sdk-buildkit-v1.0.29` to get it.
+
 ## Behavior since 1.0.28
 
 - Release builds accept only SDK jars the kit knows (factory issue #343). A

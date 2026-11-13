@@ -354,7 +354,18 @@ def import_content_zip(client: VCFOpsClient, zip_bytes: bytes, timeout_s: int = 
     returns the same id. The GET status endpoint returns the summary of
     the last import operation. To tell "our" import apart from a prior
     one, snapshot ``endTime`` before POST and poll until it advances.
+
+    Every factory content import goes through here, so the stock-id guard
+    (#345) runs here too: a zip that defines content under a VCF Operations
+    stock id is refused before anything is sent (it would overwrite the
+    stock object), as is any import when the guard cannot run.
     """
+    from vcfcf_packaging.stock_ids import StockIdRefused, refuse_stock_ids_in_zip
+    try:
+        refuse_stock_ids_in_zip(zip_bytes, "content import")
+    except StockIdRefused as exc:
+        raise VCFOpsError(str(exc)) from exc
+
     client._ensure_auth()
 
     # Snapshot the current import state so we can detect when the server
