@@ -36,8 +36,10 @@ prod's upstream vCommunity carries the same 64 ids.
 **Enforced since issue #345 (build time and content import).** The
 stock-id guard (`knowledge/context/stock_id_guard.md`) refuses any
 definition under an id in the committed stock-id baseline
-(`src/vcfcf_core/stock_ids/stock_ids_baseline.json`, 4282 ids from clean
-8.18.7, 9.0.2 and 9.1.1 exports): `validate-sdk` and `build-sdk` in the
+(`src/vcfcf_core/stock_ids/stock_ids_baseline.json`: 4282 view,
+dashboard, report, symptom and alert ids from clean 8.18.7, 9.0.2 and
+9.1.1 exports; it holds no super metric or recommendation ids yet, so
+those two types are not checked): `validate-sdk` and `build-sdk` in the
 factory and the sdk-buildkit (bundled content, then the built pak), the
 bundle, discrete and release builders, the per-type `validate` commands,
 every factory content-zip import, and `vcfcf_managementpacks install`
