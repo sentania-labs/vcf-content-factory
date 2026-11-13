@@ -1,4 +1,4 @@
-# An unknown widget type aborts the whole pak dashboard import, silently
+# An unknown widget type silently loses dashboards, by pak install and by content import
 
 Date: 2026-10-12 and 2026-10-13. Compliance adapter builds 88 and 89, devel
 (VCF Operations 9.0.2.0 build 25137845). Factory issue #199. Extended
@@ -32,7 +32,8 @@ never created, not even partly, on either path.
 - **Content import** (`/api/content/operations/import`: `vcfcf_dashboards
   sync`, bundle sync, bundle install): the importer handles the owner's
   dashboards in one call, so one Section dashboard loses **every** dashboard
-  in the same import, whatever the order. The task reports FINISHED,
+  in the same import, whatever the order (one owner per import measured;
+  every factory import has one owner). The task reports FINISHED,
   `errorCode: NONE`, DASHBOARDS `total N, imported 0, skipped 0, failed 0`,
   no message. The factory's old "imported nothing" check needed
   `skipped > 0` and did not fire.
@@ -56,11 +57,15 @@ never created, not even partly, on either path.
   proof on that oldest version, not on the newest.
 - Never put a dashboard that may meet an older build in the same content
   import as dashboards that must land: it takes them all with it.
-- Read the import envelope's counters, not its state: for every content
-  type, `imported + skipped + failed < total` is a failure. The factory
-  checks it on every content-import path
-  (`vcfcf_dashboards.client.import_shortfalls`, pinned copies in both
-  installer templates).
+- Read the import envelope's counters, not just its state: on a FINISHED
+  task, `imported + skipped + failed < total` for DASHBOARDS is a failure.
+  For other types `total` has not been checked against a healthy import,
+  so the factory only warns there. The check runs on every content-import
+  path (`vcfcf_dashboards.client.import_count_findings`, pinned copies in
+  both installer templates).
+- Measured vs unmeasured: Section fails on 8.18.7 and 9.0.2 (measured) and
+  imports on 9.1.1 and 9.2 (proven); 9.1.0 is unmeasured. So the factory
+  refuses below 9.1.0 and only warns on 9.1.0.
 - After every pak install, count the pak's dashboards on the instance
   (same discipline as `new-metric-alerts-need-two-samples.md`) and, for a
   bound Summary dashboard, read `getSummaryTabId` for the kind and then
@@ -78,5 +83,5 @@ never created, not even partly, on either path.
   Content bundles declare no minimum version, so validate only warns; the
   live paths (`vcfcf_dashboards sync`, the dashboards handler, bundle sync,
   `install.py` and `install.ps1`) read the instance version and refuse
-  before importing, naming the dashboards, and every content-import reader
-  fails on counters short of total.
+  before importing below 9.1.0, or warn on 9.1.0, naming the dashboards;
+  every content-import reader fails on a DASHBOARDS count shortfall.

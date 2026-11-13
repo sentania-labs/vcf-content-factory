@@ -149,14 +149,17 @@ builds run the same importer code here. In a pak the loss is the
 so only the directories holding a Section dashboard are lost, and the pak
 still installs FINISHED and verified. In a content import
 (`/api/content/operations/import`) the loss is the owner's whole dashboards
-batch: every dashboard in the same import is lost, whatever its order, and
+batch: every dashboard in the same import is lost, whatever its order (one
+owner per import was measured; every factory import carries one owner), and
 the task reports FINISHED, `errorCode: NONE`, DASHBOARDS `total N, imported
 0, skipped 0, failed 0` and no message. The only signature is
 `imported + skipped + failed < total`; every factory reader of the import
-result now fails on it (`vcfcf_dashboards.client.import_shortfalls`, with
-pinned copies in both installer templates), and sync and bundle install
-refuse a dashboard with a widget type above the instance's version before
-importing (`vcfcf_core.dashboards.widget_versions.import_refusal`).
+result now fails on it for DASHBOARDS
+(`vcfcf_dashboards.client.import_count_findings`, with pinned copies in both
+installer templates), and sync and bundle install refuse a Section dashboard
+before importing on a build measured not to import it (below 9.1.0) and warn
+on the unmeasured 9.1.0 (`vcfcf_core.dashboards.widget_versions.import_check`).
+Measured vs unmeasured: Section is measured failing on 8.18.7 and 9.0.2 and proven importing on 9.1.1 (and 9.2); 9.1.0 is unmeasured.
 
 ## The Summary clone can carry no widget config (9.0.2)
 

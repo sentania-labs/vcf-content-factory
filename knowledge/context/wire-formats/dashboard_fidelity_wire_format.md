@@ -302,7 +302,8 @@ reads no dashboard keys at all; that predates this change.
 
 `Section` needs VCF Operations 9.1.1 or later; on 8.18.7 and 9.0.x the
 importer aborts on the dashboard, and the loss is wider than the dashboard: a
-content import loses every dashboard in the same import, a pak every
+content import loses every dashboard in the same import (one owner
+measured; factory imports carry one), a pak every
 dashboard in the same `content/dashboards/<dir>`, and both report FINISHED
 (`../investigations/2026-11-13-section-widget-on-8x-and-90.md`). Tier 2 paks
 declare their targets: RULE-019 and the
@@ -314,12 +315,15 @@ bundles declare no target; validate and bundle builds warn, naming the
 file, the dashboard and the consequence. What they cannot gate, the live
 paths do: `vcfcf_dashboards sync`, the dashboards sync handler, bundle sync
 and both installer templates read the instance's version
-(`GET /api/versions/current` `releaseName`; the body's `major`/`minor` are
-the API version) and refuse before importing when a dashboard carries a
-type above it, naming the dashboards (`widget_versions.import_refusal`). An
-unreadable version is a warning and the import goes ahead; the import
-result's counters (`imported + skipped + failed < total`) then report the
-loss. `Dashboard.widget_version_problems(target)` is the build-time check.
+(`GET /api/versions/current` `releaseName`, the first dotted number after
+`Operations`; the body's `major`/`minor` are the API version on 8.18.7 and
+9.0.2 but the product version on 9.1, so only `releaseName` is consistent
+across lines). Measured vs unmeasured: Section is measured failing on 8.18.7 and 9.0.2 and proven importing on 9.1.1 (and 9.2); 9.1.0 is unmeasured. So they refuse before importing, naming
+the dashboards, below 9.1.0 (`WIDGET_TYPE_REFUSE_BELOW_OPS_VERSION`), and on
+9.1.0 warn, naming them, and import (`widget_versions.import_check`). An
+unreadable version is a warning and the import goes ahead; in both cases the
+import result's counters (`imported + skipped + failed < total`, an error
+for DASHBOARDS) are the backstop. `Dashboard.widget_version_problems(target)` is the build-time check.
 
 The gate runs after the bundled content loads, in
 `sdk_builder.check_bundled_version_floors`, beside the `omit:` gate below:

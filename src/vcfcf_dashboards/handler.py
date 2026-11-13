@@ -38,6 +38,7 @@ from .client import (
     get_current_user,
     import_content_zip,
     import_shortfall_errors,
+    print_import_count_warnings,
     skipped_import_advice,
     widget_import_refusal,
 )
@@ -194,6 +195,7 @@ class ViewsHandler(ContentHandler):
         state = api_result.get("state", "")
         all_skipped = _all_skipped_message(api_result, "VIEW_DEFINITIONS")
         shortfall = " ".join(import_shortfall_errors(api_result, ("VIEW_DEFINITIONS",)))
+        print_import_count_warnings(api_result, ("VIEW_DEFINITIONS",))
         for v in views:
             if shortfall:
                 result.items.append(
@@ -399,6 +401,7 @@ class DashboardsHandler(ContentHandler):
         # The views re-imported with these dashboards speak through this
         # handler only when they fell short (the views handler reports the
         # rest of their outcome).
+        print_import_count_warnings(api_result)
         view_shortfall = " ".join(
             import_shortfall_errors(api_result, ("VIEW_DEFINITIONS",)))
         if view_shortfall:

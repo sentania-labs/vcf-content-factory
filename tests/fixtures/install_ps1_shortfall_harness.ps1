@@ -40,11 +40,12 @@ if ($errors) { throw "install.ps1 has parse errors: $errors" }
 $want = @(
     "Write-Ok", "Write-Warn", "Get-PropValue", "Get-PropList", "Get-StatusCode",
     "ConvertFrom-MatJson", "Test-MatMapping", "Get-MatJsonArray",
-    "Get-ImportShortfalls", "Get-ImportShortfallMessage", "Add-ImportShortfalls",
+    "Get-ImportCountFindings", "ConvertTo-WholeCount", "Get-ImportShortfallMessage", "Get-ImportUninterpretableMessage", "Add-ImportShortfalls", "Get-LostImportLines",
     "ConvertTo-VersionTuple", "Compare-VersionTuple", "ConvertFrom-ReleaseName",
     "Format-VersionTuple", "Get-OpsVersion", "Get-DashboardWidgetPairs",
-    "Get-ImportRefusal", "Invoke-WidgetFloorPreflight",
-    "Install-Dashboard", "Get-AllSkippedSummaries", "Get-DashboardAdvisoryNames",
+    "Get-ImportCheck", "Invoke-WidgetFloorPreflight",
+    "Install-Dashboard", "Install-Supermetrics", "Install-Reports", "Get-SmGhostStateSkipCount",
+    "Get-AllSkippedSummaries", "Get-DashboardAdvisoryNames",
     "Get-BoundedNames", "Get-ViewAdvisoryNames", "Get-DashboardIdNames")
 $found = New-Object System.Collections.Generic.List[string]
 $fns = $ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] }, $true)
@@ -66,13 +67,14 @@ $assignments = $ast.FindAll({
 }, $true)
 foreach ($a in $assignments) {
     $left = $a.Left.Extent.Text
-    if ($left -eq '$script:WidgetTypeFloors' -or $left -eq '$script:ImportLossSentence' -or
+    if ($left -like '$script:WidgetType*' -or $left -like '$script:Shortfall*' -or
+        $left -eq '$script:ImportLossSentence' -or $left -eq '$script:VersionUnreadableNote' -or
         $left -like '$script:Advisory*') {
         Invoke-Expression $a.Extent.Text
         $replayed++
     }
 }
-if ($replayed -ne 4) { throw "expected 4 replayed constants, found $replayed" }
+if ($replayed -ne 8) { throw "expected 8 replayed constants, found $replayed" }
 
 # Write-Fail exits the installer; here it records the message and throws a
 # marker the case loop catches, so one run can cover several cases.
@@ -100,6 +102,9 @@ function New-DashboardZip {
     return [byte[]]@(1, 2)
 }
 function Import-ContentZip { param($ZipBytes, $Label) return $script:StubImportResult }
+function New-SmZip { param($SmDict, $Marker, $OwnerId) return [byte[]]@(1) }
+function New-ReportsZip { param($ReportsXml, $Marker, $OwnerId) return [byte[]]@(1) }
+function Load-JsonFile($Path) { return ($script:StubFiles[[string]$Path] | ConvertFrom-Json) }
 
 function Get-InfoLines([scriptblock]$Block) {
     $lines = New-Object System.Collections.Generic.List[string]
@@ -111,18 +116,13 @@ $scenario = Get-Content -LiteralPath $ScenarioPath -Raw -Encoding UTF8 | Convert
 $results = New-Object System.Collections.Generic.List[object]
 
 foreach ($case in @($scenario.shortfalls)) {
-    $short = Get-ImportShortfalls -Result $case
-    [string[]]$keys = @($short.Keys)
-    [Array]::Sort($keys, [System.StringComparer]::Ordinal)
-    $out = [ordered]@{}
-    foreach ($k in $keys) {
-        $c = $short[$k]
-        $out[$k] = [ordered]@{
-            counts  = @($c.Total, $c.Imported, $c.Skipped, $c.Failed)
-            message = (Get-ImportShortfallMessage -ContentType $k -Counts $c)
-        }
-    }
-    $results.Add([ordered]@{ kind = "shortfall"; result = $out })
+    $out = [System.Collections.Generic.List[object]]::new()
+    foreach ($f in (Get-ImportCountFindings -Result $case)) { $out.Add(@($f[0], $f[1], $f[2])) }
+    $results.Add([ordered]@{ kind = "shortfall"; result = $out.ToArray() })
+}
+
+foreach ($case in @($scenario.lost)) {
+    $results.Add([ordered]@{ kind = "lost"; result = (Get-LostImportLines -Lost @([string]$case)) })
 }
 
 foreach ($name in @($scenario.release_names)) {
@@ -132,7 +132,8 @@ foreach ($name in @($scenario.release_names)) {
 
 foreach ($case in @($scenario.refusals)) {
     $pairs = Get-DashboardWidgetPairs -DashJson ([string]$case.dash_json)
-    $results.Add([ordered]@{ kind = "refusal"; result = (Get-ImportRefusal -Dashboards $pairs -InstanceVersion ([string]$case.version)) })
+    $check = Get-ImportCheck -Dashboards $pairs -InstanceVersion ([string]$case.version)
+    $results.Add([ordered]@{ kind = "refusal"; result = @($check.Refusal, $check.Warning) })
 }
 
 foreach ($case in @($scenario.preflights)) {
@@ -173,6 +174,25 @@ foreach ($case in @($scenario.installs)) {
     $results.Add([ordered]@{ kind = "install"; result = [ordered]@{
         warnings = @($ctx.Warnings); advisories = @($ctx.Advisories); lines = @($lines)
         recorded = $pairs.ToArray() } })
+}
+
+foreach ($case in @($scenario.other_installs)) {
+    $script:StubFiles = @{ "/b/sm.json" = '{"i":{"name":"SM"}}'; "/b/reports.xml" = '<Content><ReportDef id="r"/></Content>' }
+    $script:StubImportResult = $case.import_result
+    $ctx = @{
+        BundleDir  = "/b"
+        Manifest   = ([pscustomobject]@{ content = [pscustomobject]@{
+            supermetrics = [pscustomobject]@{ file = "sm.json" }
+            reports      = [pscustomobject]@{ file = "reports.xml" } } })
+        Marker     = "m"
+        OwnerId    = "u1"
+        Warnings   = [System.Collections.Generic.List[string]]::new()
+        Advisories = [System.Collections.Generic.List[string]]::new()
+    }
+    $fn = [string]$case.fn
+    $lines = Get-InfoLines { & $fn $ctx }
+    $results.Add([ordered]@{ kind = "other"; result = [ordered]@{
+        warnings = @($ctx.Warnings); lines = @($lines) } })
 }
 
 $json = ConvertTo-Json -InputObject $results.ToArray() -Depth 20

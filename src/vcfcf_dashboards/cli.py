@@ -22,6 +22,7 @@ from .client import (
     import_content_zip,
     import_shortfall_errors,
     import_shortfalls,
+    print_import_count_warnings,
     skipped_import_advice,
     widget_import_refusal,
 )
@@ -583,10 +584,13 @@ def cmd_sync(args) -> int:
     # Counters that do not add up to total are objects the importer dropped
     # without a word (a FINISHED task with imported=skipped=failed=0 on 8.18.7
     # and 9.0.2 when a dashboard carries an unknown widget type). An error.
+    # Error severity only for DASHBOARDS (the measured type); the rest warn.
     shortfalls = import_shortfalls(result)
-    short_rc = 1 if shortfalls else 0
-    for msg in import_shortfall_errors(result):
+    short_errors = import_shortfall_errors(result)
+    short_rc = 1 if short_errors else 0
+    for msg in short_errors:
         print(f"ERROR: IMPORT SHORTFALL: {msg}", file=sys.stderr)
+    print_import_count_warnings(result)
     if "DASHBOARDS" in shortfalls and dashboards:
         print(
             "ERROR: IMPORT SHORTFALL: dashboards in this import: "

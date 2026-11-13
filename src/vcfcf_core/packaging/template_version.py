@@ -17,13 +17,17 @@ This list is the same one CLAUDE.md carries under "After tooling changes";
 keep the two in step.
 
 History (most recent first):
-  2026-11-13-1  install.py / install.ps1: a content-import summary whose
-                imported + skipped + failed is below total is an error (exit
-                2), for every content type; before any import, an install
-                whose dashboards carry a widget type above the instance's
-                version (Section below 9.1.1) is refused, naming them
-                (issue #199; on 8.18.7 and 9.0.2 one such dashboard loses
-                every dashboard in the import while the task reports FINISHED)
+  2026-11-13-1  install.py / install.ps1: on a FINISHED import, a DASHBOARDS
+                summary whose imported + skipped + failed is below total is
+                an ERROR (exit 2) and the run ends on "DASHBOARDS were not
+                imported", not the "refresh after ~5 minutes" note; any other
+                type's shortfall, or a counter that is not a whole number, is
+                a WARN that changes nothing (its total is unverified). Before
+                any import, an install whose dashboards carry Section is
+                refused on a build measured not to import it (below 9.1.0)
+                and warned on for the unmeasured 9.1.0, naming them (issue
+                #199). Every dist zip built before this is stale: rebuild
+                every bundles/ manifest (content-packager)
   2026-11-12-1  content prefix moved to [VCF CF] (from [VCF Content Factory]);
                 zips built before carry the legacy names, and re-running one
                 reverts the rename (UUID-keyed objects rename back in place,

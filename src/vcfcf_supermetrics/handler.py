@@ -78,7 +78,8 @@ class SuperMetricsHandler(ContentHandler):
             for msg in (s.get("errorMessages") or [])
         ]
 
-        from vcfcf_dashboards.client import import_shortfall_errors
+        from vcfcf_dashboards.client import import_shortfall_errors, print_import_count_warnings
+        print_import_count_warnings(api_result)
         shortfall = " ".join(import_shortfall_errors(api_result))
         for entry in bundle:
             if shortfall:

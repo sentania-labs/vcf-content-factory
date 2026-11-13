@@ -42,6 +42,7 @@ import getpass
 import io
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -1549,35 +1550,55 @@ def _all_skipped_summaries(result: dict, content_types) -> dict:
     return flagged
 
 
-def _import_shortfalls(result: dict, content_types=None) -> dict:
-    """{contentType: (total, imported, skipped, failed)} for summaries whose
-    counters do not add up to total.
+#: The factory's vcfcf_dashboards.client.SHORTFALL_SEVERITY, re-stated (this
+#: template ships standalone; a parity test pins it). Only DASHBOARDS, the
+#: measured type, is an error; every other type's shortfall is a warning
+#: that changes no exit code, because its `total` is not verified.
+_SHORTFALL_SEVERITY = {"DASHBOARDS": "error"}
 
-    The factory's vcfcf_dashboards.client.import_shortfalls, re-stated
-    because this template ships standalone (a parity test pins the two).
-    On 8.18.7 and 9.0.2 a dashboard with a widget type the build does not
-    know aborts the whole dashboards batch, and the task still reports
-    FINISHED with imported=skipped=failed=0: this is the only signature.
-    """
-    short = {}
-    for entry in (result or {}).get("operationSummaries") or []:
+
+def _whole(value):
+    """Same rule as vcfcf_dashboards.client._whole: int (not bool) or ASCII
+    digit string; None is 0; anything else is False (not a count)."""
+    if value is None:
+        return 0
+    if isinstance(value, bool):
+        return False
+    if isinstance(value, int):
+        return value if value >= 0 else False
+    if isinstance(value, str) and value and all("0" <= c <= "9" for c in value):
+        return int(value)
+    return False
+
+
+def _import_count_findings(result: dict, content_types=None) -> list:
+    """[(severity, contentType, message)] for a FINISHED import result; the
+    factory's import_count_findings re-stated (parity test). On 8.18.7 and
+    9.0.2 a dashboard with a widget type the build does not know aborts the
+    whole dashboards batch, and the task still reports FINISHED with
+    imported=skipped=failed=0: counters short of total are the only sign."""
+    if not isinstance(result, dict) or result.get("state") != "FINISHED":
+        return []
+    found = {}
+    for entry in result.get("operationSummaries") or []:
         if not isinstance(entry, dict):
             continue
         ct = entry.get("contentType") or "?"
+        if not isinstance(ct, str):
+            ct = "?"
         if content_types and ct not in content_types:
             continue
         if entry.get("total") is None:
             continue
-        try:
-            total = int(entry.get("total"))
-            imported = int(entry.get("imported") or 0)
-            skipped = int(entry.get("skipped") or 0)
-            failed = int(entry.get("failed") or 0)
-        except (TypeError, ValueError):
+        counts = [_whole(entry.get(k)) for k in ("total", "imported", "skipped", "failed")]
+        if any(c is False for c in counts):
+            found[ct] = ("warning", _import_uninterpretable_message(ct))
             continue
+        total, imported, skipped, failed = counts
         if imported + skipped + failed < total:
-            short[ct] = (total, imported, skipped, failed)
-    return short
+            found[ct] = (_SHORTFALL_SEVERITY.get(ct, "warning"),
+                         _import_shortfall_message(ct, tuple(counts)))
+    return [(sev, ct, msg) for ct, (sev, msg) in sorted(found.items())]
 
 
 def _import_shortfall_message(content_type: str, counts) -> str:
@@ -1593,39 +1614,93 @@ def _import_shortfall_message(content_type: str, counts) -> str:
     if content_type == "DASHBOARDS":
         return head + (
             " The likely cause is a widget type this instance's version "
-            "cannot import (for example Section before VCF Operations "
-            "9.1.1): on 8.18.7 and 9.0.2 one such dashboard makes the "
-            "importer discard every dashboard in the same import, and "
-            "view-bridge.log shows 'restoreData failed to import "
-            "Dashboards'. Check which dashboards exist on the instance."
+            "cannot import (for example Section, measured failing on 8.18.7 "
+            "and 9.0.2): one such dashboard makes the importer discard every "
+            "dashboard in the same import, and view-bridge.log shows "
+            "'restoreData failed to import Dashboards'. Check which dashboards "
+            "exist on the instance."
         )
     return head + (
-        " The cause is not known for this content type. Check on the "
-        "instance which objects exist, and report it with the import "
-        "envelope."
+        f" What total counts for {content_type} has not been verified (no "
+        f"healthy {content_type} import result with a total is recorded), so "
+        f"this is a warning, not a failure. Check on the instance which "
+        f"objects exist, and report it with the import envelope."
     )
 
 
-def _record_import_shortfalls(ctx: Dict, result: dict) -> dict:
-    """Print and record (ctx["warnings"], exit 2) every shortfall in result."""
-    short = _import_shortfalls(result)
-    for ct in sorted(short):
-        msg = "IMPORT SHORTFALL: " + _import_shortfall_message(ct, short[ct])
-        _warn(msg)
-        ctx["warnings"].append(msg)
-    return short
+def _import_uninterpretable_message(content_type: str) -> str:
+    """Same text as vcfcf_dashboards.client.import_uninterpretable_message."""
+    return (
+        f"{content_type}: the import result carries a total but its counters "
+        f"are not all whole numbers, so whether everything imported cannot be "
+        f"told from it. Check on the instance which objects exist, and report "
+        f"it with the import envelope."
+    )
 
 
-# Widget types with a minimum VCF Operations version, and the sentence for
-# what a dashboard carrying one costs below it: the factory's
-# vcfcf_core.dashboards.widget_versions (WIDGET_TYPE_MIN_OPS_VERSION entries
-# with a floor, IMPORT_LOSS_SENTENCE), re-stated; a parity test pins them.
+#: Prefix of an error-severity shortfall in ctx["warnings"]; the run summary
+#: keys on it to end on "not imported" instead of "refresh after 5 minutes".
+_SHORTFALL_PREFIX = "IMPORT SHORTFALL: "
+
+
+def _lost_import_lines(lost) -> list:
+    """The closing lines of a run with error-severity shortfalls: one per
+    content type, saying it was not imported and why."""
+    lines = []
+    for w in lost:
+        ct = w[len(_SHORTFALL_PREFIX):].split(":", 1)[0]
+        if ct == "DASHBOARDS":
+            why = ("the import accounted for fewer dashboards than it carried, "
+                   "most likely because one of them uses a widget type this VCF "
+                   "Operations version cannot import (see IMPORT SHORTFALL above). "
+                   "Waiting or refreshing will not bring them back.")
+        else:
+            why = ("the import accounted for fewer objects than it carried "
+                   "(see IMPORT SHORTFALL above).")
+        lines.append(f"ERROR: {ct} were not imported: {why}")
+    if lines:
+        lines.insert(0, "")
+    return lines
+
+
+def _record_import_shortfalls(ctx: Dict, result: dict) -> list:
+    """Print every finding. Errors print as ERROR and go to ctx["warnings"]
+    (exit 2); warnings print as WARN and change nothing. Returns the
+    content types with an error."""
+    errors = []
+    for sev, ct, msg in _import_count_findings(result):
+        if sev == "error":
+            print(f"  ERROR  {_SHORTFALL_PREFIX}{msg}")
+            ctx["warnings"].append(_SHORTFALL_PREFIX + msg)
+            errors.append(ct)
+        else:
+            _warn(_SHORTFALL_PREFIX + msg)
+    return errors
+
+
+# Widget-type floors and the sentence for what a dashboard carrying one costs:
+# the factory's vcfcf_core.dashboards.widget_versions (WIDGET_TYPE_MIN_OPS_VERSION
+# entries with a floor, WIDGET_TYPE_REFUSE_BELOW_OPS_VERSION,
+# IMPORT_LOSS_SENTENCE), re-stated; a parity test pins them. Refused below
+# the measured-failing version, warned on between it and the proven floor.
 _WIDGET_TYPE_FLOORS = {"Section": (9, 1, 1)}
+_WIDGET_TYPE_REFUSE_BELOW = {"Section": (9, 1, 0)}
 _IMPORT_LOSS_SENTENCE = (
     "the importer then aborts on that dashboard: a content import (sync, "
-    "bundle install) loses EVERY dashboard in the same import, a pak install "
-    "every dashboard in the same content/dashboards directory, and the task "
-    "still reports FINISHED with nothing failed"
+    "bundle install) loses EVERY dashboard in the same import (measured with "
+    "one owner, which every factory import has), a pak install every "
+    "dashboard in the same content/dashboards directory, and the task still "
+    "reports FINISHED with nothing failed"
+)
+_VERSION_UNREADABLE_NOTE = (
+    "could not read the instance version (GET /api/versions/current), "
+    "so the widget-type floors were not checked before import; a "
+    "dashboard with a widget type this build cannot import loses every "
+    "dashboard in the import, which the import result check reports."
+)
+#: Same pattern as widget_versions.RELEASE_NAME_VERSION_RE.
+_RELEASE_NAME_VERSION_RE = re.compile(
+    r"Operations[ \t\r\n]+([0-9]+(?:\.[0-9]+)+)(?=[ \t\r\n]|\Z)"
 )
 
 
@@ -1637,18 +1712,16 @@ def _version_tuple(value) -> tuple:
 
 
 def _format_version(v) -> str:
-    return ".".join(str(p) for p in v)
+    parts = list(v) + [0] * (3 - len(v))
+    return ".".join(str(p) for p in parts)
 
 
 def _parse_release_name(release_name):
-    """Same rule as widget_versions.parse_release_name."""
+    """Same rule as widget_versions.parse_release_name. Never raises."""
     if not isinstance(release_name, str):
         return None
-    found = None
-    for token in release_name.split():
-        if "." in token and all(p.isdigit() for p in token.split(".")):
-            found = token
-    return _version_tuple(found) if found else None
+    m = _RELEASE_NAME_VERSION_RE.search(release_name)
+    return _version_tuple(m.group(1)) if m else None
 
 
 def _dashboard_widget_pairs(dashboard_json: str) -> list:
@@ -1670,41 +1743,66 @@ def _dashboard_widget_pairs(dashboard_json: str) -> list:
         return []
 
 
-def _import_refusal(dashboards, instance_version):
-    """Same rule and text as widget_versions.import_refusal."""
+def _import_check(dashboards, instance_version):
+    """Same rule and texts as widget_versions.import_check: (refusal, warning)."""
     have = _version_tuple(instance_version)
-    blocked = []
-    floors = {}
+    refused, unverified = [], []
+    refused_types, unverified_types = {}, {}
     for name, widgets in dashboards:
-        bad = []
+        bad, unsure = [], []
         for local_id, wtype in widgets:
             floor = _WIDGET_TYPE_FLOORS.get(wtype)
             if floor is None or have >= _version_tuple(floor):
                 continue
-            floors[wtype] = _version_tuple(floor)
-            bad.append(f"{local_id} ({wtype})")
+            floor = _version_tuple(floor)
+            below = _WIDGET_TYPE_REFUSE_BELOW.get(wtype)
+            if below is not None and have < _version_tuple(below):
+                refused_types[wtype] = (_version_tuple(below), floor)
+                bad.append(f"{local_id} ({wtype})")
+            else:
+                unverified_types[wtype] = (_version_tuple(below) if below else floor, floor)
+                unsure.append(f"{local_id} ({wtype})")
         if bad:
-            blocked.append(f"'{name}' (widget(s) {', '.join(bad)})")
-    if not blocked:
-        return None
-    needs = ", ".join(
-        f"{t} needs {_format_version(v)} or later" for t, v in sorted(floors.items())
-    )
-    return (
-        f"refused before import: this instance is VCF Operations "
-        f"{_format_version(have)} and {needs}. Dashboards carrying it: "
-        f"{'; '.join(blocked)}. On this build {_IMPORT_LOSS_SENTENCE}, so "
-        f"the import was not sent. Remove those widgets or install on VCF "
-        f"Operations {_format_version(max(floors.values()))} or later "
-        f"(issue #199)."
-    )
+            refused.append(f"'{name}' (widget(s) {', '.join(bad)})")
+        if unsure:
+            unverified.append(f"'{name}' (widget(s) {', '.join(unsure)})")
+    have_s = _format_version(have)
+    if refused:
+        why = ", ".join(
+            f"{t} is measured not to import below {_format_version(b)} and "
+            f"proven to import from {_format_version(f)}"
+            for t, (b, f) in sorted(refused_types.items())
+        )
+        top = max(f for _b, f in refused_types.values())
+        return (
+            f"refused before import: this instance is VCF Operations {have_s}; "
+            f"{why}. Dashboards carrying it: {'; '.join(refused)}. On this "
+            f"build {_IMPORT_LOSS_SENTENCE}, so the import was not sent. Remove "
+            f"those widgets or install on VCF Operations "
+            f"{_format_version(top)} or later (issue #199).",
+            None,
+        )
+    if unverified:
+        why = ", ".join(
+            f"{t} is proven to import from {_format_version(f)} and measured "
+            f"not to import below {_format_version(b)}"
+            for t, (b, f) in sorted(unverified_types.items())
+        )
+        return (
+            None,
+            f"this instance is VCF Operations {have_s}, which is unverified: "
+            f"{why}. Dashboards carrying it: {'; '.join(unverified)}. Importing "
+            f"anyway; if this build cannot import it, {_IMPORT_LOSS_SENTENCE}, "
+            f"and the import result check reports the loss (issue #199).",
+        )
+    return None, None
 
 
 def _preflight_widget_floors(client, bundles: List[Dict]) -> None:
     """Refuse the install, before anything is imported, when the instance's
-    version cannot import a widget type a selected bundle's dashboards use.
-    An unreadable version is a WARN: the import goes ahead and the
-    shortfall check reports a loss."""
+    version is measured not to import a widget type a selected bundle's
+    dashboards use. An unmeasured or unreadable version is a WARN: the
+    import goes ahead and the shortfall check reports a loss."""
     pairs = []
     for bundle in bundles:
         content = (bundle.get("manifest") or {}).get("content") or {}
@@ -1720,14 +1818,13 @@ def _preflight_widget_floors(client, bundles: List[Dict]) -> None:
         return
     version = client.get_ops_version()
     if version is None:
-        _warn("could not read the instance version (GET /api/versions/current), "
-              "so the widget-type floors were not checked before import; a "
-              "dashboard with a widget type this build cannot import loses every "
-              "dashboard in the import, which the import result check reports.")
+        _warn(_VERSION_UNREADABLE_NOTE)
         return
-    refusal = _import_refusal(pairs, version)
+    refusal, warning = _import_check(pairs, version)
     if refusal:
         _die(refusal)
+    if warning:
+        _warn(warning)
 
 
 # ---------------------------------------------------------------------------
@@ -3246,19 +3343,26 @@ def _run_install(args: argparse.Namespace, host: str, user: str,
     other_warnings = [w for w in all_warnings if w not in enable_warnings]
     if enable_warnings or other_warnings:
         total = len(enable_warnings) + len(other_warnings)
+        # An error-severity import shortfall (W4): the content is not on the
+        # instance and will not appear, so the run must not end on the
+        # "expected, refresh after ~5 minutes" note; it ends on what was lost.
+        lost = [w for w in other_warnings if w.startswith(_SHORTFALL_PREFIX)]
         print(f"Done with {total} warning(s):")
         for w in enable_warnings + other_warnings:
-            print(f"  WARN  {w}")
+            print(f"  {'ERROR' if w in lost else 'WARN'}  {w}")
         if enable_warnings:
             print("Content was imported but one or more super metrics could not be enabled.")
         print()
-        print("NOTE: VCF Operations needs roughly 5 minutes to finish ingesting and")
-        print("configuring imported content. Until that completes:")
-        print("  - Dashboards may render with empty widgets")
-        print("  - View columns may show 'No data'")
-        print("  - Newly enabled super metrics will report no values")
-        print("This is expected. Refresh after ~5 minutes.")
+        if not lost:
+            print("NOTE: VCF Operations needs roughly 5 minutes to finish ingesting and")
+            print("configuring imported content. Until that completes:")
+            print("  - Dashboards may render with empty widgets")
+            print("  - View columns may show 'No data'")
+            print("  - Newly enabled super metrics will report no values")
+            print("This is expected. Refresh after ~5 minutes.")
         _print_advisories()
+        for line in _lost_import_lines(lost):
+            print(line)
         sys.exit(2)
     else:
         if all_advisories or mat_notes:
