@@ -218,6 +218,25 @@ def _check_sm_referents_before_import(bundle: Bundle, session) -> int:
 # Sync one bundle
 # ---------------------------------------------------------------------------
 
+def _refuse_unimportable_widgets(bundle, session) -> bool:
+    """True (after printing why) when the instance's version cannot import a
+    widget type one of the bundle's dashboards uses (issue #199). Checked
+    before anything of the bundle is imported: on 8.18.7 and 9.0.x one such
+    dashboard loses every dashboard in the import while the task reports
+    FINISHED."""
+    dashboards = list(getattr(bundle, "dashboards", None) or [])
+    if not dashboards:
+        return False
+    from vcfcf_dashboards.client import widget_import_refusal
+    refusal, note = widget_import_refusal(session, dashboards)
+    if note:
+        _print_warn(note)
+    if refusal:
+        print(f"FATAL: {refusal}", file=sys.stderr)
+        return True
+    return False
+
+
 def sync_bundle(
     bundle_path: str | Path,
     handlers: Optional[List[ContentHandler]] = None,
@@ -256,6 +275,8 @@ def sync_bundle(
         print(f"  {first_line}")
 
     if _check_sm_referents_before_import(bundle, session):
+        return 1
+    if _refuse_unimportable_widgets(bundle, session):
         return 1
     # Symptoms and alerts sync by name: warn on a stock name (#345 W8).
     from .stock_ids import warn_bundle_stock_names

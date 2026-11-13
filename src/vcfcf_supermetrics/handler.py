@@ -78,8 +78,15 @@ class SuperMetricsHandler(ContentHandler):
             for msg in (s.get("errorMessages") or [])
         ]
 
+        from vcfcf_dashboards.client import import_shortfall_errors
+        shortfall = " ".join(import_shortfall_errors(api_result))
         for entry in bundle:
-            if failed > 0 and errors:
+            if shortfall:
+                result.items.append(
+                    ItemResult(name=entry["name"], status="failed",
+                               message=f"IMPORT SHORTFALL: {shortfall}")
+                )
+            elif failed > 0 and errors:
                 result.items.append(
                     ItemResult(
                         name=entry["name"],

@@ -413,6 +413,18 @@ class Client:
             _die(f"currentuser failed ({r.status_code}): {r.text}")
         return r.json()
 
+    def get_ops_version(self):
+        """Product version from GET /api/versions/current releaseName, or
+        None when it cannot be read (same rule as the factory's
+        vcfcf_dashboards.client.get_ops_version)."""
+        try:
+            r = self._req("GET", "/api/versions/current")
+            if r.status_code != 200:
+                return None
+            return _parse_release_name((r.json() or {}).get("releaseName"))
+        except Exception:  # noqa: BLE001
+            return None
+
     def discover_marker_filename(self, timeout_s: int = 120) -> str:
         """Discover the target's *L.v1 marker filename via a throwaway export.
 
@@ -1537,6 +1549,187 @@ def _all_skipped_summaries(result: dict, content_types) -> dict:
     return flagged
 
 
+def _import_shortfalls(result: dict, content_types=None) -> dict:
+    """{contentType: (total, imported, skipped, failed)} for summaries whose
+    counters do not add up to total.
+
+    The factory's vcfcf_dashboards.client.import_shortfalls, re-stated
+    because this template ships standalone (a parity test pins the two).
+    On 8.18.7 and 9.0.2 a dashboard with a widget type the build does not
+    know aborts the whole dashboards batch, and the task still reports
+    FINISHED with imported=skipped=failed=0: this is the only signature.
+    """
+    short = {}
+    for entry in (result or {}).get("operationSummaries") or []:
+        if not isinstance(entry, dict):
+            continue
+        ct = entry.get("contentType") or "?"
+        if content_types and ct not in content_types:
+            continue
+        if entry.get("total") is None:
+            continue
+        try:
+            total = int(entry.get("total"))
+            imported = int(entry.get("imported") or 0)
+            skipped = int(entry.get("skipped") or 0)
+            failed = int(entry.get("failed") or 0)
+        except (TypeError, ValueError):
+            continue
+        if imported + skipped + failed < total:
+            short[ct] = (total, imported, skipped, failed)
+    return short
+
+
+def _import_shortfall_message(content_type: str, counts) -> str:
+    """Same text as vcfcf_dashboards.client.import_shortfall_message."""
+    total, imported, skipped, failed = counts
+    missing = total - imported - skipped - failed
+    head = (
+        f"{content_type}: the import accounted for {total - missing} of "
+        f"{total} (imported={imported} skipped={skipped} failed={failed}); "
+        f"{missing} were neither imported, skipped nor failed, and the task "
+        f"still reported FINISHED."
+    )
+    if content_type == "DASHBOARDS":
+        return head + (
+            " The likely cause is a widget type this instance's version "
+            "cannot import (for example Section before VCF Operations "
+            "9.1.1): on 8.18.7 and 9.0.2 one such dashboard makes the "
+            "importer discard every dashboard in the same import, and "
+            "view-bridge.log shows 'restoreData failed to import "
+            "Dashboards'. Check which dashboards exist on the instance."
+        )
+    return head + (
+        " The cause is not known for this content type. Check on the "
+        "instance which objects exist, and report it with the import "
+        "envelope."
+    )
+
+
+def _record_import_shortfalls(ctx: Dict, result: dict) -> dict:
+    """Print and record (ctx["warnings"], exit 2) every shortfall in result."""
+    short = _import_shortfalls(result)
+    for ct in sorted(short):
+        msg = "IMPORT SHORTFALL: " + _import_shortfall_message(ct, short[ct])
+        _warn(msg)
+        ctx["warnings"].append(msg)
+    return short
+
+
+# Widget types with a minimum VCF Operations version, and the sentence for
+# what a dashboard carrying one costs below it: the factory's
+# vcfcf_core.dashboards.widget_versions (WIDGET_TYPE_MIN_OPS_VERSION entries
+# with a floor, IMPORT_LOSS_SENTENCE), re-stated; a parity test pins them.
+_WIDGET_TYPE_FLOORS = {"Section": (9, 1, 1)}
+_IMPORT_LOSS_SENTENCE = (
+    "the importer then aborts on that dashboard: a content import (sync, "
+    "bundle install) loses EVERY dashboard in the same import, a pak install "
+    "every dashboard in the same content/dashboards directory, and the task "
+    "still reports FINISHED with nothing failed"
+)
+
+
+def _version_tuple(value) -> tuple:
+    parts = [int(p) for p in (value if isinstance(value, tuple) else str(value).split("."))]
+    while len(parts) > 1 and parts[-1] == 0:
+        parts.pop()
+    return tuple(parts)
+
+
+def _format_version(v) -> str:
+    return ".".join(str(p) for p in v)
+
+
+def _parse_release_name(release_name):
+    """Same rule as widget_versions.parse_release_name."""
+    if not isinstance(release_name, str):
+        return None
+    found = None
+    for token in release_name.split():
+        if "." in token and all(p.isdigit() for p in token.split(".")):
+            found = token
+    return _version_tuple(found) if found else None
+
+
+def _dashboard_widget_pairs(dashboard_json: str) -> list:
+    """[(name, [(widget id, type), ...])] from a rendered dashboard.json.
+    Never raises (an unreadable file yields [])."""
+    try:
+        data = json.loads(dashboard_json)
+        out = []
+        for d in (data.get("dashboards") or []) if isinstance(data, dict) else []:
+            if not isinstance(d, dict):
+                continue
+            widgets = [
+                (str(w.get("id") or "?"), str(w.get("type") or ""))
+                for w in (d.get("widgets") or []) if isinstance(w, dict)
+            ]
+            out.append((str(d.get("name") or d.get("id") or "?"), widgets))
+        return out
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def _import_refusal(dashboards, instance_version):
+    """Same rule and text as widget_versions.import_refusal."""
+    have = _version_tuple(instance_version)
+    blocked = []
+    floors = {}
+    for name, widgets in dashboards:
+        bad = []
+        for local_id, wtype in widgets:
+            floor = _WIDGET_TYPE_FLOORS.get(wtype)
+            if floor is None or have >= _version_tuple(floor):
+                continue
+            floors[wtype] = _version_tuple(floor)
+            bad.append(f"{local_id} ({wtype})")
+        if bad:
+            blocked.append(f"'{name}' (widget(s) {', '.join(bad)})")
+    if not blocked:
+        return None
+    needs = ", ".join(
+        f"{t} needs {_format_version(v)} or later" for t, v in sorted(floors.items())
+    )
+    return (
+        f"refused before import: this instance is VCF Operations "
+        f"{_format_version(have)} and {needs}. Dashboards carrying it: "
+        f"{'; '.join(blocked)}. On this build {_IMPORT_LOSS_SENTENCE}, so "
+        f"the import was not sent. Remove those widgets or install on VCF "
+        f"Operations {_format_version(max(floors.values()))} or later "
+        f"(issue #199)."
+    )
+
+
+def _preflight_widget_floors(client, bundles: List[Dict]) -> None:
+    """Refuse the install, before anything is imported, when the instance's
+    version cannot import a widget type a selected bundle's dashboards use.
+    An unreadable version is a WARN: the import goes ahead and the
+    shortfall check reports a loss."""
+    pairs = []
+    for bundle in bundles:
+        content = (bundle.get("manifest") or {}).get("content") or {}
+        entry = content.get("dashboards")
+        if not isinstance(entry, dict) or not entry.get("file"):
+            continue
+        try:
+            text = (Path(bundle["dir"]) / entry["file"]).read_text(encoding="utf-8")
+        except OSError:
+            continue
+        pairs.extend(_dashboard_widget_pairs(text))
+    if not any(_WIDGET_TYPE_FLOORS.get(t) for _n, ws in pairs for _i, t in ws):
+        return
+    version = client.get_ops_version()
+    if version is None:
+        _warn("could not read the instance version (GET /api/versions/current), "
+              "so the widget-type floors were not checked before import; a "
+              "dashboard with a widget type this build cannot import loses every "
+              "dashboard in the import, which the import result check reports.")
+        return
+    refusal = _import_refusal(pairs, version)
+    if refusal:
+        _die(refusal)
+
+
 # ---------------------------------------------------------------------------
 # Post-import dashboard materialization check (issue #244)
 #
@@ -1933,8 +2126,10 @@ def _install_supermetrics(ctx: Dict) -> None:
         if total_imported == 0 and total_skipped > 0:
             print(f"    [ghost-state recovery] all {total_skipped} SM(s) skipped on first "
                   f"import, retrying to re-register in SM catalog...")
-            ctx["client"].import_content_zip(sm_zip, "super metrics (retry)")
+            result = ctx["client"].import_content_zip(sm_zip, "super metrics (retry)") or {}
 
+    if _record_import_shortfalls(ctx, result):
+        return
     _ok(f"Imported {len(sm_dict)} super metric(s)")
 
 
@@ -1971,6 +2166,10 @@ def _install_dashboards(ctx: Dict) -> None:
     # the same envelope. Each type gets its own line, and the type that
     # imported normally still gets its success line.
     flagged = _all_skipped_summaries(result, ("DASHBOARDS", "VIEW_DEFINITIONS"))
+    # Counters short of total are an error (exit 2): a dashboards batch lost
+    # to an unknown widget type reports imported=skipped=failed=0, which the
+    # all-skipped advisory below does not see.
+    short = _record_import_shortfalls(ctx, result)
     dash_names = _extract_dashboard_names(
         dash_json.replace("PLACEHOLDER_USER_ID", owner_id)
     )
@@ -1997,10 +2196,12 @@ def _install_dashboards(ctx: Dict) -> None:
         " with the import envelope."
     )
 
-    if "DASHBOARDS" not in flagged:
+    if "DASHBOARDS" not in flagged or "DASHBOARDS" in short:
         # Post-import materialization check (#244) runs once at the end of
         # the run. A dashboard the import skipped is not what this run put
         # on the instance, so it is not checked (same rule as the factory).
+        # After a shortfall it runs: it is the by-id existence check that
+        # names the absent dashboards.
         ctx.setdefault("imported_dashboards", []).extend(
             _extract_dashboard_id_names(dash_json.replace("PLACEHOLDER_USER_ID", owner_id))
         )
@@ -2015,10 +2216,10 @@ def _install_dashboards(ctx: Dict) -> None:
         )
         _warn(advisory)
         ctx.setdefault("advisories", []).append(advisory)
-    else:
+    elif "DASHBOARDS" not in short:
         _ok("Imported 1 dashboard")
 
-    if n_views:
+    if n_views and "VIEW_DEFINITIONS" not in short:
         if "VIEW_DEFINITIONS" in flagged:
             imp, skp = flagged["VIEW_DEFINITIONS"]
             view_names = _extract_view_names(views_xml)
@@ -2523,7 +2724,9 @@ def _install_reports(ctx: Dict) -> None:
     reports_file = bundle_dir / manifest["content"]["reports"]["file"]
     reports_xml = reports_file.read_text(encoding="utf-8")
     reports_zip = _build_reports_zip(reports_xml, ctx["marker"], ctx["owner_id"])
-    ctx["client"].import_content_zip(reports_zip, "reports")
+    result = ctx["client"].import_content_zip(reports_zip, "reports") or {}
+    if _record_import_shortfalls(ctx, result):
+        return
     n_reports = reports_xml.count("<ReportDef ")
     _ok(f"Imported {n_reports} report definition(s)")
     # Note: report uninstall (like view and dashboard uninstall) requires the
@@ -2976,6 +3179,10 @@ def _run_install(args: argparse.Namespace, host: str, user: str,
     _step(step, TOTAL_STEPS, "Resolving current user ID...")
     owner_id = client.get_current_user()["id"]
     _ok(f"Owner user ID: {owner_id}")
+
+    # Before anything is imported: a widget type this instance's version
+    # cannot import loses every dashboard in the import (issue #199).
+    _preflight_widget_floors(client, selected_bundles)
 
     global_ctx: Dict = {
         "client": client,

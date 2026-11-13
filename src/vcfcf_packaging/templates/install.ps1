@@ -1940,6 +1940,240 @@ function Get-SmGhostStateSkipCount {
     return 0
 }
 
+# ---------------------------------------------------------------------------
+# Import result shortfall and widget-type floors (issue #199).  Parity with
+# install.py _import_shortfalls, _import_shortfall_message,
+# _record_import_shortfalls, _parse_release_name, _dashboard_widget_pairs,
+# _import_refusal and _preflight_widget_floors, which re-state the factory's
+# vcfcf_dashboards.client and vcfcf_core.dashboards.widget_versions; this
+# script ships standalone.  tests/test_import_shortfall_and_widget_floor.py
+# pins the texts.  If one side changes, change both.
+# ---------------------------------------------------------------------------
+$script:WidgetTypeFloors = @{ "Section" = @(9, 1, 1) }
+$script:ImportLossSentence = ("the importer then aborts on that dashboard: a content import (sync, " +
+    "bundle install) loses EVERY dashboard in the same import, a pak install " +
+    "every dashboard in the same content/dashboards directory, and the task " +
+    "still reports FINISHED with nothing failed")
+
+function Get-ImportShortfalls {
+    param($Result, [string[]]$ContentTypes = @())
+    # @{ contentType = @{ Total; Imported; Skipped; Failed } } for every summary
+    # whose counters do not add up to total.  On 8.18.7 and 9.0.2 a dashboard
+    # with a widget type the build does not know aborts the whole dashboards
+    # batch and the task still reports FINISHED with imported=skipped=failed=0:
+    # this is the only signature.  A summary with no total is not flagged.
+    $short = @{}
+    if ($null -eq $Result) { return $short }
+    foreach ($entry in (Get-PropList $Result "operationSummaries")) {
+        if ($null -eq $entry) { continue }
+        $ct = [string](Get-PropValue $entry "contentType")
+        if (-not $ct) { $ct = "?" }
+        if ($ContentTypes -and $ContentTypes.Count -gt 0 -and ($ContentTypes -notcontains $ct)) { continue }
+        $totalRaw = Get-PropValue $entry "total"
+        if ($null -eq $totalRaw) { continue }
+        try {
+            $total = [int]$totalRaw
+            $imp = 0; $skp = 0; $fail = 0
+            $raw = Get-PropValue $entry "imported"; if ($raw) { $imp = [int]$raw }
+            $raw = Get-PropValue $entry "skipped"; if ($raw) { $skp = [int]$raw }
+            $raw = Get-PropValue $entry "failed"; if ($raw) { $fail = [int]$raw }
+        } catch {
+            continue
+        }
+        if (($imp + $skp + $fail) -lt $total) {
+            $short[$ct] = @{ Total = $total; Imported = $imp; Skipped = $skp; Failed = $fail }
+        }
+    }
+    return $short
+}
+
+function Get-ImportShortfallMessage {
+    param([string]$ContentType, $Counts)
+    $missing = $Counts.Total - $Counts.Imported - $Counts.Skipped - $Counts.Failed
+    $head = ("${ContentType}: the import accounted for $($Counts.Total - $missing) of " +
+        "$($Counts.Total) (imported=$($Counts.Imported) skipped=$($Counts.Skipped) failed=$($Counts.Failed)); " +
+        "$missing were neither imported, skipped nor failed, and the task " +
+        "still reported FINISHED.")
+    if ($ContentType -ceq "DASHBOARDS") {
+        return $head + (" The likely cause is a widget type this instance's version " +
+            "cannot import (for example Section before VCF Operations " +
+            "9.1.1): on 8.18.7 and 9.0.2 one such dashboard makes the " +
+            "importer discard every dashboard in the same import, and " +
+            "view-bridge.log shows 'restoreData failed to import " +
+            "Dashboards'. Check which dashboards exist on the instance.")
+    }
+    return $head + (" The cause is not known for this content type. Check on the " +
+        "instance which objects exist, and report it with the import " +
+        "envelope.")
+}
+
+function Add-ImportShortfalls {
+    param($Ctx, $Result)
+    # Print and record ($Ctx.Warnings, exit 2) every shortfall in $Result.
+    $short = Get-ImportShortfalls -Result $Result
+    [string[]]$keys = @($short.Keys)
+    [Array]::Sort($keys, [System.StringComparer]::Ordinal)
+    foreach ($ct in $keys) {
+        $msg = "IMPORT SHORTFALL: " + (Get-ImportShortfallMessage -ContentType $ct -Counts $short[$ct])
+        Write-Warn $msg
+        $Ctx.Warnings.Add($msg)
+    }
+    return $short
+}
+
+function ConvertTo-VersionTuple {
+    param($Value)
+    # "9.0.2.0" or @(9,0,2,0) -> @(9,0,2): trailing zeros dropped, as in
+    # install.py _version_tuple.
+    $parts = [System.Collections.Generic.List[int]]::new()
+    if ($Value -is [System.Array]) {
+        foreach ($v in $Value) { $parts.Add([int]$v) }
+    } else {
+        foreach ($v in ([string]$Value).Split(".")) { $parts.Add([int]$v) }
+    }
+    while ($parts.Count -gt 1 -and $parts[$parts.Count - 1] -eq 0) { $parts.RemoveAt($parts.Count - 1) }
+    return ,$parts.ToArray()
+}
+
+function Compare-VersionTuple {
+    param([int[]]$A, [int[]]$B)
+    # -1 / 0 / 1, Python tuple ordering (a shorter prefix sorts first).
+    $n = [Math]::Min($A.Count, $B.Count)
+    for ($i = 0; $i -lt $n; $i++) {
+        if ($A[$i] -lt $B[$i]) { return -1 }
+        if ($A[$i] -gt $B[$i]) { return 1 }
+    }
+    if ($A.Count -lt $B.Count) { return -1 }
+    if ($A.Count -gt $B.Count) { return 1 }
+    return 0
+}
+
+function ConvertFrom-ReleaseName {
+    param($ReleaseName)
+    # The product version in a /api/versions/current releaseName ("VCF
+    # Operations 9.0.2.0" -> 9,0,2); $null when it carries no dotted number.
+    if (-not ($ReleaseName -is [string])) { return $null }
+    $found = $null
+    foreach ($token in $ReleaseName.Split([char[]]@(' ', "`t"), [System.StringSplitOptions]::RemoveEmptyEntries)) {
+        if ($token -cmatch '^[0-9]+(\.[0-9]+)+$') { $found = $token }
+    }
+    if ($null -eq $found) { return $null }
+    return ,(ConvertTo-VersionTuple $found)
+}
+
+function Format-VersionTuple {
+    param([int[]]$V)
+    return ($V -join ".")
+}
+
+function Get-OpsVersion {
+    # Product version of the instance, or $null when it cannot be read.
+    try {
+        $resp = Invoke-Api -Method GET -Path "/api/versions/current"
+        if ((Get-StatusCode $resp) -ne 200) { return $null }
+        $v = ConvertFrom-ReleaseName (Get-PropValue $resp "releaseName")
+        if ($null -eq $v) { return $null }
+        return ,$v
+    } catch {
+        return $null
+    }
+}
+
+function Get-DashboardWidgetPairs {
+    param([string]$DashJson)
+    # @( @(name, @( @(widget id, type), ... )), ... ) from a rendered
+    # dashboard.json.  Never throws (unreadable yields an empty array).
+    $out = [System.Collections.Generic.List[object]]::new()
+    try {
+        $data = ConvertFrom-MatJson $DashJson
+        if (-not (Test-MatMapping $data)) { return ,$out.ToArray() }
+        foreach ($d in (Get-MatJsonArray $data "dashboards")) {
+            if (-not (Test-MatMapping $d)) { continue }
+            $widgets = [System.Collections.Generic.List[object]]::new()
+            foreach ($w in (Get-MatJsonArray $d "widgets")) {
+                if (-not (Test-MatMapping $w)) { continue }
+                $wid = [string](Get-PropValue $w "id"); if (-not $wid) { $wid = "?" }
+                $widgets.Add(@($wid, [string](Get-PropValue $w "type")))
+            }
+            $name = [string](Get-PropValue $d "name")
+            if (-not $name) { $name = [string](Get-PropValue $d "id") }
+            if (-not $name) { $name = "?" }
+            $out.Add(@($name, $widgets.ToArray()))
+        }
+    } catch {
+        return ,@()
+    }
+    return ,$out.ToArray()
+}
+
+function Get-ImportRefusal {
+    param([object[]]$Dashboards, $InstanceVersion)
+    # Same rule and text as install.py _import_refusal; $null when every
+    # widget type imports on this version.
+    $have = ConvertTo-VersionTuple $InstanceVersion
+    $blocked = [System.Collections.Generic.List[string]]::new()
+    $floors = @{}
+    foreach ($pair in $Dashboards) {
+        $bad = [System.Collections.Generic.List[string]]::new()
+        foreach ($w in $pair[1]) {
+            $wtype = [string]$w[1]
+            if (-not $script:WidgetTypeFloors.ContainsKey($wtype)) { continue }
+            $floor = ConvertTo-VersionTuple $script:WidgetTypeFloors[$wtype]
+            if ((Compare-VersionTuple $have $floor) -ge 0) { continue }
+            $floors[$wtype] = $floor
+            $bad.Add("$($w[0]) ($wtype)")
+        }
+        if ($bad.Count -gt 0) { $blocked.Add("'$($pair[0])' (widget(s) $($bad -join ', '))") }
+    }
+    if ($blocked.Count -eq 0) { return $null }
+    [string[]]$types = @($floors.Keys)
+    [Array]::Sort($types, [System.StringComparer]::Ordinal)
+    $needs = @($types | ForEach-Object { "$_ needs $(Format-VersionTuple $floors[$_]) or later" }) -join ", "
+    $top = $null
+    foreach ($t in $types) {
+        if ($null -eq $top -or (Compare-VersionTuple $floors[$t] $top) -gt 0) { $top = $floors[$t] }
+    }
+    return ("refused before import: this instance is VCF Operations " +
+        "$(Format-VersionTuple $have) and $needs. Dashboards carrying it: " +
+        "$($blocked -join '; '). On this build $($script:ImportLossSentence), so " +
+        "the import was not sent. Remove those widgets or install on VCF " +
+        "Operations $(Format-VersionTuple $top) or later " +
+        "(issue #199).")
+}
+
+function Invoke-WidgetFloorPreflight {
+    param([object[]]$Bundles)
+    # Refuse the install, before anything is imported, when the instance's
+    # version cannot import a widget type a selected bundle's dashboards use.
+    # An unreadable version is a WARN: the import goes ahead and the
+    # shortfall check reports a loss.
+    $pairs = [System.Collections.Generic.List[object]]::new()
+    foreach ($b in $Bundles) {
+        $content = Get-PropValue (Get-PropValue $b "Manifest") "content"
+        $entry = Get-PropValue $content "dashboards"
+        $file = Get-PropValue $entry "file"
+        if (-not $file) { continue }
+        $path = Join-Path (Get-PropValue $b "Dir") $file
+        if (-not (Test-Path -LiteralPath $path)) { continue }
+        foreach ($pair in (Get-DashboardWidgetPairs -DashJson (Load-RawTextFile $path))) { $pairs.Add($pair) }
+    }
+    $any = $false
+    foreach ($pair in $pairs) {
+        foreach ($w in $pair[1]) { if ($script:WidgetTypeFloors.ContainsKey([string]$w[1])) { $any = $true } }
+    }
+    if (-not $any) { return }
+    $version = Get-OpsVersion
+    if ($null -eq $version) {
+        Write-Warn ("could not read the instance version (GET /api/versions/current), " +
+            "so the widget-type floors were not checked before import; a " +
+            "dashboard with a widget type this build cannot import loses every " +
+            "dashboard in the import, which the import result check reports.")
+        return
+    }
+    $refusal = Get-ImportRefusal -Dashboards $pairs.ToArray() -InstanceVersion $version
+    if ($refusal) { Write-Fail $refusal }
+}
+
 function Write-AdvisoryTrailer {
     param([object[]]$Advisories)
     # Trailer printed in BOTH summary branches.  Without it, a run whose
@@ -3131,9 +3365,11 @@ function Install-Supermetrics($Ctx) {
     if ($ghostSkipped -gt 0) {
         Write-Host ("    [ghost-state recovery] all $ghostSkipped SM(s) skipped on first " +
             "import, retrying to re-register in SM catalog...")
-        $null = Import-ContentZip -ZipBytes $smZip -Label "super metrics (retry)"
+        $importResult = Import-ContentZip -ZipBytes $smZip -Label "super metrics (retry)"
     }
 
+    $short = Add-ImportShortfalls -Ctx $Ctx -Result $importResult
+    if ($short.Count -gt 0) { return }
     $smCount = @($smDict.PSObject.Properties.Name).Count
     Write-Ok "Imported $smCount super metric(s)"
 }
@@ -3166,6 +3402,10 @@ function Install-Dashboard($Ctx) {
     # envelope.  Each type gets its own line, and the type that imported
     # normally still gets its success line.
     $flagged = Get-AllSkippedSummaries -Result $importResult -ContentTypes @("DASHBOARDS", "VIEW_DEFINITIONS")
+    # Counters short of total are an error (exit 2): a dashboards batch lost
+    # to an unknown widget type reports imported=skipped=failed=0, which the
+    # all-skipped advisory below does not see.
+    $short = Add-ImportShortfalls -Ctx $Ctx -Result $importResult
     # Not "the existing dashboard was NOT updated": under the owner-mapping
     # cause the dashboard was never created, and this import sends
     # force=true, so the create-only cause does not apply.  Same text as
@@ -3187,6 +3427,15 @@ function Install-Dashboard($Ctx) {
         "exists on the instance and holds this version, and report the skip" +
         " with the import envelope.")
 
+    if ($short.ContainsKey("DASHBOARDS")) {
+        # The by-id existence check at the end of the run names the absent
+        # dashboards.
+        if ($Ctx.ContainsKey("ImportedDashboards") -and $null -ne $Ctx["ImportedDashboards"]) {
+            foreach ($pair in (Get-DashboardIdNames -DashJson $dashJson -OwnerId $Ctx.OwnerId)) {
+                $Ctx["ImportedDashboards"].Add($pair)
+            }
+        }
+    }
     if ($flagged.ContainsKey("DASHBOARDS")) {
         $counts = $flagged["DASHBOARDS"]
         $dashNames = Get-DashboardAdvisoryNames -DashJson $dashJson -OwnerId $Ctx.OwnerId
@@ -3196,7 +3445,7 @@ function Install-Dashboard($Ctx) {
             "$named." + $dashSkipTail)
         Write-Warn $advisory
         $Ctx.Advisories.Add($advisory)
-    } else {
+    } elseif (-not $short.ContainsKey("DASHBOARDS")) {
         Write-Ok "Imported 1 dashboard"
         # Post-import materialization check (#255) runs once at the end of
         # the run.  A dashboard the import skipped is not what this run put on
@@ -3208,7 +3457,7 @@ function Install-Dashboard($Ctx) {
         }
     }
 
-    if ($nViews -gt 0) {
+    if ($nViews -gt 0 -and -not $short.ContainsKey("VIEW_DEFINITIONS")) {
         if ($flagged.ContainsKey("VIEW_DEFINITIONS")) {
             $counts = $flagged["VIEW_DEFINITIONS"]
             $viewNames = Get-ViewAdvisoryNames -ViewsXml $viewsXml
@@ -3415,7 +3664,9 @@ function Install-Reports($Ctx) {
     $reportsFile = Join-Path $Ctx.BundleDir $Ctx.Manifest.content.reports.file
     $reportsXml = Load-RawTextFile $reportsFile
     $reportsZip = New-ReportsZip -ReportsXml $reportsXml -Marker $Ctx.Marker -OwnerId $Ctx.OwnerId
-    $null = Import-ContentZip -ZipBytes $reportsZip -Label "reports"
+    $importResult = Import-ContentZip -ZipBytes $reportsZip -Label "reports"
+    $short = Add-ImportShortfalls -Ctx $Ctx -Result $importResult
+    if ($short.Count -gt 0) { return }
     $nReports = ([regex]::Matches($reportsXml, "<ReportDef ")).Count
     Write-Ok "Imported $nReports report definition(s)"
     # Note: report uninstall (like dashboard and view uninstall) requires the
@@ -3945,6 +4196,10 @@ function Invoke-Install {
     Write-Step $step $TOTAL "Resolving current user ID..."
     $ownerId = Get-OwnerId
     Write-Ok "Owner user ID: $ownerId"
+
+    # Before anything is imported: a widget type this instance's version
+    # cannot import loses every dashboard in the import (issue #199).
+    Invoke-WidgetFloorPreflight -Bundles $SelectedBundles
 
     $allAdvisories = [System.Collections.Generic.List[string]]::new()
     $globalCtx = @{

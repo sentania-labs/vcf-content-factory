@@ -141,6 +141,23 @@ that build. Any pak dashboard whose bound dashboard uses a widget type
 unknown to the target build therefore fails silently. Evidence:
 `../investigations/2026-10-12-compliance-pak-summary-binding.md`.
 
+Re-measured 2026-11-13 on 8.18.7 (build 25423534) and 9.0.2 (build
+25431135), on both install paths
+(`../investigations/2026-11-13-section-widget-on-8x-and-90.md`). The two
+builds run the same importer code here. In a pak the loss is the
+`content/dashboards/<dir>`: the installer imports each directory separately,
+so only the directories holding a Section dashboard are lost, and the pak
+still installs FINISHED and verified. In a content import
+(`/api/content/operations/import`) the loss is the owner's whole dashboards
+batch: every dashboard in the same import is lost, whatever its order, and
+the task reports FINISHED, `errorCode: NONE`, DASHBOARDS `total N, imported
+0, skipped 0, failed 0` and no message. The only signature is
+`imported + skipped + failed < total`; every factory reader of the import
+result now fails on it (`vcfcf_dashboards.client.import_shortfalls`, with
+pinned copies in both installer templates), and sync and bundle install
+refuse a dashboard with a widget type above the instance's version before
+importing (`vcfcf_core.dashboards.widget_versions.import_refusal`).
+
 ## The Summary clone can carry no widget config (9.0.2)
 
 Seen live on devel (9.0.2.0 Build 25137845) on 2026-10-13 with compliance
@@ -244,6 +261,11 @@ copy back and prints `SUMMARY NOT REBOUND` (exit 3) if it is unfinished.
 `vcfcf_dashboards bind-summary` refuses a still-building source since #256.
 
 ### 9.0.2 WidgetType keys (complete list)
+
+8.18.7 (build 25423534) has the same 47 constants with the same keys
+(read 2026-11-13 from the same jar on devel_8_18,
+`../investigations/2026-11-13-section-widget-on-8x-and-90.md`); neither
+has `Section`.
 
 Read on 2026-10-12 from `WidgetDTONew$WidgetType` in
 `/usr/lib/vmware-vcops/common/lib/vcops-bridge-client-1.0-SNAPSHOT.jar`

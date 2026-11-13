@@ -30,6 +30,7 @@ from .client import (
     get_current_user,
     import_reports_zip,
 )
+from vcfcf_dashboards.client import import_shortfall_errors
 from .loader import ReportValidationError, load_file
 from .render import build_import_zip
 
@@ -99,8 +100,14 @@ class ReportsHandler(ContentHandler):
             return result
 
         state = api_result.get("state", "")
+        shortfall = " ".join(import_shortfall_errors(api_result))
         for rd in reports:
-            if state == "FINISHED":
+            if shortfall:
+                result.items.append(ItemResult(
+                    name=rd.name, status="failed",
+                    message=f"IMPORT SHORTFALL: {shortfall}",
+                ))
+            elif state == "FINISHED":
                 result.items.append(ItemResult(name=rd.name, status="ok"))
             else:
                 result.items.append(

@@ -126,6 +126,13 @@ def cmd_sync(args) -> int:
     )
     for d in defs:
         print(f"  {d.id}  {d.name}")
+    # Counters short of total: objects the importer dropped without a word.
+    from vcfcf_dashboards.client import import_shortfall_errors
+    shortfall = import_shortfall_errors(result)
+    for msg in shortfall:
+        print(f"ERROR: IMPORT SHORTFALL: {msg}", file=sys.stderr)
+    if shortfall:
+        return 1
     if imported == 0 and (skipped or failed):
         print(
             "WARNING: nothing imported — all entries skipped/failed. "

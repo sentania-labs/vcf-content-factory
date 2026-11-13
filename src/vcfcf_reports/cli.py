@@ -7,6 +7,7 @@ from pathlib import Path
 
 from vcfcf_common._profile_cli import add_profile_arg, validate_profile_arg, resolve_profile_from_args
 from vcfcf_supermetrics.client import VCFOpsClient, VCFOpsError
+from vcfcf_dashboards.client import import_shortfall_errors
 
 from .client import (
     VCFOpsReportsError,
@@ -136,7 +137,13 @@ def cmd_sync(args) -> int:
         )
         for msg in s.get("errorMessages", []) or []:
             print(f"    ERROR: {msg}")
-    return 0 if result.get("state") == "FINISHED" else 1
+    if result.get("state") != "FINISHED":
+        return 1
+    # Counters short of total: objects the importer dropped without a word.
+    shortfall = import_shortfall_errors(result)
+    for msg in shortfall:
+        print(f"ERROR: IMPORT SHORTFALL: {msg}", file=sys.stderr)
+    return 1 if shortfall else 0
 
 
 def cmd_delete(args) -> int:

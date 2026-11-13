@@ -47,6 +47,124 @@ def all_skipped_content_types(result: dict, content_types=None) -> dict:
     return flagged
 
 
+def import_shortfalls(result: dict, content_types=None) -> dict:
+    """Content types whose counters do not add up to their ``total``.
+
+    Returns ``{contentType: (total, imported, skipped, failed)}`` for every
+    summary where ``imported + skipped + failed < total``: objects the
+    importer neither imported, skipped nor failed. Measured on 8.18.7 and
+    9.0.2 (2026-11-13): a dashboard with a widget type the build does not
+    know aborts the owner's whole dashboards batch, and the task still
+    reports FINISHED, ``errorCode: NONE``, ``imported=0 skipped=0
+    failed=0`` and no message. This is the only signature in the envelope.
+
+    The one definition of the check: every factory reader of a content
+    import result calls it (the installer templates carry a pinned copy).
+    A summary with no usable ``total`` is not flagged.
+    """
+    wanted = tuple(content_types) if content_types else None
+    short: dict = {}
+    for s in (result or {}).get("operationSummaries") or []:
+        if not isinstance(s, dict):
+            continue
+        ct = s.get("contentType") or "?"
+        if wanted is not None and ct not in wanted:
+            continue
+        if s.get("total") is None:
+            continue
+        try:
+            total = int(s.get("total"))
+            imported = int(s.get("imported") or 0)
+            skipped = int(s.get("skipped") or 0)
+            failed = int(s.get("failed") or 0)
+        except (TypeError, ValueError):
+            continue
+        if imported + skipped + failed < total:
+            short[ct] = (total, imported, skipped, failed)
+    return short
+
+
+def import_shortfall_message(content_type: str, counts) -> str:
+    """The error for one :func:`import_shortfalls` entry. The installer
+    templates carry the same text verbatim (pinned by a test)."""
+    total, imported, skipped, failed = counts
+    missing = total - imported - skipped - failed
+    head = (
+        f"{content_type}: the import accounted for {total - missing} of "
+        f"{total} (imported={imported} skipped={skipped} failed={failed}); "
+        f"{missing} were neither imported, skipped nor failed, and the task "
+        f"still reported FINISHED."
+    )
+    if content_type == "DASHBOARDS":
+        return head + (
+            " The likely cause is a widget type this instance's version "
+            "cannot import (for example Section before VCF Operations "
+            "9.1.1): on 8.18.7 and 9.0.2 one such dashboard makes the "
+            "importer discard every dashboard in the same import, and "
+            "view-bridge.log shows 'restoreData failed to import "
+            "Dashboards'. Check which dashboards exist on the instance."
+        )
+    return head + (
+        " The cause is not known for this content type. Check on the "
+        "instance which objects exist, and report it with the import "
+        "envelope."
+    )
+
+
+def import_shortfall_errors(result: dict, content_types=None) -> list:
+    """One :func:`import_shortfall_message` per short content type, sorted."""
+    return [
+        import_shortfall_message(ct, counts)
+        for ct, counts in sorted(import_shortfalls(result, content_types).items())
+    ]
+
+
+def get_ops_version(client: VCFOpsClient):
+    """The instance's product version from ``GET /api/versions/current``
+    ``releaseName`` (an int tuple), or None when it cannot be read."""
+    from vcfcf_core.dashboards.widget_versions import parse_release_name
+    try:
+        r = client._request("GET", "/api/versions/current")
+        if r.status_code != 200:
+            return None
+        return parse_release_name((r.json() or {}).get("releaseName"))
+    except Exception:  # noqa: BLE001  unreadable is reported by the caller
+        return None
+
+
+def widget_import_refusal(client: VCFOpsClient, dashboards) -> "tuple":
+    """``(refusal, note)`` for a content import of ``dashboards`` on ``client``.
+
+    ``refusal`` is the message when the instance's version is below a widget
+    type's floor (``widget_versions.import_refusal``): the caller must not
+    import. ``note`` is a WARNING when a floored type is present but the
+    version could not be read; the import goes ahead and the post-import
+    :func:`import_shortfalls` check is what catches a loss. Both None when no
+    dashboard carries a floored type (no request is made).
+    """
+    from vcfcf_core.dashboards.widget_versions import (
+        WIDGET_TYPE_MIN_OPS_VERSION,
+        import_refusal,
+    )
+    pairs = [
+        (d.name, [(w.local_id, w.type) for w in d.widgets]) for d in dashboards
+    ]
+    if not any(
+        WIDGET_TYPE_MIN_OPS_VERSION.get(t) is not None
+        for _n, ws in pairs for _i, t in ws
+    ):
+        return None, None
+    version = get_ops_version(client)
+    if version is None:
+        return None, (
+            "could not read the instance version (GET /api/versions/current), "
+            "so the widget-type floors were not checked before import; a "
+            "dashboard with a widget type this build cannot import loses every "
+            "dashboard in the import, which the import result check reports."
+        )
+    return import_refusal(pairs, version), None
+
+
 def skipped_import_advice(content_type: str) -> str:
     """What an ``imported=0 / skipped=N`` result for ``content_type`` means
     for the request every factory import sends, ``force=true``

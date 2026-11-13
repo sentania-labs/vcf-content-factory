@@ -59,7 +59,12 @@ $want = @(
     "Invoke-MaterializationCheck", "Invoke-MaterializationReport",
     "Write-MaterializationTrailer", "Write-AdvisoryTrailer",
     "Install-Dashboard", "Get-AllSkippedSummaries", "Get-DashboardAdvisoryNames",
-    "Get-BoundedNames", "Get-ViewAdvisoryNames", "Invoke-Install")
+    "Get-BoundedNames", "Get-ViewAdvisoryNames", "Invoke-Install",
+    # issue #199: the shortfall check and the widget-floor preflight
+    "Get-ImportShortfalls", "Get-ImportShortfallMessage", "Add-ImportShortfalls",
+    "Invoke-WidgetFloorPreflight", "Get-DashboardWidgetPairs", "Get-OpsVersion",
+    "ConvertFrom-ReleaseName", "ConvertTo-VersionTuple", "Compare-VersionTuple",
+    "Format-VersionTuple", "Get-ImportRefusal")
 $found = New-Object System.Collections.Generic.List[string]
 $fns = $ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] }, $true)
 foreach ($f in $fns) {

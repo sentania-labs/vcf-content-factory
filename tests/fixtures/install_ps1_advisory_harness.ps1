@@ -35,6 +35,8 @@ $want = @("Write-Ok", "Write-Warn", "Get-PropValue", "Get-BoundedNames",
           "Get-OwnerId", "Get-CurrentUser", "Get-MarkerFilename",
           # issue #108 -- SM ghost-state retry
           "Get-SmGhostStateSkipCount", "Install-Supermetrics",
+          # issue #199 -- counters short of total are an error
+          "Get-ImportShortfalls", "Get-ImportShortfallMessage", "Add-ImportShortfalls",
           # issue #116 -- the Ext.Direct / dashboard.action envelope family
           "Get-ExtDirectResult", "Get-AllViews", "Get-AllReports",
           "Get-AllDashboards", "Remove-View", "Remove-Reports",

@@ -300,15 +300,26 @@ reads no dashboard keys at all; that predates this change.
 
 ## Section and the oldest targeted build (issue #199)
 
-`Section` needs VCF Operations 9.1.1 or later; on 9.0.x the importer aborts
-the whole dashboard. Tier 2 paks declare their targets: RULE-019 and the
+`Section` needs VCF Operations 9.1.1 or later; on 8.18.7 and 9.0.x the
+importer aborts on the dashboard, and the loss is wider than the dashboard: a
+content import loses every dashboard in the same import, a pak every
+dashboard in the same `content/dashboards/<dir>`, and both report FINISHED
+(`../investigations/2026-11-13-section-widget-on-8x-and-90.md`). Tier 2 paks
+declare their targets: RULE-019 and the
 SDK compat lines (`sdk_builder._SDK_COMPAT_LINES`: 8.18.7, 9.0, 9.1.1.0100).
 The pak build therefore fails a bundled dashboard whose widget types the
 oldest line (`sdk_builder._oldest_supported_line()`, 8.18.7) cannot import,
 naming the file, the dashboard, the widget ids and the consequence. Content
 bundles declare no target; validate and bundle builds warn, naming the
-file, the dashboard and the consequence.
-`Dashboard.widget_version_problems(target)` is the check.
+file, the dashboard and the consequence. What they cannot gate, the live
+paths do: `vcfcf_dashboards sync`, the dashboards sync handler, bundle sync
+and both installer templates read the instance's version
+(`GET /api/versions/current` `releaseName`; the body's `major`/`minor` are
+the API version) and refuse before importing when a dashboard carries a
+type above it, naming the dashboards (`widget_versions.import_refusal`). An
+unreadable version is a warning and the import goes ahead; the import
+result's counters (`imported + skipped + failed < total`) then report the
+loss. `Dashboard.widget_version_problems(target)` is the build-time check.
 
 The gate runs after the bundled content loads, in
 `sdk_builder.check_bundled_version_floors`, beside the `omit:` gate below:

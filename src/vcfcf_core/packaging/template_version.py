@@ -17,6 +17,13 @@ This list is the same one CLAUDE.md carries under "After tooling changes";
 keep the two in step.
 
 History (most recent first):
+  2026-11-13-1  install.py / install.ps1: a content-import summary whose
+                imported + skipped + failed is below total is an error (exit
+                2), for every content type; before any import, an install
+                whose dashboards carry a widget type above the instance's
+                version (Section below 9.1.1) is refused, naming them
+                (issue #199; on 8.18.7 and 9.0.2 one such dashboard loses
+                every dashboard in the import while the task reports FINISHED)
   2026-11-12-1  content prefix moved to [VCF CF] (from [VCF Content Factory]);
                 zips built before carry the legacy names, and re-running one
                 reverts the rename (UUID-keyed objects rename back in place,
@@ -59,4 +66,4 @@ History (most recent first):
   2026-08-24-2  install.ps1: uninstall residual-else sites warn and continue
 """
 
-CURRENT_TEMPLATE_VERSION = "2026-11-12-1"
+CURRENT_TEMPLATE_VERSION = "2026-11-13-1"

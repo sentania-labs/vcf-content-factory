@@ -58,7 +58,18 @@ Non-negotiables the factory bakes into every import:
    export against the target instance first.
 2. **One import at a time.** A concurrent import returns 403
    "Task is already running": retry at 30s intervals, max 3.
-3. **Imported-nothing check.** `imported=0, skipped>0` in the
+3. **Counters short of total.** For every content type,
+   `imported + skipped + failed < total` is an error: objects the importer
+   neither imported, skipped nor failed. Measured 2026-11-13 on 8.18.7 and
+   9.0.2: a dashboard with a widget type the build lacks (`Section` before
+   9.1.1) makes the importer discard every dashboard in the same import,
+   and the task still reports FINISHED, `errorCode: NONE`, DASHBOARDS
+   `imported=0 skipped=0 failed=0` and no message
+   (`../investigations/2026-11-13-section-widget-on-8x-and-90.md`). The
+   check below needs `skipped > 0`, so it never sees this. One definition:
+   `vcfcf_dashboards.client.import_shortfalls`; the installer templates
+   carry a pinned copy.
+4. **Imported-nothing check.** `imported=0, skipped>0` in the
    summaries means the import finished without changing anything on
    the instance: never report that as a successful install.
    For **SUPER_METRICS** specifically, this is the bisected ghost-state
@@ -80,7 +91,7 @@ Non-negotiables the factory bakes into every import:
    dashboards, non-admin import of another user's content, and
    pak-supplied solution content. Evidence and verbatim envelopes:
    `content_import_skip_semantics.md` in this directory.
-4. **`force=true` on every import.** Omitting `force` also overwrites
+5. **`force=true` on every import.** Omitting `force` also overwrites
    (measured); only an explicit `force=false` skips existing content.
    Note `imported=N` means "written", not "changed": there is no content
    comparison, so an unchanged re-import still reports `imported=N`.
