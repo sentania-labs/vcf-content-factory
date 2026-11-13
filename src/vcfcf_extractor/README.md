@@ -27,7 +27,20 @@ python -m vcfcf_extractor --help
 python -m vcfcf_extractor extract --help
 python -m vcfcf_extractor extract dashboard --help
 python -m vcfcf_extractor list-dashboards --help
+python -m vcfcf_extractor import-local --help
 ```
+
+### `import-local`
+
+Offline conversion of whole content trees (views, dashboards, report
+templates, alerts, symptoms, recommendations, super metrics; directories,
+content-export zips, `.pak` files) to factory YAML in a `content/`,
+third-party or SDK pak layout, with explicit id (`--ids keep|mint`,
+`--id-map`) and naming (`--naming`) decisions, the stock-id guard on the
+result and `--verify` through the real loaders. The table above is the
+live-extract scope; `import-local` covers every type. How-to:
+`knowledge/context/authoring/importer_offline_conversion.md`. Logic in
+`vcfcf_core.importer`, CLI and verification in `importer.py` here.
 
 ### `extract dashboard`
 

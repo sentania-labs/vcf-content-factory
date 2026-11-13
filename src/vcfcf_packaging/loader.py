@@ -12,7 +12,9 @@ on:
   parent);
 - resolve report sections against ``content/views`` and
   ``content/dashboards`` under the working directory (the pre-row-3
-  report loader default, kept verbatim);
+  report loader default, kept verbatim) for a ``bundles/`` manifest, and
+  against the project's own ``views/`` and ``dashboards/`` for a
+  third-party ``PROJECT.yaml`` (since 2026-11-13);
 - mint a uuid4 into a super metric, view, dashboard or report YAML that
   has no ``id`` and derive ``provenance`` from the repo layout;
 - default ``load_all_bundles`` to the ``bundles`` directory.
@@ -61,11 +63,18 @@ def load_bundle(path: str | Path) -> Bundle:
     """Load a bundle manifest and every content object it references, with
     the factory's root sniff, minting and provenance (see module docstring)."""
     path = Path(path)
+    # A third-party project's reports name the project's own views and
+    # dashboards, which live beside its PROJECT.yaml (the core loader's
+    # default, None here). Against content/ under the working directory a
+    # project report that names its own view or dashboard could never
+    # resolve (found by the offline importer, import-local, 2026-11-13).
+    # A bundles/*.yaml manifest lists factory content and keeps content/.
+    is_project = path.name == "PROJECT.yaml"
     return _core.load_bundle(
         path,
         repo_root=_find_repo_root(path.parent),
-        report_views_dir=Path("content/views"),
-        report_dashboards_dir=Path("content/dashboards"),
+        report_views_dir=None if is_project else Path("content/views"),
+        report_dashboards_dir=None if is_project else Path("content/dashboards"),
         on_missing_id=_mint_id_into_file,
         provenance_of=_provenance_of,
     )

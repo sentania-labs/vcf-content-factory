@@ -1161,6 +1161,16 @@ reused. Field lines are `- **Field:** value` (parsed by
   has a YAML form the renderer reproduces (183 of 189 vCommunity 0.8.1
   views round-trip with zero semantic difference through a mechanical
   mapper), so the close condition is now only importer work.
+- **Narrowed 2026-11-13:** the offline converter
+  `python3 -m vcfcf_extractor import-local`
+  (`knowledge/context/authoring/importer_offline_conversion.md`) carries
+  `filter=` into `subject.filter`, instanced-group member `isProperty`,
+  summary rows and every other ViewDef field with a YAML form, and its
+  `--verify` reports any remaining difference per view (tests:
+  `tests/test_import_local.py`). The defect now covers only the two older
+  reverse writers, `extract dashboard` (`/extract`) and `reverse-local`, which
+  were left unchanged because they have users; the close condition applies to
+  them as written.
 
 ### DEF-020
 
