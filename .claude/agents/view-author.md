@@ -104,6 +104,10 @@ Track-specific examples:
   `validate-sdk` and `build-sdk` fail on a mismatch when the field is
   declared. When it is absent, match the pak's existing names: the tools
   assume `factory_prefixed` and only warn (issue #229).
+  If the pak's existing names still carry `[VCF Content Factory]`,
+  stop and ask for the pak to be migrated first
+  (`knowledge/context/authoring/prefix_migration.md` §Pak repos): new
+  `[VCF CF]` names in it fail as mixed spellings.
 - Totals: `summary:` takes `true`, one mapping, or a list of mappings
   (`display_name`, `aggregation` SUM/AVG/MIN/MAX/DEVIATION, `columns` 0-based),
   one rendered totals row per entry in order (issue #168).

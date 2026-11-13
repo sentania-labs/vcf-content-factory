@@ -71,6 +71,10 @@ name: "[VCF CF] <Human Name>"
 # `validate-sdk` and `build-sdk` fail on a mismatch when the field is
 # declared. When it is absent, match the pak's existing names: the tools
 # assume `factory_prefixed` and only warn (issue #229).
+# If the pak's existing names still carry `[VCF Content Factory]`, stop
+# and ask for the pak to be migrated first
+# (`knowledge/context/authoring/prefix_migration.md` §Pak repos): new
+# `[VCF CF]` names in it fail as mixed spellings.
 adapter_kind: VMWARE
 resource_kind: VirtualMachine
 wait_cycles: 3
