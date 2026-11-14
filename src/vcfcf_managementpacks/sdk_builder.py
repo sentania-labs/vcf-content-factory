@@ -2843,6 +2843,21 @@ def _build_overview_packed(project: SdkProjectDef) -> bytes:
     return buf.getvalue()
 
 
+def _pak_minimum_ops_version() -> str:
+    """``manifest.txt`` ``vcops_minimum_version``: the oldest supported
+    line's major.minor, as ``<major>.<minor>.0`` ("8.18.0" while 8.18.7 is
+    the oldest line in ``_SDK_COMPAT_LINES``).
+
+    Owner decision 2026-11-14: a Tier 2 pak supports the whole 8.18.x line
+    (tested on 8.18.7), so the floor follows ``_SDK_COMPAT_LINES`` instead of
+    a second constant. The content and Section gates keep keying on the
+    tested line itself (``_oldest_supported_line``); only this declared floor
+    is widened to the line. Was a hardcoded "8.0.0".
+    """
+    major, minor = _oldest_supported_line().split(".")[:2]
+    return f"{major}.{minor}.0"
+
+
 def _generate_outer_manifest(project: SdkProjectDef) -> str:
     """Generate the outer pak manifest.txt JSON.
 
@@ -2856,7 +2871,7 @@ def _generate_outer_manifest(project: SdkProjectDef) -> str:
         "name": project.name,
         "description": project.description,
         "version": f"{project.version}.{project.build_number}",
-        "vcops_minimum_version": "8.0.0",
+        "vcops_minimum_version": _pak_minimum_ops_version(),
         "disk_space_required": 500,
         "eula_file": "eula.txt",
         "platform": ["Linux VA"],

@@ -406,8 +406,11 @@ key in the same import keeps today's handling, and a refusal names only the
 dashboards whose Sections remain.
 
 The Tier 2 floor is the RULE-019 oldest line, the same target the floor gate
-uses, not `manifest.txt` `vcops_minimum_version` (hardcoded `8.0.0` in
-`sdk_builder._generate_outer_manifest`, not read from `adapter.yaml`). When
+uses, not `manifest.txt` `vcops_minimum_version`. That field says
+`8.18.0` since 2026-11-14 (a Tier 2 pak supports 8.18.x, tested on 8.18.7):
+`sdk_builder._pak_minimum_ops_version`, the oldest line's major.minor, not
+read from `adapter.yaml`; it was a hardcoded `8.0.0`. The gates stay keyed
+to the tested line 8.18.7 itself. When
 8.18 and 9.0 leave RULE-019 and their entries leave `_SDK_COMPAT_LINES`, the
 oldest line becomes 9.1.1.0100 and every Tier 2 pak ships its Sections.
 Tier 1 (MPB) paks render no dashboards. Distribution bundles carry no
