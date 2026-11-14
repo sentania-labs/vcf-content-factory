@@ -208,7 +208,9 @@ pak's file layout; the gate below is what checks the layout.
   the same directory, a `localizationKey` with no entry, an empty dashboard
   bundle value, and any content id (view, dashboard, report, super metric,
   symptom, alert, recommendation) defined more than once, naming every
-  location (factory policy, worded as such). Allowed, byte-identical only: a
+  location (factory policy, worded as such). Allowed, identical copies only
+  (`pak_content.canonical_definition`: whitespace layout and the element's
+  own tail aside; the renderer indents a last sibling differently): a
   ViewDef in its own directory and in the directory of a report that embeds
   it (the importer upserts views; every such view of 0.0.0.15 was present on
   9.0.2 and 9.1.1; the source pak ships 59 such copies), and a

@@ -493,6 +493,79 @@ def test_shared_recommendation_does_not_merge_alert_files(tmp_path, monkeypatch)
     assert pak_content.check_pak_content(pak) == []
 
 
+def _two_recs_project(tmp_path):
+    """Codex P2 repro: alert groups [shared] and [shared, extra]. The
+    renderer indents the last <Recommendation> differently from earlier
+    siblings, so the shared copy's tail whitespace differs between files."""
+    shared, extra = f"{P}Gate Fix It", f"{P}Gate Extra Step"
+    d = _project(tmp_path)
+    (d / "recommendations").mkdir()
+    for fname, name in (("fix.yaml", shared), ("extra.yaml", extra)):
+        (d / "recommendations" / fname).write_text(
+            f'name: "{name}"\ndescription: Do {fname}.\nadapter_kind: VMWARE\n',
+            encoding="utf-8")
+    (d / "symptoms" / "other.yaml").write_text(
+        _symptom("6b6b6b6b-7777-4888-8999-aaaabbbbcccc", f"{P}Gate Mem High", 80),
+        encoding="utf-8")
+    (d / "alerts" / "first.yaml").write_text(
+        _alert_with_rec(f"{P}Gate CPU First", [SHARED], shared), encoding="utf-8")
+    (d / "alerts" / "mem.yaml").write_text(
+        _alert(f"{P}Gate Mem Alert", [f"{P}Gate Mem High"])
+        + f'recommendations:\n  - name: "{shared}"\n    priority: 1\n'
+        + f'  - name: "{extra}"\n    priority: 2\n', encoding="utf-8")
+    text = (d / "adapter.yaml").read_text(encoding="utf-8")
+    text = text.replace("symptoms/cond-b.yaml]", "symptoms/cond-b.yaml, symptoms/other.yaml]")
+    text = text.replace("alerts/second.yaml]", "alerts/second.yaml, alerts/mem.yaml]")
+    text += "  recommendations: [recommendations/fix.yaml, recommendations/extra.yaml]\n"
+    (d / "adapter.yaml").write_text(text, encoding="utf-8")
+    return d
+
+
+def test_shared_recommendation_copies_with_different_indentation_pass(tmp_path, monkeypatch):
+    d = _two_recs_project(tmp_path)
+    assert _validate(d, monkeypatch) == []
+    _stub_java(monkeypatch)
+    pak = sb.build_sdk_pak(d, tmp_path / "out")
+    m = _members(pak)
+    copies = [m[n] for n in m if n.startswith("content/alertdefs/")
+              and b'key="Recommendation-df-' in m[n] and b"Gate_Fix_It" in m[n]]
+    assert len(copies) == 2
+    # The repro holds: the raw serializations differ (tail whitespace)...
+    import xml.etree.ElementTree as ET
+    raw = {ET.tostring(e) for c in copies for e in ET.fromstring(c).iter("Recommendation")
+           if "Gate_Fix_It" in (e.get("key") or "")}
+    assert len(raw) == 2
+    # ...and the gate still reads them as one definition.
+    assert pak_content.check_pak_content(pak) == []
+
+
+def test_viewdef_copies_with_different_indentation_pass_but_different_content_fails(tmp_path):
+    compact = _viewdef(VIEW_ID, inner="<Usage>report</Usage>")
+    pretty = ('<?xml version="1.0"?>\n<Content>\n  <Views>\n'
+              f'    <ViewDef id="{VIEW_ID}">\n      <Title>T</Title>\n'
+              '      <Usage>report</Usage>\n    </ViewDef>\n'
+              f'    <ViewDef id="{REPORT_ID}"><Title>Other</Title></ViewDef>\n'
+              '  </Views>\n</Content>\n')
+    ok = _pak_with(tmp_path, {"content/reports/v/content.xml": compact,
+                              "content/reports/r/content.xml": pretty})
+    assert pak_content.check_pak_content(ok) == []
+    (tmp_path / "t.pak").unlink()
+    differ = _pak_with(tmp_path, {
+        "content/reports/v/content.xml": compact,
+        "content/reports/r/content.xml": _viewdef(VIEW_ID, inner="<Usage>dashboard</Usage>")})
+    errs = pak_content.check_pak_content(differ)
+    assert len(errs) == 1 and "copies differ" in errs[0]
+
+
+def test_canonical_form_keeps_attribute_values_and_text():
+    import xml.etree.ElementTree as ET
+    c = pak_content.canonical_definition
+    a = ET.fromstring('<R key="k" a="1"><D>x</D></R>')
+    assert c(a) == c(ET.fromstring('<R a="1" key="k">\n  <D>x</D>\n</R>'))  # order, layout
+    assert c(a) != c(ET.fromstring('<R key="k" a="2"><D>x</D></R>'))       # attribute value
+    assert c(a) != c(ET.fromstring('<R key="k" a="1"><D> x</D></R>'))      # significant text
+
+
 def test_gate_recommendation_copies_identical_pass_differing_fail(tmp_path):
     def _f(desc):
         return ('<alertContent><Recommendations><Recommendation key="R1">'

@@ -103,12 +103,39 @@ def content_definitions(members: Dict[str, bytes]) -> Tuple[List["_guard.Definit
     return defs, [f"{u.location}: {u.reason}" for u in unreadable]
 
 
+def _significant(text: Optional[str]) -> str:
+    """Text or tail as a definition sees it: whitespace-only is nothing,
+    anything else is kept exactly (its own whitespace included)."""
+    return "" if text is None or not text.strip() else text
+
+
+def canonical_definition(elem) -> tuple:
+    """What "an identical copy" means for the duplicate gate.
+
+    Two copies are the same definition when they have the same tag, the
+    same attributes with the same values (order is not part of it), the same
+    text, and the same children in the same order, recursively. Not part of
+    it: the element's own tail (the whitespace after it, which depends on
+    where it sits among its siblings: the renderer indents the last child
+    differently), and whitespace-only text or tails between child elements
+    (pretty-printing). Text with any non-whitespace character is compared
+    exactly, leading and trailing whitespace included, because whether the
+    importer trims it is not recorded.
+    """
+    return (
+        _local(elem.tag),
+        tuple(sorted(elem.attrib.items())),
+        _significant(elem.text),
+        tuple((canonical_definition(c), _significant(c.tail)) for c in elem),
+    )
+
+
 def _element_texts(members: Dict[str, bytes], prefix: str, tag: str,
-                   id_attr: str) -> Dict[Tuple[str, str], bytes]:
-    """``(member, normalized id)`` to the canonical bytes of each defining
-    ``tag`` element (identified by ``id_attr``) in the XML members under
-    ``prefix``."""
-    out: Dict[Tuple[str, str], bytes] = {}
+                   id_attr: str) -> Dict[Tuple[str, str], tuple]:
+    """``(member, normalized id)`` to the canonical form
+    (:func:`canonical_definition`) of each defining ``tag`` element
+    (identified by ``id_attr``) in the XML members under ``prefix``."""
+    out: Dict[Tuple[str, str], tuple] = {}
     for name, data in members.items():
         if not (name.startswith(prefix) and name.endswith(".xml")):
             continue
@@ -119,13 +146,13 @@ def _element_texts(members: Dict[str, bytes], prefix: str, tag: str,
         for elem in root.iter():
             if (_local(elem.tag) == tag and elem.get(id_attr)
                     and elem.get("ref") is None):
-                out[(name, _guard.normalize_id(elem.get(id_attr)))] = ET.tostring(elem)
+                out[(name, _guard.normalize_id(elem.get(id_attr)))] = canonical_definition(elem)
     return out
 
 
-#: Types whose byte-identical copies are allowed, all under one directory:
-#: content type to (directory, XML tag, id attribute). Why: the docstring of
-#: :func:`duplicate_definition_errors`.
+#: Types whose identical copies (:func:`canonical_definition`) are allowed,
+#: all under one directory: content type to (directory, XML tag, id
+#: attribute). Why: the docstring of :func:`duplicate_definition_errors`.
 IDENTICAL_COPIES_ALLOWED = {
     "view": (REPORTS_DIR, "ViewDef", "id"),
     "recommendation": (ALERTDEFS_DIR, "Recommendation", "key"),
@@ -141,7 +168,8 @@ def duplicate_definition_errors(members: Dict[str, bytes],
     specified. A duplicate is not by itself an import failure: on 9.0.2 a
     symptom defined twice updates in place (probe T2,
     ``knowledge/context/investigations/2026-11-14-symptom-duplicate-key-on-902.md``).
-    Two exceptions, byte-identical copies only:
+    Two exceptions, identical copies only (same definition by
+    :func:`canonical_definition`, whitespace layout aside):
 
     - a ViewDef in its own ``content/reports/<dir>/`` and again in a
       report's directory that embeds the views its sections name (the vendor
@@ -163,7 +191,7 @@ def duplicate_definition_errors(members: Dict[str, bytes],
     by_key: Dict[Tuple[str, str], List[_guard.Definition]] = {}
     for d in defs:
         by_key.setdefault((d.type, _guard.normalize_id(d.id)), []).append(d)
-    texts: Dict[str, Dict[Tuple[str, str], bytes]] = {}
+    texts: Dict[str, Dict[Tuple[str, str], tuple]] = {}
     errors: List[str] = []
     for (ctype, nid), found in sorted(by_key.items()):
         if len(found) < 2:

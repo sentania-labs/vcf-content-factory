@@ -514,10 +514,14 @@ content-only render, no compile. It refuses:
   differing copies the importer keeps is not specified), not a measured
   import failure: on 9.0.2 a symptom defined twice updates in place (probe
   T2, `investigations/2026-11-14-symptom-duplicate-key-on-902.md`).
-  Byte-identical copies are allowed for a ViewDef embedded in a report's
+  Identical copies are allowed for a ViewDef embedded in a report's
   directory as well as its own (the importer upserts views; measured) and
-  for a recommendation carried in each alert file that names it (inferred,
-  see below).
+  for a recommendation carried in each alert file that names it.
+  "Identical" is `pak_content.canonical_definition`: same tag, attributes
+  (any order), text and children; not the element's own tail or
+  whitespace-only text between children, which depend on its position (the
+  renderer indents a last sibling differently). Recommendation copies are
+  inferred safe (see below).
 
 Layout this enforces: no localization entry for an empty text; keys and
 values escaped for `java.util.Properties` (non-ASCII as `\uXXXX`, so the
