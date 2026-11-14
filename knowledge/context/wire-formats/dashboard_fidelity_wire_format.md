@@ -180,7 +180,15 @@ Carried for fidelity. An author writing new content leaves `ui:` out.
 (historically null; exports carry `""` on most widgets, or a spec name).
 `pin.traversal_spec:` sets the pinned resource's nested `traversalSpecId`
 (historically `""`), self-provider View only, authored explicitly and never
-inferred (see the note above `render._resolve_view_pin`).
+inferred (see the note above `render._resolve_view_pin`). A spec name has the
+form `<spec name>-<adapter kind>-<root resource kind>` (third-party pak,
+2026-11-13: 27 widgets carry `vSphere Hosts and Clusters-VMWARE-vSphere
+World`, `vSphere Networking-VMWARE-vSphere World` or `vSphere
+Storage-VMWARE-vSphere World`), so it names an adapter kind; the spec itself
+is declared by that adapter's describe.xml. `import-local --map-kind` therefore
+stops a dashboard whose spec names a mapped adapter kind rather than guess
+the target adapter's spec (`../authoring/importer_offline_conversion.md`
+§Re-pointing kinds).
 
 **Scoreboard / MetricChart.** Scoreboard: `old_metric_values:` (historically
 true; every third-party Scoreboard carries false), `layout_mode: fixedSize`
