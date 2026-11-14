@@ -495,6 +495,34 @@ are scanned but not checked, and the pass line says so. The escape hatch is adap
 check of any pak: `python3 -m sdk_buildkit stock-id-check <pak>`. Full
 reference: `stock_id_guard.md`.
 
+### Pak content gate and content layout (2026-11-14, buildkit 1.0.29)
+
+The pak installer reports success whatever its content import did, so
+`build-sdk` reads the pak's `content/` tree back before it ships
+(`vcfcf_core/packaging/pak_content.py`, `PakContentGateError`; a release
+build deletes a failing pak) and `validate-sdk` runs the same gate on a
+content-only render, no compile. It refuses:
+
+- a localization entry with an empty value, a key over 64 characters, a
+  line that is not `view.<id>.<key>` for a ViewDef in the same
+  `content/reports/<dir>/`, a ViewDef `localizationKey` with no entry, and
+  an empty value in a dashboard's `resources/*.properties` (the content
+  schema gives the value `minLength 1`; one bad line fails the whole
+  directory, a report and every view it embeds);
+- any content id defined more than once across the pak's files, naming
+  every location. A ViewDef embedded byte-identical in a report's directory
+  as well as its own is allowed (the importer upserts views).
+
+Layout this enforces: no localization entry for an empty text, values
+escaped for `java.util.Properties`; each `content/alertdefs/` file carries
+its alerts with every bundled symptom and recommendation they reference
+(alerts that share one go in one file), and `content/symptomdefs/` only the
+symptoms no bundled alert references. Writing a symptom in both (the layout
+until 2026-11-14) fails on 9.0.2 with a duplicate key and strips the
+alert's conditions. Evidence: `investigations/2026-11-14-pak-content-silent-drops.md`.
+`install` then counts the pak's views, report templates, symptoms and
+alerts on the instance (`post_install_content.py`, exit 3 on a shortfall).
+
 ### Defect gate in pak repos (generated vendored copy, #226)
 
 Each pak repo's release CI runs the RULE-012 gate as `ci/defect_gate.py`
@@ -1711,6 +1739,7 @@ built from the change.
 
 | Date | Change |
 |---|---|
+| 2026-11-14 | **Buildkit 1.0.29: the pak content gate; each symptom defined once; no empty localization values.** vCommunity Java 0.0.0.15 installed "successfully" on 9.0.2 and 9.1.1 with 14 views and a report template missing (`view.<id>.<key>=` lines with an empty value, `cvc-minLength-valid`) and, on 9.0.2, two alerts without their conditions (every symptom written in `content/symptomdefs/` and again in its alert's file; duplicate key). `_generate_view_content_properties` and `_generate_dashboard_resources_properties` write no entry for an empty text and escape values; `plan_alert_content_files` writes each bundled symptom and recommendation once, in the file of the alerts that reference it (alerts sharing one share a file), leaving `content/symptomdefs/` for unreferenced symptoms. `_write_outer_pak` ends with the content gate (`vcfcf_core/packaging/pak_content.py`), validate-sdk runs it on a content-only render, and `install` counts views, reports, symptoms and alerts (`post_install_content.py`, `--skip-content-check`). The kit ships `pak_content.py` and `java_properties.py` (flat copies of the core modules). Evidence: `investigations/2026-11-14-pak-content-silent-drops.md`. **Versioning:** `BUILDKIT_VERSION` 1.0.29, the same unreleased kit as the rows below. Factory zips: no template-version bump (no file of the template-version list changed; `alerts/render.py` and `dashboards/render.py` are untouched). **Adapter adoption:** rebuild every pak with bundled alerts (synology, unifi, vsanperf, vcommunity-java: their built paks define symptoms twice today) and vcommunity-java for the localization fix; no source change. |
 | 2026-11-13 | **Buildkit 1.0.29: `section_fallback: omit` on bundled dashboards; `build-sdk --sections`.** A bundled dashboard that sets `section_fallback: omit` ships without its Section widgets (rows closed up) while the oldest supported line (`_oldest_supported_line()`, 8.18.7) is below 9.1.1, the first build proven to import Section, and with them once the line rises; each omission prints `build-sdk: SECTIONS OMITTED: dashboard '<name>': <n> Section widget(s) left out (section_fallback: omit): <reason>` (`validate-sdk` the same). A Section dashboard without the key still fails the build below the floor, and the error now names the key. `build-sdk --sections auto|ship|omit` (kit and factory CLI) forces a variant on a dev build (`ship` leaves Section out of the floor gate and prints `SECTIONS KEPT BELOW FLOOR`); with `--release` anything but `auto` is refused. New kit rewrite rule for `sdk_builder`'s `from vcfcf_dashboards.loader import apply_section_fallback`. Reference: `wire-formats/dashboard_fidelity_wire_format.md` §Section fallback. **Versioning:** ships in 1.0.29 (`BUILDKIT_VERSION` already 1.0.29 and not tagged; not bumped again). Published kits (1.0.27 and earlier) have neither this nor the Section build gate of 2026-11-12: they warn and ship the Sections, which 8.18.7 and 9.0.x lose with the dashboard's directory. **Adapter adoption:** a pak with Section dashboards (the vCommunity Java port) adds the key to each and builds on 1.0.29 or later; no registered pak bundles a Section dashboard today. |
 | 2026-11-12 | **Buildkit 1.0.29: stitcher `post`, `pushEvents`, numeric properties; icon hints; key differential.** `SuiteApiStitchClient` and `SuiteApiStitcher` gain `post(path, jsonBody)` and `post(path, jsonBody, maxResponseBytes)` (read-style query paths only, checked against an allowlist before any request; response read whole up to 8 MiB by default, else `ResponseTooLargeException`; `get`'s error contract), `pushEvents` (with the new `SuiteApiEvent`; `NOTIFICATION` refused; a cancel time of 0 or less is unset) and `pushTypedPropertiesBatch` / `pushTypedBatch` (numeric property values as `data`, every number a double, integers beyond 2^53 dropped and counted); contract and evidence in "Stitcher reads, events and numeric properties". Internals: the batch code's `boolean stats` became a package-private `Kind` enum; the string pushes keep their String-only serializer, pinned by golden bodies captured from `origin/main` (`SuiteApiStitchBatchTest`). Icon library: `content_library`, `library_item`, `vm_template` (`knowledge/context/mpb/mp_icon_library.md`). New read-only CLI `python3 -m vcfcf_common keydiff` compares two instances or snapshots (GETs plus each live side's token acquire and release; per-request timeout; exit 4 when nothing was compared, 5 when some objects were not, 6 on an internal error; numbers and tolerances compare exactly in `Decimal`, rounding trapped); see `vcfcf_common/keydiff.py`. Review: `reviews/framework/stitch-post-events-numeric-keydiff-2026-11-12.md`, every finding fixed. **Versioning:** ships in 1.0.29 (`BUILDKIT_VERSION` already 1.0.29 from the stock-id guard; not bumped again). **Adapter adoption:** additive; no pak changes until it calls the new methods. |
 | 2026-11-12 | **Buildkit 1.0.29: the factory content-name prefix is `[VCF CF] ` (was `[VCF Content Factory] `), with a pak transition rule.** The kit ships `naming.py` (the factory's `vcfcf_core/naming.py`, the one definition of the prefix). For a `factory_prefixed` pak (declared or default), validate-sdk and build-sdk accept a pak whose prefixed names are all in the old spelling with one warning naming `python3 -m vcfcf_common migrate-prefix <pak dir>`, reject the two spellings mixed in one pak (an error per old-spelled name), and pass a pak in the new spelling silently; `unprefixed` paks reject either spelling. A factory-prefixed dashboard name over 50 characters is a build error. Ids derived from names, the in-pak paths (`content/dashboards/<dir>/`, `content/reports/<dir>/`, the supermetrics, symptomdefs and alertdefs file names) and the `dashboards.properties` Summary binding key are computed from the old spelling (`id_basis_name`), so they do not change. Reference: §Bundled content naming and `authoring/prefix_migration.md`. **Versioning:** `BUILDKIT_VERSION` 1.0.29, the same kit as the stock-id guard below. **Adapter adoption:** none required during the transition (old-spelled paks build with a warning); a migrated pak's display names and localization strings change. |

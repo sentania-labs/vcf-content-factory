@@ -573,8 +573,8 @@ def cmd_install(args) -> int:
         return 2
 
     # installer.install_pak calls sys.exit(1) on fatal errors; a return is
-    # 0, 3 when the pak installed but a post-install dashboard or account
-    # check failed, or 4 when the wait ran out with the install still running.
+    # 0, 3 when the pak installed but a post-install dashboard, content or
+    # account check failed, or 4 when the wait ran out with the install still running.
     return install_pak(
         pak_path=args.pak_path,
         host=args.host,
@@ -589,6 +589,7 @@ def cmd_install(args) -> int:
         summary_rebind=summary_rebind,
         restart_failed=getattr(args, "restart_failed", True),
         allow_stock_ids=getattr(args, "allow_stock_ids", False),
+        content_check=not getattr(args, "skip_content_check", False),
     )
 
 
@@ -1384,6 +1385,19 @@ def build_parser() -> argparse.ArgumentParser:
             "Skip the post-install check that each dashboard the pak ships "
             "finished building (a dashboard-list read plus an adapter-kind "
             "read). Default: check. Not run with --no-wait."
+        ),
+    )
+    pi.add_argument(
+        "--skip-content-check",
+        action="store_true",
+        default=False,
+        help=(
+            "Skip the post-install check that every view, report template, "
+            "symptom and alert definition the pak ships is on the instance and "
+            "that each alert still names all its symptoms and inline "
+            "conditions (exit 3 and a list of missing ids by type when not; "
+            "re-checked every 30 s for up to 120 s). Default: check. Not run "
+            "with --no-wait."
         ),
     )
     pi.add_argument(

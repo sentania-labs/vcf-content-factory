@@ -1191,6 +1191,7 @@ def install_pak(
     restart_failed: bool = True,
     suite_factory=None,
     allow_stock_ids: bool = False,
+    content_check: bool = True,
 ) -> int:
     """Install a .pak file onto a VCF Ops instance via the /ui/ SPA Struts layer.
 
@@ -1230,9 +1231,15 @@ def install_pak(
            cloned before the source finished (#200); with
            ``summary_rebind=False`` it only reads each Summary copy and
            reports it.
+      9:   post_install_content.report_pak_content(): is every view, report
+           template, symptom and alert the pak ships on the instance, and does
+           each alert still name all its symptoms and inline conditions
+           (2026-11-14)? Only with ``wait`` and ``content_check``; re-reads
+           every 30 s for up to 120 s while something is missing.
 
     Returns 0, or ``post_install.POST_INSTALL_FAILED_RC`` (3) when the pak
-    installed but a post-install dashboard check failed or an account that
+    installed but a post-install dashboard or content check failed (content
+    the pak ships is missing, step 9) or an account that
     was collecting, or already FAILED, before the install is not STARTED
     (``ACCOUNT NOT STARTED``), or
     :data:`INSTALL_STILL_RUNNING_RC` (4) when ``poll_timeout`` ran out while
@@ -1494,19 +1501,30 @@ def install_pak(
             accounts_rc = restart_failed_accounts(suite, adapter_kinds,
                                                   accounts_before,
                                                   session_note=watch_note)
-    if not materialization_check:
-        return accounts_rc
-    # Post-install (issues #244, #200): the install finishing says nothing
-    # about whether the pak's dashboards, or the Summary copies the server
-    # cloned from them, finished building.
-    from .post_install import report_pak_dashboards
+    dashboards_rc = 0
+    if materialization_check:
+        # Post-install (issues #244, #200): the install finishing says nothing
+        # about whether the pak's dashboards, or the Summary copies the server
+        # cloned from them, finished building.
+        from .post_install import report_pak_dashboards
 
-    dashboards_rc = report_pak_dashboards(
-        p, host=host, user=user, password=password,
-        verify_ssl=effective_verify_ssl, wait_s=materialization_wait,
-        summary_rebind=summary_rebind,
-    )
-    return dashboards_rc or accounts_rc
+        dashboards_rc = report_pak_dashboards(
+            p, host=host, user=user, password=password,
+            verify_ssl=effective_verify_ssl, wait_s=materialization_wait,
+            summary_rebind=summary_rebind,
+        )
+    content_rc = 0
+    if content_check:
+        # Post-install (2026-11-14): the install finishing says nothing about
+        # whether the views, reports, symptoms and alerts the pak ships were
+        # imported; the pak installer drops them silently.
+        from .post_install_content import report_pak_content
+
+        content_rc = report_pak_content(
+            p, host=host, user=user, password=password,
+            verify_ssl=effective_verify_ssl,
+        )
+    return content_rc or dashboards_rc or accounts_rc
 
 
 # ---------------------------------------------------------------------------

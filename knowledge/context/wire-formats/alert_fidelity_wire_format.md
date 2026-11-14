@@ -78,7 +78,15 @@ field here. The REST path cannot: the Suite API `alert-definition` and
   fields are deliverable only through the content-import XML path of a pak
   build. The installer templates are unchanged. A symptom `id:` predates
   this page and is unaffected.
-- Tier 2 pak builds (`build-sdk`): every field renders.
+- Tier 2 pak builds (`build-sdk`): every field renders. Each symptom,
+  alert and recommendation id is defined once per pak (2026-11-14): an
+  alert's `content/alertdefs/` file carries every bundled symptom and
+  recommendation it references (alerts sharing one share a file), and
+  `content/symptomdefs/` only symptoms no bundled alert references. A
+  `symptom_def_type` (`condition_self`, `condition_population`) symptom is
+  the alert editor's inline condition: REST shows it only inside its alert,
+  as `alertConditions[].id = "Condition-<x>"`, never on
+  `/api/symptomdefinitions`. Why both: `investigations/2026-11-14-pak-content-silent-drops.md`.
 
 ## Alert definition
 

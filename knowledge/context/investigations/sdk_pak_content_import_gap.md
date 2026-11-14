@@ -582,3 +582,16 @@ a blocker.
 Read-only. Devel token acquired for GET probes then discarded; scratch token
 file removed. TVS pak extraction (`scratchpad/tvs_probe`) removed. No repo
 content, no `src/vcfops_*/`, no live Ops state modified (no POST/PUT/DELETE).
+
+## Addendum 2026-11-14: the value facet, and duplicate symptom ids
+
+The same `Localization/Locale/Property` element has a second facet: its
+`value` carries `minLength 1`
+(`cvc-minLength-valid ... '#AnonType_valuePropertyLocaleLocalizationViewDefViewsContent'`,
+9.0.2 and 9.1.1). A `view.<id>.<key>=` line with an empty value (a column
+with no display name) fails its whole `content/reports/<dir>/`, the same
+blast radius as an over-64 key. Separately, a symptom written in both
+`content/symptomdefs/` and its alert's file fails on 9.0.2 with a duplicate
+key. `build-sdk` and `validate-sdk` now refuse both classes, the 64-char key
+included (`vcfcf_core/packaging/pak_content.py`). Full record:
+`2026-11-14-pak-content-silent-drops.md`.

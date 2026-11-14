@@ -563,6 +563,16 @@ unreferenced on this code path (it still applies to `<Title>` and
 `<Description>` at view level, which use static `"title"` / `"desc"` keys
 that do not collide).
 
+Correction (2026-11-14): the SDK pak bundles are not empty. `build-sdk`
+writes `view.<id>.title`, `view.<id>.desc` and a `view.<id>.<attribute key>`
+line per labelled column into each `content/reports/<dir>/resources/content.properties`,
+and the importer turns every line into a ViewDef `<Localization>` property
+whatever the XML references. A column with no `display_name` (`omit:
+[display_name]`) gets no line: an empty value fails the whole directory
+(`cvc-minLength-valid`). Since DEF-018 no `localizationKey` is emitted on
+`<Title>` / `<Description>` either.
+`../investigations/2026-11-14-pak-content-silent-drops.md`.
+
 ## Limitations
 
 Things VCF Ops does NOT support on list view columns, documented so
