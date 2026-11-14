@@ -146,6 +146,22 @@ def key_hit(keys, type_: str, nid: str):
     return None
 
 
+def rec_kind_choice(source_key: str, kinds) -> str:
+    """The adapter kind a recommendation's YAML carries, from the kinds of
+    the alerts that reference it, whatever their order: the one kind when
+    they agree; when they differ, the kind the source key already embeds
+    (``Recommendation-df-<kind>-...``, so a derived key stays derived), else
+    the first in sorted order; ``""`` when none has a kind (the caller writes
+    ``VMWARE`` and says so). An empty kind is ignored."""
+    ks = sorted(k for k in kinds if k)
+    if len(ks) <= 1:
+        return ks[0] if ks else ""
+    for k in sorted(ks, key=len, reverse=True):
+        if source_key.startswith(f"{_ids.RECOMMENDATION_PAK_PREFIX}{k}-"):
+            return k
+    return ks[0]
+
+
 def mint_namespace_uuid(text: str) -> uuid.UUID:
     """The UUID namespace a ``--mint-namespace`` text names."""
     return uuid.uuid5(MINT_ROOT, text)
@@ -689,7 +705,10 @@ class _Planner:
 
     # 3. mapping -------------------------------------------------------
     def map_all(self, objs: List[SourceObject]) -> List[Tuple[SourceObject, MappedObject]]:
-        rec_kind: Dict[str, str] = {}
+        # a recommendation's adapter kind (its YAML has one, the source does
+        # not; a minted key embeds it), from the alerts that reference it,
+        # independent of their order: rec_kind_choice
+        rec_kinds: Dict[str, Set[str]] = defaultdict(set)
         for o in objs:
             if o.type == "alert":
                 rr = o.payload.find("State/Recommendations")
@@ -700,7 +719,7 @@ class _Planner:
                         # the alert's (re-pointed) kind is the one written
                         ref = self.kind_unmap.get(("recommendation", norm_id("recommendation", r.get("ref"))),
                                                   r.get("ref"))
-                        rec_kind.setdefault(ref, o.payload.get("adapterKind") or "")
+                        rec_kinds[ref].add(o.payload.get("adapterKind") or "")
         out = []
         for o in sorted(objs, key=lambda x: (CONTENT_TYPES.index(x.type), x.location, x.id)):
             try:
@@ -715,12 +734,19 @@ class _Planner:
                 elif o.type == "alert":
                     m = _alerts.map_alert(o.payload, o.location)
                 elif o.type == "recommendation":
-                    kind = rec_kind.get(o.id)
+                    kinds = rec_kinds.get(o.id, set())
+                    kind = rec_kind_choice(o.id, kinds)
                     m = _alerts.map_recommendation(o.payload, o.location, kind or "VMWARE")
+                    on_wire = ("and it is the kind segment of the minted key" if self.opts.ids == "mint"
+                               else "unused on the wire: the explicit id is rendered")
                     if not kind:
                         m.notes.append("adapter_kind is not in the source and no alert in the set references "
-                                       "this recommendation; VMWARE is written (unused on the wire: the "
-                                       "explicit id is rendered)")
+                                       f"this recommendation with a kind; VMWARE is written ({on_wire})")
+                    elif len({k for k in kinds if k}) > 1:
+                        m.notes.append(f"the alerts that reference this recommendation are on several adapter "
+                                       f"kinds ({', '.join(sorted(k for k in kinds if k))}); {kind} is written "
+                                       f"(the kind its source key embeds, else the first in sorted order; "
+                                       f"{on_wire})")
                 elif o.type == "supermetric":
                     m = _sms.map_supermetric(o.id, o.payload, o.location)
                 else:  # pragma: no cover

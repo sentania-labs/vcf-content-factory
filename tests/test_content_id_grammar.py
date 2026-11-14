@@ -114,8 +114,9 @@ def test_wire_and_yaml_grammar_per_type():
     # a bare id imports (a VMware pak ships them in content/alertdefs/)
     assert w("symptom", "SwitchPortDown") is None and w("symptom", "SymptomDefinition-") and w("symptom", "")
     assert w("alert", f"AlertDefinition-{u}") is None and w("alert", u) is None and w("alert", "AlertDefinition-")
-    # the product's own exports carry keys with spaces; the YAML refuses them
-    assert w("recommendation", "Recommendation-df-vCenter Operations Adapter-DefaultFaultRecommendation") is None
+    # a policy export carries keys with spaces; the alertdefs schema (xs:ID) and the YAML refuse them
+    space = "Recommendation-df-vCenter Operations Adapter-DefaultFaultRecommendation"
+    assert w("recommendation", space, alertdefs=False) is None and w("recommendation", space)
     assert w("recommendation", "Recommendation-ec5f14b5-b009-564e-8c31-66f205a839b1")
     for t in ("view", "dashboard", "report", "supermetric"):
         assert w(t, u) is None and w(t, u.upper()) is None and w(t, "d1")
@@ -386,3 +387,112 @@ def test_minted_super_metric_ids_follow_in_every_rendered_reference(source, tmp_
     assert not any(old in wire for old in new)
     assert _yaml(out, "dashboards/probe-dashboard-a.yaml")["widgets"][1]["metrics"][0]["metric_key"] == \
         f"Super Metric|sm_{new[SM1]}"
+
+
+# ------------------------------- review fixes (framework review 2026-11-14)
+def _variant(alert_source: Path, dest: Path, edit) -> Path:
+    """A copy of ``alert_source`` with ``edit(text)`` applied to its alert file."""
+    shutil.copytree(alert_source, dest)
+    f = dest / "alertdefs" / "Alert.xml"
+    f.write_text(edit(f.read_text()))
+    return dest
+
+
+@pytest.mark.parametrize("kind,segment", [("EP Ops Adapter", "EP_Ops_Adapter"),
+                                          ("vCenter Operations Adapter", "vCenter_Operations_Adapter")])
+def test_b1_a_kind_with_spaces_mints_an_xml_id_key(alert_source, tmp_path, capsys, kind, segment):
+    def edit(t):
+        return t.replace('adapterKind="VMWARE"', f'adapterKind="{kind}"')
+    src = _variant(alert_source, tmp_path / "src", edit)
+    for f in (src / "symptomdefs").glob("*.xml"):
+        f.write_text(edit(f.read_text()))
+    out = tmp_path / "out"
+    rc, text = _run(src, out, capsys, "--layout", "third-party", "--ids", "mint", "--mint-namespace", NS,
+                    "--naming", "unprefixed", "--verify")
+    assert rc == 0, text
+    rec = _only_rec(out)
+    uid = minted_id(mint_namespace_uuid(NS), "recommendation", REC_KEY)
+    assert rec["adapter_kind"] == kind
+    assert rec["id"] == f"Recommendation-df-{segment}-{uid}"
+    assert content_ids.recommendation_key_problem(rec["id"]) is None
+    root = _rendered(out)
+    assert {r.get("ref") for r in root.iter("Recommendation") if r.get("ref")} == {rec["id"]}
+
+
+def test_b1_the_kind_segment_and_why_two_kinds_cannot_collide():
+    assert content_ids.mint_kind_segment("VMWARE") == "VMWARE"   # the real pak's key is unchanged
+    assert content_ids.mint_kind_segment("a b/c|d") == "a_b_c_d"
+    ns = mint_namespace_uuid(NS)
+    # two kinds on one segment, two recommendations: the uuid5 of each source id separates them
+    a = content_ids.mint_recommendation_key("EP Ops Adapter", minted_id(ns, "recommendation", "keyA"))
+    b = content_ids.mint_recommendation_key("EP_Ops_Adapter", minted_id(ns, "recommendation", "keyB"))
+    assert a != b
+
+
+def _second_alert(t: str) -> str:
+    """The source's alert, copied onto KindB under another id and name (same
+    recommendation reference)."""
+    block = re.search(r"<AlertDefinition .*?</AlertDefinition>", t, re.S).group(0)
+    return (block.replace('adapterKind="VMWARE"', 'adapterKind="KindB"')
+            .replace("4a000000-0000-4000-8000-000000000001", "4a000000-0000-4000-8000-0000000000b2")
+            .replace('name="Probe Host Alert"', 'name="Probe KindB Alert"'))
+
+
+@pytest.mark.parametrize("first", ["VMWARE", "KindB"])
+def test_w1_the_kind_does_not_depend_on_alert_order(alert_source, tmp_path, capsys, first):
+    def edit(t):
+        if first == "KindB":
+            return t.replace("<AlertDefinitions>", "<AlertDefinitions>" + _second_alert(t), 1)
+        return t.replace("</AlertDefinitions>", _second_alert(t) + "</AlertDefinitions>", 1)
+    src = _variant(alert_source, tmp_path / "src", edit)
+    out = tmp_path / "out"
+    rc, text = _run(src, out, capsys, "--layout", "third-party", "--ids", "mint", "--mint-namespace", NS,
+                    "--naming", "unprefixed", "--verify")
+    assert rc == 0, text
+    rec = _only_rec(out)
+    # the kinds differ and the bare source key embeds neither: the first in sorted order
+    assert rec["adapter_kind"] == "KindB"
+    assert rec["id"] == _minted_rec(kind="KindB")
+    assert "several adapter kinds (KindB, VMWARE); KindB is written" in text
+    assert "kind segment of the minted key" in text
+
+
+def test_w1_rule_prefers_the_kind_the_key_embeds_and_ignores_empty_kinds():
+    from vcfcf_core.importer.convert import rec_kind_choice
+    assert rec_kind_choice("k", {"", "VMWARE"}) == "VMWARE"
+    assert rec_kind_choice("k", {""}) == "" and rec_kind_choice("k", set()) == ""
+    assert rec_kind_choice("k", {"VMWARE", "KindB"}) == "KindB"
+    assert rec_kind_choice("Recommendation-df-VMWARE-Fix", {"VMWARE", "KindB"}) == "VMWARE"
+
+
+def test_w2_unreferenced_recommendation_note_says_the_kind_is_in_the_minted_key(tmp_path, capsys):
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "a.xml").write_text('<alertContent><Recommendations><Recommendation key="probeLoneKey">'
+                               "<Description>d</Description></Recommendation></Recommendations></alertContent>")
+    out = tmp_path / "out"
+    rc, text = _run(src, out, capsys, "--layout", "third-party", "--ids", "mint", "--mint-namespace", NS,
+                    "--naming", "unprefixed")
+    assert rc == 0, text
+    assert "VMWARE is written (and it is the kind segment of the minted key)" in text
+    assert "unused on the wire" not in text
+    assert _only_rec(out)["id"] == _minted_rec(key="probeLoneKey")
+
+
+def test_w3_gate_keeps_the_xs_id_rule_in_alertdefs_only(tmp_path):
+    key = "Recommendation-df-EP Ops Adapter-Fix_It"   # what the loader derives for a kind with a space
+    body = (f'<alertContent><Recommendations><Recommendation key="{key}"><Description>d</Description>'
+            f"</Recommendation></Recommendations></alertContent>")
+    pak = gates._pak_with(tmp_path, {"content/alertdefs/a.xml": body})
+    errs = pak_content.check_pak_content(pak)
+    assert len(errs) == 1 and "not an XML id" in errs[0], errs
+    pak.unlink()
+    # a policy export carries product keys with spaces: only the prefix rule there
+    pak = gates._pak_with(tmp_path, {"content/policies/p.xml": f"<Policy>{body}</Policy>"})
+    assert pak_content.check_pak_content(pak) == []
+
+
+def test_n1_lower_case_prefix_message_names_a_factory_caution():
+    msg = content_ids.recommendation_key_problem("recommendation-df-x")
+    assert "factory caution, not the measured product rule" in msg
+    assert "Invalid format" not in msg

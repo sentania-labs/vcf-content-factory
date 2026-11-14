@@ -235,13 +235,17 @@ def duplicate_definition_errors(members: Dict[str, bytes],
 def id_grammar_errors(defs: List["_guard.Definition"]) -> List[str]:
     """An error per definition whose id its type's grammar refuses
     (:func:`vcfcf_core.content_ids.wire_id_problem`): a recommendation key
-    the importer refuses (and the whole alert file with it), an empty
+    the importer refuses (and the whole alert file with it) or, in
+    ``content/alertdefs/``, one that is not an ``xs:ID`` (the pak alert
+    schema's type for it), an empty
     symptom or alert id, a view, dashboard, report or super metric id that
     is not a UUID. One line per id and file."""
     errors: List[str] = []
     seen: set = set()
     for d in defs:
-        problem = _ids.wire_id_problem(d.type, d.id)
+        # the xs:ID rule for recommendation keys holds where the alert schema
+        # applies (content/alertdefs/); a policy carries product keys outside it
+        problem = _ids.wire_id_problem(d.type, d.id, alertdefs=d.location.startswith(ALERTDEFS_DIR))
         key = (d.type, d.id, d.location)
         if problem is None or key in seen:
             continue

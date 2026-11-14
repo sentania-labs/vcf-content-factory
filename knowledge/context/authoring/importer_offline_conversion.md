@@ -212,8 +212,12 @@ One of these is required:
   is required) and the object's type and source id, so a rerun with the same
   namespace gives the same ids and a second import updates rather than
   duplicates (RULE-007). A recommendation gets
-  `Recommendation-df-<adapter kind>-<uuid>`, the kind being the one its YAML
-  `adapter_kind` carries (the alerts' kind, re-pointed by `--map-kind`). Until
+  `Recommendation-df-<kind segment>-<uuid>`: the kind is its YAML
+  `adapter_kind` (from the alerts that reference it, independent of their
+  order, re-pointed by `--map-kind`) with characters outside `[A-Za-z0-9_.-]`
+  replaced by `_`. That form is inferred from the error text and the export
+  shape, not yet seen installing (live result: pending;
+  `../wire-formats/alert_fidelity_wire_format.md` §Id grammar). Until
   2026-11-14 it got `Recommendation-<uuid>`, which VCF Operations refuses
   ("Invalid format of Recommendation Id ... It should start with
   Recommendation-df- or Recommendation-ud-", 9.0.2), and the whole alert
@@ -384,7 +388,9 @@ old pack's ids. Every reference follows (an alert's symptom sets and
 recommendations, a dashboard AlertList); `id_map.tsv` lists old and new, and
 each counts as a re-pointed reference. A recommendation, which has no kind
 of its own, follows the alerts in the set that use it, and its YAML
-`adapter_kind` is the (re-pointed) kind of the first of them: when none of
+`adapter_kind` is their (re-pointed) kind, whatever their order (one kind
+when they agree; when they differ, the kind its key embeds, else the first
+in sorted order; none: `VMWARE`, with a note): when none of
 them moves, its key is kept; when all of them move from the kind its key
 embeds to one new adapter kind, the key follows; when only some move, or
 they move to different kinds, it stops. One no alert uses follows its key's

@@ -15,13 +15,19 @@ Two forms per type:
   alert id is the part after its XML prefix; a recommendation id is the key
   itself); checked by :func:`yaml_id_problem`.
 
-Measured product rule (VCF Operations 9.0.2, a pak's ``content/alertdefs/``
-file, 2026-11-14): ``AlertDefinitionServiceImpl.importAlertDefinitions``
+Measured product rule (VCF Operations 9.0.2, the pak install path only: a
+pak's ``content/alertdefs/`` file, 2026-11-14; REST and content-zip sync were
+not measured, and that content-zip import reaches the same service is an
+inference): ``AlertDefinitionServiceImpl.importAlertDefinitions``
 refuses a recommendation key ``Recommendation-<uuid>`` with ``Invalid format
 of Recommendation Id: ... It should start with Recommendation-df- or
 Recommendation-ud-``, and refuses the whole alert file with it (its alerts,
 symptoms and recommendations never exist on the instance). A bare key
-(``vCommunityCollectionWarnings``, no ``Recommendation-`` prefix) imports.
+(``vCommunityCollectionWarnings``, no ``Recommendation-`` prefix) imports
+(reported from the same install; the id the product stores for it is not
+recorded). The pak's alert schema (``content/alertdefs/alertDefinitionSchema.xsd``,
+in every SDK sample pak) types ``Recommendation/@key`` as ``xs:ID`` and every
+``ref`` as ``xs:IDREF``, so a key in ``content/alertdefs/`` is also an XML id.
 Every other rule here is the form every observed id has and the factory's
 loaders already require; none of them has a product error on record. A
 VMware-built pak (``vmware-mpforphysicalsan-8.12.0``) ships bare symptom,
@@ -52,6 +58,8 @@ RECOMMENDATION_USER_PREFIX = "Recommendation-ud-"
 
 #: An XML ``xs:ID`` as the recommendation YAML has always accepted it.
 _REC_KEY_CHARS = re.compile(r"^[A-Za-z_][A-Za-z0-9_.\-]*$")
+#: Characters outside an ``xs:ID``'s, replaced in a minted key's kind segment.
+_NOT_ID_CHAR = re.compile(r"[^A-Za-z0-9_.\-]")
 
 #: The product's rule, quoted in every recommendation-key message.
 RECOMMENDATION_RULE = (
@@ -77,11 +85,12 @@ def recommendation_key_problem(key, xml_id: bool = True) -> Optional[str]:
     read as a bare key (vendor ``describe.xml`` files carry
     ``recommendation-<n>`` keys, but that is the definition-file path, not
     the content importer that refused ``Recommendation-<uuid>``).
-    With ``xml_id`` (the YAML rule) the key is also an XML ``xs:ID``
-    (letters, digits, ``_ . -``, starting with a letter or ``_``), as the
-    recommendation YAML has always required; the product's own exports carry
-    keys outside it (``Recommendation-df-vCenter Operations Adapter-...``),
-    so the wire check leaves it out.
+    With ``xml_id`` the key is also an XML ``xs:ID`` (letters, digits,
+    ``_ . -``, starting with a letter or ``_``): the recommendation YAML has
+    always required it, and the pak alert schema types the key ``xs:ID``.
+    Without it (a definition outside ``content/alertdefs/``: the product's
+    policy exports carry ``Recommendation-df-vCenter Operations Adapter-...``)
+    only the prefix rule applies.
     """
     if not isinstance(key, str) or not key:
         return f"a recommendation key must be a non-empty string; got {key!r}"
@@ -94,18 +103,38 @@ def recommendation_key_problem(key, xml_id: bool = True) -> Optional[str]:
                 if len(key) == len(p):
                     return f"recommendation key {key!r} has nothing after {p!r}"
                 return None
+        if not key.startswith(RECOMMENDATION_PREFIX):
+            return (f"recommendation key {key!r} starts with {key[:len(RECOMMENDATION_PREFIX)]!r}: a factory "
+                    f"caution, not the measured product rule (whether the importer compares the prefix "
+                    f"case-sensitively is not recorded); use 'Recommendation-df-...' or a key without "
+                    f"that prefix")
         return f"recommendation key {key!r}: {RECOMMENDATION_RULE}"
     return None
 
 
+def mint_kind_segment(adapter_kind: str) -> str:
+    """``adapter_kind`` with every character outside an ``xs:ID``'s
+    (``[A-Za-z0-9_.-]``) replaced by ``_`` (``EP Ops Adapter`` becomes
+    ``EP_Ops_Adapter``), so the minted key is an XML id. A kind that needs no
+    change is kept as it is (``VMWARE``)."""
+    return _NOT_ID_CHAR.sub("_", adapter_kind)
+
+
 def mint_recommendation_key(adapter_kind: str, minted_uuid: str) -> str:
     """The key ``--ids mint`` gives a recommendation:
-    ``Recommendation-df-<adapter kind>-<uuid>``, the shape of every
-    definition-file recommendation in the product's exports and of the
-    factory's derived key (``Recommendation-df-<kind>-<slug>``), which the
-    alert renderer writes verbatim as the ``<Recommendation key>`` and every
-    alert's ``ref``."""
-    return f"{RECOMMENDATION_PAK_PREFIX}{adapter_kind}-{minted_uuid}"
+    ``Recommendation-df-<kind segment>-<uuid>`` (:func:`mint_kind_segment`),
+    the shape of every definition-file recommendation in the product's
+    exports and of the factory's derived key
+    (``Recommendation-df-<kind>-<slug>``), which the alert renderer writes
+    verbatim as the ``<Recommendation key>`` and every alert's ``ref``.
+    Inferred from the error text and the export shape; not yet seen
+    installing (``alert_fidelity_wire_format.md`` §Id grammar).
+
+    Two kinds that map to one segment (``EP Ops Adapter``, ``EP_Ops_Adapter``)
+    cannot make two recommendations collide: the uuid is the uuid5 of the
+    recommendation's own type and source id, so two recommendations never
+    share it, and one recommendation gets one kind."""
+    return f"{RECOMMENDATION_PAK_PREFIX}{mint_kind_segment(adapter_kind)}-{minted_uuid}"
 
 
 def yaml_id_problem(content_type: str, yaml_id) -> Optional[str]:
@@ -130,12 +159,13 @@ def yaml_id_problem(content_type: str, yaml_id) -> Optional[str]:
     return None
 
 
-def wire_id_problem(content_type: str, wire_id) -> Optional[str]:
+def wire_id_problem(content_type: str, wire_id, alertdefs: bool = True) -> Optional[str]:
     """Why ``wire_id`` cannot be the id a ``content_type`` definition carries
     in content-import XML or JSON, or ``None``.
 
-    - recommendation: :func:`recommendation_key_problem` without the XML-id
-      character rule (the product's measured prefix rule);
+    - recommendation: :func:`recommendation_key_problem` (the measured prefix
+      rule), with the ``xs:ID`` rule when ``alertdefs`` (a definition in a
+      ``content/alertdefs/`` file, whose schema types the key ``xs:ID``);
     - symptom / alert: not empty, and not the bare ``SymptomDefinition-`` /
       ``AlertDefinition-`` prefix (a bare id imports: module docstring);
     - view, dashboard, report template, super metric: a UUID (every one of
@@ -143,7 +173,7 @@ def wire_id_problem(content_type: str, wire_id) -> Optional[str]:
     """
     s = wire_id if isinstance(wire_id, str) else ""
     if content_type == "recommendation":
-        return recommendation_key_problem(wire_id, xml_id=False)
+        return recommendation_key_problem(wire_id, xml_id=alertdefs)
     if content_type in ("symptom", "alert"):
         prefix = SYMPTOM_PREFIX if content_type == "symptom" else ALERT_PREFIX
         if not s.strip() or s == prefix:

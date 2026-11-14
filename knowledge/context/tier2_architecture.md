@@ -525,7 +525,10 @@ content-only render, no compile. It refuses:
 - a definition whose id its type's grammar refuses
   (`vcfcf_core/content_ids.py`, `pak_content.id_grammar_errors`): a
   recommendation key starting `Recommendation-` but not `Recommendation-df-`
-  or `Recommendation-ud-` (measured: 9.0.2 refuses the whole alert file), an
+  or `Recommendation-ud-` (measured: 9.0.2 refuses the whole alert file), a
+  `content/alertdefs/` recommendation key that is not an `xs:ID` (the pak
+  alert schema's type; so an alert YAML on an adapter kind with a space needs
+  an explicit recommendation `id:`), an
   empty symptom or alert id, a view, dashboard, report or super metric id
   that is not a UUID (the form of every one read; not a measured refusal).
   Grammar and evidence: `wire-formats/alert_fidelity_wire_format.md` §Id
