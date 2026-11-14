@@ -212,7 +212,9 @@ def test_alert_id_case_is_kept(tmp_path):
 
 def test_recommendation_explicit_key_equal_to_a_derived_key(tmp_path):
     _write(tmp_path / "rec" / "a.yaml", _rec_data("Probe Rec"))
-    _write(tmp_path / "rec" / "b.yaml", _rec_data("Other Rec", id="recommendation-df-VMWARE-Probe_Rec"))
+    # differs from the derived key only in case after the prefix (a lower-case
+    # "recommendation-" prefix is refused outright: content_ids)
+    _write(tmp_path / "rec" / "b.yaml", _rec_data("Other Rec", id="Recommendation-df-vmware-probe_rec"))
     with pytest.raises(AlertValidationError, match="duplicate recommendation id") as exc:
         load_recommendations(tmp_path / "rec", enforce_framework_prefix=False)
     assert "a.yaml" in str(exc.value) and "b.yaml" in str(exc.value)

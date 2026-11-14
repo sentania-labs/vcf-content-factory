@@ -27,6 +27,9 @@ Kit contents (assembled under a temp dir, then tarballed):
     pak_content.py             : copy of vcfcf_core/packaging/pak_content.py (the
                                  built-pak content gate, kit 1.0.29; imports patched)
     java_properties.py         : copy of vcfcf_core/java_properties.py (no rewrites)
+    content_ids.py             : copy of vcfcf_core/content_ids.py (the per-type
+                                 id grammar the alerts loader and the pak content
+                                 gate check; no rewrites)
     defect_gate.py             : vcfcf_packaging/defects.py verbatim behind a
                                  generated header; the standalone RULE-012 gate
                                  for pak CI (#226)
@@ -144,6 +147,9 @@ _FACTORY_SOURCES = {
     # factory's one java.util.Properties reader.
     "pak_content.py": _CORE_ROOT / "packaging" / "pak_content.py",
     "java_properties.py": _CORE_ROOT / "java_properties.py",
+    # Per-type id grammar (recommendation keys the importer refuses, 9.0.2):
+    # read by the alerts loader and the pak content gate. Stdlib only.
+    "content_ids.py": _CORE_ROOT / "content_ids.py",
 }
 
 # The RULE-012 defect gate, shipped as a standalone script so pak CI can run
@@ -451,6 +457,11 @@ _IMPORT_REWRITES: dict[str, list[tuple[str, str]]] = {
             r"from \.render import rendered_id_collisions",
             "from .alerts_render import rendered_id_collisions",
         ),
+        # the recommendation key grammar (module-level)
+        (
+            r"from vcfcf_core\.content_ids import recommendation_key_problem",
+            "from .content_ids import recommendation_key_problem",
+        ),
     ],
     "reports_loader.py": [
         # from vcfcf_core.naming import ...  (the content-name prefix constants)
@@ -459,7 +470,7 @@ _IMPORT_REWRITES: dict[str, list[tuple[str, str]]] = {
             "from .naming import",
         ),
     ],
-    # pak_content.py (vcfcf_core/packaging copy): its two vcfcf_core imports
+    # pak_content.py (vcfcf_core/packaging copy): its three vcfcf_core imports
     # to the flat kit names.
     "pak_content.py": [
         (
@@ -469,6 +480,10 @@ _IMPORT_REWRITES: dict[str, list[tuple[str, str]]] = {
         (
             r"from vcfcf_core\.stock_ids import guard as _guard",
             "from . import stock_ids as _guard",
+        ),
+        (
+            r"from vcfcf_core import content_ids as _ids",
+            "from . import content_ids as _ids",
         ),
     ],
     "reports_render.py": [

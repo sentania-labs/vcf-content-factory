@@ -204,16 +204,36 @@ Nothing is written on any non-zero exit.
 One of these is required:
 
 - `--ids keep`: the source ids. Right only for content that never shipped
-  under someone else's id.
+  under someone else's id. A source id its type's YAML cannot carry (a
+  recommendation key VCF Operations refuses, a symptom id that is not a
+  UUID) fails that object, naming the rule; mint or map it.
 - `--ids mint`: a new id for every object, UUID version 5 from a namespace
   (`--mint-namespace TEXT`, default `project:<--project-name>`; one of the two
   is required) and the object's type and source id, so a rerun with the same
   namespace gives the same ids and a second import updates rather than
-  duplicates (RULE-007). A recommendation gets `Recommendation-<uuid>`.
+  duplicates (RULE-007). A recommendation gets
+  `Recommendation-df-<adapter kind>-<uuid>`, the kind being the one its YAML
+  `adapter_kind` carries (the alerts' kind, re-pointed by `--map-kind`). Until
+  2026-11-14 it got `Recommendation-<uuid>`, which VCF Operations refuses
+  ("Invalid format of Recommendation Id ... It should start with
+  Recommendation-df- or Recommendation-ud-", 9.0.2), and the whole alert
+  file with it: the alert, its symptoms and the recommendation never
+  existed on the instance. Every other type's minted id is unchanged (a plain
+  uuid5). Each minted id is checked against its type's grammar
+  (`vcfcf_core/content_ids.py`; `../wire-formats/alert_fidelity_wire_format.md`
+  §Id grammar) before anything is written; a violation is a converter
+  error (INTERNAL ERROR, exit 5). Verification could not catch the old key:
+  the source and the written YAML render through the same code, so both
+  sides carried it. It also checks each rendered symptom, alert and
+  recommendation id against the grammar now (a load error).
   `id_map.tsv` records old to new and, in its first line, the namespace.
 - `--id-map TSV` (repeatable): `old_id<TAB>new_id` rows (a header row and
   extra columns are allowed) for some objects; the rest keep their ids. An
-  entry that matches nothing is a warning. A destination may be another
+  entry that matches nothing is a warning. A destination its type's grammar
+  refuses (a recommendation key starting `Recommendation-` but not
+  `Recommendation-df-` / `Recommendation-ud-`, or not an XML id; a view,
+  dashboard, report, super metric, symptom or alert id that is not a UUID)
+  is a usage error (exit 2) naming the file and line of the row. A destination may be another
   object's source id (a chain `A -> B, B -> C` or a swap `A <-> B`): the
   rewrite is one simultaneous substitution over source ids and never
   touches a definition's own final id, and the collision check runs on the
