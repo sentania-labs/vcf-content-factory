@@ -215,9 +215,9 @@ One of these is required:
   `Recommendation-df-<kind segment>-<uuid>`: the kind is its YAML
   `adapter_kind` (from the alerts that reference it, independent of their
   order, re-pointed by `--map-kind`) with characters outside `[A-Za-z0-9_.-]`
-  replaced by `_`. That form is inferred from the error text and the export
-  shape, not yet seen installing (live result: pending;
-  `../wire-formats/alert_fidelity_wire_format.md` §Id grammar). Until
+  replaced by `_`. That form was inferred from the error text and the export
+  shape, then seen installing through a pak on 9.0.2 and 9.1.1 on 2026-11-14
+  (`../wire-formats/alert_fidelity_wire_format.md` §Id grammar). Until
   2026-11-14 it got `Recommendation-<uuid>`, which VCF Operations refuses
   ("Invalid format of Recommendation Id ... It should start with
   Recommendation-df- or Recommendation-ud-", 9.0.2), and the whole alert

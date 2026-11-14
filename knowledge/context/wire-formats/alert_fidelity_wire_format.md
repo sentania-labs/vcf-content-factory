@@ -178,7 +178,12 @@ at all (for a kind that is not the pak's adapter kind, `KindB`, or the
 `VMWARE` fallback) is not recorded. Two recommendations cannot collide on one
 key: the uuid5 is of each recommendation's own type and source id.
 
-live result: pending (a pak carrying `Recommendation-df-VMWARE-ec5f14b5-b009-564e-8c31-66f205a839b1` is being installed, 2026-11-14)
+Live result, measured 2026-11-14: a pak carrying a minted key of this form
+(`Recommendation-df-VMWARE-<uuid5>`) was installed fresh on VCF Operations
+9.0.2 and 9.1.1. On both, the alert that references the recommendation
+imported with its symptom set and the recommendation attached, with no
+"Invalid format" line in the appliance logs. Not measured: 8.18.7, a kind
+segment other than `VMWARE`, and the REST and content-zip sync paths.
 
 The recommendation's YAML `adapter_kind`, and so the kind segment, does not
 depend on the order of the alerts that reference it: the one kind when they
