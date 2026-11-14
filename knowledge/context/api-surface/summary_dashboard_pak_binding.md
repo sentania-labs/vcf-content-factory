@@ -661,6 +661,13 @@ was not traced past `ViewDataRetrieverServer`, which passes it through.
   whitespace-bearing or duplicate entries before they can reach the file.
   The content-import zip path (Suite API) still cannot: that path does
   not run `SolutionManagerDistributedTask`.
+- The offline importer (`import-local`) reads this file from a source pak
+  and is the only source of a converted dashboard's `summary_for`: a folder
+  named after a kind (`VMFolder`, ...) binds nothing without an entry here.
+  It parses the file the way this section describes (Properties syntax,
+  split on `,` then `:`, no trimming) and stops a dashboard whose entry the
+  YAML cannot reproduce exactly
+  (`../authoring/importer_offline_conversion.md` §Summary-tab bindings).
 - Whether the MPB builder or the SDK pak template passes an arbitrary
   `content/dashboards/` tree through untouched is a separate question
   for `tooling` / `sdk-adapter-author`; the earlier

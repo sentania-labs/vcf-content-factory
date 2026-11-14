@@ -63,8 +63,6 @@ _BAD_KIND_CHARS = set('/|,={}":') | {chr(c) for c in range(32)} | {"\x7f"}
 _SYMPTOM_PREFIX = "SymptomDefinition-"
 _ALERT_PREFIX = "AlertDefinition-"
 _REC_PREFIX = "Recommendation-df-"
-_SUMMARY_FOLDERS = {"VMFolder", "HostFolder", "DatastoreFolder", "NetworkFolder",
-                    "VmwareDistributedVirtualSwitch", "DistributedVirtualPortgroup"}
 
 
 @dataclass(frozen=True)
@@ -673,10 +671,12 @@ def _dashboard(db: dict, context: dict, ctx: _Ctx, ids: _Ids) -> dict:
             e["adapterKindKey"] = nak
             if "resourceKindKey" in e:
                 e["resourceKindKey"] = nrk
-    folder = context.get("folder")
-    if folder in _SUMMARY_FOLDERS and ctx.km.lookup("VMWARE", folder, count=False) is not None:
-        ctx.r.problems.append(f"the dashboard is a Summary page for VMWARE:{folder} (its pak folder), which the "
-                              f"kind map re-points; the importer does not re-point Summary page bindings")
+    b = context.get("summary_binding")
+    for kind in (b.kinds if b is not None else []):
+        bak, _, brk = kind.partition(":")
+        if ctx.km.lookup(bak, brk, count=False) is not None:
+            ctx.r.problems.append(f"the dashboard is a Summary page for {kind} (its binding {b.where}), which the "
+                                  f"kind map re-points; the importer does not re-point Summary page bindings")
 
     def rkid_field(obj: dict, key: str, where: str) -> None:
         sp = _split_rkid(obj.get(key))

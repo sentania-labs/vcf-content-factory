@@ -34,8 +34,11 @@ are classified by content, never by folder name:
 
 - view XML (`<ViewDef>`, one or many per file, any nesting);
 - dashboard JSON: a bare dashboard or an `{entries, dashboards[]}` envelope
-  of one or many dashboards (a pak `dashboards/<Folder>/dashboard.json`
-  becomes a Summary page with `summary_for: VMWARE:<Folder>`);
+  of one or many dashboards. A folder name never binds a Summary page; only
+  the pak's binding file does (next item, §Summary-tab bindings);
+- a pak's Summary-tab binding file, `content/dashboards/dashboards.properties`
+  (the one file read by its place, because that is how the pak installer
+  finds it; one outside a `dashboards` directory is passed over);
 - report template XML (`<ReportDef>`);
 - `alertContent` XML: alert definitions, symptom definitions (standalone or
   inline) and recommendations;
@@ -73,6 +76,58 @@ relative to the input it was found under, must match exactly one of the
 files that define that object, and is a usage error (exit 2) when it matches
 two of them, picks a different copy than another fragment, or matches no
 file of any differing duplicate.
+
+## Summary-tab bindings
+
+A dashboard gets `summary_for` only when the source's binding file names
+it. The file is `content/dashboards/dashboards.properties`, one entry per
+line, `<dashboard directory>=<AdapterKind>:<ResourceKind>[,...]`
+(`../api-surface/summary_dashboard_pak_binding.md`). It is read as the
+installer reads it: `java.util.Properties` syntax (`#` and `!` comments,
+`=`, `:` or whitespace between key and value, line continuations and
+escapes, the last of two lines with one key wins), the value split on `,`
+and each part on `:`, nothing trimmed. The key is the name of a directory
+next to the file, and the entry binds the dashboard under that directory.
+One kind writes `summary_for: "<AK>:<RK>"`, several write a list in the
+entry's order, and a non-`VMWARE` kind is carried as written. A dashboard
+in a directory named after a vSphere kind (`VMFolder`, `HostFolder`, ...)
+with no entry gets no `summary_for`. Before 2026-11-13 the importer set one
+from the folder name alone, and the pak built from that output replaced the
+Summary page of six object kinds the source never touched.
+
+Every entry is classified and printed (`BINDING <file>:<line> <entry>:
+<status>: <detail>`, and `summary_bindings` in `report.json`), with a
+`summary bindings:` count line on every run:
+
+| status | meaning | effect |
+|---|---|---|
+| `carried` | the dashboard's YAML has the entry's kinds as `summary_for` | none |
+| `superseded` | a later line has the same key (`Properties` keeps the last) | none |
+| `binds no dashboard` | no dashboard of the input is under the directory it names; the installer binds only a directory it imports, so the source binds nothing there either | `WARNING:` |
+| `not carried` | its dashboard was dropped (`--drop`), did not convert, or `--prefer-source` kept an unbound copy | `WARNING:` |
+| `mismatch` | the written `summary_for` is not the entry's (a converter error) | exit 5 |
+
+The bound dashboard stops with a TOOLSET GAP when the YAML cannot say what
+the source binds: a part that does not split into exactly two `:` tokens
+(the installer skips it), an empty token or whitespace (the installer binds
+that literal key, the loader strips it), a kind listed twice, a kind two
+entries bind (the installer's directory order decides; the loader refuses
+it), a directory holding more than one dashboard (the installer binds the
+first tab of a `HashMap`), or a `GenericTemplates*` directory (a template on
+9.2, bound on 9.0.2 GA). A dashboard in a `GenericTemplates*` pak directory
+stops on its own too, bound or not: the 9.2 installer imports it as a
+template (not shared), which the YAML cannot carry. Two copies of one
+dashboard id that differ only in their binding are differing copies
+(`--prefer-source` picks one). `--map-kind` stops a dashboard whose binding
+names a mapped kind.
+
+A content export carries no binding file (a content import cannot install
+one), so nothing converted from an export gets `summary_for`. In the pak
+layout the pak builder writes the carried bindings to its own
+`dashboards.properties`. In the `content` and `third-party` layouts the key
+is carried with a note on the dashboard: a content import does not bind it,
+and the Summary page changes only when `python3 -m vcfcf_dashboards
+bind-summary` is run after the install.
 
 ## Command and options
 
@@ -317,8 +372,8 @@ like any other GAP, and so does what references it):
   they would merge;
 - two objects landing on one id (the per-type id collision check names
   both);
-- a Summary page (pak `dashboards/<Folder>/dashboard.json`) bound to a mapped
-  `VMWARE:<Folder>`;
+- a Summary page whose `dashboards.properties` entry binds it to a mapped
+  kind (§Summary-tab bindings);
 - a View traversal spec id naming a mapped adapter kind
   (`<spec>-<adapter>-<root kind>`: the target adapter's specs are not known;
   `../wire-formats/dashboard_fidelity_wire_format.md` §Per type);
@@ -584,6 +639,14 @@ source's after the intended changes (new ids, names, the old-to-new id
 rewrites) are applied to the source. A key on one side only is always a
 difference; values are compared verbatim, whitespace included.
 
+A dashboard's Summary-tab binding is part of what is compared, at the flat
+path `dashboard.<summary binding>` (the kinds, comma-joined): the source
+side is read from the source's `dashboards.properties` entry (absent when no
+entry binds it), never from the YAML or the mapper, and the built side is
+the loaded `summary_for` (what the pak builder writes to its binding file,
+and what `bind-summary` binds in the other layouts). "Source binds nothing,
+output binds" and the reverse are both differences.
+
 Per object the result is one of: **identical**; **identical apart from keys
 forced by `--target-min`** (only at the recorded deviation paths);
 **identical apart from intended changes** (re-pointed kinds, a replaced
@@ -746,10 +809,33 @@ preferred). Each run takes 2 to 4 seconds.
   "alertdefs/Windows Service Down.xml"` and `--drop` of the two Section
   dashboards: 1180 kind references re-pointed in 208 objects, 228 compared,
   0 differ (131 identical apart from intended changes). 20 dashboards stop,
-  each named: 6 Summary pages bound to `VMWARE:<Folder>` and 14 with a View
+  each named: 6 Summary pages bound to `VMWARE:<Folder>` (an invented
+  binding, see the correction below) and 14 with a View
   traversal spec naming `VMWARE`; 4 templates and one dashboard cascade from
   them. Without the `--drop`, the two Section dashboards stop on their
   traversal specs too (16), so the counts differ by those two.
+- **Correction, 2026-11-13: the six Summary pages were invented.** The pak
+  has per-kind folders (`VMFolder`, `HostFolder`, `DatastoreFolder`,
+  `NetworkFolder`, `DistributedVirtualPortgroup`,
+  `VmwareDistributedVirtualSwitch`) but no `dashboards.properties`, so it
+  binds nothing; the importer took `summary_for` from the folder name, and
+  verification compared the YAML with that inference, so the six verified
+  "identical". Rerun with the binding read from the source (`--layout pak
+  --ids keep --naming unprefixed --target-min 8.18.7 --allow-partial
+  --prefer-source "alertdefs/Windows Service Down.xml"`, the two Section
+  dashboards dropped): `summary bindings: 0 binding file(s), 0 entries`,
+  zero `summary_for` keys, 253 compared, 43170 fields (50 more than before:
+  one binding field per dashboard), 146 identical, 6 apart from forced
+  keys, 101 only at recorded losses, 0 differ, exit 0. The written tree is
+  byte-identical to the earlier output apart from the six Summary-page
+  YAMLs, each of which loses exactly its `summary_for: VMWARE:<Folder>`
+  line (and `report.json`). The factory's own vcommunity Java pak build
+  0.0.0.14, which does ship a `dashboards.properties` with those six
+  bindings, still converts them: 6 entries, 6 carried, each verified
+  against its entry. The stress run above therefore stopped 6 dashboards
+  on bindings the source does not have. Rerun with the fix: 15 dashboards
+  stop (14 on View traversal specs, one cascading), none on a binding; 234
+  compared, 0 differ, exit 0.
 
 9.1.1 built-in export, views, report templates and dashboards (851 + 62 +
 179), `--ids mint`, third-party layout: no internal error. 756 views, 56

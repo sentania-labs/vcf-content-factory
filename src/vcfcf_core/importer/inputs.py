@@ -28,6 +28,15 @@ Every file is classified by its content, never by its folder name:
   ``formula`` (pak ``supermetrics/*.json`` and the export
   ``supermetrics.json``), or a list of them.
 
+One file is read by its place rather than its content, because that is how
+the pak installer finds it: ``dashboards.properties`` directly inside a
+``dashboards`` directory (a pak's ``content/dashboards/``), the Summary-tab
+binding file (``summary_dashboard_pak_binding.md``). Each entry is a
+:class:`SummaryBinding`, keyed by the name of the dashboard directory it
+binds, and is attached to the dashboards found under that directory
+(``context["summary_binding"]``). A dashboard's binding comes from that file
+only, never from its folder name.
+
 Content of a type the converter does not support is listed per object as
 :class:`Unsupported` (custom groups: an export ``customGroups`` list or a
 pak custom group with a ``membershipDefinition``; policies: each
@@ -42,6 +51,7 @@ from __future__ import annotations
 import codecs
 import io
 import json
+import os
 import re
 import zipfile
 import zlib
@@ -97,6 +107,35 @@ class SourceObject:
 
 
 @dataclass
+class SummaryBinding:
+    """One entry of a pak's ``content/dashboards/dashboards.properties``:
+    ``<dashboard directory>=<AdapterKind>:<ResourceKind>[,...]``, read the way
+    the installer reads it (``java.util.Properties``; the value split on
+    ``,``, each part on ``:``, nothing trimmed).
+
+    ``kinds`` holds the parts when every part is one the factory YAML can
+    carry exactly; otherwise ``problem`` says why it cannot (the bound
+    dashboard then stops with a TOOLSET GAP). ``dashboards`` lists the
+    (id, location) of every dashboard found under the directory the key
+    names; ``superseded_by`` is the line of a later entry with the same key
+    (``Properties`` keeps the last)."""
+
+    location: str
+    line: int
+    key: str
+    value: str
+    dir_location: str
+    kinds: List[str] = field(default_factory=list)
+    problem: Optional[str] = None
+    dashboards: List[Tuple[str, str]] = field(default_factory=list)
+    superseded_by: Optional[int] = None
+
+    @property
+    def where(self) -> str:
+        return f"{self.location}:{self.line}"
+
+
+@dataclass
 class PassedOver:
     location: str
     reason: str
@@ -121,6 +160,10 @@ class InputScan:
     #: (location, raw bytes) of every content file, for the completeness
     #: cross-check against the stock-id guard's own scanner.
     content_files: List[Tuple[str, bytes]] = field(default_factory=list)
+    #: every entry of every Summary-tab binding file (``dashboards.properties``)
+    bindings: List[SummaryBinding] = field(default_factory=list)
+    #: the binding files read
+    binding_files: List[str] = field(default_factory=list)
 
 
 _XML_DECL_ENCODING = re.compile(rb"^\s*<\?xml[^>]*?\bencoding\s*=\s*[\"']([A-Za-z0-9._\-]+)[\"']")
@@ -245,7 +288,7 @@ def _no_duplicates(pairs):
     return out
 
 
-def _scan_json(text: str, location: str, scan: InputScan, raw: bytes, folder: str) -> None:
+def _scan_json(text: str, location: str, scan: InputScan, raw: bytes) -> None:
     try:
         obj = json.loads(text, object_pairs_hook=_no_duplicates)
     except _DuplicateKey as exc:
@@ -265,7 +308,7 @@ def _scan_json(text: str, location: str, scan: InputScan, raw: bytes, folder: st
             if isinstance(d, dict) and d.get("id"):
                 scan.objects.append(SourceObject(
                     "dashboard", str(d["id"]), str(d.get("name") or ""), location, d,
-                    context={"entries": entries, "folder": folder, "envelope": True,
+                    context={"entries": entries, "envelope": True,
                              "file_dashboard_count": len(obj["dashboards"])}))
                 found += 1
     elif isinstance(obj, dict) and isinstance(obj.get("customGroups"), list) or (
@@ -280,7 +323,7 @@ def _scan_json(text: str, location: str, scan: InputScan, raw: bytes, folder: st
     elif _is_bare_dashboard(obj):
         scan.objects.append(SourceObject(
             "dashboard", str(obj["id"]), str(obj.get("name") or ""), location, obj,
-            context={"entries": obj.get("entries") or {}, "folder": folder, "envelope": False,
+            context={"entries": obj.get("entries") or {}, "envelope": False,
                      "file_dashboard_count": 1}))
         found += 1
     else:
@@ -307,12 +350,180 @@ def _scan_json(text: str, location: str, scan: InputScan, raw: bytes, folder: st
         scan.passed_over.append(PassedOver(location, "JSON with no dashboard or super metric definition"))
 
 
-def _folder_of(location: str) -> str:
-    """The folder a pak dashboard sits in (``dashboards/<Folder>/dashboard.json``)."""
-    parts = re.split(r"[/\\!]", location)
-    if len(parts) >= 2 and parts[-1] == "dashboard.json":
-        return parts[-2]
-    return ""
+BINDING_FILE = "dashboards.properties"
+_SEP = re.compile(r"[/\\!]")
+#: A pak dashboard directory the 9.2 installer imports as a template (never
+#: shared, never bound); 9.0.2 GA has no such rule (pak binding doc §Install).
+_TEMPLATE_DIR = re.compile(r"(?:^|[/\\!])dashboards[/\\](GenericTemplates[^/\\!]*)[/\\]")
+
+
+def template_dir(location: str) -> Optional[str]:
+    """The ``GenericTemplates*`` pak dashboard directory ``location`` sits
+    in, or ``None``."""
+    m = _TEMPLATE_DIR.search(location)
+    return m.group(1) if m else None
+
+
+def _java_properties(text: str) -> List[Tuple[int, str, str]]:
+    """``(line, key, value)`` of every entry, in order, as
+    ``java.util.Properties.load`` reads them: ``#`` and ``!`` comment lines
+    and blank lines skipped; a line ending in an odd number of backslashes
+    continues on the next (its leading whitespace dropped); the key ends at
+    the first unescaped ``=``, ``:`` or whitespace, then whitespace and one
+    ``=`` or ``:`` are skipped; ``\\t \\n \\r \\f \\uXXXX`` escapes, any other
+    escaped character is itself. Raises ``ValueError`` on a malformed
+    ``\\u`` escape (Java throws too)."""
+    lines = re.split(r"\r\n|\r|\n", text)
+    out: List[Tuple[int, str, str]] = []
+    i = 0
+    while i < len(lines):
+        start = i + 1
+        line = lines[i].lstrip(" \t\f")
+        i += 1
+        if not line or line[0] in "#!":
+            continue
+        while (len(line) - len(line.rstrip("\\"))) % 2 == 1:
+            line = line[:-1]
+            if i >= len(lines):
+                break
+            line += lines[i].lstrip(" \t\f")
+            i += 1
+        k = 0
+        while k < len(line) and line[k] not in "=: \t\f":
+            k += 2 if line[k] == "\\" else 1
+        k = min(k, len(line))
+        rest = line[k:].lstrip(" \t\f")
+        if rest[:1] in ("=", ":"):
+            rest = rest[1:].lstrip(" \t\f")
+        out.append((start, _unescape(line[:k]), _unescape(rest)))
+    return out
+
+
+def _unescape(s: str) -> str:
+    out = []
+    k = 0
+    while k < len(s):
+        c = s[k]
+        if c != "\\" or k + 1 >= len(s):
+            out.append(c)
+            k += 1
+            continue
+        nxt = s[k + 1]
+        if nxt == "u":
+            hexs = s[k + 2:k + 6]
+            if not re.fullmatch(r"[0-9a-fA-F]{4}", hexs):
+                raise ValueError(f"malformed \\uxxxx escape {s[k:k + 6]!r}")
+            out.append(chr(int(hexs, 16)))
+            k += 6
+            continue
+        out.append({"t": "\t", "n": "\n", "r": "\r", "f": "\f"}.get(nxt, nxt))
+        k += 2
+    return "".join(out)
+
+
+def _java_split(s: str, sep: str) -> List[str]:
+    """``String.split`` on a one-character separator: trailing empty strings
+    removed."""
+    parts = s.split(sep)
+    while parts and parts[-1] == "":
+        parts.pop()
+    return parts
+
+
+def _binding_value(value: str) -> Tuple[List[str], Optional[str]]:
+    """``(kinds, problem)`` of one binding value, split as the installer
+    splits it (``,`` then ``:``, no trimming)."""
+    parts = _java_split(value, ",")
+    if not parts:
+        return [], f"the value {value!r} names no kind (the installer binds nothing)"
+    kinds: List[str] = []
+    for part in parts:
+        toks = _java_split(part, ":")
+        if len(toks) != 2:
+            return [], (f"the part {part!r} of {value!r} does not split into exactly two ':' tokens, so the "
+                        f"installer skips it; the factory YAML cannot carry a part that binds nothing")
+        if not all(toks) or any(ch.isspace() for t in toks for ch in t):
+            return [], (f"the part {part!r} of {value!r} has an empty token or whitespace, which the installer "
+                        f"does not trim (it binds a kind of that literal key); the factory YAML strips it, so "
+                        f"it cannot carry it")
+        kind = f"{toks[0]}:{toks[1]}"
+        if kind in kinds:
+            return [], f"{value!r} lists {kind} twice, which the factory YAML refuses"
+        kinds.append(kind)
+    return kinds, None
+
+
+def _scan_binding_file(data: bytes, location: str, scan: InputScan) -> None:
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        scan.unreadable.append(Unreadable(location, f"Summary binding file that does not decode as UTF-8 ({exc})"))
+        return
+    try:
+        entries = _java_properties(text.lstrip("﻿"))
+    except ValueError as exc:
+        scan.unreadable.append(Unreadable(location, f"Summary binding file the installer cannot read ({exc})"))
+        return
+    scan.binding_files.append(location)
+    base = location[:-len(BINDING_FILE)]
+    sep = base[-1:] if base[-1:] in ("/", "\\") else "/"
+    last: Dict[str, SummaryBinding] = {}
+    for line, key, value in entries:
+        b = SummaryBinding(location, line, key, value, base + key + sep)
+        if key in last:
+            last[key].superseded_by = line
+        last[key] = b
+        scan.bindings.append(b)
+
+
+def _canon(location: str) -> str:
+    """A location with its filesystem part made absolute (no disk access),
+    so a binding file and dashboards given as separate inputs still match."""
+    fs, bang, rest = location.partition("!")
+    return os.path.abspath(fs) + (os.sep if fs.endswith(("/", "\\")) else "") + (bang + rest if bang else "")
+
+
+def _attach_bindings(scan: InputScan) -> None:
+    """Resolve every binding entry to the dashboards under the directory it
+    names, decide whether the YAML can carry it (``problem``), and attach
+    each effective entry to its dashboards (``context["summary_binding"]``)."""
+    dashes = [o for o in scan.objects if o.type == "dashboard"]
+    live = [b for b in scan.bindings if b.superseded_by is None]
+    for b in live:
+        prefix = _canon(b.dir_location)
+        b.dashboards = [(o.id, o.location) for o in dashes if _canon(o.location).startswith(prefix)]
+        b.kinds, b.problem = _binding_value(b.value)
+        if b.problem is None and b.key.startswith("GenericTemplates"):
+            b.problem = (f"the directory {b.key!r} starts with GenericTemplates: the 9.2 installer imports it as a "
+                         f"template and never binds it, 9.0.2 GA binds it; the factory YAML cannot carry either")
+        if b.problem is None and len(b.dashboards) > 1:
+            b.problem = (f"the directory {b.key!r} holds {len(b.dashboards)} dashboards; the installer binds the "
+                         f"first tab of its import result (a HashMap, so which one is not known), and the factory "
+                         f"YAML cannot say which dashboard the source bound")
+    owners: Dict[str, List[SummaryBinding]] = {}
+    for b in live:
+        if b.problem is None and b.dashboards:
+            for k in b.kinds:
+                owners.setdefault(k, []).append(b)
+    for k, bs in owners.items():
+        if len(bs) > 1:
+            for b in bs:
+                if b.problem is None:
+                    others = "; ".join(f"{x.key!r} ({x.where})" for x in bs if x is not b)
+                    b.problem = (f"{k} is also bound by {others}; a kind has one Summary page (the installer's "
+                                 f"directory order decides which) and the factory loader refuses two dashboards "
+                                 f"for one kind")
+    for b in live:
+        for o in dashes:
+            if (o.id, o.location) in b.dashboards:
+                o.context["summary_binding"] = b
+
+
+def binding_kinds(obj) -> Optional[List[str]]:
+    """The kinds the source binds dashboard ``obj`` (a ``SourceObject``) to,
+    read from its binding file entry; ``None`` when no entry binds it."""
+    b = obj.context.get("summary_binding") if obj.type == "dashboard" else None
+    return list(b.kinds) if b is not None else None
 
 
 def _scan_bytes(data: bytes, location: str, scan: InputScan, depth: int) -> None:
@@ -347,6 +558,14 @@ def _scan_bytes(data: bytes, location: str, scan: InputScan, depth: int) -> None
                 _scan_bytes(member, loc, scan, depth + 1)
         return
     scan.files_read += 1
+    parts = _SEP.split(location)
+    if parts[-1] == BINDING_FILE:
+        if len(parts) >= 2 and parts[-2] == "dashboards":
+            _scan_binding_file(data, location, scan)
+        else:
+            scan.passed_over.append(PassedOver(location, f"a {BINDING_FILE} outside a dashboards directory (the "
+                                                         f"pak installer reads only content/dashboards/{BINDING_FILE})"))
+        return
     stripped = data.lstrip(b"\xef\xbb\xbf\xff\xfe\x00 \t\r\n")
     lead = stripped[:1]
     if not data.strip():
@@ -364,7 +583,7 @@ def _scan_bytes(data: bytes, location: str, scan: InputScan, depth: int) -> None
     if body.startswith("<"):
         _scan_xml(body, location, scan, data)
     elif body[:1] in ("{", "["):
-        _scan_json(body, location, scan, data, _folder_of(location))
+        _scan_json(body, location, scan, data)
     else:
         scan.passed_over.append(PassedOver(location, "not XML, JSON or an archive"))
 
@@ -396,4 +615,5 @@ def scan_inputs(paths: Sequence) -> InputScan:
             relbase = f.relative_to(p).as_posix() if p.is_dir() else f.name
             for o in scan.objects[n:]:
                 o.rel = relbase + o.location[len(prefix):] if o.location.startswith(prefix) else o.location
+    _attach_bindings(scan)
     return scan

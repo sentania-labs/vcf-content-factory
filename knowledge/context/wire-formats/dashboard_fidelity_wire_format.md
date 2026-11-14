@@ -80,13 +80,21 @@ render, not one copied from an export; add `omit: [name_path]` to match an
 export exactly.
 
 `hidden` and `summary_for` already existed and round-trip: 30 hidden
-third-party dashboards and the six per-folder Summary dashboards render
-`hidden` exactly, and `summary_for: VMWARE:VMFolder` (and the other five
-folder kinds) passes the Summary-page rule (no pinned widget) and is bound
-by the pak builder's `content/dashboards/dashboards.properties`
-(`<dir>=VMWARE:VMFolder`, the directory being the dashboard's slug, not the
-source's folder name; the installer keys on the directory, so the binding is
-the same). A source file that carries several dashboards (the third-party
+third-party dashboards render `hidden` exactly. `summary_for` is not a key
+of the dashboard JSON: a pak binds a dashboard to a Summary tab only in
+`content/dashboards/dashboards.properties` (`<dir>=<AK>:<RK>[,...]`,
+`../api-surface/summary_dashboard_pak_binding.md`), and the pak builder
+writes that file from `summary_for`, keyed by the dashboard's own directory
+(its slug, not the source's folder name; the installer keys on the
+directory, so the binding is the same). `import-local` sets `summary_for`
+only from a source binding file entry, and verification compares the
+binding with that entry (`../authoring/importer_offline_conversion.md`
+§Summary-tab bindings). **Corrected 2026-11-13:** this paragraph used to
+say the six per-folder vCommunity dashboards (`VMFolder`, `HostFolder`, ...)
+were Summary dashboards with `summary_for: VMWARE:<Folder>`. They are not:
+that pak ships no `dashboards.properties`, so it binds nothing, and the
+`summary_for` came from the importer reading the folder name. A folder name
+is a directory name, nothing more. A source file that carries several dashboards (the third-party
 `Input dashboards.json` holds 34) is expressed as one YAML file per
 dashboard; each renders alone, and the shared `entries` table is rebuilt per
 dashboard with only the kinds it uses.
