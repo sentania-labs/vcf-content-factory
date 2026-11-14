@@ -712,3 +712,267 @@ def test_verbatim_free_text_is_listed_per_object(source, tmp_path, capsys):
     rep = _report(out)
     assert "kind_map" not in rep and "intended_changes" not in rep["verify"]
     assert "kind_references_repointed" not in by["Renamed VM"] and "description_replaced" not in by["Renamed VM"]
+
+
+def test_verbatim_lists_prefixed_names_and_measures_the_source(tmp_path, capsys):
+    src = build_source(tmp_path / "s", sources={"v_vm.yaml": SOURCES["v_vm.yaml"]})
+    x = (src / "views.xml").read_text().replace("not on the mapped kind</Description>",
+                                                "not on the mapped kind  </Description>")
+    (src / "views.xml").write_text(x)
+    out = tmp_path / "out"
+    rc, text = _cli(["import-local", src, "--out", out, "--layout", "content", "--ids", "mint", "--mint-namespace",
+                     "p", "--naming", "factory-prefixed", "--allow-partial"], capsys)
+    assert rc == 0, text
+    vt = {f["field"]: f["length"] for f in _report(out)["objects"][0]["verbatim_text"]}
+    # the prefixed name still ships the source's name; the length is the source's
+    assert vt == {"name": len("Probe VM List"), "description": len("not on the mapped kind  ")}
+
+
+# ------------------------------------------------- review fixes (2026-11-13)
+DERIVED_REC = f"Recommendation-df-{OLD}-Probe_Derived_Rec"
+REC_D = f"""
+    name: Probe Derived Rec
+    description: Check the item.
+    adapter_kind: {OLD}
+"""
+
+
+def _with_rec(alerts_using_it):
+    srcs = {k: SOURCES[k] for k in ("y_k.yaml", "y_d.yaml", "a_k.yaml", "a_d.yaml")}
+    srcs["k_d.yaml"] = REC_D
+    for a in alerts_using_it:
+        srcs[a] = srcs[a].replace("        recommendations: [{name: probeKindRec, priority: 1}]\n", "")
+        srcs[a] = srcs[a].rstrip() + "\n        recommendations: [{name: Probe Derived Rec, priority: 1}]\n"
+    return srcs
+
+
+def test_derived_recommendation_key_takes_the_alerts_new_kind(tmp_path, capsys):
+    src = build_source(tmp_path / "s", sources=_with_rec(["a_d.yaml"]))
+    assert DERIVED_REC in (src / "alerts.xml").read_text()
+    out = tmp_path / "out"
+    rc, text = _run(src, out, capsys, "--map-kind", _tsv(tmp_path, "k.tsv", STAR_ROW))
+    assert rc == 0, text
+    rec = _y(out, f"recommendations/recommendation-df-{NEW.replace('_', '-')}-probe-derived-rec.yaml")
+    assert rec["id"] == f"Recommendation-df-{NEW}-Probe_Derived_Rec" and rec["adapter_kind"] == NEW
+    assert "no alert in the set references this recommendation" not in text
+    assert _y(out, "alerts/probe-derived-alert.yaml")["recommendations"][0]["name"] == rec["name"]
+
+
+def test_recommendation_key_is_kept_when_no_alert_using_it_moves(tmp_path, capsys):
+    # the map names Probe Library only; the alert using the key is on Probe Item
+    km = _tsv(tmp_path, "k.tsv", [(OLD, "Probe Library", NEW, "*")])
+    src = build_source(tmp_path / "s", sources=_with_rec(["a_d.yaml"]))
+    out = tmp_path / "out"
+    rc, text = _run(src, out, capsys, "--map-kind", km)
+    assert rc == 0, text
+    assert _y(out, "recommendations/recommendation-df-probeold-probe-derived-rec.yaml")["id"] == DERIVED_REC
+    # alerts on both kinds use it, and only one moves: that stops it
+    src2 = build_source(tmp_path / "s2", sources=_with_rec(["a_d.yaml", "a_k.yaml"]))
+    rc, text = _run(src2, tmp_path / "o2", capsys, "--map-kind", km, "--allow-partial")
+    assert (f"FAILED recommendation {DERIVED_REC} '{DERIVED_REC}': kind map: recommendation key {DERIVED_REC} "
+            f"embeds the mapped adapter kind {OLD}; the alerts that use it move to {NEW} while alerts on "
+            f"{OLD}:Probe Item stay") in text
+
+
+def test_alertlist_naming_a_repointed_alert_that_failed_fails_too(tmp_path, capsys):
+    srcs = {k: SOURCES[k] for k in ("sm_k.yaml", "v_lib.yaml", "d_k.yaml", "y_d.yaml", "a_d.yaml")}
+    src = build_source(tmp_path / "s", sources=srcs)
+    x = (src / "alerts.xml").read_text()
+    start = x.index("<SymptomDefinition ")
+    end = x.index("</SymptomDefinition>", start) + len("</SymptomDefinition>")
+    (src / "alerts.xml").write_text(x[:start] + x[end:])  # the alert's symptom is gone: the alert fails
+    rc, text = _run(src, tmp_path / "out", capsys, "--map-kind", _tsv(tmp_path, "k.tsv", STAR_ROW),
+                    "--allow-partial")
+    assert f"FAILED alert {DERIVED_ALERT} 'Probe Derived Alert'" in text
+    assert (f"FAILED dashboard {D_K} 'Probe Kind Dashboard': field widgets[3].alert_definitions[0] references "
+            f"alert AlertDefinition-{NEW}-Probe_Derived_Alert (its derived id re-pointed by --map-kind), which did "
+            f"not convert") in text
+    assert not (tmp_path / "out" / "dashboards").exists() or not list((tmp_path / "out" / "dashboards").iterdir())
+
+
+def test_a_prefixed_drop_or_id_map_key_names_its_own_type_only(tmp_path, capsys):
+    srcs = {k: SOURCES[k] for k in ("y_d.yaml", "a_d.yaml")}
+    srcs["a_d.yaml"] = srcs["a_d.yaml"].replace("name: Probe Derived Alert", "name: Probe Derived Symptom")
+    src = build_source(tmp_path / "s", sources=srcs)
+    sym_id = f"SymptomDefinition-{OLD}-Probe_Derived_Symptom"
+    alert_id = f"AlertDefinition-{OLD}-Probe_Derived_Symptom"
+    assert alert_id in (src / "alerts.xml").read_text()
+    rc, text = _run(src, tmp_path / "d1", capsys, "--drop", _tsv(tmp_path, "d1.tsv", [(sym_id,)]), "--allow-partial")
+    assert f"dropped (--drop): symptom {sym_id}" in text and "dropped (--drop): alert" not in text
+    # a bare key names no type and matches both, as before
+    rc, text = _run(src, tmp_path / "d2", capsys, "--drop",
+                    _tsv(tmp_path, "d2.tsv", [(f"{OLD}-Probe_Derived_Symptom",)]), "--dry-run")
+    assert f"dropped (--drop): symptom {sym_id}" in text and f"dropped (--drop): alert {alert_id}" in text
+    new = "11111111-2222-4333-8444-555555555555"
+    rc, text = _cli(["import-local", src, "--out", tmp_path / "m", "--layout", "third-party", "--naming", "unprefixed",
+                     "--id-map", _tsv(tmp_path, "m.tsv", [(sym_id, f"SymptomDefinition-{new}")])], capsys)
+    assert rc == 0, text
+    idmap = (tmp_path / "m" / "import-report" / "id_map.tsv").read_text()
+    assert f"symptom\t{sym_id}\tSymptomDefinition-{new}\t" in idmap
+    assert f"alert\t{alert_id}\t{alert_id}\t" in idmap
+
+
+def test_kind_valued_labels_follow_the_kind(tmp_path, capsys):
+    heat = f"""
+        id: 1d000000-0000-4000-8000-0000000000c1
+        name: Probe Kind Heat
+        description: heat
+        name_path: ""
+        shared: false
+        widgets:
+          - id: heat
+            type: Heatmap
+            title: Heat
+            coords: {{x: 1, y: 1, w: 12, h: 6}}
+            mode: all
+            depth: 1
+            configs:
+              - name: Probe Tab
+                adapter_kind: {OLD}
+                resource_kind: Probe Library
+                color_by: {{metric_key: {OLD}|size, label: Size}}
+                size_by: {{metric_key: {OLD}|size, label: Size}}
+                group_by: {{adapter_kind: {OLD}, resource_kind: Probe Item, text: Items}}
+                color:
+                  min_value: 0
+                  max_value: 100
+                  thresholds: {{values: [0, 100], colors: ["#74B43B", "#DE3F30"]}}
+                solid_coloring: false
+                focus_on_groups: false
+    """
+    srcs = {k: SOURCES[k] for k in ("sm_k.yaml", "v_lib.yaml", "d_k.yaml", "y_d.yaml", "a_d.yaml")}
+    srcs["d_h.yaml"] = heat
+    src = build_source(tmp_path / "s", sources=srcs)
+    env = json.loads((src / "dashboards.json").read_text())
+    heat_db = next(d for d in env["dashboards"] if d["name"] == "Probe Kind Heat")
+    assert heat_db["widgets"][0]["config"]["configs"][0]["groupBy"]["parentText"] == OLD
+    rc, text = _run(src, tmp_path / "o1", capsys, "--map-kind", _tsv(tmp_path, "k1.tsv", STAR_ROW))
+    assert rc == 0, text
+    tab = _y(tmp_path / "o1", "dashboards/probe-kind-heat.yaml")["widgets"][0]["configs"][0]
+    assert tab["group_by"].get("parent_text", NEW) == NEW and tab["group_by"]["adapter_kind"] == NEW
+    # a resource kind renamed: the Scoreboard entry's resourceKindName follows
+    rc, text = _run(src, tmp_path / "o2", capsys, "--map-kind",
+                    _tsv(tmp_path, "k2.tsv", [(OLD, "Probe Item", OLD, "Probe Thing")]))
+    assert rc == 0, text
+    m = _y(tmp_path / "o2", "dashboards/probe-kind-dashboard.yaml")["widgets"][1]["metrics"][0]
+    assert m["resource_kind"] == "Probe Thing" and m.get("resource_kind_name", "Probe Thing") == "Probe Thing"
+    assert _report(tmp_path / "o2")["verify"]["differ"] == 0
+
+
+def test_headers_after_comments_and_upper_case_ids(source, tmp_path, capsys):
+    km = tmp_path / "k.tsv"
+    km.write_text(f"# kinds\n\nold_adapter_kind\told_rk\tnew_ak\tnew_rk\n{OLD}\t*\t{NEW}\t*\n")
+    desc = tmp_path / "d.tsv"
+    desc.write_text(f"# descriptions\ntype\tname\tdescription\nview\t{V_VM.upper()}\tUpper id\n")
+    rc, text = _run(source, tmp_path / "out", capsys, "--map-kind", km, "--describe", desc)
+    assert rc == 0, text
+    assert _y(tmp_path / "out", "views/probe-vm-list.yaml")["description"] == "Upper id"
+    bad = tmp_path / "bad.tsv"
+    bad.write_text(f"{OLD}\t*\t{NEW}\t*\nold_adapter_kind\told_rk\tnew_ak\tnew_rk\n")
+    rc, text = _run(source, tmp_path / "o2", capsys, "--map-kind", bad)
+    assert rc == 2 and "a header row is only read as the first row" in text
+
+
+# ------------------------------------------------ independent oracle (W4)
+_KIND_FIELDS = ("adapter_kind", "adapter_kind_key", "parent_text")
+
+
+def _flat_yaml(x, path="", out=None):
+    out = {} if out is None else out
+    if isinstance(x, dict):
+        for k, v in x.items():
+            _flat_yaml(v, f"{path}.{k}" if path else str(k), out)
+    elif isinstance(x, list):
+        for i, v in enumerate(x):
+            _flat_yaml(v, f"{path}[{i}]", out)
+    else:
+        out[path] = x
+    return out
+
+
+def _yaml_by_object(root: Path) -> dict:
+    out = {}
+    for p in root.rglob("*.yaml"):
+        if p.name == "PROJECT.yaml" or "import-report" in p.parts:
+            continue
+        d = yaml.safe_load(p.read_text())
+        out[(p.parent.name, str(d.get("name")))] = d
+    return out
+
+
+def _corpus_source(tmp: Path) -> Path:
+    import warnings
+    from vcfcf_core.alerts.loader import load_dir as load_alerts, load_recommendations
+    from vcfcf_core.dashboards.loader import load_all
+    from vcfcf_core.reports.loader import load_dir as load_reports
+    from vcfcf_core.supermetrics.loader import load_dir as load_sms
+    from vcfcf_core.symptoms.loader import load_dir as load_syms
+    c = Path(__file__).resolve().parent.parent / "content"
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        sms = load_sms(c / "supermetrics")
+        views, dashes = load_all(c / "views", c / "dashboards")
+        reports = load_reports(c / "reports", c / "views", c / "dashboards")
+        syms, alerts, recs = load_syms(c / "symptoms"), load_alerts(c / "alerts"), load_recommendations(
+            c / "recommendations")
+    src = tmp / "src"
+    src.mkdir()
+    (src / "views.xml").write_text(render_views_xml(views, sm_map={s.name: s.id for s in sms}))
+    by_name = {v.name: v for v in views}
+    for i, d in enumerate(dashes):
+        (src / f"d{i}.json").write_text(render_dashboards_bundle_json([d], by_name, "0", known_dashboards=dashes))
+    (src / "reports.xml").write_text(render_report_xml(reports))
+    (src / "alerts.xml").write_text(render_alert_content_xml(syms, alerts, recs))
+    (src / "sms.json").write_text(json.dumps(_render_supermetrics_dict(type("B", (), {"supermetrics": sms})())))
+    return src
+
+
+@pytest.mark.parametrize("old_ak,old_rk,new_ak,new_rk", [
+    ("VMWARE", "*", "oracle_ak", "*"),
+    ("VMWARE", "VirtualMachine", "VMWARE", "OracleVM"),
+])
+def test_independent_oracle_mapped_vs_unmapped_yaml(tmp_path, capsys, old_ak, old_rk, new_ak, new_rk):
+    """Logic independent of the importer's mapper: the factory corpus is
+    converted with and without the map and the two YAML trees are diffed.
+    Every differing leaf must be an exact old-to-new kind swap, and no kind
+    field of a converted object may still name a kind the map moves. A place
+    the rewriter missed is unchanged in both runs and so cannot cancel out
+    here the way it can in verification (which compares against the
+    re-pointed source)."""
+    src = _corpus_source(tmp_path)
+    common = ["--layout", "third-party", "--ids", "keep", "--naming", "unprefixed", "--allow-partial"]
+    rc, text = _cli(["import-local", src, "--out", tmp_path / "plain", *common], capsys)
+    assert rc == 0, text
+    rc, text = _cli(["import-local", src, "--out", tmp_path / "mapped", *common, "--map-kind",
+                     _tsv(tmp_path, "k.tsv", [(old_ak, old_rk, new_ak, new_rk)])], capsys)
+    assert rc == 0, text
+    plain, mapped = _yaml_by_object(tmp_path / "plain"), _yaml_by_object(tmp_path / "mapped")
+    swaps, bad, stale = 0, [], []
+
+    def swap(v: str) -> str:  # the new value spelled with the old kind
+        return v.replace(new_ak, old_ak) if old_rk == "*" else v.replace(new_rk, old_rk)
+
+    for key, dm in mapped.items():
+        dp = plain.get(key)
+        if dp is None:
+            continue
+        fm, fp = _flat_yaml(dm), _flat_yaml(dp)
+        for path in set(fm) | set(fp):
+            vm, vp = fm.get(path), fp.get(path)
+            if vm != vp:
+                if isinstance(vm, str) and isinstance(vp, str) and swap(vm) == vp:
+                    swaps += 1
+                else:
+                    bad.append((key, path, vp, vm))
+            leaf = path.rsplit(".", 1)[-1]
+            if old_rk == "*" and leaf in _KIND_FIELDS and vm == old_ak:
+                stale.append((key, path))
+            if old_rk != "*" and leaf in ("resource_kind", "resource_kind_key", "resource_kind_name") \
+                    and vm == old_rk:
+                ak = fm.get(path.rsplit(".", 1)[0] + (".adapter_kind_key" if leaf.endswith("_key") else ".adapter_kind"),
+                            fm.get("adapter_kind"))
+                if ak == old_ak:
+                    stale.append((key, path))
+    assert swaps > (50 if old_rk == "*" else 10), swaps
+    assert not bad, bad[:10]
+    assert not stale, stale[:10]

@@ -1015,9 +1015,10 @@ def run(args) -> int:
         _say(f"kind map: {len(km.rows)} row(s), {len(km.rows) - len(km.unused())} used; {len(moved)} converted "
              f"object(s) carry re-pointed kinds, {sum(e.kind_refs for e in moved)} kind reference(s) re-pointed")
     vt = [e for e in plan.emitted if e.verbatim]
-    _say(f"verbatim source text: {len(vt)} object(s) carry {sum(len(e.verbatim) for e in vt)} free-text field(s) "
-         f"({sum(n for e in vt for _, n in e.verbatim)} characters) exactly as the source wrote them (names, "
-         f"descriptions, widget titles and text); listed per object in report.json (verbatim_text)")
+    _say(f"verbatim source text: {len(vt)} object(s) ship the source's prose in {sum(len(e.verbatim) for e in vt)} "
+         f"free-text field(s) not replaced by --rename or --describe ({sum(n for e in vt for _, n in e.verbatim)} "
+         f"characters as the source wrote them: names, descriptions, widget titles and text); listed per object "
+         f"in report.json (verbatim_text)")
     if args.naming == "factory-prefixed":
         from vcfcf_core.dashboards.loader import DASHBOARD_NAME_MAX_LEN
         for e in plan.emitted:

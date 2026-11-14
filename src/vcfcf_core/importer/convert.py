@@ -118,16 +118,26 @@ def norm_id(type_: str, raw: str) -> str:
     return s.lower()
 
 
-def norm_key(raw: str) -> str:
-    """Comparison form of a ``--drop`` / ``--id-map`` key, which names no
-    type: :func:`norm_id` with either XML prefix stripped, so a symptom or
-    alert is matched by its wire id (``SymptomDefinition-<id>``, as
-    ``id_map.tsv`` and the stock-id guard print it) or by the bare id."""
+def norm_key(raw: str) -> Tuple[Optional[str], str]:
+    """Comparison form of a ``--drop`` / ``--id-map`` key: ``(type, id)``.
+    A key carrying an XML prefix (``SymptomDefinition-<id>``,
+    ``AlertDefinition-<id>``, as ``id_map.tsv`` and the stock-id guard print
+    them) names that type only; a bare key names no type (``None``) and
+    matches any object whose :func:`norm_id` it equals, as before."""
     s = str(raw or "").strip()
-    for p in _ID_PREFIX.values():
+    for t, p in _ID_PREFIX.items():
         if s.startswith(p):
-            return s[len(p):].lower()
-    return s.lower()
+            return t, s[len(p):].lower()
+    return None, s.lower()
+
+
+def key_hit(keys, type_: str, nid: str):
+    """The ``norm_key`` form in ``keys`` that names an object of ``type_``
+    with norm id ``nid`` (its own type first), or ``None``."""
+    for k in ((type_, nid), (None, nid)):
+        if k in keys:
+            return k
+    return None
 
 
 def mint_namespace_uuid(text: str) -> uuid.UUID:
@@ -349,12 +359,16 @@ def parse_describe_map(text: str, what: str) -> Dict[Tuple[str, str], str]:
     (the loaders strip it); an empty one is an error. Raises ValueError on a
     malformed row, a type without a shipped description or a repeated key."""
     out: Dict[Tuple[str, str], str] = {}
+    first = True
     for n, line in enumerate(text.splitlines(), 1):
         if not line.strip() or line.lstrip().startswith("#"):
             continue
         cells = line.rstrip("\r\n").split("\t")
-        if n == 1 and cells[0].strip().lower() == "type":
+        # the header is the first row that is not blank or a comment
+        if first and cells[0].strip().lower() == "type":
+            first = False
             continue
+        first = False
         if len(cells) != 3 or not cells[0].strip() or not cells[1] or not cells[2].strip():
             raise ValueError(f"{what}: line {n}: expected type<TAB>name or id<TAB>new description (a tab or a "
                              f"line break inside the description is written \\t or \\n), got {line[:120]!r}")
@@ -437,32 +451,36 @@ def _kinds_gap(type_: str, problem: str) -> Dict[str, str]:
 
 
 def verbatim_text(e: "Emitted") -> List[Tuple[str, int]]:
-    """The free-text fields of ``e`` carried from the source verbatim (not
-    replaced by ``--rename``, ``--naming`` or ``--describe``), with their
-    lengths in characters: names, descriptions, widget titles and
-    descriptions, TextDisplay HTML, recommendation text. Functional labels
-    (view column display names, metric labels, tab names) are not listed.
-    Empty fields are left out."""
-    y = e.yaml_tree
+    """The free-text fields of ``e`` that ship the source's prose (every
+    one not replaced by ``--rename`` or ``--describe``; a name under
+    ``--naming factory-prefixed`` still carries the source's name), with the
+    length in characters of the SOURCE value: names, descriptions, widget
+    titles and descriptions, TextDisplay HTML, recommendation text.
+    Functional labels (view column display names, metric labels, tab names)
+    are not listed. Empty fields are left out."""
+    src = e.source.payload
     out: List[Tuple[str, int]] = []
 
     def add(label: str, v) -> None:
         if isinstance(v, str) and v:
             out.append((label, len(v)))
 
-    renamed = any(r in ("--rename", "--naming factory-prefixed") or r.startswith("--map-kind")
-                  for r in e.rename_reasons)
-    if e.type != "recommendation" and not renamed:
-        add("name", e.name)
+    if e.type != "recommendation" and "--rename" not in e.rename_reasons:
+        add("name", e.source_name)
     if e.type in DESCRIBED_TYPES and e.described is None:
-        add("description", y.get("description"))
+        if e.type in ("view", "report", "recommendation"):
+            add("description", src.findtext("Description"))
+        else:  # alert (an attribute), dashboard, super metric
+            add("description", src.get("description"))
     if e.type == "dashboard":
-        for w in y.get("widgets") or []:
-            wid = w.get("id")
-            add(f"widget {wid} title", w.get("title"))
-            add(f"widget {wid} description", w.get("description"))
+        for i, w in enumerate(src.get("widgets") or []):
+            if not isinstance(w, dict):
+                continue
+            c = w.get("config") if isinstance(w.get("config"), dict) else {}
+            add(f"widget w{i} title", w.get("title"))
+            add(f"widget w{i} description", c.get("description"))
             if w.get("type") == "TextDisplay":
-                add(f"widget {wid} html", w.get("html"))
+                add(f"widget w{i} html", c.get("editorData"))
     return out
 
 
@@ -543,19 +561,20 @@ class _Planner:
 
     # 2. drops ---------------------------------------------------------
     def apply_drops(self, objs: List[SourceObject]) -> List[SourceObject]:
-        drop = {norm_key(k): v for k, v in self.opts.drop.items()}
+        drop = {norm_key(k): k for k in self.opts.drop}
         used = set()
         kept = []
         for o in objs:
-            nid = norm_id(o.type, o.id)
-            if nid in drop:
-                used.add(nid)
+            hit = key_hit(drop, o.type, norm_id(o.type, o.id))
+            if hit is not None:
+                used.add(hit)
                 self.plan.dropped.append((o.type, o.id, o.name, list(o.locations)))
             else:
                 kept.append(o)
-        for k in drop:
+        for k, raw in drop.items():
             if k not in used:
-                self.plan.warnings.append(f"drop list: {k} names no object in the input")
+                shown = k[1] if k[0] is None else raw.strip()
+                self.plan.warnings.append(f"drop list: {shown} names no object in the input")
         self.dropped_keys = {(t, norm_id(t, i)) for t, i, _, _ in self.plan.dropped}
         return kept
 
@@ -570,13 +589,18 @@ class _Planner:
         self.kind_ids: Dict[Tuple[str, str], str] = {}     # (type, norm source id) -> re-pointed id
         self.kind_unmap: Dict[Tuple[str, str], str] = {}   # (type, norm re-pointed id) -> source id
         self.kind_info: Dict[Tuple[str, str], _kinds.Remap] = {}
+        self.kind_owner = {}
         if km is None:
             return objs
         mapping = {norm_key(k) for k in self.opts.id_map}
         keep = {(o.type, o.id) for o in objs
-                if self.opts.ids != "mint" and norm_id(o.type, o.id) not in mapping}
+                if self.opts.ids != "mint" and key_hit(mapping, o.type, norm_id(o.type, o.id)) is None}
         ids, id_problems = _kinds.make_ids(objs, km, keep,
                                            {(t, i) for t, i, _, _ in self.plan.dropped})
+        # re-pointed derived id -> (type, norm source id) of the object that
+        # ships it: a reference to it fails when that object fails (run)
+        self.kind_owner: Dict[str, Tuple[str, str]] = {
+            new: (t, norm_id(t, old)) for (t, old), new in ids.table.items()}
         kept = []
         for o in objs:
             r = _kinds.remap_object(o, km, ids)
@@ -612,7 +636,12 @@ class _Planner:
                 rr = o.payload.find("State/Recommendations")
                 for r in (rr if rr is not None else []):
                     if r.get("ref"):
-                        rec_kind.setdefault(r.get("ref"), o.payload.get("adapterKind") or "")
+                        # keyed by the recommendation's source id: under
+                        # --map-kind the ref carries the re-pointed key, and
+                        # the alert's (re-pointed) kind is the one written
+                        ref = self.kind_unmap.get(("recommendation", norm_id("recommendation", r.get("ref"))),
+                                                  r.get("ref"))
+                        rec_kind.setdefault(ref, o.payload.get("adapterKind") or "")
         out = []
         for o in sorted(objs, key=lambda x: (CONTENT_TYPES.index(x.type), x.location, x.id)):
             try:
@@ -690,9 +719,12 @@ class _Planner:
         for e in entries:
             o = e.source
             keys = []
-            for key in ((o.type, o.id), (o.type, norm_id(o.type, o.id)), (o.type, e.source_name),
-                        (o.type, e.source_name.strip())):
-                if key in rows and key not in keys:
+            nid = norm_id(o.type, o.id)
+            for key in rows:
+                # an id in any letter case (and with or without its XML
+                # prefix), or the source name exactly or stripped
+                if key[0] == o.type and (norm_id(o.type, key[1]) == nid or key[1] in (
+                        e.source_name, e.source_name.strip())) and key not in keys:
                     keys.append(key)
             if len(keys) > 1:
                 self.usage_errors.append(
@@ -733,9 +765,10 @@ class _Planner:
         if self.opts.ids == "mint":
             new = minted_id(self.namespace, o.type, o.id)
             return f"Recommendation-{new}" if o.type == "recommendation" else new
-        if nid in mapping:
-            self.map_used.add(nid)
-            return norm_id(o.type, mapping[nid]) if o.type != "recommendation" else mapping[nid]
+        hit = key_hit(mapping, o.type, nid)
+        if hit is not None:
+            self.map_used.add(hit)
+            return norm_id(o.type, mapping[hit]) if o.type != "recommendation" else mapping[hit]
         if o.type in ("view", "dashboard", "report", "supermetric"):
             return raw.lower()
         return raw
@@ -911,7 +944,7 @@ class _Planner:
             new_failures = False
             final_ids = {e.id.lower() for e in ok}
             for e in ok:
-                hit = self.failed_sm_reference(e, failed)
+                hit = self.failed_sm_reference(e, failed) or self.failed_kind_reference(e, failed)
                 if hit:
                     mark(e, hit)
                     new_failures = True
@@ -1058,6 +1091,20 @@ class _Planner:
                 k = ("supermetric", m.group(1).lower())
                 if k in failed and not (e.type == "supermetric" and norm_id(e.type, e.source_id) == k[1]):
                     return f"references super metric {m.group(1)}, which did not convert (see its own failure)"
+        return None
+
+    def failed_kind_reference(self, e: Emitted, failed) -> Optional[str]:
+        """A whole-string reference in ``e`` (a dashboard AlertList entry) to
+        a derived id ``--map-kind`` re-pointed, whose object did not convert:
+        nothing ships that id, so ``e`` fails with it (the reference would
+        otherwise verify against the same re-pointed expectation)."""
+        if not self.kind_owner or e.type != "dashboard":
+            return None
+        for path, key, s in _walk_strings(e.yaml_tree):
+            owner = self.kind_owner.get(s)
+            if owner is not None and owner in failed:
+                return (f"field {path} references {owner[0]} {s} (its derived id re-pointed by --map-kind), which "
+                        f"did not convert (see its own failure)")
         return None
 
     # id rewrites in strings (every type) ---------------------------------

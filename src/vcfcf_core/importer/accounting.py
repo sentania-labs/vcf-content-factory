@@ -797,7 +797,7 @@ class KindRule:
 
 
 _KIND_FORMS = ("ak", "rk", "rkid", "heatmap_id", "formula", "derived_id", "report_filter", "view_table_state",
-               "traversal_spec")
+               "traversal_spec", "rk_name")
 
 
 def parse_kind_table(text: str) -> List[KindRule]:
@@ -845,7 +845,11 @@ def parse_kind_table(text: str) -> List[KindRule]:
 #:   (``<spec name>-<adapter kind>-<root resource kind>``, e.g. ``vSphere Hosts
 #:   and Clusters-VMWARE-vSphere World``): it names a spec an adapter's
 #:   describe.xml declares, which the target adapter may not have, so one
-#:   naming a mapped adapter kind stops the object.
+#:   naming a mapped adapter kind stops the object; ``rk_name`` a metric
+#:   entry's ``resourceKindName`` (the resource kind key by the renderer's
+#:   default; ``kinds`` re-points one equal to the old key, as it does a
+#:   Heatmap ``groupBy.parentText`` equal to the old adapter kind, which is
+#:   read here as an ``ak``).
 #:   A pair the map still re-points at such a place means the rewriter missed
 #:   it: the object stops.
 #: - ``text``: display text, names, metric and property keys, HTML: the
@@ -919,14 +923,16 @@ entries.(resourceKind|resource){{*}}.resourceKindKey     kind rk .resourceKindKe
 entries.resource{{*}}.name                               text
 {_W}.(title|config.title|config.titleLocalized|config.description)  text
 widget:TextDisplay.config.editorData                     text
-{_METRICS}.(metricKey|metricName|label|labelLocalized|labelOrig|resourceKindName|resourceName|unit|metricUnit|defUnit|link)  text
+{_METRICS}.(metricKey|metricName|label|labelLocalized|labelOrig|resourceName|unit|metricUnit|defUnit|link)  text
 widget:HealthChart.config.(metricKey|metricName|metricFullName)  text
 widget:ParetoAnalysis.config.(metricName|metric.metricKey|metric.name|metricUnit.metricUnitName)  text
 widget:ParetoAnalysis.config.additionalColumns[].(boxLabel|metricKey|metricName)  text
 widget:Heatmap.config.value                              text
 widget:Heatmap.config.configs[].(name|nameLocalized|nameOrig)  text
 widget:Heatmap.config.configs[].(colorBy|sizeBy).(metricKey|value)  text
-widget:Heatmap.config.configs[].groupBy.(text|parentText|originalText)  text
+widget:Heatmap.config.configs[].groupBy.(text|originalText)  text
+widget:Heatmap.config.configs[].groupBy.parentText       kind ak .parentText>.resourceKind
+{_METRICS}.resourceKindName                              kind rk_name .resourceKindName>.resourceKindId
 widget:Heatmap.config.configs[].groupBy.adapterKind      kind ak .adapterKind>.resourceKind
 widget:Heatmap.config.configs[].groupBy.resourceKind     kind rk .resourceKind>.adapterKind
 widget:Heatmap.config.configs[].groupBy.parentId         kind ak .parentId>.resourceKind
@@ -992,6 +998,16 @@ def _kind_problem(type_: str, path: str, value, leaves, rule: KindRule, km) -> O
         return _report_filter_problem(value, km)
     elif f == "view_table_state":
         return _view_table_state_problem(value, km)
+    elif f == "rk_name":
+        # a metric entry's resourceKindName (the resource kind key by the
+        # renderer's default) beside its entries token RK:<adapter>/<kind>
+        tok = leaves.get(_sibling(path, rule.arg)) if rule.arg else None
+        if isinstance(tok, str) and tok.startswith("RK:") and "/" in tok and isinstance(value, str):
+            ak, rk = tok[3:].split("/", 1)
+            if value != rk and km.lookup(ak, value, count=False) is not None:
+                return (f"the label {value!r} is the key of {ak}:{value}, which the kind map re-points, beside the "
+                        f"entry's kind {ak}:{rk} (the importer missed this place; an internal error)")
+        return None
     elif f == "traversal_spec":
         hit = km.occurs(str(value))
         if hit:

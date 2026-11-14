@@ -174,7 +174,10 @@ dropped or absent fails with that reason.
 A symptom or alert in a `--drop` or `--id-map` file is matched by its wire
 id (`SymptomDefinition-<id>`, `AlertDefinition-<id>`, as `id_map.tsv` and the
 stock-id guard print it) or by the bare id (until 2026-11-13 only the bare id
-matched, and a wire id was reported as naming no object).
+matched, and a wire id was reported as naming no object). A wire id names
+its own type only: `SymptomDefinition-X` never drops or maps
+`AlertDefinition-X`, which a symptom and an alert sharing a name both derive.
+A bare id names no type and matches every object with that id, as before.
 
 A symptom, alert or recommendation whose source id is the one the renderer
 derives from its adapter kind and name (`AlertDefinition-<kind>-<slug>`,
@@ -184,7 +187,11 @@ derived id changes (minted, mapped, or re-pointed by `--map-kind`), a
 reference that is the whole wire id follows it: a dashboard AlertList's
 `alert_definitions` entry, and an alert's symptom reference in verification
 (until 2026-11-13 the AlertList kept the old id and verification reported
-the alert's symptom reference as a difference).
+the alert's symptom reference as a difference). So a `--ids mint` run on
+content with derived symptom ids, run without `--map-kind` or `--describe`,
+now verifies those alerts as identical where it reported them as DIFFERS
+(the factory corpus: 9 alerts); that run's `verify` block is the one place a
+run without the new options reports differently, and it is intended.
 
 ## Names
 
@@ -231,8 +238,10 @@ vCommunity	Content Library	vcfcf_vcommunity	content_library
   `content_library`, every other `vCommunity` kind keeps its key). A named
   old resource kind with `*` in the fourth column keeps the key and moves
   only the adapter kind. Kinds no row lists are untouched.
-- A header row whose first cell is `old_adapter_kind` (or `adapter_kind`,
-  `old_kind`, `old`), `#` lines and blank lines are skipped.
+- `#` lines and blank lines are skipped. The first other row is a header
+  when its first cell is `old_adapter_kind` (or `adapter_kind`, `old_kind`,
+  `old`); such a row anywhere later is a usage error. (`--describe`: the
+  first other row is a header when its first cell is `type`.)
 - **Usage errors** (exit 2, nothing written): a row without exactly four
   cells; `*` mapped to a named resource kind; the same old pair listed twice
   (the same way or differently; the message names both rows); a row mapping a
@@ -260,7 +269,12 @@ filters, Heatmap tabs and groups, Pareto and HealthChart kinds, pinned
 resources), `0020<nn><adapter><kind>` ids (a View pin, a resource-mode
 Scoreboard entry, a Heatmap custom filter, re-encoded with the new length)
 and a Heatmap `groupBy` (`adapterKind`, `resourceKind`, `parentId`,
-`004null...` `id`).
+`004null...` `id`). Two labels default to a kind key in the renderer and so
+follow the kind when they equal the old key exactly: a Heatmap
+`groupBy.parentText` (the adapter kind key) and a metric entry's
+`resourceKindName` (the resource kind key). They are re-pointed rather than
+dropped, so verification against the re-pointed source stays exact; any
+other value is the author's label and is kept.
 
 **Ids that embed the kind.** Explicit symptom and alert ids are UUIDs and
 carry no kind. The factory's derived ids do: `SymptomDefinition-<kind>-<slug>`,
@@ -274,9 +288,15 @@ would get, and keeping the old one would ship the pak's content under the
 old pack's ids. Every reference follows (an alert's symptom sets and
 recommendations, a dashboard AlertList); `id_map.tsv` lists old and new, and
 each counts as a re-pointed reference. A recommendation, which has no kind
-of its own, is re-pointed only when its key embeds a mapped adapter kind that
-moves as a whole and every alert in the set that references it is on that
-kind; otherwise it stops. `--ids mint` and `--id-map` rows decide the id
+of its own, follows the alerts in the set that use it, and its YAML
+`adapter_kind` is the (re-pointed) kind of the first of them: when none of
+them moves, its key is kept; when all of them move from the kind its key
+embeds to one new adapter kind, the key follows; when only some move, or
+they move to different kinds, it stops. One no alert uses follows its key's
+adapter kind when that moves as a whole, and is kept otherwise. A
+reference to a re-pointed derived id whose object does not convert (a
+dashboard AlertList naming an alert that fails) fails the referencing
+object, since nothing ships that id. `--ids mint` and `--id-map` rows decide the id
 themselves (the kind is not re-pointed in it). A reference to a derived id
 outside the input stops the object (whether the object it names moves cannot
 be known); one to a `--drop`ped object stays as it is, which is the point of
@@ -365,9 +385,12 @@ alert	ESXi Host License Expiring	A host license expires within 30 days.
   A `symptom` row is refused: the symptom YAML's `description` is REST-only,
   the content-import XML has none. Custom groups and policies are not
   converted at all.
-- The second column is matched as `--rename` matches, against the source id
-  or the source name, before any rename (a row naming the new name of a
-  renamed object matches nothing).
+- The second column is matched against the source id (in any letter case,
+  with or without a `SymptomDefinition-` / `AlertDefinition-` prefix) or the
+  source name (exactly, or stripped), before any rename (a row naming the new
+  name of a renamed object matches nothing). `--rename` matches a lower-case
+  id or the id as written, so an upper-case UUID it does not match is
+  matched here.
 - Escapes in the third column: `\n` a line break, `\t` a tab, `\\` a
   backslash; any other backslash is an error. The text is stripped (the
   loaders strip it); an empty one is an error.
@@ -386,14 +409,17 @@ and `report.json` `objects[].description_replaced` /
 `source_description_length`.
 
 **Verbatim source text.** Every run (with or without these options) lists,
-per object, the free-text fields it carries exactly as the source wrote them,
-with their lengths, so a porter sees what prose is shipping:
+per object, the free-text fields that ship the source's prose, with the
+length of the SOURCE value (before the loader strips whitespace or an id
+rewrite touches HTML), so a porter sees what prose is shipping:
 `report.json` `objects[].verbatim_text` (`[{field, length}]`: `name`,
-`description`, and for a dashboard each widget's `widget <id> title`,
-`widget <id> description` and TextDisplay `widget <id> html`; a
+`description`, and for a dashboard each widget's `widget w<i> title`,
+`widget w<i> description` and TextDisplay `widget w<i> html`; a
 recommendation's text is its `description`, its name is its key and is not
-listed), and one `verbatim source text:` summary line. A field replaced by
-`--rename`, `--naming factory-prefixed` or `--describe` is not listed.
+listed), and one `verbatim source text:` summary line. Only a field replaced
+by `--rename` or `--describe` is left out; a name under `--naming
+factory-prefixed` still ships the source's name after the prefix, so it is
+listed.
 Functional labels (view column display names, metric labels, Heatmap tab
 names) and template section settings are not prose and are not listed;
 there is no override for widget titles or text widget bodies (edit the
@@ -709,12 +735,16 @@ preferred). Each run takes 2 to 4 seconds.
   and the alert file's copy preferred it exits 0, and the written tree,
   merged into a scaffolded project on `vcfcf_vcommunity`, passes
   `validate-sdk`.
-- Stress run of the rewriter on the same pak (not a port): `VMWARE<TAB>*<TAB>
-  vcfcf_stress<TAB>*`: 1180 kind references re-pointed in 208 objects, 228
-  compared, 0 differ (131 identical apart from intended changes). 20
-  dashboards stop, each named: 6 Summary pages bound to `VMWARE:<Folder>` and
-  14 with a View traversal spec naming `VMWARE`; 4 templates and one
-  dashboard cascade from them.
+- Stress run of the rewriter on the same pak (not a port): `--layout pak
+  --ids keep --naming unprefixed --target-min 8.18.7 --allow-partial
+  --map-kind` with `VMWARE<TAB>*<TAB>vcfcf_stress<TAB>*`, `--prefer-source
+  "alertdefs/Windows Service Down.xml"` and `--drop` of the two Section
+  dashboards: 1180 kind references re-pointed in 208 objects, 228 compared,
+  0 differ (131 identical apart from intended changes). 20 dashboards stop,
+  each named: 6 Summary pages bound to `VMWARE:<Folder>` and 14 with a View
+  traversal spec naming `VMWARE`; 4 templates and one dashboard cascade from
+  them. Without the `--drop`, the two Section dashboards stop on their
+  traversal specs too (16), so the counts differ by those two.
 
 9.1.1 built-in export, views, report templates and dashboards (851 + 62 +
 179), `--ids mint`, third-party layout: no internal error. 756 views, 56

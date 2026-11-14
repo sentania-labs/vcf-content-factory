@@ -81,18 +81,25 @@ class KindRow:
 
 def parse_kind_map(text: str, what: str) -> List[KindRow]:
     """``old adapter kind<TAB>old resource kind or *<TAB>new adapter kind<TAB>new
-    resource kind or *`` rows. A first row whose first cell is a column label
-    (``old_adapter_kind``, ``adapter_kind``, ``old_kind``, ``old``) is a
-    header; ``#`` and blank lines are skipped. Raises ``ValueError`` on a
-    malformed row (exactly four non-empty cells), a ``*`` old resource kind
-    with a named new one, or a new kind key carrying a delimiter character."""
+    resource kind or *`` rows. ``#`` and blank lines are skipped; the first
+    other row is a header when its first cell is a column label
+    (``old_adapter_kind``, ``adapter_kind``, ``old_kind``, ``old``). Raises
+    ``ValueError`` on a malformed row (exactly four non-empty cells, so a
+    header anywhere else is an error), a ``*`` old resource kind with a
+    named new one, or a new kind key carrying a delimiter character."""
     rows: List[KindRow] = []
+    first = True
     for n, line in enumerate(text.splitlines(), 1):
         if not line.strip() or line.lstrip().startswith("#"):
             continue
         cells = line.rstrip("\r\n").split("\t")
-        if n == 1 and cells[0].strip().lower() in _HEADER_CELLS:
+        if first and cells[0].strip().lower() in _HEADER_CELLS:
+            first = False
             continue
+        first = False
+        if cells[0].strip().lower() in _HEADER_CELLS:
+            raise ValueError(f"{what}: line {n}: a header row is only read as the first row (after comments and "
+                             f"blank lines), got {line!r}")
         if len(cells) != 4 or any(not c.strip() for c in cells):
             raise ValueError(f"{what}: line {n}: expected old adapter kind<TAB>old resource kind or *<TAB>"
                              f"new adapter kind<TAB>new resource kind or *, got {line!r}")
@@ -450,18 +457,23 @@ def derived_id_table(objs, km: KindMap, keep_ids: Set[Tuple[str, str]]) -> Tuple
     the table (``keep_ids``: (type, id) of objects that keep their source
     id; minted and id-mapped ones ship another id, so their references are
     left as they were). A symptom or alert is re-pointed when its id embeds
-    its own adapter kind and its own pair is mapped; a recommendation (it
-    has no kind of its own) when the kind its id embeds is mapped as a whole
-    and every alert in the set that references it is on that kind."""
+    its own adapter kind and its own pair is mapped. A recommendation (it has
+    no kind of its own) follows the alerts in the set that reference it:
+    when none of them moves, its key is kept; when they all move from the
+    kind its key embeds to one new adapter kind, the key follows; when only
+    some move, or they move to different kinds, it stops. Referenced by no
+    alert, it follows its key's adapter kind when that moves as a whole, and
+    is kept otherwise."""
     table: Dict[Tuple[str, str], str] = {}
     problems: Dict[Tuple[str, str], str] = {}
-    rec_users: Dict[str, Set[str]] = defaultdict(set)
+    rec_users: Dict[str, Set[Tuple]] = defaultdict(set)
     for o in objs:
         if o.type == "alert":
             rr = o.payload.find("State/Recommendations")
             for r in (rr if rr is not None else []):
                 if r.get("ref"):
-                    rec_users[r.get("ref")].add(o.payload.get("adapterKind") or "")
+                    rec_users[r.get("ref")].add((o.payload.get("adapterKind") or "",
+                                                 o.payload.get("resourceKind")))
     for o in objs:
         if (o.type, o.id) not in keep_ids:
             continue
@@ -478,17 +490,31 @@ def derived_id_table(objs, km: KindMap, keep_ids: Set[Tuple[str, str]]) -> Tuple
                 if not _derived_ak(o.id, _REC_PREFIX, ak):
                     continue
                 users = rec_users.get(o.id, set())
-                if users - {ak}:
-                    problems[(o.type, o.id)] = (
-                        f"recommendation key {o.id} embeds the mapped adapter kind {ak}, but alerts on "
-                        f"{', '.join(sorted(users - {ak}))} reference it too; the importer cannot re-point it "
-                        f"with certainty")
+                rest = o.id[len(_REC_PREFIX) + len(ak):]
+                if not users:
+                    new_ak, prob = km.adapter_only(ak, count=False)
+                    if new_ak and not prob:
+                        table[(o.type, o.id)] = _REC_PREFIX + new_ak + rest
                     break
-                new_ak, prob = km.adapter_only(ak, count=False)
-                if prob:
-                    problems[(o.type, o.id)] = f"recommendation key {o.id}: {prob}"
-                elif new_ak:
-                    table[(o.type, o.id)] = _REC_PREFIX + new_ak + o.id[len(_REC_PREFIX) + len(ak):]
+                moving = {}
+                for u in users:
+                    m = km.lookup(u[0], u[1], count=False)
+                    if m is not None and m[0] != u[0]:
+                        moving[u] = m
+                if not moving:
+                    break  # no alert using it moves: the key is kept, with certainty
+                new_aks = {m[0] for m in moving.values()}
+                other = sorted({u[0] for u in users if u[0] != ak})
+                if len(moving) != len(users) or len(new_aks) > 1 or other:
+                    still = sorted(f"{u[0]}:{u[1]}" for u in users if u not in moving)
+                    problems[(o.type, o.id)] = (
+                        f"recommendation key {o.id} embeds the mapped adapter kind {ak}; the alerts that use it "
+                        f"move to {', '.join(sorted(new_aks))}"
+                        + (f" while alerts on {', '.join(still)} stay" if still else "")
+                        + (f", and alerts on {', '.join(other)} use it too" if other else "")
+                        + "; the importer cannot re-point it with certainty")
+                    break
+                table[(o.type, o.id)] = _REC_PREFIX + next(iter(new_aks)) + rest
                 break
     return table, problems
 
@@ -658,6 +684,15 @@ def _dashboard(db: dict, context: dict, ctx: _Ctx, ids: _Ids) -> dict:
         t = w.get("type")
         if t == "View" and isinstance(c.get("resource"), dict):
             rkid_field(c["resource"], "resourceKindId", f"{where} pin")
+        if isinstance(c.get("metric"), dict):
+            for m in c["metric"].get("resourceKindMetrics") or []:
+                # resourceKindName is the resource kind key by the renderer's
+                # default: one equal to the old key follows the kind
+                if isinstance(m, dict) and m.get("resourceKindId") in orig_rk:
+                    oak, ork = orig_rk[m["resourceKindId"]]
+                    new = ctx.km.lookup(oak, ork, count=False)
+                    if new is not None and m.get("resourceKindName") == ork and new[1] != ork:
+                        m["resourceKindName"] = new[1]
         if t == "Scoreboard" and isinstance(c.get("metric"), dict):
             for m in c["metric"].get("resourceMetrics") or []:
                 if isinstance(m, dict):
@@ -686,6 +721,9 @@ def _dashboard(db: dict, context: dict, ctx: _Ctx, ids: _Ids) -> dict:
                         ctx.pair(oak, ork, f"{where} groupBy")
                     if gb.get("parentId") == oak:
                         gb["parentId"] = nak
+                    if gb.get("parentText") == oak:
+                        # the renderer's default label is the adapter kind key
+                        gb["parentText"] = nak
                     try:
                         if gb.get("id") == "004null" + _rkid(oak, ork):
                             gb["id"] = "004null" + _rkid(nak, nrk)
