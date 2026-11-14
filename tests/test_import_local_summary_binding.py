@@ -90,6 +90,11 @@ def _run(src, out, capsys, layout="pak", *extra):
                  "unprefixed", *extra], capsys)
 
 
+def _run_many(srcs, out, capsys, *extra):
+    return _cli(["import-local", *srcs, "--out", out, "--layout", "pak", "--ids", "keep", "--naming",
+                 "unprefixed", *extra], capsys)
+
+
 def _summary_for(out: Path) -> dict:
     return {p.name: yaml.safe_load(p.read_text()).get("summary_for")
             for p in sorted((out / "dashboards").glob("*.yaml"))}
@@ -179,7 +184,7 @@ def test_binding_of_a_dropped_dashboard_is_not_carried(tmp_path, capsys):
     ("VMFolder=VMWARE\n", "does not split into exactly two ':' tokens"),
     ("VMFolder=VMWARE: VMFolder\n", "has an empty token or whitespace"),
     ("VMFolder=VMWARE:VMFolder,VMWARE:VMFolder\n", "lists VMWARE:VMFolder twice"),
-    ("VMFolder=VMWARE:VMFolder\nHostFolder=VMWARE:VMFolder\n", "VMWARE:VMFolder is also bound by"),
+    ("VMFolder=VMWARE:VMFolder\nHostFolder=VMWARE:VMFolder\n", "VMWARE:VMFolder is also bound to dashboard"),
 ])
 def test_binding_the_yaml_cannot_carry_stops_the_dashboard_with_a_gap(tmp_path, capsys, binding, expect):
     src = _pak_tree(tmp_path, binding)
@@ -460,6 +465,67 @@ def test_partial_kind_map_on_a_bound_dashboard(tmp_path, capsys):
     assert "probe-summary-vmfolder.yaml" not in sf
     assert sf["probe-summary-hostfolder.yaml"] == "VMWARE:HostFolder"
     assert "HostFolder=VMWARE:HostFolder: carried" in text
+
+
+# ----------------------- binding conflicts after duplicate merging and --drop
+def test_pak_plus_its_unpacked_tree_is_one_claimant(tmp_path, capsys):
+    """Codex P2 on PR 366: the same bound dashboard in a pak and in its
+    unpacked tree is one dashboard after merging, not two claimants."""
+    src = _pak_tree(tmp_path, "VMFolder=VMWARE:VMFolder\n")
+    pak = _pack(src, tmp_path)
+    out = tmp_path / "out"
+    rc, text = _run_many([src, pak], out, capsys)
+    assert rc == 0, text
+    assert f"merged: dashboard {_did(0)} is the same in 2 files" in text
+    assert _summary_for(out)["probe-summary-vmfolder.yaml"] == "VMWARE:VMFolder"
+    assert "2 entries: 1 carried, 1 merged" in text, text
+    assert "an identical copy, merged; its binding is carried by the entry at" in text
+    assert "is also bound to" not in text and "FAILED" not in text
+
+
+def test_two_different_dashboards_bound_to_one_kind_still_conflict(tmp_path, capsys):
+    src = _pak_tree(tmp_path, "VMFolder=VMWARE:VMFolder\nHostFolder=VMWARE:VMFolder\n")
+    pak = _pack(src, tmp_path)
+    rc, text = _run_many([src, pak], tmp_path / "out", capsys, "--allow-partial")
+    assert rc == 0, text
+    for i, f in ((0, "VMFolder"), (1, "HostFolder")):
+        assert f"FAILED dashboard {_did(i)} 'Probe Summary {f}': Summary binding" in text
+    assert "VMWARE:VMFolder is also bound to dashboard" in text
+
+
+def test_conflict_disappears_when_one_claimant_is_dropped(tmp_path, capsys):
+    src = _pak_tree(tmp_path, "VMFolder=VMWARE:VMFolder\nHostFolder=VMWARE:VMFolder\n")
+    drop = tmp_path / "drop.tsv"
+    drop.write_text(_did(1) + "\n")
+    out = tmp_path / "out"
+    rc, text = _run(src, out, capsys, "pak", "--drop", drop)
+    assert rc == 0, text
+    assert "FAILED" not in text and "is also bound to" not in text
+    assert _summary_for(out)["probe-summary-vmfolder.yaml"] == "VMWARE:VMFolder"
+    assert f"HostFolder=VMWARE:VMFolder: not carried: dashboard {_did(1)} was dropped (--drop)" in text
+
+
+@pytest.mark.parametrize("prefer,bound", [("probe.pak", True), ("pak/content", False)])
+def test_prefer_source_between_a_bound_pak_and_an_unbound_tree(tmp_path, capsys, prefer, bound):
+    """The pak binds the dashboard, its unpacked tree has no binding file:
+    the copies differ by their binding, so --prefer-source decides."""
+    tp = tmp_path / "tp"
+    tp.mkdir()
+    src = _pak_tree(tp, "VMFolder=VMWARE:VMFolder\n")
+    pak = _pack(src, tmp_path)
+    (src / "content" / "dashboards" / "dashboards.properties").unlink()
+    # the tree is given by its parent, so its paths read "pak/content/..."
+    # and the pak's "probe.pak!content/..."
+    rc, text = _run_many([tp, pak], tmp_path / "o0", capsys, "--allow-partial")
+    assert f"FAILED dashboard {_did(0)} 'Probe Summary VMFolder': the same id is defined differently" in text
+    out = tmp_path / "out"
+    rc, text = _run_many([tp, pak], out, capsys, "--prefer-source", prefer)
+    assert rc == 0, text
+    assert _summary_for(out)["probe-summary-vmfolder.yaml"] == ("VMWARE:VMFolder" if bound else None)
+    if bound:
+        assert "1 entry: 1 carried" in text
+    else:
+        assert "this entry does not bind (--prefer-source)" in text
 
 
 def test_post_install_uses_the_shared_java_reader():

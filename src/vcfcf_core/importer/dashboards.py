@@ -203,6 +203,8 @@ class _DashMapper:
         if b is not None:
             if b.problem:
                 self.loss(f"Summary binding {b.key}={b.value} ({b.where}): {b.problem}")
+            if self.ctx.get("summary_binding_conflict"):
+                self.loss(f"Summary binding {b.key}={b.value} ({b.where}): {self.ctx['summary_binding_conflict']}")
             y["summary_for"] = b.kinds[0] if len(b.kinds) == 1 else list(b.kinds)
         tdir = template_dir(self.location)
         if tdir is not None:

@@ -120,6 +120,7 @@ Every entry is classified and printed (`BINDING <file>:<line> <entry>:
 |---|---|---|
 | `carried` | the dashboard's YAML has the entry's kinds as `summary_for` | none |
 | `superseded` | a later line has the same key (`Properties` keeps the last) | none |
+| `merged` | the entry binds an identical copy of a dashboard that was merged (a pak and its unpacked tree, both bound to the same kinds); the kept copy's entry carries it | none |
 | `binds no dashboard` | no dashboard of the input is in a directory of that exact name next to the file; the installer binds only a directory it imports, so the source binds nothing there either | `WARNING:` |
 | `not carried` | its dashboard was dropped (`--drop`), did not convert, or `--prefer-source` kept an unbound copy | `WARNING:` |
 | `mismatch` | a converter error, in either direction: the written `summary_for` is not the entry's (lost or changed), or a dashboard has a `summary_for` no live entry backs (invented; printed as `(no entry)`) | exit 5, never accepted by `--allow-partial`; checked with `--no-verify` and `--dry-run` too, since it is a classification, not a render compare |
@@ -127,9 +128,11 @@ Every entry is classified and printed (`BINDING <file>:<line> <entry>:
 The bound dashboard stops with a TOOLSET GAP when the YAML cannot say what
 the source binds: a part that does not split into exactly two `:` tokens
 (the installer skips it), an empty token or whitespace (the installer binds
-that literal key, the loader strips it), a kind listed twice, a kind two
-entries bind (the installer's directory order decides; the loader refuses
-it), a directory holding more than one dashboard (the installer binds the
+that literal key, the loader strips it), a kind listed twice, a kind bound
+to two different dashboards (the installer's directory order decides; the
+loader refuses it; decided on the dashboards left after duplicate merging
+and `--drop`, so a pak given with its unpacked tree is one claimant, and
+dropping one of two claimants clears the conflict), a directory holding more than one dashboard (the installer binds the
 first tab of a `HashMap`), or a `GenericTemplates*` directory (a template on
 9.2, bound on 9.0.2 GA). A dashboard in a `GenericTemplates*` pak directory
 stops on its own too, bound or not: the 9.2 installer imports it as a

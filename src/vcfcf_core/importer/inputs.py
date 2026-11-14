@@ -459,23 +459,15 @@ def _attach_bindings(scan: InputScan) -> None:
         if b.problem is None and b.key.startswith("GenericTemplates"):
             b.problem = (f"the directory {b.key!r} starts with GenericTemplates: the 9.2 installer imports it as a "
                          f"template and never binds it, 9.0.2 GA binds it; the factory YAML cannot carry either")
-        if b.problem is None and len(b.dashboards) > 1:
-            b.problem = (f"the directory {b.key!r} holds {len(b.dashboards)} dashboards; the installer binds the "
+        n = len({i.lower() for i, _ in b.dashboards})
+        if b.problem is None and n > 1:
+            b.problem = (f"the directory {b.key!r} holds {n} dashboards; the installer binds the "
                          f"first tab of its import result (a HashMap, so which one is not known), and the factory "
                          f"YAML cannot say which dashboard the source bound")
-    owners: Dict[str, List[SummaryBinding]] = {}
-    for b in live:
-        if b.problem is None and b.dashboards:
-            for k in b.kinds:
-                owners.setdefault(k, []).append(b)
-    for k, bs in owners.items():
-        if len(bs) > 1:
-            for b in bs:
-                if b.problem is None:
-                    others = "; ".join(f"{x.key!r} ({x.where})" for x in bs if x is not b)
-                    b.problem = (f"{k} is also bound by {others}; a kind has one Summary page (the installer's "
-                                 f"directory order decides which) and the factory loader refuses two dashboards "
-                                 f"for one kind")
+    # A kind two dashboards claim is decided by the planner, on the
+    # dashboards left after duplicate merging and --drop
+    # (convert._Planner.binding_conflicts): identical copies of one
+    # dashboard (a pak and its unpacked tree) are one claimant, not two.
     for b in live:
         for o in dashes:
             if (o.id, o.location) in b.dashboards:

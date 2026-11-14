@@ -1026,7 +1026,7 @@ def run(args) -> int:
          + (": " + ", ".join(f"{n} {s}" for s, n in sorted(by_status.items())) if by_status else
             " (no dashboard is bound to a Summary tab in the source, so none is in the output)"))
     for b in plan.bindings:
-        label = "BINDING" if b["status"] in ("carried", "superseded") else "WARNING: BINDING"
+        label = "BINDING" if b["status"] in ("carried", "superseded", "merged") else "WARNING: BINDING"
         _say(f"{label} {_rel_location(str(b['file']), roots)}:{b['line']} {b['entry']}: {b['status']}: {b['detail']}")
     if plan.kind_map is not None:
         km = plan.kind_map

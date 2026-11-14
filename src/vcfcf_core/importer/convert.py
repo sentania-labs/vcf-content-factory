@@ -584,6 +584,36 @@ class _Planner:
         self.dropped_keys = {(t, norm_id(t, i)) for t, i, _, _ in self.plan.dropped}
         return kept
 
+    # 2a. Summary-binding conflicts ---------------------------------------
+    def binding_conflicts(self, objs: List[SourceObject]) -> None:
+        """A kind bound to more than one of the dashboards that remain after
+        duplicate merging and ``--drop``: the installer's directory order
+        decides which binds and the factory loader refuses two dashboards for
+        one kind, so each claimant stops with a TOOLSET GAP (the mapper reads
+        ``context["summary_binding_conflict"]``). Identical copies of one
+        dashboard merged by ``dedupe`` are one claimant."""
+        owners: Dict[str, List[SourceObject]] = defaultdict(list)
+        for o in objs:
+            if o.type != "dashboard":
+                continue
+            o.context.pop("summary_binding_conflict", None)
+            b = o.context.get("summary_binding")
+            if b is None or b.problem:
+                continue
+            for k in b.kinds:
+                owners[k].append(o)
+        for k, os_ in owners.items():
+            if len(os_) < 2:
+                continue
+            for o in os_:
+                others = "; ".join(f"dashboard {x.id} ({x.name!r}, entry {x.context['summary_binding'].key!r} at "
+                                   f"{x.context['summary_binding'].where})" for x in os_ if x is not o)
+                msg = (f"{k} is also bound to {others}; a kind has one Summary page (the installer's directory "
+                       f"order decides which) and the factory loader refuses two dashboards for one kind (drop "
+                       f"one with --drop)")
+                prev = o.context.get("summary_binding_conflict")
+                o.context["summary_binding_conflict"] = f"{prev}; {msg}" if prev else msg
+
     # 2b. kind map ----------------------------------------------------
     def apply_kind_map(self, objs: List[SourceObject]) -> List[SourceObject]:
         """``--map-kind``: re-point each object's source (``kinds``), so the
@@ -831,7 +861,9 @@ class _Planner:
             p.failures.append(Failure(u.type, u.id, u.name, [u.location],
                                       f"not converted: the importer does not convert {u.type}s (unsupported type)",
                                       kind="unsupported"))
-        objs = self.apply_kind_map(self.apply_drops(self.dedupe()))
+        objs = self.apply_drops(self.dedupe())
+        self.binding_conflicts(objs)
+        objs = self.apply_kind_map(objs)
         mapped = self.map_all(objs)
         self.rename_used: Set[Tuple[str, str]] = set()
         self.map_used: Set[str] = set()
@@ -1369,7 +1401,9 @@ def classify_bindings(plan: Plan) -> List[Dict[str, object]]:
     dashboard's YAML has the entry's kinds as ``summary_for``), ``not carried``
     (its dashboard was dropped, did not convert, or the YAML cannot carry the
     entry), ``superseded`` (a later line has the same key; ``Properties``
-    keeps the last), ``binds no dashboard`` (no dashboard of the input is
+    keeps the last), ``merged`` (the entry binds an identical copy of a
+    dashboard that ``dedupe`` merged, such as a pak and its unpacked tree,
+    to the same kinds; the kept copy's entry carries it), ``binds no dashboard`` (no dashboard of the input is
     under the directory it names: the installer binds only a directory it
     imports, so the source binds nothing either), or ``mismatch`` (the
     written ``summary_for`` is not the entry's, or a dashboard has a
@@ -1399,7 +1433,16 @@ def classify_bindings(plan: Plan) -> List[Dict[str, object]]:
             statuses = set()
             for did, loc in b.dashboards:
                 nid = norm_id("dashboard", did)
-                if nid in emitted and emitted[nid].source.location != loc:
+                kept_b = emitted[nid].source.context.get("summary_binding") if nid in emitted else None
+                if (nid in emitted and emitted[nid].source.location != loc and loc in emitted[nid].source.locations
+                        and kept_b is not None and kept_b is not b and not b.problem
+                        and list(kept_b.kinds) == list(b.kinds)):
+                    # an identical copy merged by dedupe (a pak and its
+                    # unpacked tree): the kept copy's entry carries it
+                    statuses.add("merged")
+                    details.append(f"dashboard {did}: an identical copy, merged; its binding is carried by the "
+                                   f"entry at {kept_b.where}")
+                elif nid in emitted and emitted[nid].source.location != loc:
                     # --prefer-source kept another copy, which this entry does not bind
                     statuses.add("not carried")
                     details.append(f"dashboard {did}: the copy kept is {emitted[nid].source.location}, which "
@@ -1421,12 +1464,14 @@ def classify_bindings(plan: Plan) -> List[Dict[str, object]]:
                     details.append(f"dashboard {did} was dropped (--drop)")
                 elif nid in failed:
                     statuses.add("not carried")
-                    details.append(f"dashboard {did} did not convert" + (f" ({b.problem})" if b.problem else ""))
+                    why = b.problem or (failed[nid].reason if "Summary binding" in failed[nid].reason else "")
+                    details.append(f"dashboard {did} did not convert" + (f" ({why})" if why else ""))
                 else:
                     statuses.add("not carried")
                     details.append(f"dashboard {did} is not in the output")
             rec["status"] = ("mismatch" if "mismatch" in statuses else
-                             "carried" if statuses == {"carried"} else "not carried")
+                             "carried" if statuses == {"carried"} else
+                             "merged" if statuses == {"merged"} else "not carried")
             rec["detail"] = "; ".join(details)
         out.append(rec)
     # The other direction: a summary_for no live source entry backs is an
