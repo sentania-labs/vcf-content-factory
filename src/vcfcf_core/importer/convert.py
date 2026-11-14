@@ -257,6 +257,12 @@ class Plan:
     #: not a UUID and changed (a derived id under ``--ids mint``, a map or
     #: ``--map-kind``): a reference that is the whole id follows it
     exact_id_rewrites: Dict[str, str] = field(default_factory=dict)
+    #: every Summary-tab binding entry of the source (``inputs.SummaryBinding``)
+    #: and the binding files read; ``bindings`` classifies each entry
+    #: (:func:`classify_bindings`)
+    source_bindings: list = field(default_factory=list)
+    binding_files: List[str] = field(default_factory=list)
+    bindings: List[Dict[str, object]] = field(default_factory=list)
 
     def counts(self) -> Dict[str, Dict[str, int]]:
         out: Dict[str, Dict[str, int]] = {}
@@ -578,6 +584,36 @@ class _Planner:
         self.dropped_keys = {(t, norm_id(t, i)) for t, i, _, _ in self.plan.dropped}
         return kept
 
+    # 2a. Summary-binding conflicts ---------------------------------------
+    def binding_conflicts(self, objs: List[SourceObject]) -> None:
+        """A kind bound to more than one of the dashboards that remain after
+        duplicate merging and ``--drop``: the installer's directory order
+        decides which binds and the factory loader refuses two dashboards for
+        one kind, so each claimant stops with a TOOLSET GAP (the mapper reads
+        ``context["summary_binding_conflict"]``). Identical copies of one
+        dashboard merged by ``dedupe`` are one claimant."""
+        owners: Dict[str, List[SourceObject]] = defaultdict(list)
+        for o in objs:
+            if o.type != "dashboard":
+                continue
+            o.context.pop("summary_binding_conflict", None)
+            b = o.context.get("summary_binding")
+            if b is None or b.problem:
+                continue
+            for k in b.kinds:
+                owners[k].append(o)
+        for k, os_ in owners.items():
+            if len(os_) < 2:
+                continue
+            for o in os_:
+                others = "; ".join(f"dashboard {x.id} ({x.name!r}, entry {x.context['summary_binding'].key!r} at "
+                                   f"{x.context['summary_binding'].where})" for x in os_ if x is not o)
+                msg = (f"{k} is also bound to {others}; a kind has one Summary page (the installer's directory "
+                       f"order decides which) and the factory loader refuses two dashboards for one kind (drop "
+                       f"one with --drop)")
+                prev = o.context.get("summary_binding_conflict")
+                o.context["summary_binding_conflict"] = f"{prev}; {msg}" if prev else msg
+
     # 2b. kind map ----------------------------------------------------
     def apply_kind_map(self, objs: List[SourceObject]) -> List[SourceObject]:
         """``--map-kind``: re-point each object's source (``kinds``), so the
@@ -825,7 +861,9 @@ class _Planner:
             p.failures.append(Failure(u.type, u.id, u.name, [u.location],
                                       f"not converted: the importer does not convert {u.type}s (unsupported type)",
                                       kind="unsupported"))
-        objs = self.apply_kind_map(self.apply_drops(self.dedupe()))
+        objs = self.apply_drops(self.dedupe())
+        self.binding_conflicts(objs)
+        objs = self.apply_kind_map(objs)
         mapped = self.map_all(objs)
         self.rename_used: Set[Tuple[str, str]] = set()
         self.map_used: Set[str] = set()
@@ -1003,11 +1041,22 @@ class _Planner:
             listed.append(e)
         ok = listed
         self.layout_paths(ok)
+        if self.opts.layout != "pak":
+            for e in ok:
+                if e.type == "dashboard" and e.yaml_tree.get("summary_for"):
+                    e.notes.append(
+                        "summary_for: the source pak binds this dashboard to a Summary tab at install; a content "
+                        f"import does not (only a pak's dashboards.properties does), so in the {self.opts.layout} "
+                        "layout the binding takes effect only when python3 -m vcfcf_dashboards bind-summary is "
+                        "run after the install")
         for e in ok:
             rel = ", ".join(e.source.locations)
             e.text = dump_yaml(e.yaml_tree, header=f"# Converted offline by vcfcf_extractor import-local from: {rel}\n")
             p.id_table.append((e.type, e.source_id, e.id, e.name))
         p.emitted = ok
+        p.source_bindings = list(self.scan.bindings)
+        p.binding_files = list(self.scan.binding_files)
+        classify_bindings(p)
         if self.usage_errors:
             p.usage_error = "; ".join(self.usage_errors)
         return p
@@ -1344,6 +1393,102 @@ class _Planner:
                 n += 1
             used.add(rel.lower())
             e.relpath = rel
+
+
+def classify_bindings(plan: Plan) -> List[Dict[str, object]]:
+    """Classify every source Summary-tab binding entry against the plan as it
+    stands (call again after objects are dropped from it): ``carried`` (the
+    dashboard's YAML has the entry's kinds as ``summary_for``), ``not carried``
+    (its dashboard was dropped, did not convert, or the YAML cannot carry the
+    entry), ``superseded`` (a later line has the same key; ``Properties``
+    keeps the last), ``merged`` (the entry binds an identical copy of a
+    dashboard that ``dedupe`` merged, such as a pak and its unpacked tree,
+    to the same kinds; the kept copy's entry carries it), ``binds no dashboard`` (no dashboard of the input is
+    under the directory it names: the installer binds only a directory it
+    imports, so the source binds nothing either), or ``mismatch`` (the
+    written ``summary_for`` is not the entry's, or a dashboard has a
+    ``summary_for`` no source entry backs: a converter error either way;
+    such a record has ``line`` 0 and entry ``(no entry)``). Sets and returns
+    ``plan.bindings``."""
+    emitted = {norm_id("dashboard", e.source_id): e for e in plan.emitted if e.type == "dashboard"}
+    dropped = {norm_id(t, i) for t, i, _, _ in plan.dropped if t == "dashboard"}
+    failed = {norm_id(f.type, f.id): f for f in plan.failures if f.type == "dashboard"}
+    out: List[Dict[str, object]] = []
+    for b in plan.source_bindings:
+        rec: Dict[str, object] = OrderedDict(file=b.location, line=b.line, entry=f"{b.key}={b.value}",
+                                             kinds=list(b.kinds), dashboards=[])
+        if b.superseded_by is not None:
+            rec["status"] = "superseded"
+            rec["detail"] = f"line {b.superseded_by} has the same key (java.util.Properties keeps the last)"
+        elif not b.dashboards:
+            rec["status"] = "binds no dashboard"
+            rec["detail"] = (f"no dashboard of the input is in a directory named {b.key!r} next to the file; the "
+                             f"installer binds only a directory it imports, by its exact name, so the source binds "
+                             f"nothing here")
+            if b.key.startswith("﻿"):
+                rec["detail"] += (" (the key starts with a byte-order mark: the installer's FileReader keeps it, so "
+                                  "this first entry matches no directory)")
+        else:
+            details = []
+            statuses = set()
+            for did, loc in b.dashboards:
+                nid = norm_id("dashboard", did)
+                kept_b = emitted[nid].source.context.get("summary_binding") if nid in emitted else None
+                if (nid in emitted and emitted[nid].source.location != loc and loc in emitted[nid].source.locations
+                        and kept_b is not None and kept_b is not b and not b.problem
+                        and list(kept_b.kinds) == list(b.kinds)):
+                    # an identical copy merged by dedupe (a pak and its
+                    # unpacked tree): the kept copy's entry carries it
+                    statuses.add("merged")
+                    details.append(f"dashboard {did}: an identical copy, merged; its binding is carried by the "
+                                   f"entry at {kept_b.where}")
+                elif nid in emitted and emitted[nid].source.location != loc:
+                    # --prefer-source kept another copy, which this entry does not bind
+                    statuses.add("not carried")
+                    details.append(f"dashboard {did}: the copy kept is {emitted[nid].source.location}, which "
+                                   f"this entry does not bind (--prefer-source)")
+                elif nid in emitted:
+                    e = emitted[nid]
+                    rec["dashboards"].append(e.relpath)
+                    sf = e.yaml_tree.get("summary_for")
+                    got = [sf] if isinstance(sf, str) else list(sf or [])
+                    if got == list(b.kinds) and not b.problem:
+                        statuses.add("carried")
+                        details.append(f"{e.relpath}: summary_for {', '.join(got)}")
+                    else:
+                        statuses.add("mismatch")
+                        details.append(f"{e.relpath}: summary_for {got or 'absent'} is not the entry's "
+                                       f"{list(b.kinds)} (converter error)")
+                elif nid in dropped:
+                    statuses.add("not carried")
+                    details.append(f"dashboard {did} was dropped (--drop)")
+                elif nid in failed:
+                    statuses.add("not carried")
+                    why = b.problem or (failed[nid].reason if "Summary binding" in failed[nid].reason else "")
+                    details.append(f"dashboard {did} did not convert" + (f" ({why})" if why else ""))
+                else:
+                    statuses.add("not carried")
+                    details.append(f"dashboard {did} is not in the output")
+            rec["status"] = ("mismatch" if "mismatch" in statuses else
+                             "carried" if statuses == {"carried"} else
+                             "merged" if statuses == {"merged"} else "not carried")
+            rec["detail"] = "; ".join(details)
+        out.append(rec)
+    # The other direction: a summary_for no live source entry backs is an
+    # invented binding, the same converter error as a lost one.
+    for e in plan.emitted:
+        if e.type != "dashboard" or not e.yaml_tree.get("summary_for"):
+            continue
+        sb = e.source.context.get("summary_binding")
+        if sb is None or sb.superseded_by is not None:
+            sf = e.yaml_tree["summary_for"]
+            out.append(OrderedDict(
+                file=e.source.location, line=0, entry="(no entry)", kinds=[sf] if isinstance(sf, str) else list(sf),
+                dashboards=[e.relpath], status="mismatch",
+                detail=f"{e.relpath}: summary_for {sf} has no binding entry in the source (an invented binding; "
+                       f"converter error)"))
+    plan.bindings = out
+    return out
 
 
 def plan_conversion(scan: InputScan, opts: ConvertOptions) -> Plan:

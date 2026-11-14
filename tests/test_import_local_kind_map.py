@@ -523,15 +523,20 @@ def test_derived_reference_outside_the_input_stops_unless_dropped(tmp_path, caps
 
 def test_summary_page_bound_to_a_mapped_kind_stops(tmp_path, capsys):
     src = build_source(tmp_path / "s", sources={k: SOURCES[k] for k in ("sm_k.yaml", "v_lib.yaml", "d_k.yaml")})
-    pak = tmp_path / "pakish" / "dashboards" / "HostFolder"
+    pak = tmp_path / "pakish" / "content" / "dashboards" / "HostFolder"
     pak.mkdir(parents=True)
     (pak / "dashboard.json").write_text((src / "dashboards.json").read_text())
     (src / "dashboards.json").unlink()
     (tmp_path / "pakish" / "views.xml").write_text((src / "views.xml").read_text())
-    rc, text = _run(tmp_path / "pakish", tmp_path / "out", capsys, "--map-kind",
-                    _tsv(tmp_path, "k.tsv", [("VMWARE", "HostFolder", NEW, "probe_folder")]))
+    km = _tsv(tmp_path, "k.tsv", [("VMWARE", "HostFolder", NEW, "probe_folder")])
+    # the folder name alone binds nothing (no binding file): nothing to re-point
+    rc, text = _run(tmp_path / "pakish", tmp_path / "out0", capsys, "--map-kind", km)
+    assert "Summary page for" not in text, text
+    # the binding file is what binds it
+    (tmp_path / "pakish" / "content" / "dashboards" / "dashboards.properties").write_text("HostFolder=VMWARE:HostFolder\n")
+    rc, text = _run(tmp_path / "pakish", tmp_path / "out", capsys, "--map-kind", km)
     assert rc == 1
-    assert "Summary page for VMWARE:HostFolder" in text and "does not re-point Summary page bindings" in text
+    assert "Summary page for VMWARE:HostFolder (its binding" in text and "does not re-point Summary page bindings" in text
 
 
 def test_accounting_catches_a_kind_the_rewriter_missed():

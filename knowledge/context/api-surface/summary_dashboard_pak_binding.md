@@ -661,6 +661,18 @@ was not traced past `ViewDataRetrieverServer`, which passes it through.
   whitespace-bearing or duplicate entries before they can reach the file.
   The content-import zip path (Suite API) still cannot: that path does
   not run `SolutionManagerDistributedTask`.
+- The offline importer (`import-local`) reads this file from a source pak
+  and is the only source of a converted dashboard's `summary_for`: a folder
+  named after a kind (`VMFolder`, ...) binds nothing without an entry here.
+  It parses the file the way this section describes (Properties syntax,
+  split on `,` then `:`, no trimming) with `vcfcf_core.java_properties`, the
+  reader `post_install` uses too. `FileReader` does not strip a UTF-8
+  byte-order mark, so a file saved with one has U+FEFF in its first key and
+  the installer never binds that entry (OpenJDK 17, framework review
+  2026-11-13); the shared reader keeps the mark for that reason. It
+  matches a key to a directory name exactly and stops a dashboard whose entry the
+  YAML cannot reproduce exactly
+  (`../authoring/importer_offline_conversion.md` §Summary-tab bindings).
 - Whether the MPB builder or the SDK pak template passes an arbitrary
   `content/dashboards/` tree through untouched is a separate question
   for `tooling` / `sdk-adapter-author`; the earlier

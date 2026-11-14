@@ -51,6 +51,7 @@ from vcfcf_core.importer.convert import (
     ConvertOptions,
     Plan,
     TYPE_DIRS,
+    classify_bindings,
     dump_yaml,
     mint_namespace_uuid,
     norm_id,
@@ -60,7 +61,7 @@ from vcfcf_core.importer.convert import (
     parse_tsv_map,
     plan_conversion,
 )
-from vcfcf_core.importer.inputs import CONTENT_TYPES, scan_inputs
+from vcfcf_core.importer.inputs import CONTENT_TYPES, binding_kinds, scan_inputs
 from vcfcf_core.importer.kinds import KindMap, parse_kind_map
 from vcfcf_core.importer.model import Mark
 
@@ -741,6 +742,15 @@ def _verify_tree(plan: Plan, out: Path, layout: str):
                         known_dashboards=L.dashboards))
                 c = _cmp.compare_dashboard(_expected_dashboard(e, plan), e.source.context.get("entries") or {},
                                            env, env["dashboards"][0], widget_ids, rewrites)
+                # The Summary-tab binding is part of the dashboard's wire form:
+                # the source's, read from its dashboards.properties (absent
+                # when no entry binds it), against the built one, the loaded
+                # summary_for (what the pak builder writes to
+                # dashboards.properties, and what bind-summary binds in the
+                # content and third-party layouts).
+                cb = _cmp.compare_binding(binding_kinds(e.source), obj.summary_for)
+                c.fields += cb.fields
+                c.differences.extend(cb.differences)
             elif e.type == "report":
                 root = ET.fromstring(render_report_xml([obj]))
                 c = _cmp.compare_xml(_expected_xml(e.source.payload, e, plan), root.find("Reports/ReportDef"))
@@ -945,6 +955,7 @@ def run(args) -> int:
     # first; an object a loader refuses (and anything referencing it) becomes
     # a reported failure instead of a file nothing can read.
     _load_check(plan, args.layout, args)
+    classify_bindings(plan)  # a dashboard the load check refused carries no binding
     roots = inputs
 
     # -- report: what was found -------------------------------------------
@@ -1009,6 +1020,14 @@ def run(args) -> int:
         _say(f"note ({', '.join(files)}): {n}")
     for w in plan.warnings:
         _say(f"WARNING: {w}")
+    by_status = Counter(str(b["status"]) for b in plan.bindings)
+    _say(f"summary bindings: {len(plan.binding_files)} binding file(s), {len(plan.bindings)} entr"
+         f"{'y' if len(plan.bindings) == 1 else 'ies'}"
+         + (": " + ", ".join(f"{n} {s}" for s, n in sorted(by_status.items())) if by_status else
+            " (no dashboard is bound to a Summary tab in the source, so none is in the output)"))
+    for b in plan.bindings:
+        label = "BINDING" if b["status"] in ("carried", "superseded", "merged") else "WARNING: BINDING"
+        _say(f"{label} {_rel_location(str(b['file']), roots)}:{b['line']} {b['entry']}: {b['status']}: {b['detail']}")
     if plan.kind_map is not None:
         km = plan.kind_map
         moved = [e for e in plan.emitted if e.kind_refs]
@@ -1210,6 +1229,10 @@ def _report(plan: Plan, args, scan, unreadable, missed, v, roots, rc) -> dict:
                         if plan.describing else {})}
                     for e in plan.emitted],
         "warnings": plan.warnings,
+        "summary_bindings": {
+            "files": [_rel_location(f, roots) for f in plan.binding_files],
+            "entries": [dict(b, file=_rel_location(str(b["file"]), roots)) for b in plan.bindings],
+        },
     }
     if plan.kind_map is not None:
         km = plan.kind_map
@@ -1244,6 +1267,10 @@ def _exit(plan: Plan, unreadable, missed, v, args) -> int:
     if plan.internal_errors:
         _err(f"internal error in the converter on {len(plan.internal_errors)} object(s) (listed as INTERNAL ERROR); "
              f"--allow-partial does not accept it")
+        return EXIT_INTERNAL
+    if any(b["status"] == "mismatch" for b in plan.bindings):
+        _err("internal error in the converter: a written summary_for is not the source's binding entry (listed as "
+             "BINDING ... mismatch); --allow-partial does not accept it")
         return EXIT_INTERNAL
     if unreadable or missed:
         return EXIT_PARTIAL

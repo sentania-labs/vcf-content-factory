@@ -22,6 +22,10 @@ UI residue states, a ``config.widgetId`` naming no widget of the dashboard
 strings the loader strips (``accounting.STRIPPED_TEXT``: description,
 widget titles, labels, tab names, TextDisplay HTML), accepted only where the
 render is the source stripped.
+``summary_for`` comes only from the source's Summary-tab binding file entry
+for the dashboard's directory (``inputs.SummaryBinding``), never from a folder
+name; an entry the YAML cannot reproduce exactly, and a dashboard in a pak
+``GenericTemplates*`` directory, stop the dashboard with a TOOLSET GAP.
 Anything else the schema cannot carry stops the dashboard with a TOOLSET
 GAP; ``accounting.account`` classifies every source key after mapping (the
 constants the renderer writes are rows there).
@@ -41,15 +45,12 @@ from ..dashboards.loader import (
 )
 from . import flat as _flat
 from .accounting import account
+from .inputs import template_dir
 from .model import MappedObject, MappingError, Mark, documented_loss, gap_error, wire_number
 from .refs import NavRef, Ref
 
 UUID = r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
 TIME_BY_WIRE = {v: k for k, v in DASHBOARD_TIME_RANGES.items()}
-#: The pak ``dashboards/<Folder>/dashboard.json`` folders that bind a
-#: Summary page (``summary_for: VMWARE:<Folder>``).
-SUMMARY_FOLDERS = {"VMFolder", "HostFolder", "DatastoreFolder", "NetworkFolder",
-                   "VmwareDistributedVirtualSwitch", "DistributedVirtualPortgroup"}
 
 #: Dashboard keys the renderer writes as constants: an absent one is not
 #: modeled (the render always writes it). Present values are checked by the
@@ -196,8 +197,20 @@ class _DashMapper:
             y["column_proportion"] = db["columnProportion"]
         if db.get("columnCount", 1) != 1:
             y["column_count"] = db["columnCount"]
-        if self.ctx.get("folder") in SUMMARY_FOLDERS:
-            y["summary_for"] = f"VMWARE:{self.ctx['folder']}"
+        # The Summary-tab binding is the source's binding file entry for this
+        # dashboard's directory (inputs.SummaryBinding), never its folder name.
+        b = self.ctx.get("summary_binding")
+        if b is not None:
+            if b.problem:
+                self.loss(f"Summary binding {b.key}={b.value} ({b.where}): {b.problem}")
+            if self.ctx.get("summary_binding_conflict"):
+                self.loss(f"Summary binding {b.key}={b.value} ({b.where}): {self.ctx['summary_binding_conflict']}")
+            y["summary_for"] = b.kinds[0] if len(b.kinds) == 1 else list(b.kinds)
+        tdir = template_dir(self.location)
+        if tdir is not None:
+            self.loss(f"the dashboard sits in the pak directory {tdir!r}: the 9.2 installer imports a GenericTemplates* "
+                      f"directory as a template (not shared, never bound) and 9.0.2 GA as a shared dashboard; the "
+                      f"factory YAML cannot carry the template install")
         for k in _RENDER_CONSTANTS:
             if k not in db:
                 self.loss(f"absent {k} is not modeled (the renderer always writes it)")

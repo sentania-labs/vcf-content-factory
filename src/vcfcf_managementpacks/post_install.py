@@ -73,6 +73,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Dict, List, Optional
 
+from vcfcf_core import java_properties as _jprops
+
 DASHBOARDS_DIR = "content/dashboards/"
 PROPERTIES_PATH = "content/dashboards/dashboards.properties"
 
@@ -160,67 +162,18 @@ class PakBinding:
     kinds: List[tuple] = field(default_factory=list)
 
 
-def _unescape(text: str) -> str:
-    """``java.util.Properties`` backslash escapes (``\\t`` etc., else the char)."""
-    out, i = [], 0
-    while i < len(text):
-        c = text[i]
-        if c == "\\" and i + 1 < len(text):
-            nxt = text[i + 1]
-            out.append({"t": "\t", "n": "\n", "r": "\r", "f": "\f"}.get(nxt, nxt))
-            i += 2
-            continue
-        out.append(c)
-        i += 1
-    return "".join(out)
-
-
 def parse_properties(text: str) -> Dict[str, str]:
-    """Parse a ``.properties`` file as ``Properties.load`` does: ``#``/``!``
-    comments, ``key=value`` / ``key: value`` / ``key value`` (first unescaped
-    separator), leading whitespace of the value dropped, trailing-backslash
-    continuation."""
-    result: Dict[str, str] = {}
-    logical: List[str] = []
-    buf = ""
-    for raw in text.splitlines():
-        line = raw.lstrip()
-        if not buf and (not line or line[0] in "#!"):
-            continue
-        trailing = len(line) - len(line.rstrip("\\"))
-        if trailing % 2 == 1:
-            buf += line[:-1]
-            continue
-        logical.append(buf + line)
-        buf = ""
-    if buf:
-        logical.append(buf)
-    for line in logical:
-        key_end, i = len(line), 0
-        while i < len(line):
-            c = line[i]
-            if c == "\\":
-                i += 2
-                continue
-            if c in "=:" or c.isspace():
-                key_end = i
-                break
-            i += 1
-        key = line[:key_end]
-        rest = line[key_end:].lstrip()
-        if rest[:1] in ("=", ":"):
-            rest = rest[1:].lstrip()
-        result[_unescape(key)] = _unescape(rest)
-    return result
+    """Parse a ``.properties`` file as ``Properties.load`` does
+    (``vcfcf_core.java_properties``, the one reader shared with the offline
+    importer: Java line ends and whitespace, ``\\uXXXX`` escapes, a leading
+    byte-order mark kept in the first key)."""
+    return _jprops.load(text)
 
 
 def java_split(text: str, sep: str) -> List[str]:
     """``String.split`` for a one-character literal: trailing empty strings
     are dropped, leading ones kept, nothing is trimmed."""
-    parts = text.split(sep)
-    while parts and parts[-1] == "":
-        parts.pop()
-    return parts
+    return _jprops.split(text, sep)
 
 
 def read_pak_bindings(
@@ -236,7 +189,14 @@ def read_pak_bindings(
     with zipfile.ZipFile(Path(pak_path), "r") as zf:
         if PROPERTIES_PATH not in zf.namelist():
             return []
-        props = parse_properties(zf.read(PROPERTIES_PATH).decode("utf-8", errors="replace"))
+        text = zf.read(PROPERTIES_PATH).decode("utf-8", errors="replace")
+    try:
+        props = parse_properties(text)
+    except ValueError as exc:
+        # the installer's Properties.load throws on it too (what it then does
+        # is not traced), so no binding is checked from it
+        warn(f"{PROPERTIES_PATH} cannot be read as Properties ({exc}); no Summary binding is checked from it")
+        return []
     by_dir: Dict[str, List[PakDashboard]] = {}
     for d in dashboards:
         by_dir.setdefault(d.directory, []).append(d)

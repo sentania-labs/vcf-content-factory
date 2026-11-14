@@ -227,6 +227,28 @@ def compare_dashboard(src_db: dict, src_entries: dict, rendered_env: dict, rende
     return out
 
 
+#: The flat path of a dashboard's Summary-tab binding: the kinds a pak's
+#: ``dashboards.properties`` binds its directory to (comma-joined, in order).
+BINDING_PATH = "dashboard.<summary binding>"
+
+
+def binding_leaves(kinds) -> Leaves:
+    """The flat form of a Summary-tab binding: one leaf, absent when nothing
+    binds the dashboard."""
+    return {BINDING_PATH: ",".join(kinds)} if kinds else {}
+
+
+def compare_binding(src_kinds, built_kinds) -> Comparison:
+    """The source binding (read from its ``dashboards.properties``, ``None``
+    or empty when the source binds nothing) against the built one (the kinds
+    the output binds), present / absent and value."""
+    out = Comparison()
+    diff_flat(binding_leaves(src_kinds), binding_leaves(built_kinds), out, xml=False)
+    if not src_kinds and not built_kinds:
+        out.fields += 1  # compared: both absent
+    return out
+
+
 # ---------------------------------------------------------- super metrics
 def compare_supermetric(src: dict, rendered: dict) -> Comparison:
     out = Comparison()
@@ -255,6 +277,14 @@ def compare_copies(first, other) -> Comparison:
     uses this, so copies merge only when the comparator finds no
     difference between them."""
     out = Comparison()
-    diff_flat(source_leaves(first, out.set_aside), source_leaves(other, Counter()), out,
-              xml=first.type not in ("dashboard", "supermetric"))
+    a, b = source_leaves(first, out.set_aside), source_leaves(other, Counter())
+    if first.type == "dashboard":
+        # a copy bound to a Summary tab is not the same as one that is not,
+        # nor as one bound differently (the raw entry value: a binding the
+        # YAML cannot carry still counts)
+        for obj, leaves in ((first, a), (other, b)):
+            sb = obj.context.get("summary_binding")
+            if sb is not None:
+                leaves[BINDING_PATH] = sb.value
+    diff_flat(a, b, out, xml=first.type not in ("dashboard", "supermetric"))
     return out
