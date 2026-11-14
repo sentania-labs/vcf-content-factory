@@ -7,11 +7,12 @@ a third-party pak or a lab export into the factory, or to bring existing
 content under factory management.
 
 Code: `src/vcfcf_core/importer/` (scan, per-type mapping, source accounting,
-flat forms, conversion plan, comparison: location-agnostic) and
+flat forms, conversion plan, comparison, kind map: location-agnostic) and
 `src/vcfcf_extractor/importer.py` (CLI, staged writing, stock-id guard,
 verification through the real loaders). Tests: `tests/test_import_local.py`,
 `tests/test_import_local_fidelity.py` (the review fixes and the mutation
-self-test).
+self-test), `tests/test_import_local_kind_map.py` (`--map-kind`,
+`--describe`, the verbatim-text listing).
 
 ## Which command
 
@@ -81,6 +82,7 @@ python3 -m vcfcf_extractor import-local INPUT... \
   --ids keep | --ids mint [--mint-namespace TEXT] | --id-map TSV [--id-map TSV ...] \
   --naming unprefixed|factory-prefixed \
   [--rename TSV] [--drop TSV ...] [--target-min 8.18.7|9.0.2|9.1.1] \
+  [--map-kind TSV ...] [--describe TSV ...] \
   [--prefer-source FRAGMENT ...] [--project-name NAME] [--report-dir DIR] \
   [--no-verify] [--allow-partial] [--force] [--dry-run]
 ```
@@ -89,7 +91,7 @@ python3 -m vcfcf_extractor import-local INPUT... \
 |---|---|---|
 | `content` | `<out>/{supermetrics,views,dashboards,reports,symptoms,recommendations,alerts}/` (a factory `content/` tree; every name must carry `[VCF CF] `) | the factory per-type loaders |
 | `third-party` | the same folders plus a `PROJECT.yaml` (`factory_native: false`), i.e. a `third_party/<project>/` | the factory bundle loader on `PROJECT.yaml` |
-| `pak` | the same folders relative to an SDK adapter project, plus `import-report/bundled_content.yaml` to merge into `adapter.yaml`; its header names the other settings the content needs (`content_naming: unprefixed` for unprefixed names, `content_foreign_adapter_kinds` for symptoms and alerts on another adapter kind) | `sdk_builder._load_bundled_content`, then the pak version-floor and reference checks |
+| `pak` | the same folders relative to an SDK adapter project, plus `import-report/bundled_content.yaml` to merge into `adapter.yaml`; its header names the other settings the content needs (`content_naming: unprefixed` for unprefixed names, `content_foreign_adapter_kinds` for symptoms and alerts on another adapter kind; with `--map-kind` onto one adapter kind, that kind is taken as the pak's own and is not listed) | `sdk_builder._load_bundled_content`, then the pak version-floor and reference checks |
 
 Output: one YAML per object, named from the object's name, each with a
 comment naming its source file. A name that slugs to a file name Windows
@@ -169,10 +171,20 @@ to a dropped view or dashboard stay raw ids (`view: <uuid>`, report
 name a symptom or recommendation by raw id, so an alert whose symptom is
 dropped or absent fails with that reason.
 
+A symptom or alert in a `--drop` or `--id-map` file is matched by its wire
+id (`SymptomDefinition-<id>`, `AlertDefinition-<id>`, as `id_map.tsv` and the
+stock-id guard print it) or by the bare id (until 2026-11-13 only the bare id
+matched, and a wire id was reported as naming no object).
+
 A symptom, alert or recommendation whose source id is the one the renderer
 derives from its adapter kind and name (`AlertDefinition-<kind>-<slug>`,
 factory content without `id:`) is written without `id:`; with a rename or the
-prefix that derived id changes, so such an object needs `--ids mint`.
+prefix that derived id changes, so such an object needs `--ids mint`. When a
+derived id changes (minted, mapped, or re-pointed by `--map-kind`), a
+reference that is the whole wire id follows it: a dashboard AlertList's
+`alert_definitions` entry, and an alert's symptom reference in verification
+(until 2026-11-13 the AlertList kept the old id and verification reported
+the alert's symptom reference as a difference).
 
 ## Names
 
@@ -200,6 +212,192 @@ symptoms and recommendations, `supermetric:"<name>"` in view columns and
 additional columns, `@supermetric:"<name>"` in formulas. Outside the set, by
 raw id where the schema has a raw-id form (a note names each one: it must
 exist on the target).
+
+## Re-pointing kinds (`--map-kind`)
+
+Porting a third-party pack into a factory SDK pak usually means its content
+must move from the pack's adapter kind to the pak's. `--map-kind TSV`
+(repeatable) does it, at every place a kind sits and nowhere else:
+
+```
+# old adapter kind <TAB> old resource kind or * <TAB> new adapter kind <TAB> new resource kind or *
+vCommunity	*	vcfcf_vcommunity	*
+vCommunity	Content Library	vcfcf_vcommunity	content_library
+```
+
+- `*` in the second column maps every resource kind of that adapter kind
+  and keeps its key (the fourth column must be `*` too). A row naming a
+  resource kind wins over the `*` row (above: `Content Library` becomes
+  `content_library`, every other `vCommunity` kind keeps its key). A named
+  old resource kind with `*` in the fourth column keeps the key and moves
+  only the adapter kind. Kinds no row lists are untouched.
+- A header row whose first cell is `old_adapter_kind` (or `adapter_kind`,
+  `old_kind`, `old`), `#` lines and blank lines are skipped.
+- **Usage errors** (exit 2, nothing written): a row without exactly four
+  cells; `*` mapped to a named resource kind; the same old pair listed twice
+  (the same way or differently; the message names both rows); a row mapping a
+  kind to itself; a chain or swap (a row landing on a kind another row maps
+  again: map each old kind straight to its final kind); a new kind key
+  carrying `/ | , = { } " :` or a control character, or a new adapter kind
+  that is not ASCII or longer than 99 characters (the `resourceKindId`
+  encoding).
+- **A row that matches nothing** is a `WARNING` (the same as an unused
+  `--rename`, `--drop` or `--id-map` row; the exit status is not changed), and
+  `report.json` `kind_map.rows[].used` is 0 for it. A row "matches" only at a
+  kind-bearing place (below): the adapter kind's name in a metric key, a
+  name or a description is not a use.
+
+Where a kind sits, and is re-pointed (`vcfcf_core/importer/kinds.py`): view
+`SubjectType`, `SubjectsGroupBy` and `BlacklistResourceKind`, and column and
+additional-column `adapterKind` / `resourceKind`; template `SubjectType`;
+symptom and alert `adapterKind` / `resourceKind`; super metric
+`resourceKinds` and the formula's resource entries (`adaptertype=`,
+`objecttype=`, parsed: a metric key `metric=vCommunity|...`, a
+`resourcename=`, an `identifiers={...}` block and quoted strings are never
+touched); dashboard `entries` rows (every `resourceKind:id:<n>_::_` and
+`resource:id:<n>_::_` reference resolves through them: metric entries, tag
+filters, Heatmap tabs and groups, Pareto and HealthChart kinds, pinned
+resources), `0020<nn><adapter><kind>` ids (a View pin, a resource-mode
+Scoreboard entry, a Heatmap custom filter, re-encoded with the new length)
+and a Heatmap `groupBy` (`adapterKind`, `resourceKind`, `parentId`,
+`004null...` `id`).
+
+**Ids that embed the kind.** Explicit symptom and alert ids are UUIDs and
+carry no kind. The factory's derived ids do: `SymptomDefinition-<kind>-<slug>`,
+`AlertDefinition-<kind>-<slug>` and `Recommendation-df-<kind>-<slug>`
+(`alerts/render.py`). Under `--ids keep` (and for objects a `--id-map` does
+not list), a derived id that embeds the object's own adapter kind, when that
+object's pair is mapped, is re-pointed (`AlertDefinition-vCommunity-X`
+becomes `AlertDefinition-vcfcf_vcommunity-X`), because the renderer derives
+it from the new kind: it is the id a freshly authored object on the new kind
+would get, and keeping the old one would ship the pak's content under the
+old pack's ids. Every reference follows (an alert's symptom sets and
+recommendations, a dashboard AlertList); `id_map.tsv` lists old and new, and
+each counts as a re-pointed reference. A recommendation, which has no kind
+of its own, is re-pointed only when its key embeds a mapped adapter kind that
+moves as a whole and every alert in the set that references it is on that
+kind; otherwise it stops. `--ids mint` and `--id-map` rows decide the id
+themselves (the kind is not re-pointed in it). A reference to a derived id
+outside the input stops the object (whether the object it names moves cannot
+be known); one to a `--drop`ped object stays as it is, which is the point of
+the drop. An id that merely contains the name (`vCommunityCollectionWarnings`)
+is an identifier, not a kind, and is kept. Localization keys:
+`localizationKey` on a view or template Title or Description and on a column
+`displayName` is a recorded loss (not written), so there is nothing to
+re-point; content XML carries no other localization key.
+
+**What stops an object** (a `TOOLSET GAP` naming the place; the object fails
+like any other GAP, and so does what references it):
+
+- a reference that names a mapped adapter kind alone (a formula entry by
+  `resourcename=` or with `objecttype=*`) when that adapter kind is mapped
+  only for some resource kinds, or to more than one new adapter kind;
+- a map that makes two distinct kinds of one object the same kind (two
+  subjects, a subject and its group, two resource kinds of a super metric):
+  they would merge;
+- two objects landing on one id (the per-type id collision check names
+  both);
+- a Summary page (pak `dashboards/<Folder>/dashboard.json`) bound to a mapped
+  `VMWARE:<Folder>`;
+- a View traversal spec id naming a mapped adapter kind
+  (`<spec>-<adapter>-<root kind>`: the target adapter's specs are not known;
+  `../wire-formats/dashboard_fidelity_wire_format.md` §Per type);
+- a compared value equal to a mapped adapter kind (a view or Heatmap filter
+  value, a symptom condition value, a word of a formula's quoted where
+  clause): it may name the kind as data;
+- **any other place that still holds a mapped adapter kind after the map
+  ran.** After mapping, `accounting.account_kinds` walks the re-pointed
+  source's flat form and classifies every key or value holding a mapped
+  adapter kind by `accounting.KIND_TABLE`: a kind-bearing place (the pair
+  there is checked again: one the map still re-points means the rewriter
+  missed it), text (names, descriptions, titles, HTML, labels, metric and
+  property keys, an `adapterName`, a View widget's table state whose column
+  ids embed attribute keys), or a literal (above). Anything unclassified is a
+  GAP, so a kind in a place nobody listed cannot pass. "Holding" is a
+  case-sensitive substring test, so a short adapter kind key can stop an
+  object over a longer word that contains it: a false stop, never a false
+  pass.
+
+**Verification stays exact.** The map is applied to the source before it is
+mapped, and verification compares the render with that re-pointed source,
+key by key, as always. An object whose only differences from the original
+are re-pointed kinds is reported as `identical apart from re-pointed kinds`,
+never as `identical`; each object's count is a `KIND` line (`KIND view
+'X': 5 kind reference(s) re-pointed (vCommunity:Content Library ->
+vcfcf_vcommunity:Content Library x4; ...)`), `report.json`
+`objects[].kind_references_repointed` / `kind_changes`, and
+`verify.objects_detail[].kind_references_repointed`. The verify line gains
+`N identical apart from intended changes` and an `intended changes:` line
+with the totals. A run without `--map-kind` and `--describe` prints and
+writes none of these.
+
+Worked example (a third-party pack on `vCommunity` into the SDK pak
+`vcfcf_vcommunity`):
+
+```
+printf 'vCommunity\t*\tvcfcf_vcommunity\t*\n' > kinds.tsv
+python3 -m vcfcf_extractor import-local <the pack's .pak> --out <the new SDK pak project> \
+  --layout pak --ids keep --naming unprefixed --target-min 8.18.7 --map-kind kinds.tsv
+```
+
+then read the `KIND` lines and the `kind map:` summary (rows used, objects
+and references re-pointed), and merge the `bundled_content` snippet, whose
+header now treats `vcfcf_vcommunity` as the pak's own kind. A pack whose
+content all sits on other adapters' kinds (it pushes metrics onto `VMWARE`
+objects under its own `vCommunity|...` key group) has nothing to re-point:
+the row is reported unused, which is the correct answer, and the content
+stays on `VMWARE` (`content_foreign_adapter_kinds: [VMWARE]`).
+
+## Replacing descriptions (`--describe`)
+
+`--describe TSV` (repeatable) replaces an object's description by an
+explicit decision, the way `--rename` replaces a name:
+
+```
+type	name	description
+view	ESXi Packages	Every VIB installed on each ESXi host, with its version and vendor.
+dashboard	b1b3ede5-32f2-4c49-a1a8-443dc23bd993	Host configuration at a glance.\nOne row per host.
+alert	ESXi Host License Expiring	A host license expires within 30 days.
+```
+
+- The type is one whose description ships on the content wire: `view`,
+  `dashboard`, `report`, `supermetric`, `alert`, `recommendation` (its text).
+  A `symptom` row is refused: the symptom YAML's `description` is REST-only,
+  the content-import XML has none. Custom groups and policies are not
+  converted at all.
+- The second column is matched as `--rename` matches, against the source id
+  or the source name, before any rename (a row naming the new name of a
+  renamed object matches nothing).
+- Escapes in the third column: `\n` a line break, `\t` a tab, `\\` a
+  backslash; any other backslash is an error. The text is stripped (the
+  loaders strip it); an empty one is an error.
+- Usage errors (exit 2): a malformed row, an unknown escape, a type without
+  a shipped description, the same key twice, a row naming two objects (key it
+  by id), an object two rows name. A row naming nothing is a `WARNING`, as
+  for `--rename`.
+
+A replaced description is never a loss and never `identical`: verification
+compares the render with the source carrying the new description, and the
+object's status says `identical apart from a replaced description` (or `...
+re-pointed kinds and a replaced description`). A recorded loss on the old
+description (its surrounding whitespace) no longer applies and is not
+listed. Each replacement is a `DESCRIBED` line (source and written lengths)
+and `report.json` `objects[].description_replaced` /
+`source_description_length`.
+
+**Verbatim source text.** Every run (with or without these options) lists,
+per object, the free-text fields it carries exactly as the source wrote them,
+with their lengths, so a porter sees what prose is shipping:
+`report.json` `objects[].verbatim_text` (`[{field, length}]`: `name`,
+`description`, and for a dashboard each widget's `widget <id> title`,
+`widget <id> description` and TextDisplay `widget <id> html`; a
+recommendation's text is its `description`, its name is its key and is not
+listed), and one `verbatim source text:` summary line. A field replaced by
+`--rename`, `--naming factory-prefixed` or `--describe` is not listed.
+Functional labels (view column display names, metric labels, Heatmap tab
+names) and template section settings are not prose and are not listed;
+there is no override for widget titles or text widget bodies (edit the
+written YAML).
 
 ## Every source key is accounted for
 
@@ -356,10 +554,12 @@ rewrites) are applied to the source. A key on one side only is always a
 difference; values are compared verbatim, whitespace included.
 
 Per object the result is one of: **identical**; **identical apart from keys
-forced by `--target-min`** (only at the recorded deviation paths); **differs
-only at N recorded losses** (every difference is at a path the mapper
-recorded when it dropped or altered something; the losses are listed); or
-**differs** (the differences are listed). The summary states objects and
+forced by `--target-min`** (only at the recorded deviation paths);
+**identical apart from intended changes** (re-pointed kinds, a replaced
+description: §Re-pointing kinds, §Replacing descriptions; the status names
+which); **differs only at N recorded losses** (every difference is at a path
+the mapper recorded when it dropped or altered something; the losses are
+listed); or **differs** (the differences are listed). The summary states objects and
 fields compared, these four counts per type, every difference class with
 its objects and occurrences, the differences at recorded losses per loss
 class, the forced target keys, and what was set aside.
@@ -493,6 +693,28 @@ preferred). Each run takes 2 to 4 seconds.
   50-character limit with the prefix and one template that names one of them
   cascades; 250 compared, 149 identical, 101 only at recorded losses, 0
   differ.
+- `--map-kind vCommunity<TAB>*<TAB>vcfcf_vcommunity<TAB>*`, pak layout,
+  `--ids keep`, `--target-min 8.18.7`, `--allow-partial` (a later rebuild of
+  the pak, 2026-11-13): the row is unused. No object of that pack sits on
+  its own adapter kind: its content is on `VMWARE`, `VMSP`,
+  `APPLICATIONDISCOVERY` and `Container`, and `vCommunity` appears only as a
+  metric key group
+  (`vCommunity|Cluster Risk|...`), in names, descriptions, folder names, the
+  `adapterName` and View table-state column ids, all classified as text, so
+  no object stops. 253 compared: 144 identical, 6 apart from forced target
+  keys, 103 only at recorded losses, 0 differ; the two Section dashboards
+  are not deliverable to 8.18.7 (the line points at `section_fallback:
+  omit`) and the symptom with two differing copies needs `--prefer-source`,
+  so the run exits 1 and writes nothing. With those two dashboards dropped
+  and the alert file's copy preferred it exits 0, and the written tree,
+  merged into a scaffolded project on `vcfcf_vcommunity`, passes
+  `validate-sdk`.
+- Stress run of the rewriter on the same pak (not a port): `VMWARE<TAB>*<TAB>
+  vcfcf_stress<TAB>*`: 1180 kind references re-pointed in 208 objects, 228
+  compared, 0 differ (131 identical apart from intended changes). 20
+  dashboards stop, each named: 6 Summary pages bound to `VMWARE:<Folder>` and
+  14 with a View traversal spec naming `VMWARE`; 4 templates and one
+  dashboard cascade from them.
 
 9.1.1 built-in export, views, report templates and dashboards (851 + 62 +
 179), `--ids mint`, third-party layout: no internal error. 756 views, 56

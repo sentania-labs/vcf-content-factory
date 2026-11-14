@@ -785,3 +785,323 @@ def account(type_: str, leaves: _flat.Leaves, losses: List[Loss]) -> None:
         if rule.kind == "loss":
             documented_loss(losses, rule.arg, f"{rule.arg} is not modeled ({DOCUMENTED_NOT_MODELED[rule.arg]})",
                             [Mark(path, "missing")])
+
+
+# ------------------------------------------------------------ kind places
+class KindRule:
+    __slots__ = ("pattern", "rx", "role", "form", "arg")
+
+    def __init__(self, pattern: str, role: str, form: Optional[str], arg: Optional[str]):
+        self.pattern, self.role, self.form, self.arg = pattern, role, form, arg
+        self.rx = re.compile(_pattern_rx(pattern))
+
+
+_KIND_FORMS = ("ak", "rk", "rkid", "heatmap_id", "formula", "derived_id", "report_filter", "view_table_state",
+               "traversal_spec")
+
+
+def parse_kind_table(text: str) -> List[KindRule]:
+    """Rows ``pattern kind <form> [arg]``, ``pattern text`` or ``pattern
+    literal`` (:data:`KIND_TABLE`)."""
+    rules = []
+    for raw in text.splitlines():
+        body = raw.split("  #", 1)[0].strip()
+        if not body or body.startswith("#"):
+            continue
+        parts = body.split()
+        pattern, role = parts[0], parts[1]
+        form = parts[2] if len(parts) > 2 else None
+        arg = parts[3] if len(parts) > 3 else None
+        if role == "kind" and form not in _KIND_FORMS:
+            raise ValueError(f"kind row {pattern}: unknown form {form!r}")
+        if role not in ("kind", "text", "literal"):
+            raise ValueError(f"kind row {pattern}: unknown role {role!r}")
+        if form in ("ak", "rk") and (not arg or ">" not in arg):
+            raise ValueError(f"kind row {pattern}: {form} needs a sibling A>B")
+        rules.append(KindRule(pattern, role, form, arg))
+    return rules
+
+
+#: Where a kind can sit in each type's flat form (``import-local
+#: --map-kind``; ``kinds`` module docstring). After the map is applied to a
+#: source, :func:`account_kinds` reads the re-pointed source's flat form and
+#: checks every key that still holds a mapped (old) adapter kind:
+#:
+#: - ``kind <form>``: a kind-bearing place. ``ak A>B`` / ``rk A>B``: the
+#:   value is an adapter (resource) kind key and its pair is at the sibling
+#:   key (the path with its last ``A`` replaced by ``B``); ``rkid`` a
+#:   ``0020<nn><adapter><kind>`` id; ``heatmap_id`` a Heatmap ``groupBy.id``
+#:   (``004null`` and an rkid); ``formula`` a super metric formula
+#:   (``kinds.formula_kind_problem``); ``derived_id`` a symptom, alert or
+#:   recommendation id or a reference to one (re-pointed by
+#:   ``kinds.derived_id_table`` when it embeds the object's own mapped kind;
+#:   any other id is an identifier that happens to contain the name, not a
+#:   kind); ``report_filter`` a template SubjectType ``filter`` (JSON, read
+#:   here: metric keys are text, values literals, anything else a GAP);
+#:   ``view_table_state`` a View widget's table state (URL-encoded; its
+#:   column ids are ``<widget>_<view>-column-<attribute key>``, so a mapped
+#:   adapter kind there must start an attribute key, ``-column-<kind>|``);
+#:   ``traversal_spec`` a View widget's traversal spec id
+#:   (``<spec name>-<adapter kind>-<root resource kind>``, e.g. ``vSphere Hosts
+#:   and Clusters-VMWARE-vSphere World``): it names a spec an adapter's
+#:   describe.xml declares, which the target adapter may not have, so one
+#:   naming a mapped adapter kind stops the object.
+#:   A pair the map still re-points at such a place means the rewriter missed
+#:   it: the object stops.
+#: - ``text``: display text, names, metric and property keys, HTML: the
+#:   string may contain the adapter kind's name without naming the kind.
+#: - ``literal``: a value compared with data (a filter or condition value):
+#:   one equal to a mapped adapter kind may name the kind as data, which
+#:   cannot be re-pointed with certainty, so it stops the object.
+#:
+#: Kinds in a key rather than a value (a view's ``SubjectType{<adapter>|<kind>|
+#: <type>}`` and ``SubjectsGroupBy{<adapter>|<kind>}``, a dashboard's
+#: ``entries.resourceKind{RK:<adapter>/<kind>}`` and ``entries.resource{RES:
+#: <adapter>/<kind>/<name>}``, and those tokens inside dashboard values, where
+#: an ``entries`` reference resolves) are read from the key
+#: (:data:`_KIND_SEGMENTS`). Any other key or value holding a mapped adapter
+#: kind is a GAP.
+KIND_TABLE: Dict[str, List[KindRule]] = {
+    "view": parse_kind_table(f"""
+ViewDef/(Title|Description)#text                         text
+ViewDef/(Title|Description)@localizationKey              text
+{_COL}/Property{{adapterKind}}@value                       kind ak {{adapterKind}}>{{resourceKind}}
+{_COL}/Property{{resourceKind}}@value                      kind rk {{resourceKind}}>{{adapterKind}}
+{_ADD}/Property{{adapterKind}}@value                       kind ak {{adapterKind}}>{{resourceKind}}
+{_ADD}/Property{{resourceKind}}@value                      kind rk {{resourceKind}}>{{adapterKind}}
+{_COL}/Property{{(attributeKey|displayName|instanceGroupName|metricToRelateWith|localizedMetricToRelateWith)}}@value  text
+{_COL}/Property{{displayName}}(~*)?@(value|localizationKey)  text
+{_SUM}/Property{{displayName}}@(value|localizationKey)     text
+{_ADD}/Property{{(attributeKey|displayName|localizedAttributeName)}}@value  text
+ViewDef/BlacklistResourceKind(~*)?@adapterKind           kind ak @adapterKind>@resourceKind
+ViewDef/BlacklistResourceKind(~*)?@resourceKind          kind rk @resourceKind>@adapterKind
+ViewDef/SubjectType{{*}}(~*)?@filter[][].metricKey       text
+ViewDef/SubjectType{{*}}(~*)?@filter[][].metricValue.(value|values[])  literal
+"""),
+    "report": parse_kind_table("""
+ReportDef/(Title|Description)#text                       text
+ReportDef/(Title|Description)@localizationKey            text
+ReportDef/SubjectType[]@adapterKind                      kind ak @adapterKind>@resourceKind
+ReportDef/SubjectType[]@resourceKind                     kind rk @resourceKind>@adapterKind
+ReportDef/SubjectType[]@filter                           kind report_filter
+"""),
+    "symptom": parse_kind_table("""
+SymptomDefinition@adapterKind                            kind ak @adapterKind>@resourceKind
+SymptomDefinition@resourceKind                           kind rk @resourceKind>@adapterKind
+SymptomDefinition@id                                     kind derived_id
+SymptomDefinition@name                                   text
+SymptomDefinition/State/Condition[]@key                  text
+SymptomDefinition/State/Condition[]@value                literal
+"""),
+    "alert": parse_kind_table("""
+AlertDefinition@adapterKind                              kind ak @adapterKind>@resourceKind
+AlertDefinition@resourceKind                             kind rk @resourceKind>@adapterKind
+AlertDefinition@id                                       kind derived_id
+AlertDefinition@(name|description)                       text
+AlertDefinition/State/(SymptomSets/)?SymptomSet[]@ref    kind derived_id
+AlertDefinition/State/(SymptomSets/)?SymptomSet[]/Symptom[]@ref  kind derived_id
+AlertDefinition/State/Recommendations/Recommendation[]@ref  kind derived_id
+"""),
+    "recommendation": parse_kind_table("""
+Recommendation@(key|id)                                  kind derived_id
+Recommendation/Description#text                          text
+"""),
+    "supermetric": parse_kind_table("""
+supermetric.(name|description)                           text
+supermetric.resourceKinds[].adapterKindKey               kind ak .adapterKindKey>.resourceKindKey
+supermetric.resourceKinds[].resourceKindKey              kind rk .resourceKindKey>.adapterKindKey
+supermetric.formula                                      kind formula
+"""),
+    "dashboard": parse_kind_table(f"""
+dashboard.(name|namePath|description|adapterName)        text
+entries.(resourceKind|resource){{*}}.adapterKindKey      kind ak .adapterKindKey>.resourceKindKey
+entries.(resourceKind|resource){{*}}.resourceKindKey     kind rk .resourceKindKey>.adapterKindKey
+entries.resource{{*}}.name                               text
+{_W}.(title|config.title|config.titleLocalized|config.description)  text
+widget:TextDisplay.config.editorData                     text
+{_METRICS}.(metricKey|metricName|label|labelLocalized|labelOrig|resourceKindName|resourceName|unit|metricUnit|defUnit|link)  text
+widget:HealthChart.config.(metricKey|metricName|metricFullName)  text
+widget:ParetoAnalysis.config.(metricName|metric.metricKey|metric.name|metricUnit.metricUnitName)  text
+widget:ParetoAnalysis.config.additionalColumns[].(boxLabel|metricKey|metricName)  text
+widget:Heatmap.config.value                              text
+widget:Heatmap.config.configs[].(name|nameLocalized|nameOrig)  text
+widget:Heatmap.config.configs[].(colorBy|sizeBy).(metricKey|value)  text
+widget:Heatmap.config.configs[].groupBy.(text|parentText|originalText)  text
+widget:Heatmap.config.configs[].groupBy.adapterKind      kind ak .adapterKind>.resourceKind
+widget:Heatmap.config.configs[].groupBy.resourceKind     kind rk .resourceKind>.adapterKind
+widget:Heatmap.config.configs[].groupBy.parentId         kind ak .parentId>.resourceKind
+widget:Heatmap.config.configs[].groupBy.id               kind heatmap_id
+widget:Heatmap.config.configs[].customFilter.filter[].(resourceKindId|resourceKind)  kind rkid
+widget:Heatmap.config.configs[].customFilter.filter[].filterTypes[].(metricName|metricKey|metricUnit)  text
+widget:Heatmap.config.configs[].customFilter.filter[].filterTypes[].metricValue.value  literal
+widget:View.config.resource.resourceKindId               kind rkid
+widget:View.config.(traversalSpecId|resource.traversalSpecId)  kind traversal_spec
+widget:View.config.resource.resourceName                 text
+widget:Scoreboard.config.metric.resourceMetrics[].resourceKindId  kind rkid
+widget:(Scoreboard|HealthChart).config.resource[].name   text
+widget:(ProblemAlertsList|IntSummaryAlertVolume).config.resource.resourceName  text
+widget:AlertList.config.alertDefinitions[].id            kind derived_id
+widget:View.states{{*}}.value                            kind view_table_state
+"""),
+}
+
+#: Kinds a flat path carries in a key segment: (regex, group of the adapter
+#: kind, group of the resource kind).
+_KIND_SEGMENTS = {
+    "view": [re.compile(r"SubjectType\{([^}|]*)\|([^}|]*)\|[^}]*\}"),
+             re.compile(r"SubjectsGroupBy\{([^}|]*)\|([^}]*)\}")],
+    "dashboard": [re.compile(r"^entries\.resourceKind\{RK:([^/}]*)/([^}]*)\}"),
+                  re.compile(r"^entries\.resource\{RES:([^/}]*)/([^/}]*)/[^}]*\}")],
+}
+_ENTRIES_TOKEN = re.compile(r"^entries\.(?:resourceKind|resource)\{((?:RK|RES):[^}]*)\}")
+
+
+def _sibling(path: str, arg: str) -> str:
+    a, b = arg.split(">", 1)
+    i = path.rfind(a)
+    return path[:i] + b + path[i + len(a):] if i >= 0 else path
+
+
+def _kind_problem(type_: str, path: str, value, leaves, rule: KindRule, km) -> Optional[str]:
+    """Why ``value`` at a kind-bearing ``path`` is wrong after the map was
+    applied, or ``None``."""
+    from . import kinds as _k
+    pairs: List[Tuple] = []
+    f = rule.form
+    if f == "ak":
+        pairs.append((value, leaves.get(_sibling(path, rule.arg))))
+    elif f == "rk":
+        pairs.append((leaves.get(_sibling(path, rule.arg)), value))
+    elif f == "rkid":
+        sp = _k._split_rkid(value)
+        if sp is None and km.occurs(str(value)):
+            return f"{value!r} names a mapped adapter kind but is not in the 0020<nn><adapter><kind> form"
+        if sp:
+            pairs.append(sp)
+    elif f == "heatmap_id":
+        sp = _k._split_rkid(value[len("004null"):]) if isinstance(value, str) and value.startswith("004null") else None
+        if sp is None and km.occurs(str(value)):
+            return f"{value!r} names a mapped adapter kind but is not in the 004null<rkid> form"
+        if sp:
+            pairs.append(sp)
+    elif f == "formula":
+        return _k.formula_kind_problem(str(value), km)
+    elif f == "derived_id":
+        return None  # kinds.derived_id_table decides (module docstring)
+    elif f == "report_filter":
+        return _report_filter_problem(value, km)
+    elif f == "view_table_state":
+        return _view_table_state_problem(value, km)
+    elif f == "traversal_spec":
+        hit = km.occurs(str(value))
+        if hit:
+            return (f"traversal spec {value!r} names the mapped adapter kind {', '.join(hit)}; a traversal spec is "
+                    f"declared by an adapter's describe.xml, and whether the target adapter declares an equivalent "
+                    f"cannot be known, so it is not re-pointed (re-point it by hand, or convert without the map)")
+        return None
+    for ak, rk in pairs:
+        if km.lookup(ak, rk, count=False) is not None:
+            return (f"still names {ak}:{rk}, which the kind map re-points (the importer missed this place; "
+                    f"an internal error)")
+    return None
+
+
+def _report_filter_problem(value, km) -> Optional[str]:
+    try:
+        tree = json.loads(value)
+    except (TypeError, ValueError):
+        return "a template SubjectType filter that is not JSON names a mapped adapter kind"
+    leaves: Dict[str, object] = {}
+    _flat.flatten_json(tree, "filter", leaves)
+    for p, v in leaves.items():
+        if not isinstance(v, str) or not km.occurs(v):
+            continue
+        g = re.sub(r"\[\d+\]", "[]", p)
+        if g.endswith(".metricKey"):
+            continue
+        if re.search(r"\.metricValue\.(value|values\[\])$", g):
+            if v.strip() in km.aks:
+                return f"filter value {v!r} at {p} equals a mapped adapter kind; it may name the kind as data"
+            continue
+        return f"filter key {p} names a mapped adapter kind in a place the importer does not classify"
+    return None
+
+
+def _view_table_state_problem(value, km) -> Optional[str]:
+    from urllib.parse import unquote
+    s = str(value)
+    for _ in range(12):
+        t = unquote(s)
+        if t == s:
+            break
+        s = t
+    for ak in km.occurs(s):
+        for m in re.finditer(re.escape(ak), s):
+            if not (s[:m.start()].endswith("-column-") and s[m.end():m.end() + 1] == "|"):
+                return (f"the View widget's table state names {ak} outside a column id's attribute key "
+                        f"({s[max(0, m.start() - 30):m.end() + 30]!r})")
+    return None
+
+
+def account_kinds(type_: str, leaves: _flat.Leaves, km) -> None:
+    """Classify every key of a re-pointed source's flat form that holds a
+    mapped adapter kind (:data:`KIND_TABLE`). Raises ``MappingError`` (a
+    TOOLSET GAP naming the key) at the first one in an unclassified place,
+    or at a kind-bearing place the map still re-points."""
+    rules = KIND_TABLE.get(type_, [])
+    tokens: List[str] = []
+    if type_ == "dashboard":
+        for p in leaves:
+            m = _ENTRIES_TOKEN.match(p)
+            if m and m.group(1) not in tokens:
+                tokens.append(m.group(1))
+        tokens.sort(key=len, reverse=True)
+    for path in sorted(leaves):
+        value = leaves[path]
+        # kinds in key segments: decode, check, mask
+        masked = path
+        for rx in _KIND_SEGMENTS.get(type_, ()):
+            for m in rx.finditer(path):
+                if km.lookup(m.group(1), m.group(2), count=False) is not None:
+                    raise _kind_gap(type_, path, f"still names {m.group(1)}:{m.group(2)}, which the kind map "
+                                                 f"re-points (the importer missed this place; an internal error)")
+            masked = rx.sub("{kind}", masked)
+        for t in tokens:
+            masked = masked.replace(t, "{kind}")
+        if km.occurs(masked):
+            raise _kind_gap(type_, path, f"the key names {', '.join(km.occurs(masked))} in a place the importer "
+                                         f"does not classify as kind-bearing or text")
+        if not isinstance(value, str):
+            continue
+        sval = value
+        for t in tokens:
+            sval = sval.replace(t, "{kind}")
+        g = _flat.generic(path)
+        rule = next((r for r in rules if r.rx.fullmatch(g)), None)
+        if rule is not None and rule.role == "kind":
+            why = _kind_problem(type_, path, value, leaves, rule, km)
+            if why:
+                raise _kind_gap(type_, path, why)
+            continue
+        if not km.occurs(sval):
+            continue
+        if rule is None:
+            raise _kind_gap(type_, path, f"the value names {', '.join(km.occurs(sval))} in a place the importer "
+                                         f"does not classify as kind-bearing or text "
+                                         f"({json.dumps(value, default=str)[:80]})")
+        if rule.role == "literal" and sval.strip() in km.aks:
+            raise _kind_gap(type_, path, f"the value {sval!r} equals a mapped adapter kind; a compared value may "
+                                         f"name the kind as data, which cannot be re-pointed with certainty")
+
+
+def _kind_gap(type_: str, path: str, why: str) -> MappingError:
+    return MappingError(
+        f"kind map: source key {path}: {why}",
+        gap=toolset_gap(
+            f"{type_} YAML: --map-kind at {_flat.generic(path)}",
+            f"a source {type_} with a mapped adapter kind at {path}",
+            f"re-point the {type_} to the mapped kind without guessing",
+            "classify the key in vcfcf_core/importer/accounting.py KIND_TABLE (and re-point it in "
+            "vcfcf_core/importer/kinds.py when it holds a kind), with evidence",
+        ),
+    )

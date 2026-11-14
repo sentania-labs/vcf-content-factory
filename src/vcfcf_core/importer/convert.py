@@ -17,6 +17,10 @@ Order of decisions, each reported:
    it (matched against the path relative to the input root).
 2. **Drops.** Objects whose id is in ``drop`` are not emitted; references
    to them stay raw ids (the caller references the product object in place).
+   Then **kinds** (``kind_map``, ``kinds``): each source is re-pointed at
+   every place a kind sits; a place it cannot re-point with certainty fails
+   the object; after mapping, ``accounting.account_kinds`` classifies every
+   place still holding a mapped adapter kind.
 3. **Mapping** (per-type modules), then **accounting** of every source key
    (``accounting``). A ``MappingError`` fails the object; any other
    exception fails it as an internal error (object, file and exception type
@@ -25,7 +29,8 @@ Order of decisions, each reported:
    (keyed by type and old name or id), then ``naming``
    (``factory-prefixed`` adds ``[VCF CF] ``). Every change is a recorded
    rename. Two objects of one type with the same final name fail, naming
-   both sources.
+   both sources. Then ``describe`` replaces descriptions (matched as
+   ``rename`` matches, on source ids and names).
 5. **Ids.** ``keep`` carries source ids; ``mint`` gives every object a
    UUID version 5 from ``mint_namespace`` and its type and source id (a
    rerun gives the same ids); ``map`` applies ``id_map`` and keeps the
@@ -70,14 +75,17 @@ from ..dashboards.widget_versions import (
 from ..naming import FACTORY_PREFIX, has_factory_prefix, has_legacy_prefix, strip_factory_prefix
 from ..reports.loader import SECTION_OMIT_MIN_OPS_VERSION
 from ..symptoms.loader import SYMPTOM_OMIT_MIN_OPS_VERSION
+from . import accounting as _acct
 from . import alerts as _alerts
 from . import dashboards as _dash
+from . import kinds as _kinds
 from . import reports as _reports
 from . import supermetrics as _sms
 from . import views as _views
-from .compare import compare_copies
+from .compare import compare_copies, source_leaves
 from .flat import widget_path
 from .inputs import CONTENT_TYPES, InputScan, SourceObject
+from .kinds import KindMap
 from .model import Loss, MappedObject, MappingError, Mark
 from .refs import FormulaRef, NavRef, Ref, UnresolvedReference
 
@@ -110,6 +118,18 @@ def norm_id(type_: str, raw: str) -> str:
     return s.lower()
 
 
+def norm_key(raw: str) -> str:
+    """Comparison form of a ``--drop`` / ``--id-map`` key, which names no
+    type: :func:`norm_id` with either XML prefix stripped, so a symptom or
+    alert is matched by its wire id (``SymptomDefinition-<id>``, as
+    ``id_map.tsv`` and the stock-id guard print it) or by the bare id."""
+    s = str(raw or "").strip()
+    for p in _ID_PREFIX.values():
+        if s.startswith(p):
+            return s[len(p):].lower()
+    return s.lower()
+
+
 def mint_namespace_uuid(text: str) -> uuid.UUID:
     """The UUID namespace a ``--mint-namespace`` text names."""
     return uuid.uuid5(MINT_ROOT, text)
@@ -133,6 +153,18 @@ class ConvertOptions:
     layout: str = "third-party"
     #: the ``--ids mint`` namespace text (required with mint)
     mint_namespace: Optional[str] = None
+    #: ``--map-kind``: re-point kinds (``kinds.KindMap``), or None
+    kind_map: Optional[KindMap] = None
+    #: ``--describe``: (type, name or id) -> new description
+    describe: Dict[Tuple[str, str], str] = field(default_factory=dict)
+
+
+#: Types whose factory YAML has a description that ships on the content
+#: wire, and the flat source path of that description (a symptom's YAML
+#: description is REST-only: the content-import XML has none).
+DESCRIBED_TYPES = {"view": "ViewDef/Description#text", "dashboard": "dashboard.description",
+                   "report": "ReportDef/Description#text", "supermetric": "supermetric.description",
+                   "alert": "AlertDefinition@description", "recommendation": "Recommendation/Description#text"}
 
 
 @dataclass
@@ -180,6 +212,13 @@ class Emitted:
     undeliverable: List[str] = field(default_factory=list)
     #: the source id is the one the renderer derives from the name (no id: in the YAML)
     derived: bool = False
+    #: ``--map-kind``: kind references re-pointed in this object, and how
+    kind_refs: int = 0
+    kind_changes: List[str] = field(default_factory=list)
+    #: ``--describe``: (source description, new description) when replaced
+    described: Optional[Tuple[str, str]] = None
+    #: free text carried from the source verbatim: (field, length)
+    verbatim: List[Tuple[str, int]] = field(default_factory=list)
 
 
 @dataclass
@@ -200,6 +239,14 @@ class Plan:
     usage_error: Optional[str] = None
     #: the namespace text minted ids derive from (``--ids mint``)
     mint_namespace: Optional[str] = None
+    #: ``--map-kind``: the map (rows and their use), or None
+    kind_map: Optional[KindMap] = None
+    #: ``--describe`` was given
+    describing: bool = False
+    #: full wire id -> full wire id for every symptom and alert whose id is
+    #: not a UUID and changed (a derived id under ``--ids mint``, a map or
+    #: ``--map-kind``): a reference that is the whole id follows it
+    exact_id_rewrites: Dict[str, str] = field(default_factory=dict)
 
     def counts(self) -> Dict[str, Dict[str, int]]:
         out: Dict[str, Dict[str, int]] = {}
@@ -272,6 +319,61 @@ def parse_rename_map(text: str, what: str) -> Dict[Tuple[str, str], str]:
     return out
 
 
+_DESC_ESCAPES = {"n": "\n", "t": "\t", "\\": "\\"}
+
+
+def unescape_description(cell: str, where: str) -> str:
+    """A ``--describe`` cell: ``\\n`` a line break, ``\\t`` a tab, ``\\\\`` a
+    backslash; any other backslash is an error (so a literal backslash is
+    always written doubled)."""
+    out, i = [], 0
+    while i < len(cell):
+        c = cell[i]
+        if c == "\\":
+            nxt = cell[i + 1] if i + 1 < len(cell) else ""
+            if nxt not in _DESC_ESCAPES:
+                raise ValueError(f"{where}: unknown escape \\{nxt} (use \\n, \\t or \\\\)")
+            out.append(_DESC_ESCAPES[nxt])
+            i += 2
+            continue
+        out.append(c)
+        i += 1
+    return "".join(out)
+
+
+def parse_describe_map(text: str, what: str) -> Dict[Tuple[str, str], str]:
+    """``type<TAB>name or id<TAB>new description`` rows (header row whose
+    first cell is ``type``, ``#`` and blank lines skipped). The type is one
+    whose description ships on the content wire (:data:`DESCRIBED_TYPES`).
+    The description is unescaped (:func:`unescape_description`) and stripped
+    (the loaders strip it); an empty one is an error. Raises ValueError on a
+    malformed row, a type without a shipped description or a repeated key."""
+    out: Dict[Tuple[str, str], str] = {}
+    for n, line in enumerate(text.splitlines(), 1):
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        cells = line.rstrip("\r\n").split("\t")
+        if n == 1 and cells[0].strip().lower() == "type":
+            continue
+        if len(cells) != 3 or not cells[0].strip() or not cells[1] or not cells[2].strip():
+            raise ValueError(f"{what}: line {n}: expected type<TAB>name or id<TAB>new description (a tab or a "
+                             f"line break inside the description is written \\t or \\n), got {line[:120]!r}")
+        t = cells[0].strip()
+        if t == "symptom":
+            raise ValueError(f"{what}: line {n}: a symptom has no description on the content-import wire (the "
+                             f"symptom YAML's description is REST-only), so there is nothing to replace")
+        if t not in DESCRIBED_TYPES:
+            raise ValueError(f"{what}: line {n}: type {t!r} is not one of {', '.join(DESCRIBED_TYPES)}")
+        k = (t, cells[1])
+        if k in out:
+            raise ValueError(f"{what}: line {n}: {t} {cells[1]!r} is listed twice")
+        desc = unescape_description(cells[2], f"{what}: line {n}").strip()
+        if not desc:
+            raise ValueError(f"{what}: line {n}: the new description is empty")
+        out[k] = desc
+    return out
+
+
 def parse_id_list(text: str, what: str) -> Dict[str, str]:
     """One id per row (first TSV column; extra columns are a label). Header
     and comment rules as :func:`parse_tsv_map`."""
@@ -321,6 +423,47 @@ def _walk_strings(node, path: str = ""):
             yield from _walk_strings(v, f"{path}[{i}]")
     elif isinstance(node, str):
         yield path, None, node
+
+
+def _kinds_gap(type_: str, problem: str) -> Dict[str, str]:
+    from .model import toolset_gap
+    return toolset_gap(
+        f"{type_} YAML: --map-kind cannot re-point a kind with certainty",
+        f"a source {type_}: {problem[:160]}",
+        f"re-point the {type_} to the mapped kind without guessing",
+        "map the kind with a row that makes the reference unambiguous, convert the object it references with "
+        "this set, or re-point the object by hand after converting it without the map",
+    )
+
+
+def verbatim_text(e: "Emitted") -> List[Tuple[str, int]]:
+    """The free-text fields of ``e`` carried from the source verbatim (not
+    replaced by ``--rename``, ``--naming`` or ``--describe``), with their
+    lengths in characters: names, descriptions, widget titles and
+    descriptions, TextDisplay HTML, recommendation text. Functional labels
+    (view column display names, metric labels, tab names) are not listed.
+    Empty fields are left out."""
+    y = e.yaml_tree
+    out: List[Tuple[str, int]] = []
+
+    def add(label: str, v) -> None:
+        if isinstance(v, str) and v:
+            out.append((label, len(v)))
+
+    renamed = any(r in ("--rename", "--naming factory-prefixed") or r.startswith("--map-kind")
+                  for r in e.rename_reasons)
+    if e.type != "recommendation" and not renamed:
+        add("name", e.name)
+    if e.type in DESCRIBED_TYPES and e.described is None:
+        add("description", y.get("description"))
+    if e.type == "dashboard":
+        for w in y.get("widgets") or []:
+            wid = w.get("id")
+            add(f"widget {wid} title", w.get("title"))
+            add(f"widget {wid} description", w.get("description"))
+            if w.get("type") == "TextDisplay":
+                add(f"widget {wid} html", w.get("html"))
+    return out
 
 
 # ------------------------------------------------------------------- plan
@@ -400,7 +543,7 @@ class _Planner:
 
     # 2. drops ---------------------------------------------------------
     def apply_drops(self, objs: List[SourceObject]) -> List[SourceObject]:
-        drop = {norm_id("", k): v for k, v in self.opts.drop.items()}
+        drop = {norm_key(k): v for k, v in self.opts.drop.items()}
         used = set()
         kept = []
         for o in objs:
@@ -415,6 +558,51 @@ class _Planner:
                 self.plan.warnings.append(f"drop list: {k} names no object in the input")
         self.dropped_keys = {(t, norm_id(t, i)) for t, i, _, _ in self.plan.dropped}
         return kept
+
+    # 2b. kind map ----------------------------------------------------
+    def apply_kind_map(self, objs: List[SourceObject]) -> List[SourceObject]:
+        """``--map-kind``: re-point each object's source (``kinds``), so the
+        mapper reads, and verification compares against, the source with the
+        map applied. The object's id and name stay the source's (``--drop``,
+        ``--rename``, ``--describe`` and ``--id-map`` match them); a derived
+        id the map re-points is recorded in ``kind_ids``."""
+        km = self.opts.kind_map
+        self.kind_ids: Dict[Tuple[str, str], str] = {}     # (type, norm source id) -> re-pointed id
+        self.kind_unmap: Dict[Tuple[str, str], str] = {}   # (type, norm re-pointed id) -> source id
+        self.kind_info: Dict[Tuple[str, str], _kinds.Remap] = {}
+        if km is None:
+            return objs
+        mapping = {norm_key(k) for k in self.opts.id_map}
+        keep = {(o.type, o.id) for o in objs
+                if self.opts.ids != "mint" and norm_id(o.type, o.id) not in mapping}
+        ids, id_problems = _kinds.make_ids(objs, km, keep,
+                                           {(t, i) for t, i, _, _ in self.plan.dropped})
+        kept = []
+        for o in objs:
+            r = _kinds.remap_object(o, km, ids)
+            probs = list(r.problems)
+            if (o.type, o.id) in id_problems:
+                probs.insert(0, id_problems[(o.type, o.id)])
+            if probs:
+                self.fail(o, "kind map: " + "; ".join(probs), gap=_kinds_gap(o.type, probs[0]))
+                continue
+            key = (o.type, norm_id(o.type, o.id))
+            self.kind_info[key] = r
+            if r.count:
+                o.payload = r.payload
+                o.context = r.context
+            if r.new_id:
+                self.kind_ids[key] = r.new_id
+                self.kind_unmap[(o.type, norm_id(o.type, r.new_id))] = o.id
+            kept.append(o)
+        return kept
+
+    def kind_source_id(self, e_or_o) -> str:
+        """The source id with the kind map applied (the source id when the
+        map does not re-point it)."""
+        t = e_or_o.type
+        sid = e_or_o.source_id if isinstance(e_or_o, Emitted) else e_or_o.id
+        return self.kind_ids.get((t, norm_id(t, sid)), sid)
 
     # 3. mapping -------------------------------------------------------
     def map_all(self, objs: List[SourceObject]) -> List[Tuple[SourceObject, MappedObject]]:
@@ -449,6 +637,10 @@ class _Planner:
                     m = _sms.map_supermetric(o.id, o.payload, o.location)
                 else:  # pragma: no cover
                     raise MappingError(f"unknown type {o.type}")
+                if self.opts.kind_map is not None:
+                    # every place of the re-pointed source that still names a
+                    # mapped adapter kind is classified, or the object stops
+                    _acct.account_kinds(o.type, source_leaves(o), self.opts.kind_map)
             except MappingError as exc:
                 self.fail(o, str(exc), exc.gap)
                 continue
@@ -482,11 +674,62 @@ class _Planner:
                 reasons.append("--naming factory-prefixed")
         return name, reasons
 
+    # 4b. descriptions ----------------------------------------------------
+    def apply_describe(self, entries: List["Emitted"]) -> None:
+        """``--describe``: a row names one object by type and source id or
+        source name (as ``--rename`` resolves it, before renaming); its
+        description is replaced in the YAML. A row naming several objects,
+        or an object two rows name, is a usage error; a row naming none is a
+        warning (as for ``--rename``). A recorded loss on the replaced
+        description (its surrounding whitespace) no longer applies."""
+        rows = self.opts.describe
+        if not rows:
+            return
+        self.plan.describing = True
+        hits: Dict[Tuple[str, str], List[Emitted]] = defaultdict(list)
+        for e in entries:
+            o = e.source
+            keys = []
+            for key in ((o.type, o.id), (o.type, norm_id(o.type, o.id)), (o.type, e.source_name),
+                        (o.type, e.source_name.strip())):
+                if key in rows and key not in keys:
+                    keys.append(key)
+            if len(keys) > 1:
+                self.usage_errors.append(
+                    f"--describe: {o.type} {o.id} ({e.source_name!r}) is named by {len(keys)} rows "
+                    f"({'; '.join(repr(k[1]) for k in keys)}); keep one")
+                continue
+            if keys:
+                hits[keys[0]].append(e)
+        for key, new in rows.items():
+            es = hits.get(key, [])
+            if not es:
+                self.plan.warnings.append(f"describe file: {key[0]} {key[1]!r} names no object in the input")
+                continue
+            if len(es) > 1:
+                self.usage_errors.append(
+                    f"--describe: {key[0]} {key[1]!r} names {len(es)} objects "
+                    f"({'; '.join(f'{x.source_id} ({x.source_name!r})' for x in es)}); key the row by id")
+                continue
+            e = es[0]
+            tree = e.mapped_tree
+            old = str(tree.get("description", "") or "")
+            tree["description"] = new
+            e.described = (old, new)
+            path = DESCRIBED_TYPES[e.type]
+            for x in list(e.losses):
+                x.marks = [m for m in x.marks if m.path != path]
+                if not x.marks:
+                    e.losses.remove(x)
+
     # 5. ids --------------------------------------------------------------
     def final_id(self, o: SourceObject) -> str:
         nid = norm_id(o.type, o.id)
-        raw = o.id[len(_ID_PREFIX[o.type]):] if o.type in _ID_PREFIX and o.id.startswith(_ID_PREFIX[o.type]) else o.id
-        mapping = {norm_id("", k): v for k, v in self.opts.id_map.items()}
+        # --ids keep carries the source id, with a derived id's kind re-pointed
+        # by --map-kind (the renderer derives it from the new kind)
+        src = self.kind_source_id(o)
+        raw = src[len(_ID_PREFIX[o.type]):] if o.type in _ID_PREFIX and src.startswith(_ID_PREFIX[o.type]) else src
+        mapping = {norm_key(k): v for k, v in self.opts.id_map.items()}
         if self.opts.ids == "mint":
             new = minted_id(self.namespace, o.type, o.id)
             return f"Recommendation-{new}" if o.type == "recommendation" else new
@@ -502,7 +745,8 @@ class _Planner:
         alert renderer derives (``<Type>-<adapter>-<slug of name>``)."""
         if e.type not in ("symptom", "alert", "recommendation"):
             return False
-        raw = e.source_id
+        src = self.kind_source_id(e)
+        raw = src
         if e.type in _ID_PREFIX and raw.startswith(_ID_PREFIX[e.type]):
             raw = raw[len(_ID_PREFIX[e.type]):]
         if e.id != raw:
@@ -511,7 +755,7 @@ class _Planner:
         ak = str(e.yaml_tree.get("adapter_kind") or "")
         derived = {"symptom": lambda: _symptom_id(ak, e.name), "alert": lambda: _alert_id(ak, e.name),
                    "recommendation": lambda: _rec_key(ak, e.name)}[e.type]()
-        return derived == e.source_id
+        return derived == src
 
     def id_problem(self, t: str, fid: str) -> Optional[str]:
         if t in ("view", "dashboard", "report", "supermetric") and not _UUID_LOWER.match(fid):
@@ -532,7 +776,7 @@ class _Planner:
             p.failures.append(Failure(u.type, u.id, u.name, [u.location],
                                       f"not converted: the importer does not convert {u.type}s (unsupported type)",
                                       kind="unsupported"))
-        objs = self.apply_drops(self.dedupe())
+        objs = self.apply_kind_map(self.apply_drops(self.dedupe()))
         mapped = self.map_all(objs)
         self.rename_used: Set[Tuple[str, str]] = set()
         self.map_used: Set[str] = set()
@@ -543,14 +787,28 @@ class _Planner:
             e.mapped_tree = m.yaml
             e.source_name = m.source_name if m.source_name is not None else str(m.yaml.get("name", ""))
             e.name, e.rename_reasons = self.final_name(o, e.source_name)
+            if o.type == "recommendation" and e.source_name != o.name:
+                # a recommendation's name is its key, re-pointed by --map-kind
+                e.source_name = o.name
+                e.rename_reasons.insert(0, "--map-kind (the key derives from the adapter kind)")
             e.id = self.final_id(o)
+            info = self.kind_info.get((o.type, norm_id(o.type, o.id)))
+            if info is not None and info.count:
+                e.kind_refs = info.count
+                e.kind_changes = _kinds.change_lines(info)
             entries.append(e)
         for k in self.opts.rename:
             if k not in self.rename_used:
                 p.warnings.append(f"rename file: {k[0]} {k[1]!r} names no object in the input")
         for k in self.opts.id_map:
-            if norm_id("", k) not in self.map_used:
+            if norm_key(k) not in self.map_used:
                 p.warnings.append(f"id map: {k} names no object in the input")
+        if self.opts.kind_map is not None:
+            p.kind_map = self.opts.kind_map
+            for r in self.opts.kind_map.unused():
+                p.warnings.append(f"kind map: {r.where}: {r.label()} matches no kind-bearing place of any object "
+                                  f"in the input (nothing was re-pointed by it)")
+        self.apply_describe(entries)
         # Objects that already failed (differing duplicate copies, mapping
         # errors) are failed targets too: a reference to one must not fall
         # through to the raw-id form as if it were product content.
@@ -641,6 +899,15 @@ class _Planner:
                 elif e.type == "recommendation" and e.id != e.source_id:
                     p.id_rewrites[e.source_id] = e.id
                 p.names[(e.type, norm_id(e.type, e.source_id))] = e.name
+            p.exact_id_rewrites = {}
+            for e in ok:
+                if e.type in _ID_PREFIX and not _UUID_ANY.match(norm_id(e.type, e.source_id)):
+                    new_full = _ID_PREFIX[e.type] + e.id
+                    if new_full != e.source_id:
+                        p.exact_id_rewrites[e.source_id] = new_full
+                        k = self.kind_source_id(e)
+                        if k != e.source_id and k != new_full:
+                            p.exact_id_rewrites[k] = new_full
             new_failures = False
             final_ids = {e.id.lower() for e in ok}
             for e in ok:
@@ -676,6 +943,7 @@ class _Planner:
                 break
         for e in ok:
             self.gate_versions(e)
+            e.verbatim = verbatim_text(e)
         self.layout_paths(ok)
         for e in ok:
             rel = ", ".join(e.source.locations)
@@ -691,6 +959,9 @@ class _Planner:
         e.notes = list(e.base_notes)
 
         def target(t: str, rid: str):
+            # a reference the kind map re-pointed names the object by its
+            # re-pointed derived id; the index is keyed by source ids
+            rid = self.kind_unmap.get((t, norm_id(t, rid)), rid)
             k = (t, norm_id(t, rid))
             if k in failed:
                 return "failed", None
@@ -803,9 +1074,14 @@ class _Planner:
         conditions, view filters, widget metric entries, Pareto columns,
         Heatmap metrics, HTML)."""
         rw = {k: v for k, v in self.plan.id_rewrites.items() if _UUID_ANY.match(k)}
+        exact = self.plan.exact_id_rewrites
         missing_sm: Set[str] = set()
 
         def sub_str(s: str) -> str:
+            if s in exact:
+                # a whole-string reference to a symptom or alert whose
+                # non-UUID id changed (an AlertList alert definition id)
+                return exact[s]
             for m in _SM_TOKEN.finditer(s):
                 nid = m.group(1).lower()
                 if ("supermetric", nid) not in self.plan.names and ("supermetric", nid) not in self.dropped_keys:

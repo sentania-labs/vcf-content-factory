@@ -15,8 +15,12 @@ stock-id guard and verifies through the real loaders). Nothing here reads
   ``supermetrics``): one source object -> one YAML tree; then
   ``accounting.account`` classifies every source key (converted, renumbered,
   renderer constant, documented loss) or stops the object (TOOLSET GAP).
-- ``convert.plan_conversion``: duplicates, drops, names, ids, references and
-  target-version gates -> a ``Plan`` of YAML documents.
+- ``kinds``: ``--map-kind``, re-pointing a source to another adapter or
+  resource kind at every place a kind sits (``accounting.account_kinds``
+  classifies what is left).
+- ``convert.plan_conversion``: duplicates, drops, kinds, names,
+  descriptions, ids, references and target-version gates -> a ``Plan`` of
+  YAML documents.
 - ``compare``: exact comparison of a source object with its render.
 
 How-to: ``knowledge/context/authoring/importer_offline_conversion.md``.

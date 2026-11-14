@@ -54,12 +54,14 @@ from vcfcf_core.importer.convert import (
     dump_yaml,
     mint_namespace_uuid,
     norm_id,
+    parse_describe_map,
     parse_id_list,
     parse_rename_map,
     parse_tsv_map,
     plan_conversion,
 )
 from vcfcf_core.importer.inputs import CONTENT_TYPES, scan_inputs
+from vcfcf_core.importer.kinds import KindMap, parse_kind_map
 from vcfcf_core.importer.model import Mark
 
 EXIT_OK, EXIT_PARTIAL, EXIT_USAGE, EXIT_STOCK, EXIT_NOTHING, EXIT_INTERNAL = 0, 1, 2, 3, 4, 5
@@ -123,6 +125,14 @@ def add_parser(sub) -> None:
                         "(view, dashboard, ...) keeps a rename from crossing types")
     p.add_argument("--drop", metavar="TSV", action="append",
                    help="ids (first column) not to emit; references to them stay raw ids (repeatable)")
+    p.add_argument("--map-kind", metavar="TSV", action="append",
+                   help="old adapter kind<TAB>old resource kind or *<TAB>new adapter kind<TAB>new resource kind or * "
+                        "rows: re-point content to another kind at every place a kind sits (never a text "
+                        "replace); a resource kind row wins over a * row; a place the map cannot re-point with "
+                        "certainty stops that object (repeatable)")
+    p.add_argument("--describe", metavar="TSV", action="append",
+                   help="type<TAB>name or id<TAB>new description rows (\\n, \\t, \\\\ escapes): replace an "
+                        "object's description, matched as --rename matches, before renaming (repeatable)")
     p.add_argument("--target-min", choices=("8.18.7", "9.0.2", "9.1.1"),
                    help="oldest VCF Operations the output must import on: omit: entries proven only on "
                         "newer builds are not emitted (each deviation listed); a dashboard with a widget "
@@ -232,7 +242,18 @@ def _bundled_content_text(plan: Plan, args) -> str:
     head = ["# Merge into the pak's adapter.yaml (paths are relative to it)."]
     if args.naming == "unprefixed":
         head.append("# The names are unprefixed: also set  content_naming: unprefixed")
-    if kinds:
+    own = plan.kind_map.new_adapter_kinds() if plan.kind_map is not None else set()
+    if len(own) == 1:
+        # --map-kind re-pointed content to one adapter kind: the pak's own,
+        # so content on it is not foreign.
+        (ak,) = own
+        head.append(f"# --map-kind re-pointed content to {ak}, taken as the pak's own adapter kind (content on it "
+                    f"is not foreign)")
+        kinds.discard(ak)
+        if kinds:
+            head.append(f"# Symptoms and alerts here also target {', '.join(sorted(kinds))}: also set  "
+                        f"content_foreign_adapter_kinds: [{', '.join(sorted(kinds))}]")
+    elif kinds:
         head.append(f"# Symptoms and alerts here target {', '.join(sorted(kinds))}: unless that is the pak's own "
                     f"adapter kind, also set  content_foreign_adapter_kinds: [{', '.join(sorted(kinds))}]")
     return "\n".join(head) + "\n" + dump_yaml({"bundled_content": dict(bc)})
@@ -520,10 +541,13 @@ def _expected_xml(src, e, plan: Plan):
     def fix(s: str) -> str:
         return _UUID.sub(lambda m: rw.get(m.group(0).lower(), m.group(0)), s)
 
+    exact = plan.exact_id_rewrites
     for x in el.iter():
         for k, v in list(x.attrib.items()):
             if x.tag == "Recommendation" and k in ("key", "ref") and v in rec_rw:
                 x.set(k, rec_rw[v])
+            elif x.tag in ("SymptomSet", "Symptom") and k == "ref" and v in exact:
+                x.set(k, exact[v])
             else:
                 x.set(k, fix(v))
         if x.text and not len(x):
@@ -538,6 +562,16 @@ def _expected_xml(src, e, plan: Plan):
         el.set("id", _rendered_id(e.type, e.id))
     elif e.type in ("view", "report"):
         el.set("id", e.id)
+    if e.described is not None:
+        # --describe: the intended new description (counted and reported
+        # as a replaced description, never as identical or a loss)
+        if e.type == "alert":
+            el.set("description", e.described[1])
+        else:
+            d = el.find("Description")
+            if d is None:
+                d = ET.SubElement(el, "Description")
+            d.text = e.described[1]
     return el
 
 
@@ -548,6 +582,15 @@ def _expected_dashboard(e, plan: Plan) -> dict:
         db["name"] = f"{npath}/{e.name}"
     else:
         db["name"] = e.name
+    if e.described is not None:
+        db["description"] = e.described[1]
+    exact = plan.exact_id_rewrites
+    if exact:
+        for w in db.get("widgets") or []:
+            c = w.get("config") if isinstance(w, dict) else None
+            for a in (c.get("alertDefinitions") or []) if isinstance(c, dict) else []:
+                if isinstance(a, dict) and a.get("id") in exact:
+                    a["id"] = exact[a["id"]]
     return db
 
 
@@ -600,7 +643,7 @@ def _empty_verify() -> dict:
             "per_type": defaultdict(Counter), "classes": Counter(), "class_objects": defaultdict(set),
             "set_aside": Counter(), "deviations": Counter(), "loss_classes": Counter(),
             "loss_class_objects": defaultdict(set), "objects_detail": [], "load_errors": [], "pak_problems": [],
-            "guard": []}
+            "guard": [], "intended_only": 0, "kind_objects": 0, "kind_refs": 0, "described": 0}
 
 
 def _verify(plan: Plan, out: Path, layout: str):
@@ -715,6 +758,8 @@ def _verify_tree(plan: Plan, out: Path, layout: str):
             else:
                 exp = dict(e.source.payload)
                 exp["name"] = e.name
+                if e.described is not None:
+                    exp["description"] = e.described[1]
                 exp["formula"] = re.sub(r"sm_(" + _UUID.pattern + ")",
                                         lambda m: "sm_" + rewrites.get(m.group(1).lower(), m.group(1)),
                                         str(exp.get("formula", "")))
@@ -768,9 +813,24 @@ def _verify_tree(plan: Plan, out: Path, layout: str):
         elif at_devs:
             status = "identical apart from forced target keys"
             res["deviation_only"] += 1
+        elif e.kind_refs or e.described is not None:
+            # the only differences from the source are the intended ones:
+            # re-pointed kinds (--map-kind), a replaced description
+            # (--describe); never "identical"
+            status = "identical apart from " + " and ".join(
+                x for x, on in (("re-pointed kinds", e.kind_refs), ("a replaced description", e.described))
+                if on)
+            res["intended_only"] += 1
         else:
             status = "identical"
             res["identical"] += 1
+        if e.kind_refs:
+            res["kind_objects"] += 1
+            res["kind_refs"] += e.kind_refs
+            detail["kind_references_repointed"] = e.kind_refs
+        if e.described is not None:
+            res["described"] += 1
+            detail["description_replaced"] = True
         pt[status] += 1
         detail["status"] = status
         res["objects_detail"].append(detail)
@@ -848,13 +908,25 @@ def run(args) -> int:
         for f in args.drop or []:
             drop.update(parse_id_list(Path(f).read_text(encoding="utf-8"), f))
         rename = parse_rename_map(Path(args.rename).read_text(encoding="utf-8"), args.rename) if args.rename else {}
+        kind_rows = []
+        for f in getattr(args, "map_kind", None) or []:
+            kind_rows += parse_kind_map(Path(f).read_text(encoding="utf-8"), f)
+        kind_map = KindMap(kind_rows) if getattr(args, "map_kind", None) else None
+        if kind_map is not None and not kind_map.rows:
+            raise ValueError(f"--map-kind: {', '.join(args.map_kind)} hold no rows")
+        describe: Dict[Tuple[str, str], str] = {}
+        for f in getattr(args, "describe", None) or []:
+            for k, v in parse_describe_map(Path(f).read_text(encoding="utf-8"), f).items():
+                if k in describe:
+                    raise ValueError(f"{f}: {k[0]} {k[1]!r} is already described by an earlier --describe file")
+                describe[k] = v
     except (OSError, ValueError) as exc:
         _err(f"ERROR: {exc}")
         return EXIT_USAGE
     opts = ConvertOptions(ids="map" if args.id_map else args.ids, id_map=id_map, drop=drop,
                           naming=args.naming, rename=rename, target_min=args.target_min,
                           prefer_sources=list(args.prefer_source or []), layout=args.layout,
-                          mint_namespace=mint_ns)
+                          mint_namespace=mint_ns, kind_map=kind_map, describe=describe)
 
     scan = scan_inputs(inputs)
     missed, guard_unreadable = _completeness(scan, inputs)
@@ -912,6 +984,13 @@ def run(args) -> int:
         if e.rename_reasons:
             _say(f"RENAMED {e.type} {e.source_name!r} -> {e.name!r} ({'; '.join(e.rename_reasons)})")
     for e in plan.emitted:
+        if e.kind_refs:
+            _say(f"KIND {e.type} {e.name!r}: {e.kind_refs} kind reference(s) re-pointed ({'; '.join(e.kind_changes)})")
+    for e in plan.emitted:
+        if e.described:
+            _say(f"DESCRIBED {e.type} {e.name!r}: description replaced ({len(e.described[0])} characters in the "
+                 f"source, {len(e.described[1])} written)")
+    for e in plan.emitted:
         for loss in e.losses:
             _say(f"LOSS {e.type} {e.name!r}: {loss.text} [at {', '.join(m.path for m in loss.marks)}]")
     for e in plan.emitted:
@@ -930,6 +1009,15 @@ def run(args) -> int:
         _say(f"note ({', '.join(files)}): {n}")
     for w in plan.warnings:
         _say(f"WARNING: {w}")
+    if plan.kind_map is not None:
+        km = plan.kind_map
+        moved = [e for e in plan.emitted if e.kind_refs]
+        _say(f"kind map: {len(km.rows)} row(s), {len(km.rows) - len(km.unused())} used; {len(moved)} converted "
+             f"object(s) carry re-pointed kinds, {sum(e.kind_refs for e in moved)} kind reference(s) re-pointed")
+    vt = [e for e in plan.emitted if e.verbatim]
+    _say(f"verbatim source text: {len(vt)} object(s) carry {sum(len(e.verbatim) for e in vt)} free-text field(s) "
+         f"({sum(n for e in vt for _, n in e.verbatim)} characters) exactly as the source wrote them (names, "
+         f"descriptions, widget titles and text); listed per object in report.json (verbatim_text)")
     if args.naming == "factory-prefixed":
         from vcfcf_core.dashboards.loader import DASHBOARD_NAME_MAX_LEN
         for e in plan.emitted:
@@ -1039,13 +1127,21 @@ def _summary(plan: Plan, unreadable, missed) -> None:
 
 def _print_verify(v, args) -> None:
     _say("")
+    intended = bool(getattr(args, "map_kind", None) or getattr(args, "describe", None))
     _say(f"verify ({args.layout} layout, real loaders): compared {v['objects']} object(s), {v['fields']} field(s): "
          f"{v['identical']} identical; {v['deviation_only']} identical apart from keys forced by --target-min; "
-         f"{v['only_losses']} differ only at recorded losses; {v['differ']} differ")
+         + (f"{v['intended_only']} identical apart from intended changes (re-pointed kinds, replaced "
+            f"descriptions); " if intended else "")
+         + f"{v['only_losses']} differ only at recorded losses; {v['differ']} differ")
+    if intended:
+        _say(f"  intended changes: {v['kind_refs']} kind reference(s) re-pointed in {v['kind_objects']} object(s); "
+             f"{v['described']} description(s) replaced (each object's status says which it carries)")
     for t, cnt in sorted(v["per_type"].items()):
+        n_int = sum(n for k, n in cnt.items() if k.startswith("identical apart from ") and "forced" not in k)
         _say(f"  {t:16s} {cnt['identical']} of {cnt['compared']} identical"
              + (f"; {cnt['identical apart from forced target keys']} apart from forced target keys"
                 if cnt["identical apart from forced target keys"] else "")
+             + (f"; {n_int} apart from intended changes" if n_int else "")
              + (f"; {cnt['differs only at recorded losses']} only at recorded losses"
                 if cnt["differs only at recorded losses"] else "")
              + (f"; {cnt['differs']} differ" if cnt["differs"] else ""))
@@ -1104,10 +1200,23 @@ def _report(plan: Plan, args, scan, unreadable, missed, v, roots, rc) -> dict:
                      "losses": [{"class": x.cls, "text": x.text, "at": [m.path for m in x.marks]} for x in e.losses],
                      "notes": e.notes, "deviations": [{"text": d.text, "at": [m.path for m in d.marks]}
                                                       for d in e.deviations],
-                     "version_warnings": e.version_warnings, "not_deliverable": e.undeliverable}
+                     "version_warnings": e.version_warnings, "not_deliverable": e.undeliverable,
+                     "verbatim_text": [{"field": f, "length": n} for f, n in e.verbatim],
+                     **({"kind_references_repointed": e.kind_refs, "kind_changes": e.kind_changes}
+                        if plan.kind_map is not None else {}),
+                     **({"description_replaced": e.described is not None,
+                         "source_description_length": len(e.described[0]) if e.described else None}
+                        if plan.describing else {})}
                     for e in plan.emitted],
         "warnings": plan.warnings,
     }
+    if plan.kind_map is not None:
+        km = plan.kind_map
+        rep_rows = []
+        for r in km.rows:
+            rep_rows.append({"row": r.where, "map": r.label(), "used": km.used[(r.old_ak, r.old_rk)]})
+        rep["kind_map"] = {"rows": rep_rows, "objects_repointed": sum(1 for e in plan.emitted if e.kind_refs),
+                           "kind_references_repointed": sum(e.kind_refs for e in plan.emitted)}
     if v is not None:
         rep["verify"] = {
             "objects": v["objects"], "fields": v["fields"], "identical": v["identical"],
@@ -1122,6 +1231,11 @@ def _report(plan: Plan, args, scan, unreadable, missed, v, roots, rc) -> dict:
             "load_errors": v["load_errors"], "pak_problems": v["pak_problems"], "stock_ids": v["guard"],
             "objects_detail": v["objects_detail"],
         }
+        if plan.kind_map is not None or plan.describing:
+            rep["verify"]["identical_apart_from_intended_changes"] = v["intended_only"]
+            rep["verify"]["intended_changes"] = {"objects_with_repointed_kinds": v["kind_objects"],
+                                                 "kind_references_repointed": v["kind_refs"],
+                                                 "descriptions_replaced": v["described"]}
     return rep
 
 
