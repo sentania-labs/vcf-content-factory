@@ -976,3 +976,138 @@ def test_independent_oracle_mapped_vs_unmapped_yaml(tmp_path, capsys, old_ak, ol
     assert swaps > (50 if old_rk == "*" else 10), swaps
     assert not bad, bad[:10]
     assert not stale, stale[:10]
+
+
+# ------------------------------------- a malformed object never takes the run
+UNUSED_ROW = [("Unused", "*", "other", "*")]
+BAD_SM, GOOD_SM = "5e000000-0000-4000-8000-0000000000d1", "5e000000-0000-4000-8000-0000000000d2"
+
+
+def _sm_pair_source(tmp: Path) -> Path:
+    src = tmp / "smsrc"
+    src.mkdir()
+    sms = {BAD_SM: {"id": BAD_SM, "name": "Bad SM", "formula": "1", "description": "", "unitId": "",
+                    "resourceKinds": 1},
+           GOOD_SM: {"id": GOOD_SM, "name": "Good SM", "formula": "avg(${this, metric=cpu|usage_average})",
+                     "description": "", "unitId": "",
+                     "resourceKinds": [{"adapterKindKey": "VMWARE", "resourceKindKey": "HostSystem"}]}}
+    (src / "sms.json").write_text(json.dumps(sms))
+    return src
+
+
+@pytest.mark.parametrize("extra", [[], ["--allow-partial"]])
+@pytest.mark.parametrize("with_map", [False, True])
+def test_malformed_super_metric_is_an_internal_error_with_or_without_the_map(tmp_path, capsys, extra, with_map):
+    """Codex P2 (PR 365): `resourceKinds: 1` raised out of the kind-map step
+    and stopped the run, even with an unused row. It is that object's
+    INTERNAL ERROR, as without the map: the other objects are still
+    converted and reported, and the run exits 5 (never accepted)."""
+    src = _sm_pair_source(tmp_path)
+    km = ["--map-kind", _tsv(tmp_path, "k.tsv", UNUSED_ROW)] if with_map else []
+    rc, text = _run(src, tmp_path / "out", capsys, *km, *extra)
+    assert rc == 5, text
+    assert "Traceback" not in text
+    assert f"INTERNAL ERROR supermetric {BAD_SM} 'Bad SM': internal error in the converter" in text
+    assert "TypeError: 'int' object is not iterable" in text
+    assert "  supermetric          2          1" in text  # the good one converts
+    assert "compared 1 object(s)" in text
+
+
+def _dash_with(tmp: Path, mutate) -> Path:
+    src = build_source(tmp / "s", sources={k: SOURCES[k] for k in ("sm_k.yaml", "v_lib.yaml", "d_k.yaml")})
+    env = json.loads((src / "dashboards.json").read_text())
+    env["dashboards"][0]["widgets"][3]["config"]["alertDefinitions"] = []
+    mutate(env)
+    (src / "dashboards.json").write_text(json.dumps(env))
+    return src
+
+
+def _metric_not_a_list(env):
+    env["dashboards"][0]["widgets"][1]["config"]["metric"]["resourceKindMetrics"] = 5
+
+
+def _entries_not_a_list(env):
+    env["entries"]["resourceKind"] = 3
+
+
+@pytest.mark.parametrize("mutate", [_metric_not_a_list, _entries_not_a_list])
+def test_malformed_dashboard_is_an_internal_error_under_the_map(tmp_path, capsys, mutate):
+    src = _dash_with(tmp_path, mutate)
+    rc, text = _run(src, tmp_path / "out", capsys, "--map-kind", _tsv(tmp_path, "k.tsv", STAR_ROW),
+                    "--allow-partial")
+    assert rc == 5, text
+    assert "Traceback" not in text
+    assert f"INTERNAL ERROR dashboard {D_K} 'Probe Kind Dashboard': internal error in the converter" in text
+    # the view and the super metric still convert, re-pointed
+    assert "KIND view 'Probe Library List'" in text and "KIND supermetric 'Probe Kind SM'" in text
+
+
+@pytest.mark.parametrize("func,type_,oid,name", [
+    ("_view", "view", V_LIB, "Probe Library List"),
+    ("_report", "report", R_K, "Probe Kind Report"),
+    ("_symptom", "symptom", f"SymptomDefinition-{Y_K}", "Probe Library Big"),
+    ("_alert", "alert", f"AlertDefinition-{A_K}", "Probe Library Alert"),
+    ("_recommendation", "recommendation", "probeKindRec", "probeKindRec"),
+])
+def test_a_fault_in_an_xml_remapper_is_that_objects_internal_error(source, tmp_path, capsys, monkeypatch,
+                                                                    func, type_, oid, name):
+    """XML payloads cannot take a shape these remappers trip on, so a fault
+    is injected into the one object's remap (the isolation is the same)."""
+    from vcfcf_core.importer import kinds as K
+    real = getattr(K, func)
+
+    def wrapped(el, *rest):
+        if (el.get("id") or el.get("key")) == oid:
+            raise RuntimeError(f"injected fault on {oid}")
+        return real(el, *rest)
+    monkeypatch.setattr(K, func, wrapped)
+    rc, text = _run(source, tmp_path / "out", capsys, "--map-kind", _tsv(tmp_path, "k.tsv", STAR_ROW),
+                    "--allow-partial")
+    assert rc == 5, text
+    assert "Traceback" not in text
+    assert f"INTERNAL ERROR {type_} {oid} '{name}': internal error in the converter (--map-kind): RuntimeError" in text
+    assert "INTERNAL ERROR" not in text.replace(f"INTERNAL ERROR {type_} {oid}", "", 1).split("summary")[0]
+
+
+def test_a_fault_in_the_derived_id_table_is_that_objects_internal_error(source, tmp_path, capsys, monkeypatch):
+    from vcfcf_core.importer import kinds as K
+    real = K._derived_ak
+
+    def wrapped(id_, prefix, ak):
+        if id_ == DERIVED_SYM:
+            raise RuntimeError("injected fault")
+        return real(id_, prefix, ak)
+    monkeypatch.setattr(K, "_derived_ak", wrapped)
+    rc, text = _run(source, tmp_path / "out", capsys, "--map-kind", _tsv(tmp_path, "k.tsv", STAR_ROW),
+                    "--allow-partial")
+    assert rc == 5 and "Traceback" not in text, text
+    assert f"INTERNAL ERROR symptom {DERIVED_SYM} 'Probe Derived Symptom': internal error in the converter " \
+           f"(--map-kind): RuntimeError: injected fault" in text
+    assert "KIND view 'Probe Library List'" in text
+
+
+def test_a_fault_in_describe_or_the_verbatim_listing_is_that_objects_internal_error(source, tmp_path, capsys,
+                                                                                   monkeypatch):
+    from vcfcf_core.importer import convert as C
+
+    class Boom(dict):
+        def __getitem__(self, k):
+            raise RuntimeError("injected describe fault")
+    monkeypatch.setattr(C, "DESCRIBED_TYPES", Boom(C.DESCRIBED_TYPES))
+    rc, text = _run(source, tmp_path / "o1", capsys, "--describe",
+                    _tsv(tmp_path, "d.tsv", [("view", "Probe VM List", "x")]), "--allow-partial")
+    assert rc == 5 and "Traceback" not in text, text
+    assert f"INTERNAL ERROR view {V_VM} 'Probe VM List': internal error in the converter (--describe)" in text
+    monkeypatch.undo()
+    real = C.verbatim_text
+
+    def wrapped(e):
+        if e.source_id == V_VM:
+            raise RuntimeError("injected listing fault")
+        return real(e)
+    monkeypatch.setattr(C, "verbatim_text", wrapped)
+    rc, text = _run(source, tmp_path / "o2", capsys, "--allow-partial")
+    assert rc == 5 and "Traceback" not in text, text
+    assert f"INTERNAL ERROR view {V_VM} 'Probe VM List': internal error in the converter (verbatim text listing)" \
+        in text
+    assert "compared 11 object(s)" in text

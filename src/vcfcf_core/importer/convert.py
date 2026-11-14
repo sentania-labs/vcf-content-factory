@@ -595,15 +595,27 @@ class _Planner:
         mapping = {norm_key(k) for k in self.opts.id_map}
         keep = {(o.type, o.id) for o in objs
                 if self.opts.ids != "mint" and key_hit(mapping, o.type, norm_id(o.type, o.id)) is None}
-        ids, id_problems = _kinds.make_ids(objs, km, keep,
-                                           {(t, i) for t, i, _, _ in self.plan.dropped})
+        ids, id_problems, id_internal = _kinds.make_ids(objs, km, keep,
+                                                        {(t, i) for t, i, _, _ in self.plan.dropped})
         # re-pointed derived id -> (type, norm source id) of the object that
         # ships it: a reference to it fails when that object fails (run)
         self.kind_owner: Dict[str, Tuple[str, str]] = {
             new: (t, norm_id(t, old)) for (t, old), new in ids.table.items()}
         kept = []
         for o in objs:
-            r = _kinds.remap_object(o, km, ids)
+            # An unexpected shape is that object's internal error, as in
+            # map_all, never the run (the other objects convert as usual).
+            err = id_internal.get((o.type, o.id))
+            r = None
+            if err is None:
+                try:
+                    r = _kinds.remap_object(o, km, ids)
+                except Exception as exc:
+                    err = f"{type(exc).__name__}: {exc}"
+            if r is None:
+                self.fail(o, f"internal error in the converter (--map-kind): {err} (source file {o.location})",
+                          kind="internal")
+                continue
             probs = list(r.problems)
             if (o.type, o.id) in id_problems:
                 probs.insert(0, id_problems[(o.type, o.id)])
@@ -744,15 +756,19 @@ class _Planner:
                     f"({'; '.join(f'{x.source_id} ({x.source_name!r})' for x in es)}); key the row by id")
                 continue
             e = es[0]
-            tree = e.mapped_tree
-            old = str(tree.get("description", "") or "")
-            tree["description"] = new
-            e.described = (old, new)
-            path = DESCRIBED_TYPES[e.type]
-            for x in list(e.losses):
-                x.marks = [m for m in x.marks if m.path != path]
-                if not x.marks:
-                    e.losses.remove(x)
+            try:
+                tree = e.mapped_tree
+                old = str(tree.get("description", "") or "")
+                tree["description"] = new
+                e.described = (old, new)
+                path = DESCRIBED_TYPES[e.type]
+                for x in list(e.losses):
+                    x.marks = [m for m in x.marks if m.path != path]
+                    if not x.marks:
+                        e.losses.remove(x)
+            except Exception as exc:  # that object's internal error, never the run
+                self.fail(e.source, f"internal error in the converter (--describe): {type(exc).__name__}: {exc} "
+                                    f"(source file {e.source.location})", kind="internal")
 
     # 5. ids --------------------------------------------------------------
     def final_id(self, o: SourceObject) -> str:
@@ -974,9 +990,18 @@ class _Planner:
                     new_failures = True
             if not new_failures:
                 break
+        listed = []
         for e in ok:
             self.gate_versions(e)
-            e.verbatim = verbatim_text(e)
+            try:
+                e.verbatim = verbatim_text(e)
+            except Exception as exc:  # that object's internal error, never the run
+                self.fail(e.source, f"internal error in the converter (verbatim text listing): "
+                                    f"{type(exc).__name__}: {exc} (source file {e.source.location})",
+                          kind="internal")
+                continue
+            listed.append(e)
+        ok = listed
         self.layout_paths(ok)
         for e in ok:
             rel = ", ".join(e.source.locations)

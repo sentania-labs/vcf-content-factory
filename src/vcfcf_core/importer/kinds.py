@@ -448,12 +448,13 @@ def _derived_ak(id_: str, prefix: str, ak: Optional[str]) -> bool:
     return bool(ak) and id_.startswith(prefix + ak + "-")
 
 
-def derived_id_table(objs, km: KindMap, keep_ids: Set[Tuple[str, str]]) -> Tuple[Dict[Tuple[str, str], str],
-                                                                                    Dict[Tuple[str, str], str]]:
+def derived_id_table(objs, km: KindMap, keep_ids: Set[Tuple[str, str]]):
     """The derived-form ids (``SymptomDefinition-<kind>-...``,
     ``AlertDefinition-<kind>-...``, ``Recommendation-df-<kind>-...``) the
-    map re-points: ``{(type, old id): new id}`` and ``{(type, old id):
-    problem}``. Only objects whose shipped id is this re-pointed one are in
+    map re-points: ``{(type, old id): new id}``, ``{(type, old id):
+    problem}`` and ``{(type, old id): exception}`` for an object whose
+    shape raised (the caller records it as that object's internal error;
+    it never stops the run). Only objects whose shipped id is this re-pointed one are in
     the table (``keep_ids``: (type, id) of objects that keep their source
     id; minted and id-mapped ones ship another id, so their references are
     left as they were). A symptom or alert is re-pointed when its id embeds
@@ -467,56 +468,65 @@ def derived_id_table(objs, km: KindMap, keep_ids: Set[Tuple[str, str]]) -> Tuple
     table: Dict[Tuple[str, str], str] = {}
     problems: Dict[Tuple[str, str], str] = {}
     rec_users: Dict[str, Set[Tuple]] = defaultdict(set)
+    internal: Dict[Tuple[str, str], str] = {}
     for o in objs:
-        if o.type == "alert":
-            rr = o.payload.find("State/Recommendations")
-            for r in (rr if rr is not None else []):
-                if r.get("ref"):
-                    rec_users[r.get("ref")].add((o.payload.get("adapterKind") or "",
-                                                 o.payload.get("resourceKind")))
+        try:
+            if o.type == "alert":
+                rr = o.payload.find("State/Recommendations")
+                for r in (rr if rr is not None else []):
+                    if r.get("ref"):
+                        rec_users[r.get("ref")].add((o.payload.get("adapterKind") or "",
+                                                     o.payload.get("resourceKind")))
+        except Exception as exc:  # an unexpected shape: that object's internal error, never the run
+            internal.setdefault((o.type, o.id), f"{type(exc).__name__}: {exc}")
     for o in objs:
-        if (o.type, o.id) not in keep_ids:
+        if (o.type, o.id) in internal:
             continue
-        if o.type in ("symptom", "alert"):
-            prefix = _SYMPTOM_PREFIX if o.type == "symptom" else _ALERT_PREFIX
-            ak, rk = o.payload.get("adapterKind"), o.payload.get("resourceKind")
-            if not _derived_ak(o.id, prefix, ak):
+        try:
+            if (o.type, o.id) not in keep_ids:
                 continue
-            new = km.lookup(ak, rk, count=False)
-            if new is not None and new[0] != ak:
-                table[(o.type, o.id)] = prefix + new[0] + o.id[len(prefix) + len(ak):]
-        elif o.type == "recommendation":
-            for ak in sorted(km.aks, key=len, reverse=True):
-                if not _derived_ak(o.id, _REC_PREFIX, ak):
+            if o.type in ("symptom", "alert"):
+                prefix = _SYMPTOM_PREFIX if o.type == "symptom" else _ALERT_PREFIX
+                ak, rk = o.payload.get("adapterKind"), o.payload.get("resourceKind")
+                if not _derived_ak(o.id, prefix, ak):
                     continue
-                users = rec_users.get(o.id, set())
-                rest = o.id[len(_REC_PREFIX) + len(ak):]
-                if not users:
-                    new_ak, prob = km.adapter_only(ak, count=False)
-                    if new_ak and not prob:
-                        table[(o.type, o.id)] = _REC_PREFIX + new_ak + rest
+                new = km.lookup(ak, rk, count=False)
+                if new is not None and new[0] != ak:
+                    table[(o.type, o.id)] = prefix + new[0] + o.id[len(prefix) + len(ak):]
+            elif o.type == "recommendation":
+                for ak in sorted(km.aks, key=len, reverse=True):
+                    if not _derived_ak(o.id, _REC_PREFIX, ak):
+                        continue
+                    users = rec_users.get(o.id, set())
+                    rest = o.id[len(_REC_PREFIX) + len(ak):]
+                    if not users:
+                        new_ak, prob = km.adapter_only(ak, count=False)
+                        if new_ak and not prob:
+                            table[(o.type, o.id)] = _REC_PREFIX + new_ak + rest
+                        break
+                    moving = {}
+                    for u in users:
+                        m = km.lookup(u[0], u[1], count=False)
+                        if m is not None and m[0] != u[0]:
+                            moving[u] = m
+                    if not moving:
+                        break  # no alert using it moves: the key is kept, with certainty
+                    new_aks = {m[0] for m in moving.values()}
+                    other = sorted({u[0] for u in users if u[0] != ak})
+                    if len(moving) != len(users) or len(new_aks) > 1 or other:
+                        still = sorted(f"{u[0]}:{u[1]}" for u in users if u not in moving)
+                        problems[(o.type, o.id)] = (
+                            f"recommendation key {o.id} embeds the mapped adapter kind {ak}; the alerts that use it "
+                            f"move to {', '.join(sorted(new_aks))}"
+                            + (f" while alerts on {', '.join(still)} stay" if still else "")
+                            + (f", and alerts on {', '.join(other)} use it too" if other else "")
+                            + "; the importer cannot re-point it with certainty")
+                        break
+                    table[(o.type, o.id)] = _REC_PREFIX + next(iter(new_aks)) + rest
                     break
-                moving = {}
-                for u in users:
-                    m = km.lookup(u[0], u[1], count=False)
-                    if m is not None and m[0] != u[0]:
-                        moving[u] = m
-                if not moving:
-                    break  # no alert using it moves: the key is kept, with certainty
-                new_aks = {m[0] for m in moving.values()}
-                other = sorted({u[0] for u in users if u[0] != ak})
-                if len(moving) != len(users) or len(new_aks) > 1 or other:
-                    still = sorted(f"{u[0]}:{u[1]}" for u in users if u not in moving)
-                    problems[(o.type, o.id)] = (
-                        f"recommendation key {o.id} embeds the mapped adapter kind {ak}; the alerts that use it "
-                        f"move to {', '.join(sorted(new_aks))}"
-                        + (f" while alerts on {', '.join(still)} stay" if still else "")
-                        + (f", and alerts on {', '.join(other)} use it too" if other else "")
-                        + "; the importer cannot re-point it with certainty")
-                    break
-                table[(o.type, o.id)] = _REC_PREFIX + next(iter(new_aks)) + rest
-                break
-    return table, problems
+        except Exception as exc:  # an unexpected shape: that object's internal error, never the run
+            internal.setdefault((o.type, o.id), f"{type(exc).__name__}: {exc}")
+    return table, problems, internal
 
 
 # ----------------------------------------------------------- per type
@@ -764,9 +774,10 @@ def remap_object(o, km: KindMap, ids: _Ids) -> Remap:
     return ctx.r
 
 
-def make_ids(objs, km: KindMap, keep_ids, dropped) -> Tuple[_Ids, Dict[Tuple[str, str], str]]:
-    table, problems = derived_id_table(objs, km, keep_ids)
-    return _Ids(table, {(o.type, o.id) for o in objs}, set(dropped)), problems
+def make_ids(objs, km: KindMap, keep_ids, dropped):
+    """``(ids, problems, internal)`` (:func:`derived_id_table`)."""
+    table, problems, internal = derived_id_table(objs, km, keep_ids)
+    return _Ids(table, {(o.type, o.id) for o in objs}, set(dropped)), problems, internal
 
 
 def change_lines(r: Remap) -> List[str]:

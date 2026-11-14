@@ -518,7 +518,12 @@ types the schema does not model.
 A mapper exception that is not a mapping refusal fails that one object as
 `INTERNAL ERROR` (object, source file, exception type; counted in its own
 summary column) and the run exits 5; the other objects are converted and
-reported as usual.
+reported as usual. The same holds for every other per-object step:
+`--map-kind` re-pointing and its derived-id table (the message says
+`(--map-kind)`), `--describe`, the kind accounting and the verbatim-text
+listing; a render or compare exception in verification is that object's
+`LOAD ERROR` (until 2026-11-13 a malformed object, such as a super metric
+with `resourceKinds: 1`, stopped a `--map-kind` run with a traceback).
 
 A written YAML a loader refuses is not written: each object is staged and
 loaded with the layout's loader first; one it refuses fails with the
