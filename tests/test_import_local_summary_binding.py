@@ -160,7 +160,7 @@ def test_binding_naming_an_absent_dashboard_is_reported(tmp_path, capsys):
     assert rc == 0, text
     assert all(v is None for v in _summary_for(out).values())
     assert ("WARNING: BINDING content/dashboards/dashboards.properties:1 Gone=VMWARE:ClusterComputeResource: "
-            "binds no dashboard: no dashboard of the input is under the directory 'Gone'") in text
+            "binds no dashboard: no dashboard of the input is in a directory named 'Gone' next to the file") in text
     assert _report(out)["summary_bindings"]["entries"][0]["status"] == "binds no dashboard"
 
 
@@ -221,7 +221,7 @@ def test_copies_that_differ_only_in_binding_do_not_merge(tmp_path, capsys):
     assert _summary_for(tmp_path / "out2")["probe-summary-vmfolder.yaml"] is None
 
 
-def test_binding_file_given_as_a_separate_input_still_binds(tmp_path, capsys):
+def test_dashboard_given_without_its_binding_file_binds_nothing(tmp_path, capsys):
     src = _pak_tree(tmp_path, "VMFolder=VMWARE:VMFolder\n")
     dash = src / "content" / "dashboards"
     rc, text = _run(dash / "VMFolder", tmp_path / "out", capsys, "pak", "--allow-partial")
@@ -292,9 +292,17 @@ def test_verify_catches_a_binding_the_source_does_not_have(tmp_path, capsys, mon
     monkeypatch.setattr(_d._DashMapper, "map", inferred)
     src = _pak_tree(tmp_path)
     rc, text = _run(src, tmp_path / "out", capsys)
-    assert rc == 1, text
+    assert rc == 5, text
     assert "6 differ" in text, text
     assert "dashboard.<summary binding>: extra \"VMWARE:VMFolder\"" in text
+    assert "summary_for VMWARE:VMFolder has no binding entry in the source (an invented binding" in text
+    # never accepted, and caught without a render compare too
+    for i, extra in enumerate((("--allow-partial",), ("--allow-partial", "--no-verify"), ("--dry-run",))):
+        o = tmp_path / f"o{i}"
+        rc, text = _run(src, o, capsys, "pak", *extra)
+        assert rc == 5, (extra, text)
+        assert text.count("(no entry): mismatch") == 6, (extra, text)
+        assert not o.exists()
 
 
 def test_verify_catches_a_dropped_source_binding(tmp_path, capsys, monkeypatch):
@@ -316,7 +324,7 @@ def test_verify_catches_a_dropped_source_binding(tmp_path, capsys, monkeypatch):
 
 # ---------------------------------------------------------- the file reader
 def test_java_properties_reader():
-    from vcfcf_core.importer.inputs import _java_properties
+    from vcfcf_core.java_properties import load_entries as _java_properties
     text = ("# comment\n! also a comment\n\n  a=1\nb : 2\nc 3\nd\\ e=4\nf=line\\\n    continued\n"
             "g=\\u0041\\t\nh==x\nlast")
     assert _java_properties(text) == [
@@ -331,5 +339,135 @@ def test_binding_file_outside_a_dashboards_directory_is_passed_over(tmp_path, ca
     (src / "content" / "dashboards.properties").write_text("VMFolder=VMWARE:VMFolder\n")
     rc, text = _run(src, tmp_path / "out", capsys)
     assert rc == 0, text
-    assert "content/dashboards.properties: a dashboards.properties outside a dashboards directory" in text
+    assert ("content/dashboards.properties: a dashboards.properties that is not the pak's "
+            "content/dashboards/dashboards.properties") in text
     assert all(v is None for v in _summary_for(tmp_path / "out").values())
+
+
+def _pack(src: Path, tmp: Path) -> Path:
+    pak = tmp / "probe.pak"
+    with zipfile.ZipFile(pak, "w") as zf:
+        for p in sorted(src.rglob("*")):
+            if p.is_file():
+                zf.writestr(p.relative_to(src).as_posix(), p.read_bytes())
+    return pak
+
+
+# ------------------------------------------------- the installer's exact reading
+def test_bom_keeps_the_first_entry_from_binding(tmp_path, capsys):
+    """FileReader keeps a UTF-8 BOM, so the first key carries U+FEFF and
+    matches no directory; the second entry binds (OpenJDK 17, review B1)."""
+    src = _pak_tree(tmp_path)
+    (src / "content" / "dashboards" / "dashboards.properties").write_bytes(
+        "﻿VMFolder=VMWARE:VMFolder\nHostFolder=VMWARE:HostFolder\n".encode("utf-8"))
+    out = tmp_path / "out"
+    rc, text = _run(src, out, capsys)
+    assert rc == 0, text
+    sf = _summary_for(out)
+    assert sf["probe-summary-vmfolder.yaml"] is None
+    assert sf["probe-summary-hostfolder.yaml"] == "VMWARE:HostFolder"
+    assert "binds no dashboard" in text and "starts with a byte-order mark" in text
+
+
+@pytest.mark.parametrize("eol", ["\r\n", "\r"])
+def test_crlf_and_cr_line_ends(tmp_path, capsys, eol):
+    src = _pak_tree(tmp_path)
+    (src / "content" / "dashboards" / "dashboards.properties").write_bytes(
+        eol.join(["# c", "VMFolder=VMWARE:VMFolder", "HostFolder=VMWARE:HostFolder", ""]).encode())
+    out = tmp_path / "out"
+    rc, text = _run(src, out, capsys)
+    assert rc == 0, text
+    sf = _summary_for(out)
+    assert sf["probe-summary-vmfolder.yaml"] == "VMWARE:VMFolder"
+    assert sf["probe-summary-hostfolder.yaml"] == "VMWARE:HostFolder"
+    assert "2 carried" in text
+
+
+@pytest.mark.parametrize("key", [".", "", "VMFolder/", "./VMFolder", "../dashboards/VMFolder", "VMFolder//",
+                                 "vmfolder", "VMFolder\\ "])
+@pytest.mark.parametrize("packed", [False, True])
+def test_key_must_equal_the_directory_name_exactly(tmp_path, capsys, key, packed):
+    """The installer looks a directory up by its exact name (review W1): no
+    path normalization, the same on a directory input and a packed pak."""
+    src = _pak_tree(tmp_path, f"{key}=VMWARE:VMFolder\n")
+    if packed:
+        src = _pack(src, tmp_path)
+    out = tmp_path / "out"
+    rc, text = _run(src, out, capsys)
+    assert rc == 0, text
+    assert all(v is None for v in _summary_for(out).values()), text
+    assert "1 binds no dashboard" in text, text
+
+
+@pytest.mark.parametrize("rel,read", [
+    ("content/dashboards/dashboards.properties", True),
+    ("content/dashboards/dashboards/dashboards.properties", False),
+    ("other/dashboards/dashboards.properties", False),
+    ("dashboards/dashboards.properties", False),
+])
+@pytest.mark.parametrize("packed", [False, True])
+def test_only_the_pak_binding_file_is_read(tmp_path, capsys, rel, read, packed):
+    """Review W3: only content/dashboards/dashboards.properties under the
+    pak root is read."""
+    src = _pak_tree(tmp_path)
+    nested = src / "content" / "dashboards" / "dashboards" / "VMFolder"
+    nested.mkdir(parents=True)
+    (nested / "dashboard.json").write_text(json.dumps(_dashboard(tmp_path, 50, "Probe Nested")))
+    f = src / rel
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text("VMFolder=VMWARE:VMFolder\n")
+    if packed:
+        src = _pack(src, tmp_path)
+    out = tmp_path / "out"
+    rc, text = _run(src, out, capsys)
+    assert rc == 0, text
+    sf = _summary_for(out)
+    assert sf.get("probe-summary-vmfolder.yaml") == ("VMWARE:VMFolder" if read else None), text
+    assert sf["probe-nested.yaml"] is None
+    if not read:
+        assert "that is not the pak's content/dashboards/dashboards.properties" in text
+
+
+@pytest.mark.parametrize("given", ["content", "dashboards"])
+def test_content_or_dashboards_directory_given_directly(tmp_path, capsys, given):
+    src = _pak_tree(tmp_path, "VMFolder=VMWARE:VMFolder\n")
+    root = src / "content" if given == "content" else src / "content" / "dashboards"
+    out = tmp_path / "out"
+    rc, text = _run(root, out, capsys)
+    assert rc == 0, text
+    assert _summary_for(out)["probe-summary-vmfolder.yaml"] == "VMWARE:VMFolder"
+
+
+def test_gap_message_names_the_binding_file_relative_to_its_input(tmp_path, capsys):
+    src = _pak_tree(tmp_path, "VMFolder=VMWARE\n")
+    rc, text = _run(src, tmp_path / "out", capsys, "pak", "--allow-partial")
+    line = next(ln for ln in text.splitlines() if ln.startswith("FAILED dashboard"))
+    assert "(content/dashboards/dashboards.properties:1)" in line, line
+    assert str(tmp_path) not in line
+
+
+def test_partial_kind_map_on_a_bound_dashboard(tmp_path, capsys):
+    """One of two bound kinds mapped: that dashboard stops; the other entry
+    stays carried."""
+    src = _pak_tree(tmp_path, "VMFolder=VMWARE:VMFolder\nHostFolder=VMWARE:HostFolder\n")
+    km = tmp_path / "k.tsv"
+    km.write_text("VMWARE\tVMFolder\tprobe_new\tProbeFolder\n")
+    out = tmp_path / "out"
+    rc, text = _run(src, out, capsys, "pak", "--allow-partial", "--map-kind", km)
+    assert rc == 0, text
+    assert "Summary page for VMWARE:VMFolder (its binding content/dashboards/dashboards.properties:1)" in text
+    sf = _summary_for(out)
+    assert "probe-summary-vmfolder.yaml" not in sf
+    assert sf["probe-summary-hostfolder.yaml"] == "VMWARE:HostFolder"
+    assert "HostFolder=VMWARE:HostFolder: carried" in text
+
+
+def test_post_install_uses_the_shared_java_reader():
+    """post_install reads dashboards.properties through the same reader:
+    \\uXXXX decoded, the BOM kept, only \\n and \\r end a line, a malformed
+    \\u escape refused (review N1)."""
+    from vcfcf_managementpacks import post_install as pi
+    props = pi.parse_properties("﻿a=1\n\\u0056MFolder=VMWARE:VMFolder\nb=x y\n")
+    assert props == {"﻿a": "1", "VMFolder": "VMWARE:VMFolder", "b": "x y"}
+    with pytest.raises(ValueError):
+        pi.parse_properties("a=\\u12")

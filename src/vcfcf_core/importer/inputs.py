@@ -29,13 +29,14 @@ Every file is classified by its content, never by its folder name:
   ``supermetrics.json``), or a list of them.
 
 One file is read by its place rather than its content, because that is how
-the pak installer finds it: ``dashboards.properties`` directly inside a
-``dashboards`` directory (a pak's ``content/dashboards/``), the Summary-tab
-binding file (``summary_dashboard_pak_binding.md``). Each entry is a
-:class:`SummaryBinding`, keyed by the name of the dashboard directory it
-binds, and is attached to the dashboards found under that directory
-(``context["summary_binding"]``). A dashboard's binding comes from that file
-only, never from its folder name.
+the pak installer finds it: the Summary-tab binding file
+``content/dashboards/dashboards.properties`` (``summary_dashboard_pak_binding.md``;
+the places that count are :func:`binding_place_ok`). It is read with
+``vcfcf_core.java_properties``, as ``Properties.load`` reads it (a byte-order
+mark stays in the first key). Each entry is a :class:`SummaryBinding` and is
+attached to the dashboards in the directory next to the file whose name is
+the key, exactly (``context["summary_binding"]``). A dashboard's binding
+comes from that file only, never from its folder name.
 
 Content of a type the converter does not support is listed per object as
 :class:`Unsupported` (custom groups: an export ``customGroups`` list or a
@@ -51,7 +52,6 @@ from __future__ import annotations
 import codecs
 import io
 import json
-import os
 import re
 import zipfile
 import zlib
@@ -60,6 +60,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
 
+from .. import java_properties as _jprops
 from ..stock_ids.guard import (
     Unreadable,
     _BOMS,
@@ -116,9 +117,11 @@ class SummaryBinding:
     ``kinds`` holds the parts when every part is one the factory YAML can
     carry exactly; otherwise ``problem`` says why it cannot (the bound
     dashboard then stops with a TOOLSET GAP). ``dashboards`` lists the
-    (id, location) of every dashboard found under the directory the key
-    names; ``superseded_by`` is the line of a later entry with the same key
-    (``Properties`` keeps the last)."""
+    (id, location) of every dashboard in the directory whose name is the key,
+    exactly; ``dir_location`` is the location of the directory holding the
+    binding file; ``superseded_by`` is the line of a later entry with the
+    same key (``Properties`` keeps the last); ``rel`` is the file's location
+    relative to its input (what messages print)."""
 
     location: str
     line: int
@@ -129,10 +132,11 @@ class SummaryBinding:
     problem: Optional[str] = None
     dashboards: List[Tuple[str, str]] = field(default_factory=list)
     superseded_by: Optional[int] = None
+    rel: str = ""
 
     @property
     def where(self) -> str:
-        return f"{self.location}:{self.line}"
+        return f"{self.rel or self.location}:{self.line}"
 
 
 @dataclass
@@ -364,81 +368,15 @@ def template_dir(location: str) -> Optional[str]:
     return m.group(1) if m else None
 
 
-def _java_properties(text: str) -> List[Tuple[int, str, str]]:
-    """``(line, key, value)`` of every entry, in order, as
-    ``java.util.Properties.load`` reads them: ``#`` and ``!`` comment lines
-    and blank lines skipped; a line ending in an odd number of backslashes
-    continues on the next (its leading whitespace dropped); the key ends at
-    the first unescaped ``=``, ``:`` or whitespace, then whitespace and one
-    ``=`` or ``:`` are skipped; ``\\t \\n \\r \\f \\uXXXX`` escapes, any other
-    escaped character is itself. Raises ``ValueError`` on a malformed
-    ``\\u`` escape (Java throws too)."""
-    lines = re.split(r"\r\n|\r|\n", text)
-    out: List[Tuple[int, str, str]] = []
-    i = 0
-    while i < len(lines):
-        start = i + 1
-        line = lines[i].lstrip(" \t\f")
-        i += 1
-        if not line or line[0] in "#!":
-            continue
-        while (len(line) - len(line.rstrip("\\"))) % 2 == 1:
-            line = line[:-1]
-            if i >= len(lines):
-                break
-            line += lines[i].lstrip(" \t\f")
-            i += 1
-        k = 0
-        while k < len(line) and line[k] not in "=: \t\f":
-            k += 2 if line[k] == "\\" else 1
-        k = min(k, len(line))
-        rest = line[k:].lstrip(" \t\f")
-        if rest[:1] in ("=", ":"):
-            rest = rest[1:].lstrip(" \t\f")
-        out.append((start, _unescape(line[:k]), _unescape(rest)))
-    return out
-
-
-def _unescape(s: str) -> str:
-    out = []
-    k = 0
-    while k < len(s):
-        c = s[k]
-        if c != "\\" or k + 1 >= len(s):
-            out.append(c)
-            k += 1
-            continue
-        nxt = s[k + 1]
-        if nxt == "u":
-            hexs = s[k + 2:k + 6]
-            if not re.fullmatch(r"[0-9a-fA-F]{4}", hexs):
-                raise ValueError(f"malformed \\uxxxx escape {s[k:k + 6]!r}")
-            out.append(chr(int(hexs, 16)))
-            k += 6
-            continue
-        out.append({"t": "\t", "n": "\n", "r": "\r", "f": "\f"}.get(nxt, nxt))
-        k += 2
-    return "".join(out)
-
-
-def _java_split(s: str, sep: str) -> List[str]:
-    """``String.split`` on a one-character separator: trailing empty strings
-    removed."""
-    parts = s.split(sep)
-    while parts and parts[-1] == "":
-        parts.pop()
-    return parts
-
-
 def _binding_value(value: str) -> Tuple[List[str], Optional[str]]:
     """``(kinds, problem)`` of one binding value, split as the installer
     splits it (``,`` then ``:``, no trimming)."""
-    parts = _java_split(value, ",")
+    parts = _jprops.split(value, ",")
     if not parts:
         return [], f"the value {value!r} names no kind (the installer binds nothing)"
     kinds: List[str] = []
     for part in parts:
-        toks = _java_split(part, ":")
+        toks = _jprops.split(part, ":")
         if len(toks) != 2:
             return [], (f"the part {part!r} of {value!r} does not split into exactly two ':' tokens, so the "
                         f"installer skips it; the factory YAML cannot carry a part that binds nothing")
@@ -453,6 +391,25 @@ def _binding_value(value: str) -> Tuple[List[str], Optional[str]]:
     return kinds, None
 
 
+def binding_place_ok(place: Tuple[str, ...], in_archive: bool) -> bool:
+    """Whether a ``dashboards.properties`` at ``place`` is the one the pak
+    installer reads, ``content/dashboards/dashboards.properties`` under the
+    pak root. ``place`` is the file's path components: below the archive
+    root for an archive member (only the exact path counts); for a file on
+    disk, below the input directory with that directory's own name first
+    (or the parent directory's name and the file name for a file given
+    directly). On disk the pak root, its ``content/`` or its
+    ``content/dashboards/`` may be the input, so three shapes count:
+    ``<root>/content/dashboards/F``, ``content/dashboards/F`` and
+    ``dashboards/F``. Every other place is passed over."""
+    f = BINDING_FILE
+    if in_archive:
+        return place == ("content", "dashboards", f)
+    if place[-2:] != ("dashboards", f):
+        return False
+    return len(place) == 2 or (place[-3:] == ("content", "dashboards", f) and len(place) in (3, 4))
+
+
 def _scan_binding_file(data: bytes, location: str, scan: InputScan) -> None:
     try:
         text = data.decode("utf-8")
@@ -460,27 +417,34 @@ def _scan_binding_file(data: bytes, location: str, scan: InputScan) -> None:
         scan.unreadable.append(Unreadable(location, f"Summary binding file that does not decode as UTF-8 ({exc})"))
         return
     try:
-        entries = _java_properties(text.lstrip("﻿"))
+        # No BOM is stripped: FileReader keeps U+FEFF in the first key, so the
+        # installer matches no directory with it (java_properties).
+        entries = _jprops.load_entries(text)
     except ValueError as exc:
         scan.unreadable.append(Unreadable(location, f"Summary binding file the installer cannot read ({exc})"))
         return
     scan.binding_files.append(location)
     base = location[:-len(BINDING_FILE)]
-    sep = base[-1:] if base[-1:] in ("/", "\\") else "/"
     last: Dict[str, SummaryBinding] = {}
     for line, key, value in entries:
-        b = SummaryBinding(location, line, key, value, base + key + sep)
+        b = SummaryBinding(location, line, key, value, base)
         if key in last:
             last[key].superseded_by = line
         last[key] = b
         scan.bindings.append(b)
 
 
-def _canon(location: str) -> str:
-    """A location with its filesystem part made absolute (no disk access),
-    so a binding file and dashboards given as separate inputs still match."""
-    fs, bang, rest = location.partition("!")
-    return os.path.abspath(fs) + (os.sep if fs.endswith(("/", "\\")) else "") + (bang + rest if bang else "")
+def _bound_directory(location: str, base: str) -> Optional[str]:
+    """The directory directly below ``base`` (the binding file's directory)
+    that ``location`` sits in, exactly as named, or ``None``. The installer
+    looks each such directory up by name (``props.get(dir.getName())``), so
+    a key matches only that name, character for character."""
+    if not location.startswith(base):
+        return None
+    head = re.split(r"[/\\]", location[len(base):], maxsplit=1)
+    if len(head) != 2 or not head[0] or "!" in head[0]:
+        return None
+    return head[0]
 
 
 def _attach_bindings(scan: InputScan) -> None:
@@ -490,8 +454,7 @@ def _attach_bindings(scan: InputScan) -> None:
     dashes = [o for o in scan.objects if o.type == "dashboard"]
     live = [b for b in scan.bindings if b.superseded_by is None]
     for b in live:
-        prefix = _canon(b.dir_location)
-        b.dashboards = [(o.id, o.location) for o in dashes if _canon(o.location).startswith(prefix)]
+        b.dashboards = [(o.id, o.location) for o in dashes if _bound_directory(o.location, b.dir_location) == b.key]
         b.kinds, b.problem = _binding_value(b.value)
         if b.problem is None and b.key.startswith("GenericTemplates"):
             b.problem = (f"the directory {b.key!r} starts with GenericTemplates: the 9.2 installer imports it as a "
@@ -526,7 +489,8 @@ def binding_kinds(obj) -> Optional[List[str]]:
     return list(b.kinds) if b is not None else None
 
 
-def _scan_bytes(data: bytes, location: str, scan: InputScan, depth: int) -> None:
+def _scan_bytes(data: bytes, location: str, scan: InputScan, depth: int,
+                place: Tuple[str, ...] = (), in_archive: bool = False) -> None:
     if _is_zip(data):
         if depth >= _MAX_ZIP_DEPTH:
             scan.unreadable.append(Unreadable(location, f"archive nested more than {_MAX_ZIP_DEPTH} levels deep, not opened"))
@@ -555,16 +519,15 @@ def _scan_bytes(data: bytes, location: str, scan: InputScan, depth: int) -> None
                         EOFError, ValueError, zlib.error) as exc:
                     scan.unreadable.append(Unreadable(loc, f"archive member does not read ({type(exc).__name__}: {exc})"))
                     continue
-                _scan_bytes(member, loc, scan, depth + 1)
+                _scan_bytes(member, loc, scan, depth + 1, tuple(info.filename.split("/")), True)
         return
     scan.files_read += 1
-    parts = _SEP.split(location)
-    if parts[-1] == BINDING_FILE:
-        if len(parts) >= 2 and parts[-2] == "dashboards":
+    if _SEP.split(location)[-1] == BINDING_FILE:
+        if binding_place_ok(place or tuple(_SEP.split(location)[-2:]), in_archive):
             _scan_binding_file(data, location, scan)
         else:
-            scan.passed_over.append(PassedOver(location, f"a {BINDING_FILE} outside a dashboards directory (the "
-                                                         f"pak installer reads only content/dashboards/{BINDING_FILE})"))
+            scan.passed_over.append(PassedOver(location, f"a {BINDING_FILE} that is not the pak's content/dashboards/"
+                                                         f"{BINDING_FILE} (the only one the pak installer reads)"))
         return
     stripped = data.lstrip(b"\xef\xbb\xbf\xff\xfe\x00 \t\r\n")
     lead = stripped[:1]
@@ -609,11 +572,12 @@ def scan_inputs(paths: Sequence) -> InputScan:
             except OSError as exc:
                 scan.unreadable.append(Unreadable(str(f), f"file does not read ({exc})"))
                 continue
-            n = len(scan.objects)
-            _scan_bytes(data, str(f), scan, 0)
+            n, nb = len(scan.objects), len(scan.bindings)
+            place = ((p.resolve().name,) + f.relative_to(p).parts) if p.is_dir() else (f.resolve().parent.name, f.name)
+            _scan_bytes(data, str(f), scan, 0, place)
             prefix = str(f)
             relbase = f.relative_to(p).as_posix() if p.is_dir() else f.name
-            for o in scan.objects[n:]:
+            for o in scan.objects[n:] + scan.bindings[nb:]:
                 o.rel = relbase + o.location[len(prefix):] if o.location.startswith(prefix) else o.location
     _attach_bindings(scan)
     return scan

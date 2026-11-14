@@ -1372,8 +1372,10 @@ def classify_bindings(plan: Plan) -> List[Dict[str, object]]:
     keeps the last), ``binds no dashboard`` (no dashboard of the input is
     under the directory it names: the installer binds only a directory it
     imports, so the source binds nothing either), or ``mismatch`` (the
-    written ``summary_for`` is not the entry's: a converter error). Sets and
-    returns ``plan.bindings``."""
+    written ``summary_for`` is not the entry's, or a dashboard has a
+    ``summary_for`` no source entry backs: a converter error either way;
+    such a record has ``line`` 0 and entry ``(no entry)``). Sets and returns
+    ``plan.bindings``."""
     emitted = {norm_id("dashboard", e.source_id): e for e in plan.emitted if e.type == "dashboard"}
     dropped = {norm_id(t, i) for t, i, _, _ in plan.dropped if t == "dashboard"}
     failed = {norm_id(f.type, f.id): f for f in plan.failures if f.type == "dashboard"}
@@ -1386,8 +1388,12 @@ def classify_bindings(plan: Plan) -> List[Dict[str, object]]:
             rec["detail"] = f"line {b.superseded_by} has the same key (java.util.Properties keeps the last)"
         elif not b.dashboards:
             rec["status"] = "binds no dashboard"
-            rec["detail"] = (f"no dashboard of the input is under the directory {b.key!r}; the installer binds only "
-                             f"a directory it imports, so the source binds nothing here")
+            rec["detail"] = (f"no dashboard of the input is in a directory named {b.key!r} next to the file; the "
+                             f"installer binds only a directory it imports, by its exact name, so the source binds "
+                             f"nothing here")
+            if b.key.startswith("﻿"):
+                rec["detail"] += (" (the key starts with a byte-order mark: the installer's FileReader keeps it, so "
+                                  "this first entry matches no directory)")
         else:
             details = []
             statuses = set()
@@ -1423,6 +1429,19 @@ def classify_bindings(plan: Plan) -> List[Dict[str, object]]:
                              "carried" if statuses == {"carried"} else "not carried")
             rec["detail"] = "; ".join(details)
         out.append(rec)
+    # The other direction: a summary_for no live source entry backs is an
+    # invented binding, the same converter error as a lost one.
+    for e in plan.emitted:
+        if e.type != "dashboard" or not e.yaml_tree.get("summary_for"):
+            continue
+        sb = e.source.context.get("summary_binding")
+        if sb is None or sb.superseded_by is not None:
+            sf = e.yaml_tree["summary_for"]
+            out.append(OrderedDict(
+                file=e.source.location, line=0, entry="(no entry)", kinds=[sf] if isinstance(sf, str) else list(sf),
+                dashboards=[e.relpath], status="mismatch",
+                detail=f"{e.relpath}: summary_for {sf} has no binding entry in the source (an invented binding; "
+                       f"converter error)"))
     plan.bindings = out
     return out
 

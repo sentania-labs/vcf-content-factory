@@ -38,7 +38,7 @@ are classified by content, never by folder name:
   the pak's binding file does (next item, §Summary-tab bindings);
 - a pak's Summary-tab binding file, `content/dashboards/dashboards.properties`
   (the one file read by its place, because that is how the pak installer
-  finds it; one outside a `dashboards` directory is passed over);
+  finds it; one at any other place is passed over, §Summary-tab bindings);
 - report template XML (`<ReportDef>`);
 - `alertContent` XML: alert definitions, symptom definitions (standalone or
   inline) and recommendations;
@@ -83,11 +83,28 @@ A dashboard gets `summary_for` only when the source's binding file names
 it. The file is `content/dashboards/dashboards.properties`, one entry per
 line, `<dashboard directory>=<AdapterKind>:<ResourceKind>[,...]`
 (`../api-surface/summary_dashboard_pak_binding.md`). It is read as the
-installer reads it: `java.util.Properties` syntax (`#` and `!` comments,
-`=`, `:` or whitespace between key and value, line continuations and
-escapes, the last of two lines with one key wins), the value split on `,`
-and each part on `:`, nothing trimmed. The key is the name of a directory
-next to the file, and the entry binds the dashboard under that directory.
+installer reads it, with `vcfcf_core.java_properties` (the reader the
+post-install Summary check uses too): `java.util.Properties` syntax (`#`
+and `!` comments, `=`, `:` or whitespace between key and value, line
+continuations and escapes, lines ending at `\n`, `\r` or `\r\n` only, the
+last of two lines with one key wins), the value split on `,` and each part
+on `:`, nothing trimmed. A byte-order mark is not stripped: the installer's
+`FileReader` keeps it in the first key, which then matches no directory, so
+that entry is `binds no dashboard` (the detail names the mark).
+
+Only the file the installer reads counts. In an archive that is the member
+`content/dashboards/dashboards.properties` exactly. On disk the input may be
+the unpacked pak root (`<root>/content/dashboards/dashboards.properties`),
+its `content/` directory or its `content/dashboards/` directory; any other
+`dashboards.properties` is passed over with the reason. The binding file and
+the dashboards it binds must be in the same input: a dashboard directory
+given alone has no binding file, so the source handed over binds nothing.
+
+The key is matched as the installer matches it, `props.get(dir.getName())`:
+an entry binds the dashboards in the directory next to the file whose name
+equals the key character for character. No path is normalized, so `.`, an
+empty key, `VMFolder/`, `./VMFolder` or `../dashboards/VMFolder` binds
+nothing, the same on a directory input and on the packed pak.
 One kind writes `summary_for: "<AK>:<RK>"`, several write a list in the
 entry's order, and a non-`VMWARE` kind is carried as written. A dashboard
 in a directory named after a vSphere kind (`VMFolder`, `HostFolder`, ...)
@@ -103,9 +120,9 @@ Every entry is classified and printed (`BINDING <file>:<line> <entry>:
 |---|---|---|
 | `carried` | the dashboard's YAML has the entry's kinds as `summary_for` | none |
 | `superseded` | a later line has the same key (`Properties` keeps the last) | none |
-| `binds no dashboard` | no dashboard of the input is under the directory it names; the installer binds only a directory it imports, so the source binds nothing there either | `WARNING:` |
+| `binds no dashboard` | no dashboard of the input is in a directory of that exact name next to the file; the installer binds only a directory it imports, so the source binds nothing there either | `WARNING:` |
 | `not carried` | its dashboard was dropped (`--drop`), did not convert, or `--prefer-source` kept an unbound copy | `WARNING:` |
-| `mismatch` | the written `summary_for` is not the entry's (a converter error) | exit 5 |
+| `mismatch` | a converter error, in either direction: the written `summary_for` is not the entry's (lost or changed), or a dashboard has a `summary_for` no live entry backs (invented; printed as `(no entry)`) | exit 5, never accepted by `--allow-partial`; checked with `--no-verify` and `--dry-run` too, since it is a classification, not a render compare |
 
 The bound dashboard stops with a TOOLSET GAP when the YAML cannot say what
 the source binds: a part that does not split into exactly two `:` tokens
