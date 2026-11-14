@@ -58,6 +58,7 @@ import yaml
 import yaml.constructor
 import yaml.resolver
 
+from vcfcf_core.content_ids import recommendation_key_problem
 from vcfcf_core.naming import (
     framework_prefix_problem,
     has_factory_prefix,
@@ -137,9 +138,8 @@ VALID_SUBTYPES = {
 _ALERT_UUID_RE = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.IGNORECASE
 )
-# Recommendation key: an XML xs:ID (NCName). Seen: vCommunityCollectionWarnings,
-# Recommendation-df-<kind>-<slug>.
-_REC_KEY_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_.\-]*$")
+# Recommendation key grammar (an XML xs:ID, and the product's
+# Recommendation-df- / Recommendation-ud- prefix rule): vcfcf_core.content_ids.
 
 
 def _opt_bool_field(data: dict, key: str, path) -> bool:
@@ -532,10 +532,11 @@ def load_recommendation_file(path: str | Path, enforce_framework_prefix: bool = 
     explicit_id = None
     if "id" in data:
         explicit_id = data["id"]
-        if not isinstance(explicit_id, str) or not _REC_KEY_RE.match(explicit_id):
+        problem = recommendation_key_problem(explicit_id)
+        if problem:
             raise AlertValidationError(
-                f"{path}: id must be a recommendation key (letters, digits, _ . -, starting "
-                f"with a letter or _), rendered as the Recommendation key; got {explicit_id!r}"
+                f"{path}: id must be a recommendation key, rendered as the Recommendation key "
+                f"and every alert's ref: {problem}"
             )
 
     return Recommendation(

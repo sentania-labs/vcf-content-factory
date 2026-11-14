@@ -33,8 +33,14 @@ Order of decisions, each reported:
    ``rename`` matches, on source ids and names).
 5. **Ids.** ``keep`` carries source ids; ``mint`` gives every object a
    UUID version 5 from ``mint_namespace`` and its type and source id (a
-   rerun gives the same ids); ``map`` applies ``id_map`` and keeps the
-   rest. The stock-id guard runs on the result in the wrapper.
+   rerun gives the same ids; a recommendation's key is
+   ``Recommendation-df-<adapter kind>-<that uuid>``,
+   :func:`~vcfcf_core.content_ids.mint_recommendation_key`); ``map`` applies
+   ``id_map`` and keeps the rest. Every final id is checked against its
+   type's grammar (:mod:`vcfcf_core.content_ids`) before anything is
+   written: a minted one that fails is an internal error, a mapped one a
+   usage error naming the ``--id-map`` row, a kept one fails its object. The
+   stock-id guard runs on the result in the wrapper.
 6. **References.** By name inside the set, by raw id outside it where the
    schema has a raw-id form; otherwise the referencing object fails. An
    object that references a failed one fails too (cascade, named). Then
@@ -61,6 +67,7 @@ from typing import Dict, List, Optional, Set, Tuple
 
 import yaml
 
+from .. import content_ids as _ids
 from ..dashboards.loader import DASHBOARD_NAME_MAX_LEN, WIDGET_OMIT_KEYS
 from ..dashboards.widget_versions import (
     DASHBOARD_OMIT_MIN_OPS_VERSION,
@@ -95,7 +102,6 @@ TYPE_DIRS = {"supermetric": "supermetrics", "view": "views", "dashboard": "dashb
 _ID_PREFIX = {"symptom": "SymptomDefinition-", "alert": "AlertDefinition-"}
 _UUID_LOWER = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 _UUID_ANY = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
-_REC_KEY = re.compile(r"^[A-Za-z_][A-Za-z0-9_.\-]*$")
 _SM_TOKEN = re.compile(r"sm_([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})")
 _SM_FORMULA_TERM = re.compile(
     r"((?i:super\s*metric)\s*\|\s*)?sm_([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})")
@@ -140,6 +146,22 @@ def key_hit(keys, type_: str, nid: str):
     return None
 
 
+def rec_kind_choice(source_key: str, kinds) -> str:
+    """The adapter kind a recommendation's YAML carries, from the kinds of
+    the alerts that reference it, whatever their order: the one kind when
+    they agree; when they differ, the kind the source key already embeds
+    (``Recommendation-df-<kind>-...``, so a derived key stays derived), else
+    the first in sorted order; ``""`` when none has a kind (the caller writes
+    ``VMWARE`` and says so). An empty kind is ignored."""
+    ks = sorted(k for k in kinds if k)
+    if len(ks) <= 1:
+        return ks[0] if ks else ""
+    for k in sorted(ks, key=len, reverse=True):
+        if source_key.startswith(f"{_ids.RECOMMENDATION_PAK_PREFIX}{k}-"):
+            return k
+    return ks[0]
+
+
 def mint_namespace_uuid(text: str) -> uuid.UUID:
     """The UUID namespace a ``--mint-namespace`` text names."""
     return uuid.uuid5(MINT_ROOT, text)
@@ -167,6 +189,8 @@ class ConvertOptions:
     kind_map: Optional[KindMap] = None
     #: ``--describe``: (type, name or id) -> new description
     describe: Dict[Tuple[str, str], str] = field(default_factory=dict)
+    #: ``--id-map`` row of each ``id_map`` key (``<file> line <n>``), for messages
+    id_map_rows: Dict[str, str] = field(default_factory=dict)
 
 
 #: Types whose factory YAML has a description that ships on the content
@@ -289,11 +313,12 @@ class Plan:
 
 
 # ------------------------------------------------------------------ helpers
-def parse_tsv_map(text: str, what: str) -> Dict[str, str]:
+def parse_tsv_map(text: str, what: str, rows: Optional[Dict[str, str]] = None) -> Dict[str, str]:
     """Two-column TSV (``old<TAB>new``, extra columns ignored). A first row
     whose first cell is a column label (``old_id``, ``old``, ``id``,
     ``old_name``, ``name``) is a header; ``#`` lines and blank lines are
-    skipped. Raises ValueError on a malformed row or a repeated key."""
+    skipped. Raises ValueError on a malformed row or a repeated key. When
+    ``rows`` is given, each key's ``<what> line <n>`` is recorded in it."""
     out: Dict[str, str] = {}
     for n, line in enumerate(text.splitlines(), 1):
         if not line.strip() or line.lstrip().startswith("#"):
@@ -307,6 +332,8 @@ def parse_tsv_map(text: str, what: str) -> Dict[str, str]:
         if k in out:
             raise ValueError(f"{what}: line {n}: {k!r} is listed twice")
         out[k] = cells[1].strip()
+        if rows is not None:
+            rows[k] = f"{what} line {n}"
     return out
 
 
@@ -678,7 +705,10 @@ class _Planner:
 
     # 3. mapping -------------------------------------------------------
     def map_all(self, objs: List[SourceObject]) -> List[Tuple[SourceObject, MappedObject]]:
-        rec_kind: Dict[str, str] = {}
+        # a recommendation's adapter kind (its YAML has one, the source does
+        # not; a minted key embeds it), from the alerts that reference it,
+        # independent of their order: rec_kind_choice
+        rec_kinds: Dict[str, Set[str]] = defaultdict(set)
         for o in objs:
             if o.type == "alert":
                 rr = o.payload.find("State/Recommendations")
@@ -689,7 +719,7 @@ class _Planner:
                         # the alert's (re-pointed) kind is the one written
                         ref = self.kind_unmap.get(("recommendation", norm_id("recommendation", r.get("ref"))),
                                                   r.get("ref"))
-                        rec_kind.setdefault(ref, o.payload.get("adapterKind") or "")
+                        rec_kinds[ref].add(o.payload.get("adapterKind") or "")
         out = []
         for o in sorted(objs, key=lambda x: (CONTENT_TYPES.index(x.type), x.location, x.id)):
             try:
@@ -704,12 +734,19 @@ class _Planner:
                 elif o.type == "alert":
                     m = _alerts.map_alert(o.payload, o.location)
                 elif o.type == "recommendation":
-                    kind = rec_kind.get(o.id)
+                    kinds = rec_kinds.get(o.id, set())
+                    kind = rec_kind_choice(o.id, kinds)
                     m = _alerts.map_recommendation(o.payload, o.location, kind or "VMWARE")
+                    on_wire = ("and it is the kind segment of the minted key" if self.opts.ids == "mint"
+                               else "unused on the wire: the explicit id is rendered")
                     if not kind:
                         m.notes.append("adapter_kind is not in the source and no alert in the set references "
-                                       "this recommendation; VMWARE is written (unused on the wire: the "
-                                       "explicit id is rendered)")
+                                       f"this recommendation with a kind; VMWARE is written ({on_wire})")
+                    elif len({k for k in kinds if k}) > 1:
+                        m.notes.append(f"the alerts that reference this recommendation are on several adapter "
+                                       f"kinds ({', '.join(sorted(k for k in kinds if k))}); {kind} is written "
+                                       f"(the kind its source key embeds, else the first in sorted order; "
+                                       f"{on_wire})")
                 elif o.type == "supermetric":
                     m = _sms.map_supermetric(o.id, o.payload, o.location)
                 else:  # pragma: no cover
@@ -807,20 +844,35 @@ class _Planner:
                                     f"(source file {e.source.location})", kind="internal")
 
     # 5. ids --------------------------------------------------------------
-    def final_id(self, o: SourceObject) -> str:
+    def final_id(self, o: SourceObject, adapter_kind: str = "") -> str:
+        """The id ``o`` ships under (its YAML ``id:``). ``adapter_kind`` is
+        the kind its YAML carries (a minted recommendation key embeds it).
+        A mapped id its type's grammar refuses is a usage error naming the
+        ``--id-map`` row; a minted one is checked in :meth:`run`."""
         nid = norm_id(o.type, o.id)
         # --ids keep carries the source id, with a derived id's kind re-pointed
         # by --map-kind (the renderer derives it from the new kind)
         src = self.kind_source_id(o)
         raw = src[len(_ID_PREFIX[o.type]):] if o.type in _ID_PREFIX and src.startswith(_ID_PREFIX[o.type]) else src
-        mapping = {norm_key(k): v for k, v in self.opts.id_map.items()}
+        mapping = {norm_key(k): (k, v) for k, v in self.opts.id_map.items()}
         if self.opts.ids == "mint":
             new = minted_id(self.namespace, o.type, o.id)
-            return f"Recommendation-{new}" if o.type == "recommendation" else new
+            # A recommendation key is not a bare UUID: the product refuses a
+            # Recommendation-<uuid> key and the whole alert file with it
+            # (content_ids.RECOMMENDATION_RULE).
+            return _ids.mint_recommendation_key(adapter_kind, new) if o.type == "recommendation" else new
         hit = key_hit(mapping, o.type, nid)
         if hit is not None:
             self.map_used.add(hit)
-            return norm_id(o.type, mapping[hit]) if o.type != "recommendation" else mapping[hit]
+            row_key, target = mapping[hit]
+            new = norm_id(o.type, target) if o.type != "recommendation" else target
+            prob = _ids.yaml_id_problem(o.type, new)
+            if prob:
+                where = self.opts.id_map_rows.get(row_key, "--id-map")
+                self.usage_errors.append(
+                    f"--id-map {where}: {row_key} -> {target} maps {o.type} {o.id} ({o.name!r}) to an id its "
+                    f"type cannot carry: {prob}")
+            return new
         if o.type in ("view", "dashboard", "report", "supermetric"):
             return raw.lower()
         return raw
@@ -843,16 +895,16 @@ class _Planner:
         return derived == src
 
     def id_problem(self, t: str, fid: str) -> Optional[str]:
+        """Why ``fid`` cannot be the YAML id of a ``t`` (the type's grammar,
+        :func:`vcfcf_core.content_ids.yaml_id_problem`), or ``None``."""
         if t in ("view", "dashboard", "report", "supermetric") and not _UUID_LOWER.match(fid):
             return f"id {fid!r} is not a UUID, which the {t} loader requires"
         if t == "alert" and not _UUID_ANY.match(fid):
             return (f"id AlertDefinition-{fid} does not end in a UUID, which the alert YAML requires "
                     f"(explicit alert ids are UUIDs)")
-        if t == "recommendation" and not _REC_KEY.match(fid):
-            return f"recommendation key {fid!r} is not an XML id the recommendation YAML accepts"
         if t == "symptom" and not fid:
             return "empty symptom id"
-        return None
+        return _ids.yaml_id_problem(t, fid)
 
     # ---------------------------------------------------------------- run
     def run(self) -> Plan:
@@ -878,7 +930,18 @@ class _Planner:
                 # a recommendation's name is its key, re-pointed by --map-kind
                 e.source_name = o.name
                 e.rename_reasons.insert(0, "--map-kind (the key derives from the adapter kind)")
-            e.id = self.final_id(o)
+            e.id = self.final_id(o, str(m.yaml.get("adapter_kind") or ""))
+            if self.opts.ids == "mint":
+                # A minted id is the converter's own: one its type's grammar
+                # (or the wire form it renders to) refuses is a converter bug.
+                # Verification cannot see it (both sides render through the
+                # same code), so it is checked here, before anything is written.
+                prob = _ids.yaml_id_problem(o.type, e.id) or _ids.wire_id_problem(
+                    o.type, _ID_PREFIX.get(o.type, "") + e.id)
+                if prob:
+                    self.fail(o, f"internal error in the converter (--ids mint): minted id {e.id!r} is refused "
+                                 f"by its type's grammar: {prob} (source file {o.location})", kind="internal")
+                    continue
             info = self.kind_info.get((o.type, norm_id(o.type, o.id)))
             if info is not None and info.count:
                 e.kind_refs = info.count

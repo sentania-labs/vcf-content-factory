@@ -46,6 +46,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
+from vcfcf_core.content_ids import wire_id_problem as _wire_id_problem
 from vcfcf_core.importer import compare as _cmp
 from vcfcf_core.importer.convert import (
     ConvertOptions,
@@ -764,6 +765,12 @@ def _verify_tree(plan: Plan, out: Path, layout: str):
                 else:
                     root = ET.fromstring(render_alert_content_xml([], [], [obj]))
                     got = root.find("Recommendations/Recommendation")
+                # The rendered id against its type's grammar: the comparison
+                # cannot see an id both sides carry (they render through the
+                # same code), and the product refuses the whole file for one.
+                prob = _wire_id_problem(e.type, got.get("key") or got.get("id"))
+                if prob:
+                    res["load_errors"].append(f"{e.relpath}: renders an id VCF Operations refuses: {prob}")
                 c = _cmp.compare_xml(_expected_xml(e.source.payload, e, plan), got)
             else:
                 exp = dict(e.source.payload)
@@ -909,8 +916,9 @@ def run(args) -> int:
         return EXIT_USAGE
     try:
         id_map: Dict[str, str] = {}
+        id_map_rows: Dict[str, str] = {}
         for f in args.id_map or []:
-            for k, v in parse_tsv_map(Path(f).read_text(encoding="utf-8"), f).items():
+            for k, v in parse_tsv_map(Path(f).read_text(encoding="utf-8"), f, id_map_rows).items():
                 if norm_id("", k) in {norm_id("", x) for x in id_map}:
                     raise ValueError(f"{f}: {k} is already mapped by an earlier --id-map file")
                 id_map[k] = v
@@ -936,7 +944,8 @@ def run(args) -> int:
     opts = ConvertOptions(ids="map" if args.id_map else args.ids, id_map=id_map, drop=drop,
                           naming=args.naming, rename=rename, target_min=args.target_min,
                           prefer_sources=list(args.prefer_source or []), layout=args.layout,
-                          mint_namespace=mint_ns, kind_map=kind_map, describe=describe)
+                          mint_namespace=mint_ns, kind_map=kind_map, describe=describe,
+                          id_map_rows=id_map_rows)
 
     scan = scan_inputs(inputs)
     missed, guard_unreadable = _completeness(scan, inputs)

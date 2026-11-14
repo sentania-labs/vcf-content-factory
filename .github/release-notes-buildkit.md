@@ -39,6 +39,24 @@ Portable Tier 2 SDK adapter build toolchain (jar-free).
   `sdk-buildkit-v1` tag get the guard on their next CI run (the six
   registered paks pass it); repos pinned to an exact `sdk-buildkit-v1.0.x`
   tag must bump their pin to `sdk-buildkit-v1.0.29` to get it.
+- `build-sdk` reads the built pak's `content/` back and `validate-sdk` runs
+  the same check on a content-only render (`pak_content.py`, factory #367):
+  an empty or dangling localization entry, a content id defined twice
+  (identical copies of a view or recommendation excepted), and, new in this
+  kit, an id its type's grammar refuses (`content_ids.py`): a recommendation
+  key starting `Recommendation-` but not `Recommendation-df-` or
+  `Recommendation-ud-` (VCF Operations 9.0.2 refuses the whole alert file for
+  one), a `content/alertdefs/` recommendation key that is not an `xs:ID` (the
+  pak alert schema's type), an empty symptom or alert id, a view, dashboard,
+  report or super metric id that is not a UUID. The recommendation loader
+  refuses the same keys in `bundled_content` YAML. A `--release` build
+  deletes a pak that fails.
+- Adoption: the six registered paks pass. Content minted by the factory's
+  `import-local --ids mint` before 2026-11-14 carries `Recommendation-<uuid>`
+  keys and fails (vCommunity Java 0.0.0.17 content does) until it is
+  re-minted; an alert YAML on an adapter kind with a space needs an explicit
+  recommendation `id:`.
+- Kit contents: `content_ids.py` (the factory's `vcfcf_core/content_ids.py`).
 - The factory content-name prefix is `[VCF CF] ` (it was
   `[VCF Content Factory] `). For a pak whose `adapter.yaml` declares
   `content_naming: factory_prefixed`, or declares nothing, `validate-sdk`

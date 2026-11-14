@@ -302,7 +302,7 @@ def test_gate_dangling_key_overlong_key_and_stray_line(tmp_path):
 
 def test_gate_dashboard_bundle_empty_value(tmp_path):
     p = _pak_with(tmp_path, {
-        "content/dashboards/d/dashboard.json": '{"dashboards": [{"id": "d1", "name": "D"}]}',
+        "content/dashboards/d/dashboard.json": '{"dashboards": [{"id": "%s", "name": "D"}]}' % REPORT_ID,
         "content/dashboards/d/resources/resources.properties": "D=D\nD.w=\n",
     })
     errs = pak_content.check_pak_content(p)
@@ -582,7 +582,7 @@ def test_gate_recommendation_copies_identical_pass_differing_fail(tmp_path):
 
 
 def test_duplicate_message_is_neutral(tmp_path):
-    sm = '{"u1": {"name": "SM", "formula": "1"}}'
+    sm = '{"%s": {"name": "SM", "formula": "1"}}' % VIEW_ID  # any UUID (the id grammar)
     p = _pak_with(tmp_path, {"content/supermetrics/a.json": sm,
                              "content/supermetrics/b.json": sm})
     errs = pak_content.check_pak_content(p)

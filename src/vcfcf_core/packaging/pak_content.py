@@ -3,9 +3,9 @@
 The pak installer (``SolutionManagerDistributedTask.installContent``) walks
 ``content/`` in a fixed order (localization, reports, dashboards, alertdefs,
 symptomdefs, ..., ``knowledge/context/api-surface/summary_dashboard_pak_binding.md``)
-and reports success whatever each step did. Two defect classes passed every
-factory check and were found only in the appliance logs (vCommunity Java pak
-0.0.0.15 on 9.0.2 and 9.1.1, 2026-11-14,
+and reports success whatever each step did. The first two defect classes
+passed every factory check and were found only in the appliance logs
+(vCommunity Java pak 0.0.0.15 on 9.0.2 and 9.1.1, 2026-11-14,
 ``knowledge/context/investigations/2026-11-14-pak-content-silent-drops.md``):
 
 1. **An empty localization value.** The importer turns each
@@ -23,6 +23,12 @@ factory check and were found only in the appliance logs (vCommunity Java pak
    the 9.0.2 losses came from ids purged on that instance. One definition per
    id is factory policy all the same: it is the vendor shape, and which of two
    differing copies the importer keeps is not specified.
+3. **An id the importer refuses** (a third class, found the same way in a
+   pak built from an ``import-local --ids mint`` tree, 9.0.2, 2026-11-14): a
+   recommendation key ``Recommendation-<uuid>`` failed the whole alert file
+   (``Invalid format of Recommendation Id ... It should start with
+   Recommendation-df- or Recommendation-ud-``). Each definition's id is
+   checked against its type's grammar (:mod:`vcfcf_core.content_ids`).
 
 :func:`check_pak_content` returns one error line per problem so a build can
 refuse the pak. :func:`read_pak_content_inventory` gives the ids the pak
@@ -39,6 +45,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple, Union
 
+from vcfcf_core import content_ids as _ids
 from vcfcf_core import java_properties as _jprops
 from vcfcf_core.stock_ids import guard as _guard
 
@@ -222,6 +229,33 @@ def duplicate_definition_errors(members: Dict[str, bytes],
 
 
 # ---------------------------------------------------------------------------
+# Id grammar
+# ---------------------------------------------------------------------------
+
+def id_grammar_errors(defs: List["_guard.Definition"]) -> List[str]:
+    """An error per definition whose id its type's grammar refuses
+    (:func:`vcfcf_core.content_ids.wire_id_problem`): a recommendation key
+    the importer refuses (and the whole alert file with it) or, in
+    ``content/alertdefs/``, one that is not an ``xs:ID`` (the pak alert
+    schema's type for it), an empty
+    symptom or alert id, a view, dashboard, report or super metric id that
+    is not a UUID. One line per id and file."""
+    errors: List[str] = []
+    seen: set = set()
+    for d in defs:
+        # the xs:ID rule for recommendation keys holds where the alert schema
+        # applies (content/alertdefs/); a policy carries product keys outside it
+        problem = _ids.wire_id_problem(d.type, d.id, alertdefs=d.location.startswith(ALERTDEFS_DIR))
+        key = (d.type, d.id, d.location)
+        if problem is None or key in seen:
+            continue
+        seen.add(key)
+        name = f" ('{d.name}')" if d.name else ""
+        errors.append(f"{d.location}: {_guard.type_label(d.type)} {d.id}{name}: {problem}")
+    return errors
+
+
+# ---------------------------------------------------------------------------
 # Localization bundles
 # ---------------------------------------------------------------------------
 
@@ -370,6 +404,7 @@ def check_pak_content(source: PakSource) -> List[str]:
         [f"unreadable: {u}" for u in unreadable]
         + localization_errors(members)
         + duplicate_definition_errors(members, defs)
+        + id_grammar_errors(defs)
     )
 
 

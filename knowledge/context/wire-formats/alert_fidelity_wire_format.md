@@ -112,7 +112,7 @@ cancel_cycles: 2
 
 | YAML | Wire | Notes |
 |---|---|---|
-| `id: probeRecommendationKey` | `<Recommendation key="...">` and every alert's `ref="..."` | replaces the derived `Recommendation-df-<kind>-<slug>`; an XML `xs:ID` (letters, digits, `_ . -`, starting with a letter or `_`). Seen: a camel-case key in the third-party pak, `Recommendation-df-...` in built-ins |
+| `id: probeRecommendationKey` | `<Recommendation key="...">` and every alert's `ref="..."` | replaces the derived `Recommendation-df-<kind>-<slug>`; an XML `xs:ID` (letters, digits, `_ . -`, starting with a letter or `_`), and either a bare key or `Recommendation-df-...` / `Recommendation-ud-...` (§Id grammar: the product refuses any other `Recommendation-` key). Seen: a camel-case key in the third-party pak, `Recommendation-df-...` in built-ins |
 
 The recommendation's `name` stays the YAML cross-reference alerts use;
 the key is what the XML carries. `Recommendation.id` returns the explicit
@@ -120,6 +120,114 @@ key when one is set, so `vcfcf_alerts validate` (`ref=`), the renderer and
 the stock-id guard all read the real key. The stock-id baseline holds no
 recommendation keys, so an explicit key equal to a stock recommendation's
 key is not caught.
+
+## Id grammar (2026-11-14)
+
+The ids each type may carry, one definition in `vcfcf_core/content_ids.py`,
+checked by the alert loader (recommendation `id:`), the pak content gate
+(`pak_content.id_grammar_errors`, every definition under a built pak's
+`content/`), and `import-local` (minted ids before anything is written, a
+`--id-map` destination, a kept source id, each rendered id in verification).
+
+| Type | Wire (content-import XML / JSON) | YAML `id:` | Evidence |
+|---|---|---|---|
+| recommendation | `Recommendation-df-<rest>`, `Recommendation-ud-<rest>`, or a bare key not starting `Recommendation-`; in `content/alertdefs/` also an `xs:ID` | the key itself, also an XML `xs:ID` | prefix rule measured (pak path); `xs:ID` from the pak schema |
+| symptom | `SymptomDefinition-<x>` or a bare id | a UUID (rendered `SymptomDefinition-<uuid>`); absent: derived `SymptomDefinition-<kind>-<slug>` | exports, paks |
+| alert | `AlertDefinition-<x>` or a bare id | a UUID (rendered `AlertDefinition-<uuid>`); absent: derived `AlertDefinition-<kind>-<slug>` | exports, paks |
+| view, dashboard, report template, super metric | a UUID | a lower-case UUID | every one read |
+
+**Recommendation keys, measured (VCF Operations 9.0.2, 2026-11-14; pak
+install path only).** A pak built from an `import-local --ids mint` tree
+carried `<Recommendation key="Recommendation-ec5f14b5-b009-564e-8c31-66f205a839b1">`;
+the install log shows `AlertDefinitionServiceImpl.importAlertDefinitions -
+Cannot import Alert Definitions: Invalid format of Recommendation Id:
+Recommendation-ec5f14b5-... It should start with Recommendation-df- or
+Recommendation-ud-`, and the alert, its symptoms and the recommendation in
+that file were absent after the install (the file is all-or-nothing). Only
+the pak install path was measured. That content-zip sync (`AlertContent.xml`)
+reaches the same service is inferred, not measured; REST sync carries no
+recommendation key (the server assigns ids). The loader rule applies on every
+path all the same.
+
+Reported, not recorded: the same content with the source's bare key
+(`vCommunityCollectionWarnings`) imported, the product adding `-df-` itself
+(reported from the same install; no log or REST read of it is in the repo).
+What the stored id of a bare key is exactly (`Recommendation-df-<kind>-<key>`
+is the likely form) is not recorded.
+
+What the two prefixes mean, from the corpora (observed): `df` is a
+definition-file recommendation (pak and `describe.xml` content); every one of
+212 read (policy exports, third-party exports and fixtures) is
+`Recommendation-df-<adapter kind>-<key>` (208 `VMWARE`, `CASAdapter`,
+`CISCOHYPERFLEX_ADAPTER`, and `vCenter Operations Adapter` with its spaces,
+the last only in two **policy** exports:
+`AriaOperationsContent/vropstopdashboard/SampleDefaultPolicy.xml`,
+`hol-2501-lab-files/HOL-2501-11/Module 5/autoscale-policy.xml`). `ud` is
+user-defined (created in the UI): `Recommendation-ud-<uuid>` (3, in exports).
+
+**The minted key, inferred (not yet seen installing).**
+`import-local --ids mint` mints `Recommendation-df-<kind segment>-<uuid5>`:
+the uuid5 is the one minted before 2026-11-14 (only the prefix changed), and
+the kind segment is the recommendation's YAML `adapter_kind` with every
+character outside `[A-Za-z0-9_.-]` replaced by `_` (`EP Ops Adapter` becomes
+`EP_Ops_Adapter`; `VMWARE` is unchanged). The shape is inferred from the
+error text and the export shape, and matches the factory's derived key
+`Recommendation-df-<kind>-<slug>`, which the alert renderer writes verbatim as
+the `key` and every alert's `ref`. Whether the product reads the kind segment
+at all (for a kind that is not the pak's adapter kind, `KindB`, or the
+`VMWARE` fallback) is not recorded. Two recommendations cannot collide on one
+key: the uuid5 is of each recommendation's own type and source id.
+
+Live result, measured 2026-11-14: a pak carrying a minted key of this form
+(`Recommendation-df-VMWARE-<uuid5>`) was installed fresh on VCF Operations
+9.0.2 and 9.1.1. On both, the alert that references the recommendation
+imported with its symptom set and the recommendation attached, with no
+"Invalid format" line in the appliance logs. Not measured: 8.18.7, a kind
+segment other than `VMWARE`, and the REST and content-zip sync paths.
+
+The recommendation's YAML `adapter_kind`, and so the kind segment, does not
+depend on the order of the alerts that reference it: the one kind when they
+agree; when they differ, the kind the source key already embeds (so a derived
+key stays derived), else the first in sorted order; with no kind, `VMWARE`
+and a note (`convert.rec_kind_choice`).
+
+Bare keys are also in VMware's own pak content (`vmware-mpforphysicalsan-8.12.0`
+`content/alertdefs/pSANAlerts.xml`: `AddStorageLunCapacity`) and in vendor
+`describe.xml` files (`recommendation-3563271761`, lower case).
+
+**`xs:ID`.** The pak alert schema (`content/alertdefs/alertDefinitionSchema.xsd`
+in every SDK sample pak, for example
+`vmware-vcf-operations-integration-sdk/samples/mysql-extension-java-mp/`)
+types `Recommendation/@key` as `xs:ID` and every `ref` as `xs:IDREF`. The
+YAML and the pak gate (in `content/alertdefs/`) keep that rule; a key
+elsewhere in a pak (a policy) gets only the prefix rule, since the policy
+exports above carry keys with spaces. Whether the importer enforces the
+schema is not recorded. Consequence for derived keys: a recommendation YAML
+with no `id:` on an adapter kind with a space derives
+`Recommendation-df-EP Ops Adapter-<slug>`, which the gate refuses. The derived
+key is not changed: nothing in the repo or the registered paks has a
+recommendation or alert on such a kind (checked 2026-11-14), but a clone could
+have installed one through content-zip sync, and changing the derivation would
+re-id it. Such a pak needs an explicit `id:`; only new mints get the safe kind
+segment.
+
+**Factory caution (not measured):** a key starting `recommendation-` in
+another letter case is refused; whether the content importer compares the
+prefix case-sensitively is not recorded, and the loader message says so.
+
+**Symptom and alert ids.** No refusal is recorded. Exports and paks carry
+`SymptomDefinition-<uuid>` (260), `SymptomDefinition-<kind>-<slug>` (607),
+and the same two forms for alerts; VMware's `vmware-mpforphysicalsan-8.12.0`
+pak ships bare ids in `content/alertdefs/` (`SwitchPortDown`,
+`SwitchPortLinkDown`), so the wire check accepts a bare id and refuses only
+an empty one. The YAML keeps its UUID rule (the loaders').
+`investigations/sdk_pak_content_import_gap.md` is a different failure: a
+reference to an id nothing defines.
+
+**UUID types.** All 2,858 views, 844 dashboards, 502 report templates and
+234 super metrics read in `reference/references/` carry UUIDs, as do the
+registered paks; the factory loaders require lower-case ones. Not a measured
+refusal.
 
 ## Ids: case and uniqueness
 
