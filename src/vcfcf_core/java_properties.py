@@ -21,7 +21,8 @@ Java semantics kept on purpose:
   whitespace, at most one ``=`` or ``:``, and whitespace again are skipped.
 - Escapes: ``\\t \\n \\r \\f``, ``\\uXXXX``, and any other escaped character
   is itself. A malformed ``\\uXXXX`` raises ``ValueError`` (Java throws
-  ``IllegalArgumentException``).
+  ``IllegalArgumentException``). Two ``\\uXXXX`` forming a surrogate pair
+  are one character, as in the Java ``String``.
 - A key given twice keeps the last value (:func:`load`); :func:`load_entries`
   returns every entry in order, so a caller can report the superseded ones.
 
@@ -57,7 +58,12 @@ def unescape(s: str) -> str:
             continue
         out.append(_ESC.get(nxt, nxt))
         k += 2
-    return "".join(out)
+    text = "".join(out)
+    if any("\ud800" <= ch <= "\udfff" for ch in text):
+        # Java strings are UTF-16: a 😀 pair is one character.
+        # Join escaped surrogate pairs the same way; a lone one stays as is.
+        text = text.encode("utf-16-le", "surrogatepass").decode("utf-16-le", "surrogatepass")
+    return text
 
 
 def load_entries(text: str) -> List[Tuple[int, str, str]]:

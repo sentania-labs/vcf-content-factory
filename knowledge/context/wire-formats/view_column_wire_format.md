@@ -563,6 +563,27 @@ unreferenced on this code path (it still applies to `<Title>` and
 `<Description>` at view level, which use static `"title"` / `"desc"` keys
 that do not collide).
 
+Correction (2026-11-14): the SDK pak bundles are not empty. `build-sdk`
+writes `view.<id>.title`, `view.<id>.desc` and a `view.<id>.<attribute key>`
+line per labelled column into each `content/reports/<dir>/resources/content.properties`,
+and the importer turns every line into a ViewDef `<Localization>` property
+whatever the XML references. A column with no `display_name` (`omit:
+[display_name]`) gets no line: an empty value fails the whole directory
+(`cvc-minLength-valid`). Since DEF-018 no `localizationKey` is emitted on
+`<Title>` / `<Description>` either.
+`../investigations/2026-11-14-pak-content-silent-drops.md`.
+
+**Duplicate keys in one bundle are tolerated (proven).** Two columns whose
+attribute keys sanitize to the same localization key (for example two
+`net|usage_average` columns with different transformations) write the same
+`view.<id>.<key>` twice. vCommunity Java 0.0.0.15 had such keys in 10
+directories (`config_storageDevice_multipathInfo_numberofActivePath`,
+`net_usage_average`, ...) and those views imported on 9.0.2 and 9.1.1
+(`8f50f651...`, `a54e74b2...` present). Harmless because the XML references
+no key; the pak content gate does not refuse them. If column
+`localizationKey`s are ever emitted again, this becomes the `6c59f6b`
+collision and must be gated.
+
 ## Limitations
 
 Things VCF Ops does NOT support on list view columns, documented so

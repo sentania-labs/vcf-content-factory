@@ -153,10 +153,12 @@ def test_pak_paths_and_binding_key_survive_the_rename(tmp_path):
         "content/reports/VCF_Content_Factory_Pak_VM_List/content.xml",
         "content/reports/VCF_Content_Factory_Pak_VM_Report/content.xml",
         "content/supermetrics/VCF Content Factory Pak SM.json",
-        "content/symptomdefs/VCF Content Factory Pak Host Down.xml",
         "content/alertdefs/VCF Content Factory Pak Host Down.xml",
     ):
         assert expected in names, expected
+    # The alert references the symptom, so the symptom is defined in the
+    # alert's file only (2026-11-14: each content id once per pak).
+    assert not any(n.startswith("content/symptomdefs/") and n.endswith(".xml") for n in names)
 
     # The Summary binding key is byte-identical.
     props = "content/dashboards/dashboards.properties"

@@ -362,6 +362,11 @@ live instance (fixtures only).
   `../../lessons/unknown-widget-type-aborts-pak-dashboard-import.md`. A
   STALLED dashboard exits `install` with 3 (installed, post-install check
   failed), distinct from 1 (the install failed). Not run with `--no-wait`.
+  After it (2026-11-14) the pak `install` also counts the pak's views,
+  report templates, symptoms and alerts by id and checks each alert still
+  names its symptoms and inline conditions (`CONTENT MISSING:` /
+  `CONTENT INCOMPLETE:`, exit 3; `--skip-content-check`):
+  `../investigations/2026-11-14-pak-content-silent-drops.md`.
 
 The same STALLED state therefore exits differently per tool, each following
 its own existing convention: `vcfcf_dashboards sync` exits 1, the shipped

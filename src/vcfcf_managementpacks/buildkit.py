@@ -24,6 +24,9 @@ Kit contents (assembled under a temp dir, then tarballed):
     reports_loader.py          : copy of vcfcf_core/reports/loader.py
     reports_render.py          : copy of vcfcf_core/reports/render.py (imports patched)
     naming.py                  : copy of vcfcf_core/naming.py (the content-name prefix)
+    pak_content.py             : copy of vcfcf_core/packaging/pak_content.py (the
+                                 built-pak content gate, kit 1.0.29; imports patched)
+    java_properties.py         : copy of vcfcf_core/java_properties.py (no rewrites)
     defect_gate.py             : vcfcf_packaging/defects.py verbatim behind a
                                  generated header; the standalone RULE-012 gate
                                  for pak CI (#226)
@@ -136,6 +139,11 @@ _FACTORY_SOURCES = {
     # byte for byte. No baseline in the kit fails every build (fail closed).
     "stock_ids.py": _CORE_ROOT / "stock_ids" / "guard.py",
     "stock_ids_baseline.json": _CORE_ROOT / "stock_ids" / "stock_ids_baseline.json",
+    # Built-pak content gate (kit 1.0.29): empty or dangling localization
+    # entries and content ids defined twice. Reads properties files with the
+    # factory's one java.util.Properties reader.
+    "pak_content.py": _CORE_ROOT / "packaging" / "pak_content.py",
+    "java_properties.py": _CORE_ROOT / "java_properties.py",
 }
 
 # The RULE-012 defect gate, shipped as a standalone script so pak CI can run
@@ -226,6 +234,18 @@ _IMPORT_REWRITES: dict[str, list[tuple[str, str]]] = {
         (
             r"from vcfcf_core\.stock_ids import guard as _stock_ids",
             "from . import stock_ids as _stock_ids",
+        ),
+        # from vcfcf_core.packaging import pak_content as _pak_content
+        # (module-level; the built-pak content gate, kit 1.0.29)
+        (
+            r"from vcfcf_core\.packaging import pak_content as _pak_content",
+            "from . import pak_content as _pak_content",
+        ),
+        # from vcfcf_core import java_properties as _jprops  (module-level;
+        # the localization bundles' read-back check, kit 1.0.29)
+        (
+            r"from vcfcf_core import java_properties as _jprops",
+            "from . import java_properties as _jprops",
         ),
         # from vcfcf_core.supermetrics import crossref as _crossref  (module-level;
         # the shared @supermetric:"<name>" formula cross-reference resolver)
@@ -360,21 +380,6 @@ _IMPORT_REWRITES: dict[str, list[tuple[str, str]]] = {
             "from . import dashboard_widget_versions as _wv",
         ),
     ],
-    # alerts_loader.py: load_dir / load_recommendations check rendered-id
-    # collisions through the renderer (inline import).
-    "alerts_loader.py": [
-        (
-            r"from \.render import rendered_id_collisions",
-            "from .alerts_render import rendered_id_collisions",
-        ),
-    ],
-    # symptoms_loader.py: load_dir checks rendered-id collisions (inline import).
-    "symptoms_loader.py": [
-        (
-            r"from vcfcf_core\.alerts\.render import rendered_id_collisions",
-            "from .alerts_render import rendered_id_collisions",
-        ),
-    ],
     # dashboard_render.py: rewrite .loader import (it's a relative import within
     # vcfcf_dashboards, which becomes .dashboard_loader in the kit)
     "dashboard_render.py": [
@@ -419,11 +424,19 @@ _IMPORT_REWRITES: dict[str, list[tuple[str, str]]] = {
             "from .naming import",
         ),
     ],
+    # One entry per file: a second literal key for the same file silently
+    # replaced the first (the rendered_id_collisions rules below were lost
+    # until 2026-11-14; tests/managementpacks/test_buildkit_rewrite_keys.py).
     "symptoms_loader.py": [
         # from vcfcf_core.naming import ...  (the content-name prefix constants)
         (
             r"from vcfcf_core\.naming import",
             "from .naming import",
+        ),
+        # load_dir checks rendered-id collisions (inline import).
+        (
+            r"from vcfcf_core\.alerts\.render import rendered_id_collisions",
+            "from .alerts_render import rendered_id_collisions",
         ),
     ],
     "alerts_loader.py": [
@@ -432,12 +445,30 @@ _IMPORT_REWRITES: dict[str, list[tuple[str, str]]] = {
             r"from vcfcf_core\.naming import",
             "from .naming import",
         ),
+        # load_dir / load_recommendations check rendered-id collisions
+        # through the renderer (inline import).
+        (
+            r"from \.render import rendered_id_collisions",
+            "from .alerts_render import rendered_id_collisions",
+        ),
     ],
     "reports_loader.py": [
         # from vcfcf_core.naming import ...  (the content-name prefix constants)
         (
             r"from vcfcf_core\.naming import",
             "from .naming import",
+        ),
+    ],
+    # pak_content.py (vcfcf_core/packaging copy): its two vcfcf_core imports
+    # to the flat kit names.
+    "pak_content.py": [
+        (
+            r"from vcfcf_core import java_properties as _jprops",
+            "from . import java_properties as _jprops",
+        ),
+        (
+            r"from vcfcf_core\.stock_ids import guard as _guard",
+            "from . import stock_ids as _guard",
         ),
     ],
     "reports_render.py": [

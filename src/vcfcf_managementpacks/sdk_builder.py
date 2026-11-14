@@ -54,6 +54,7 @@ Key design decisions:
 """
 from __future__ import annotations
 
+import contextlib
 import glob
 import hashlib
 import html
@@ -93,6 +94,12 @@ from vcfcf_core.naming import (
 # Stock content id guard (#345): baseline, allowlist and check. In the
 # sdk-buildkit this is the flat stock_ids.py beside its baseline file.
 from vcfcf_core.stock_ids import guard as _stock_ids
+# Built-pak content gate (2026-11-14): empty or dangling localization
+# entries, and content ids defined twice. In the sdk-buildkit this is the
+# flat pak_content.py.
+from vcfcf_core.packaging import pak_content as _pak_content
+# The java.util.Properties reader the localization bundles are checked with.
+from vcfcf_core import java_properties as _jprops
 
 from .sdk_project import (
     CONTENT_NAMING_DEFAULT,
@@ -2836,6 +2843,21 @@ def _build_overview_packed(project: SdkProjectDef) -> bytes:
     return buf.getvalue()
 
 
+def _pak_minimum_ops_version() -> str:
+    """``manifest.txt`` ``vcops_minimum_version``: the oldest supported
+    line's major.minor, as ``<major>.<minor>.0`` ("8.18.0" while 8.18.7 is
+    the oldest line in ``_SDK_COMPAT_LINES``).
+
+    Owner decision 2026-11-14: a Tier 2 pak supports the whole 8.18.x line
+    (tested on 8.18.7), so the floor follows ``_SDK_COMPAT_LINES`` instead of
+    a second constant. The content and Section gates keep keying on the
+    tested line itself (``_oldest_supported_line``); only this declared floor
+    is widened to the line. Was a hardcoded "8.0.0".
+    """
+    major, minor = _oldest_supported_line().split(".")[:2]
+    return f"{major}.{minor}.0"
+
+
 def _generate_outer_manifest(project: SdkProjectDef) -> str:
     """Generate the outer pak manifest.txt JSON.
 
@@ -2849,7 +2871,7 @@ def _generate_outer_manifest(project: SdkProjectDef) -> str:
         "name": project.name,
         "description": project.description,
         "version": f"{project.version}.{project.build_number}",
-        "vcops_minimum_version": "8.0.0",
+        "vcops_minimum_version": _pak_minimum_ops_version(),
         "disk_space_required": 500,
         "eula_file": "eula.txt",
         "platform": ["Linux VA"],
@@ -2990,17 +3012,95 @@ def _dashboard_short_name(dashboard_name: str, name_path: str) -> str:
     return dashboard_name
 
 
-def _java_properties_escape_key(key: str) -> str:
-    """Escape a Java properties key (backslash-escape spaces and special chars).
+_PROPS_CONTROL_ESCAPES = {"\t": "\\t", "\n": "\\n", "\r": "\\r", "\f": "\\f"}
 
-    Java .properties format requires spaces in keys to be backslash-escaped.
-    Equals signs and colons in keys must also be escaped.
+
+def _java_properties_escape(text: str, *, key: bool) -> str:
+    """Escape one key or value of a content ``.properties`` file so
+    ``java.util.Properties.load`` reads it back exactly, under either reader.
+
+    Backslash and the four control escapes always; in a key also space,
+    ``=``, ``:``, ``#`` and ``!`` (a key starting with ``#`` or ``!`` made the
+    line a comment); in a value a leading space. Every other character
+    outside printable ASCII is written as ``\\uXXXX`` (UTF-16 code units), so
+    the file is ASCII and reads the same through a UTF-8 ``Reader`` and the
+    ISO-8859-1 ``Properties.load(InputStream)``: which one the importer uses
+    for ``content/reports/*/resources/`` and the dashboard bundles is not
+    recorded. Only for these content bundles: the pak-root
+    ``resources/resources.properties`` is read by Python ``configparser``,
+    which knows no ``\\u`` escapes (``_generate_outer_resources_properties``).
     """
-    key = key.replace("\\", "\\\\")
-    key = key.replace(" ", "\\ ")
-    key = key.replace("=", "\\=")
-    key = key.replace(":", "\\:")
-    return key
+    out = []
+    for i, ch in enumerate(text):
+        if ch == "\\":
+            out.append("\\\\")
+        elif ch in _PROPS_CONTROL_ESCAPES:
+            out.append(_PROPS_CONTROL_ESCAPES[ch])
+        elif key and ch in " =:#!":
+            out.append("\\" + ch)
+        elif not key and ch == " " and i == 0:
+            out.append("\\ ")
+        elif " " <= ch <= "~":
+            out.append(ch)
+        else:
+            units = ch.encode("utf-16-be", "surrogatepass")
+            out.extend(f"\\u{int.from_bytes(units[j:j + 2], 'big'):04x}"
+                       for j in range(0, len(units), 2))
+    return "".join(out)
+
+
+def _java_properties_escape_key(key: str) -> str:
+    """Escape a Java properties key (``_java_properties_escape``)."""
+    return _java_properties_escape(key, key=True)
+
+
+def _java_properties_escape_value(value: str) -> str:
+    """Escape a Java properties value so ``Properties.load`` reads it back whole.
+
+    An unescaped line break ended the value and turned the next line into a
+    key of its own: 0.0.0.15 of the vCommunity Java pak carried 34 such stray
+    entries, each a localized description cut to its first line (2026-11-14,
+    knowledge/context/investigations/2026-11-14-pak-content-silent-drops.md).
+    """
+    return _java_properties_escape(value, key=False)
+
+
+def _has_text(value) -> bool:
+    """Whether a localization text is worth an entry.
+
+    The content schema gives a localization value ``minLength 1``: one
+    ``key=`` line fails the import of its whole ``content/reports/<dir>/``
+    (``cvc-minLength-valid``, 9.0.2 and 9.1.1, 2026-11-14). An empty or blank
+    text has nothing to localize, so no entry is written (the ViewDef XML
+    carries no ``localizationKey`` for it either, so nothing dangles).
+    """
+    return value is not None and bool(str(value).strip())
+
+
+def _render_properties(entries: List[Tuple[str, str]], header: str = "",
+                       where: str = "", blank_after: Optional[int] = None) -> str:
+    """The ``.properties`` text for ``(key, value)`` entries (unescaped).
+
+    Read back with the factory's ``java.util.Properties`` reader before it
+    is returned: an entry that does not come back exactly (a key read as a
+    comment, a value cut at a line break) is a build error naming the
+    entry, never a silently different bundle.
+    """
+    lines = [header] if header else []
+    for i, (k, v) in enumerate(entries):
+        lines.append(f"{_java_properties_escape_key(k)}={_java_properties_escape_value(v)}")
+        if blank_after is not None and i + 1 == blank_after:
+            lines.append("")
+    lines.append("")
+    text = "\n".join(lines)
+    read = [(k, v) for _line, k, v in _jprops.load_entries(text)]
+    if read != [(k, str(v)) for k, v in entries]:
+        bad = next((e for e, r in zip(entries, read + [None] * len(entries)) if e != r), None)
+        raise SdkBuildError(
+            f"{where or 'localization bundle'}: the entry {bad!r} does not read back "
+            f"as written from the generated properties file (a builder bug)."
+        )
+    return text
 
 
 def _generate_dashboard_resources_properties(dashboard, name_path: str) -> str:
@@ -3018,32 +3118,24 @@ def _generate_dashboard_resources_properties(dashboard, name_path: str) -> str:
         dashboard: Dashboard dataclass instance.
         name_path: The dashboard's namePath (folder label, e.g. "VCF Content Factory").
     """
-    lines = ["#Dashboard Localization"]
-
-    # Folder label — the namePath itself gets a top-level entry
-    if name_path:
-        escaped_folder = _java_properties_escape_key(name_path)
-        lines.append(f"{escaped_folder}={name_path}")
-        lines.append("")
-
+    entries: List[Tuple[str, str]] = []
+    blank_after = None
+    # Folder label — the namePath itself gets a top-level entry (and a blank
+    # line after it, as before)
+    if _has_text(name_path):
+        entries.append((name_path, name_path))
+        blank_after = 1
     # Dashboard entry — key is the dashboard name, value is the display name
-    dash_key = _java_properties_escape_key(dashboard.name)
-    lines.append(f"{dash_key}={dashboard.name}")
-
+    if _has_text(dashboard.name):
+        entries.append((dashboard.name, dashboard.name))
     # Per-widget entries — key is "<dashboard_name>.<widget_title>"
+    # (an empty or blank title has no entry: values are never empty).
     for w in dashboard.widgets:
-        if not w.title:
-            continue
-        # Compound key: escaped dashboard name + "." + escaped widget title
-        compound_key = (
-            _java_properties_escape_key(dashboard.name)
-            + "."
-            + _java_properties_escape_key(w.title)
-        )
-        lines.append(f"{compound_key}={w.title}")
-
-    lines.append("")
-    return "\n".join(lines)
+        if _has_text(w.title):
+            entries.append((f"{dashboard.name}.{w.title}", w.title))
+    return _render_properties(entries, "#Dashboard Localization",
+                              where=f"dashboard '{dashboard.name}' resources.properties",
+                              blank_after=blank_after)
 
 
 def _generate_view_content_properties(view) -> str:
@@ -3061,19 +3153,35 @@ def _generate_view_content_properties(view) -> str:
     matching the localizationKey emitted in content.xml).
 
     The <viewdef_uuid> is the view's ``id`` field (stable uuid4).
+
+    A text that is empty or blank gets no entry at all (a column with
+    ``omit: [display_name]``, as converted from a source view whose column
+    carries no ``displayName``; a blank description). The content schema
+    rejects an empty value and with it the whole directory, the view and any
+    report in it (``cvc-minLength-valid``, 2026-11-14). The rendered XML
+    carries no ``localizationKey`` for these (DEF-018 and the column note in
+    render.py), so leaving the entry out dangles nothing. The source pak
+    this layout was compared with ships no per-view bundle at all.
+
+    Values are escaped (``_java_properties_escape_value``) so a multi-line
+    description stays one entry.
     """
     uuid = view.id
-    lines = [f"view.{uuid}.title={view.name}"]
-    if view.description:
-        lines.append(f"view.{uuid}.desc={view.description.strip()}")
+    entries: List[Tuple[str, str]] = []
+    if _has_text(view.name):
+        entries.append((f"view.{uuid}.title", view.name))
+    if _has_text(view.description):
+        entries.append((f"view.{uuid}.desc", view.description.strip()))
     for col in view.columns:
         # Derive the localizationKey from the attribute key.
         # We use the same sanitization as the XML renderer will use:
         # replace '|' with '_', replace spaces with '_', keep alphanumerics and hyphens.
-        loc_key = _attribute_to_localization_key(col.attribute)
-        lines.append(f"view.{uuid}.{loc_key}={col.display_name}")
-    lines.append("")
-    return "\n".join(lines)
+        # Two columns whose attribute keys sanitize alike give the same key
+        # twice; harmless, the XML references no key (view_column_wire_format.md).
+        if _has_text(col.display_name):
+            loc_key = _attribute_to_localization_key(col.attribute)
+            entries.append((f"view.{uuid}.{loc_key}", col.display_name))
+    return _render_properties(entries, where=f"view '{view.name}' content.properties")
 
 
 # The platform's ViewDef Localization Property `key` attribute is XSD-capped
@@ -3203,6 +3311,134 @@ def _resolve_sm_formula(
     )
 
 
+def _alert_symptom_names(alert) -> List[str]:
+    """Symptom names an alert's sets reference, first occurrence order."""
+    out: List[str] = []
+    for s in (alert.symptom_sets or {}).get("sets") or []:
+        for ref in (s.get("symptoms") or []):
+            name = ref.get("name", "")
+            if name and name not in out:
+                out.append(name)
+    return out
+
+
+def _alert_recommendation_names(alert) -> List[str]:
+    out: List[str] = []
+    for ref in (getattr(alert, "recommendations", None) or []):
+        name = ref.name if hasattr(ref, "name") else str(ref)
+        if name not in out:
+            out.append(name)
+    return out
+
+
+def plan_alert_content_files(symptoms: list, alerts: list, recommendations: list):
+    """Which pak file defines each bundled symptom, alert and recommendation.
+
+    Returns ``(groups, standalone)``. ``groups`` is a list of
+    ``(alerts, symptoms, recommendations)``, one per
+    ``content/alertdefs/`` file: the alerts connected by a shared bundled
+    SYMPTOM, with every bundled symptom and recommendation they reference.
+    ``standalone`` is the bundled symptoms no bundled alert references, one
+    ``content/symptomdefs/`` file each.
+
+    Each bundled symptom lands in exactly one file, so no alert file depends
+    on another being imported first (``installContent`` imports alertdefs
+    before symptomdefs, and in ``File.listFiles`` order within a directory;
+    an alert whose symptoms do not exist yet is not created). This is the
+    vendor shape and factory policy; it is not what failed on 9.0.2: a
+    duplicated symptom updates in place there (probe T2,
+    ``knowledge/context/investigations/2026-11-14-symptom-duplicate-key-on-902.md``).
+
+    Alerts that share only a recommendation keep separate files, each
+    carrying its own identical copy of the recommendation (allowed by the
+    content gate). One file is one symptom import batch, all-or-nothing:
+    one bad or purged symptom id fails every symptom in its file, and the
+    file's alerts install with empty sets. Merging on a recommendation would
+    widen that for no symptom-level reason.
+
+    Order is the bundled order: groups by their first alert, symptoms and
+    recommendations by first reference. A referenced name the pak does not
+    bundle (a built-in) is left to the renderer, as before.
+    """
+    symptoms = list(symptoms or [])
+    alerts = list(alerts or [])
+    sym_by_name = {s.name: s for s in symptoms}
+    rec_by_name = {r.name: r for r in (recommendations or [])}
+
+    parent = list(range(len(alerts)))
+
+    def _find(i: int) -> int:
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    owner: Dict[Tuple[str, str], int] = {}
+    for i, alert in enumerate(alerts):
+        keys = [("s", n) for n in _alert_symptom_names(alert) if n in sym_by_name]
+        for key in keys:
+            if key in owner:
+                a, b = _find(owner[key]), _find(i)
+                if a != b:
+                    parent[max(a, b)] = min(a, b)
+            else:
+                owner[key] = i
+
+    members: Dict[int, List[int]] = {}
+    for i in range(len(alerts)):
+        members.setdefault(_find(i), []).append(i)
+    groups = []
+    referenced: set = set()
+    for root in sorted(members):
+        group_alerts = [alerts[i] for i in members[root]]
+        g_syms: list = []
+        g_recs: list = []
+        for alert in group_alerts:
+            for n in _alert_symptom_names(alert):
+                s = sym_by_name.get(n)
+                if s is not None and all(s is not x for x in g_syms):
+                    g_syms.append(s)
+                    referenced.add(n)
+            for n in _alert_recommendation_names(alert):
+                r = rec_by_name.get(n)
+                if r is not None and all(r is not x for x in g_recs):
+                    g_recs.append(r)
+        groups.append((group_alerts, g_syms, g_recs))
+    standalone = [s for s in symptoms if s.name not in referenced]
+    return groups, standalone
+
+
+class PakContentGateError(SdkBuildError):
+    """The built pak's content/ tree would import incompletely (2026-11-14).
+
+    An empty or dangling localization entry, or a content id defined more
+    than once: :func:`vcfcf_core.packaging.pak_content.check_pak_content`.
+    ``problems`` holds one line per problem.
+    """
+
+    def __init__(self, message: str, problems: Optional[List[str]] = None):
+        super().__init__(message)
+        self.problems = list(problems or [])
+
+
+def check_built_pak_content(pak_path: Path) -> None:
+    """Refuse a pak whose content/ the installer would drop silently.
+
+    Raises :class:`PakContentGateError` naming every problem (the object,
+    the field or the two locations). The pak is left on disk; the caller
+    decides whether to delete it.
+    """
+    problems = _pak_content.check_pak_content(pak_path)
+    if problems:
+        raise PakContentGateError(
+            f"pak content gate: {pak_path.name} carries {len(problems)} problem(s) "
+            f"the pak installer would not report (it imports the rest and says "
+            f"the install succeeded):\n"
+            + "\n".join(f"  - {p}" for p in problems),
+            problems,
+        )
+
+
 def _write_outer_pak(
     project: SdkProjectDef,
     adapters_zip_bytes: bytes,
@@ -3240,11 +3476,17 @@ def _write_outer_pak(
     Super metric layout (one JSON file per SM):
       content/supermetrics/<display_name>.json   [{<uuid>: {name, formula, ...}}]
 
-    Symptom layout (one XML file per symptom):
-      content/symptomdefs/<safe_name>.xml   [<alertContent><SymptomDefinitions>...]
-
-    Alert layout (one XML file per alert, includes symptom inline):
+    Symptom and alert layout (``plan_alert_content_files``; each id once):
       content/alertdefs/<safe_name>.xml   [<alertContent><AlertDefinitions><SymptomDefinitions>...]
+        one file per group of alerts that share a bundled symptom (usually
+        one alert), carrying every bundled symptom and recommendation they
+        reference (a recommendation shared across groups is copied, identical)
+      content/symptomdefs/<safe_name>.xml   [<alertContent><SymptomDefinitions>...]
+        one file per bundled symptom NO bundled alert references
+
+    The written content/ tree is then read back by the pak content gate
+    (``check_built_pak_content``); a problem raises ``PakContentGateError``
+    with the pak left on disk.
 
     Standard empty directories are also written whenever bundled_content is
     present so the platform recognises the full content/ tree structure.
@@ -3272,11 +3514,12 @@ def _write_outer_pak(
             owning-adapter ``<SubjectType>`` on each ViewDef (spec A2).
         supermetrics: List of SuperMetricDef objects to emit as JSON in
             ``content/supermetrics/``.
-        symptoms: List of SymptomDef objects to emit as XML in
-            ``content/symptomdefs/``.
+        symptoms: List of SymptomDef objects: in their alert's
+            ``content/alertdefs/`` file when a bundled alert references them,
+            else in ``content/symptomdefs/``.
         alerts: List of AlertDef objects to emit as XML in
-            ``content/alertdefs/``.  Each alert XML includes its referenced
-            symptoms inline.
+            ``content/alertdefs/``.  Each alert file includes its referenced
+            symptoms inline (and is the only place they are defined).
         reports: List of ReportDef objects to emit as XML in
             ``content/reports/<slug>/content.xml`` (subdirectory layout — the
             platform content walker only descends into *subdirectories* of
@@ -3575,16 +3818,44 @@ def _write_outer_pak(
                     file=sys.stderr,
                 )
 
-        # --- Symptoms ---
-        # Emit one XML file per symptom at content/symptomdefs/<safe_name>.xml.
+        # --- Symptoms and alerts: each symptom id written exactly once ---
+        # Layout (plan_alert_content_files): an alert's file carries the
+        # alert, every bundled symptom and recommendation it references, so
+        # its import never depends on another file. installContent imports
+        # content/alertdefs/ BEFORE content/symptomdefs/
+        # (summary_dashboard_pak_binding.md, the 9.0.2 bytecode order) and an
+        # alert whose symptoms do not exist yet is not created (synology
+        # 0.0.0.35, symptomdef_dt_condition_import.md). Alerts that share a
+        # symptom go in one file for the same reason; alerts that share only
+        # a recommendation each carry an identical copy of it. content/
+        # symptomdefs/ then holds only the symptoms no bundled alert
+        # references. This is the vendor shape and factory policy. The old
+        # layout (every symptom also in symptomdefs/) imports fine on 9.0.2
+        # (probe T2); the 0.0.0.15 duplicate-key losses were ids purged on
+        # that instance: knowledge/context/investigations/
+        # 2026-11-14-symptom-duplicate-key-on-902.md.
+        _alert_groups, _standalone_syms = plan_alert_content_files(
+            symptoms, alerts, recommendations
+        )
+        for _sym in _standalone_syms:
+            if getattr(_sym, "symptom_def_type", None):
+                print(
+                    f"  bundled content: warning: symptom '{_sym.name}' is an "
+                    f"alert's inline condition (symptom_def_type: "
+                    f"{_sym.symptom_def_type}) but no bundled alert references "
+                    f"it; it is written to content/symptomdefs/ on its own",
+                    file=sys.stderr,
+                )
+
+        # Emit one XML file per standalone symptom at content/symptomdefs/<safe_name>.xml.
         # Format: <alertContent><SymptomDefinitions>...</SymptomDefinitions></alertContent>
         # Exactly the format render_alert_content_xml() produces when called with
         # symptoms only (alerts=[], recommendations=[]).
-        if symptoms:
+        if _standalone_syms:
             from vcfcf_alerts.render import render_alert_content_xml
             zf.writestr("content/symptomdefs/", "")
             _sym_seen_names: set[str] = set()
-            for sym in symptoms:
+            for sym in _standalone_syms:
                 xml_text = render_alert_content_xml(
                     symptoms=[sym],
                     alerts=[],
@@ -3614,55 +3885,27 @@ def _write_outer_pak(
                     file=sys.stderr,
                 )
 
-        # --- Alerts ---
-        # Emit one XML file per alert at content/alertdefs/<safe_name>.xml.
+        # Emit one XML file per alert group at content/alertdefs/<safe_name>.xml
+        # (named after the group's first alert; a group is one alert unless
+        # alerts share a symptom or a recommendation).
         # Format: <alertContent><AlertDefinitions>...</AlertDefinitions>
-        #                       <SymptomDefinitions>...</SymptomDefinitions></alertContent>
-        # The alert XML includes the symptoms it references inline so the platform
-        # can register them when importing this file in isolation.  Cross-reference
-        # consistency (SymptomDefinition IDs) is guaranteed because both sides
-        # derive the ID from _symptom_id(adapter_kind, name) — same formula.
-        if alerts:
+        #                       <SymptomDefinitions>...</SymptomDefinitions>
+        #                       <Recommendations>...</Recommendations></alertContent>
+        # Cross-reference consistency (SymptomDefinition IDs) is guaranteed
+        # because both sides derive the ID from _symptom_id(adapter_kind, name)
+        # or the symptom YAML id: field, the same formula.
+        if _alert_groups:
             from vcfcf_alerts.render import render_alert_content_xml
-            # Build a name→SymptomDef lookup for finding referenced symptoms.
-            symptom_by_name = {s.name: s for s in symptoms}
-            # Build a name→Recommendation lookup for referenced recommendations.
-            recommendation_by_name = {r.name: r for r in recommendations}
             zf.writestr("content/alertdefs/", "")
             _alert_seen_names: set[str] = set()
-            for alert in alerts:
-                # Collect the symptoms referenced by this specific alert.
-                referenced_syms = []
-                sets = (alert.symptom_sets or {}).get("sets") or []
-                seen_sym_names: set = set()
-                for s in sets:
-                    for sym_ref in (s.get("symptoms") or []):
-                        sym_name = sym_ref.get("name", "")
-                        if sym_name and sym_name not in seen_sym_names:
-                            sym_obj = symptom_by_name.get(sym_name)
-                            if sym_obj is not None:
-                                referenced_syms.append(sym_obj)
-                            seen_sym_names.add(sym_name)
-                # Collect the recommendations referenced by this specific alert.
-                # The cross-ref validation above already guaranteed all
-                # factory-prefixed names resolve; non-factory names are
-                # built-in refs that are not in our bundled list (skip them).
-                referenced_recs = []
-                seen_rec_names: set = set()
-                for rec_ref in (getattr(alert, "recommendations", None) or []):
-                    rec_name = rec_ref.name if hasattr(rec_ref, "name") else str(rec_ref)
-                    if rec_name not in seen_rec_names:
-                        rec_obj = recommendation_by_name.get(rec_name)
-                        if rec_obj is not None:
-                            referenced_recs.append(rec_obj)
-                        seen_rec_names.add(rec_name)
+            for group_alerts, group_syms, group_recs in _alert_groups:
                 xml_text = render_alert_content_xml(
-                    symptoms=referenced_syms,
-                    alerts=[alert],
-                    recommendations=referenced_recs,
+                    symptoms=group_syms,
+                    alerts=group_alerts,
+                    recommendations=group_recs,
                 )
                 # From the id basis, so the path survives the prefix rename.
-                _alert_basis = id_basis_name(alert.name)
+                _alert_basis = id_basis_name(group_alerts[0].name)
                 safe_name = "".join(
                     c for c in _alert_basis if c.isalnum() or c in " -."
                 ).strip()
@@ -3680,7 +3923,9 @@ def _write_outer_pak(
                     xml_text,
                 )
                 print(
-                    f"  bundled content: content/alertdefs/{safe_name}.xml <- {alert.name}",
+                    f"  bundled content: content/alertdefs/{safe_name}.xml <- "
+                    + ", ".join(a.name for a in group_alerts)
+                    + (f" (+ {len(group_syms)} symptom(s))" if group_syms else ""),
                     file=sys.stderr,
                 )
 
@@ -3728,8 +3973,10 @@ def _write_outer_pak(
         # same import unit, and our content-import zips never shipped one).
         # We still emit a matching resources/content.properties whenever a
         # view is embedded — spec A3 wants the resources/ subdirectory
-        # populated regardless, and the file is harmless now that nothing in
-        # the XML references its keys.
+        # populated regardless. Nothing in the XML references its keys, but
+        # the importer still turns every line into a ViewDef Localization
+        # property and validates it: an empty value fails this whole
+        # directory, report included (2026-11-14), so empty texts get no line.
         if reports:
             from vcfcf_dashboards.render import render_view_def_fragments
             from vcfcf_reports.render import render_report_xml
@@ -3865,6 +4112,11 @@ def _write_outer_pak(
                         "pak from reaching the install pipeline."
                     )
 
+    # Content gate (2026-11-14): read the written content/ tree the way the
+    # pak installer does; an empty localization value or an id defined twice
+    # is a silent drop on install, so it fails the build here.
+    if has_bundled_content:
+        check_built_pak_content(pak_path)
     return pak_path
 
 
@@ -5033,19 +5285,34 @@ def build_sdk_pak(project_dir: Path, output_dir: Optional[Path] = None,
         # Step 10+11: generate manifest and write outer .pak
         # Pass owning binding info so content renderers emit the required
         # adapter-namespace fields (spec A1, A2, A3).
-        pak_path = _write_outer_pak(
-            project, adapters_zip_bytes, Path(output_dir), project_dir,
-            views=bundled_views,
-            dashboards=bundled_dashboards,
-            views_zip_bytes=_views_zip_bytes,
-            owning_adapter_kind=_owning_adapter_kind,
-            owning_resource_kind=_owning_resource_kind,
-            supermetrics=bundled_supermetrics,
-            symptoms=bundled_symptoms,
-            alerts=bundled_alerts,
-            reports=bundled_reports,
-            recommendations=bundled_recommendations,
-        )
+        try:
+            pak_path = _write_outer_pak(
+                project, adapters_zip_bytes, Path(output_dir), project_dir,
+                views=bundled_views,
+                dashboards=bundled_dashboards,
+                views_zip_bytes=_views_zip_bytes,
+                owning_adapter_kind=_owning_adapter_kind,
+                owning_resource_kind=_owning_resource_kind,
+                supermetrics=bundled_supermetrics,
+                symptoms=bundled_symptoms,
+                alerts=bundled_alerts,
+                reports=bundled_reports,
+                recommendations=bundled_recommendations,
+            )
+        except PakContentGateError as exc:
+            # Same disposal as the other built-pak gates: a release build's
+            # pak is deleted, a dev build's is left for inspection.
+            failed = Path(output_dir) / project.pak_filename
+            if release_build:
+                failed.unlink(missing_ok=True)
+                raise PakContentGateError(
+                    f"{exc}\n  removed {failed.name} (release build failed the "
+                    f"pak content gate).", exc.problems,
+                ) from exc
+            raise PakContentGateError(
+                f"{exc}\n  {failed} left for inspection; it failed the pak "
+                f"content gate and must not be installed.", exc.problems,
+            ) from exc
 
     print(f"Built: {pak_path}", file=sys.stderr)
 
@@ -5879,6 +6146,48 @@ def check_bundled_content(project: SdkProjectDef, bundled: tuple,
     return errors
 
 
+def _dry_render_content_problems(project: SdkProjectDef, project_dir: Path,
+                                 bundled: tuple) -> List[str]:
+    """The pak content gate's problems for ``bundled``, without a build.
+
+    Writes the pak's content/ tree to a temporary pak (no adapters.zip, no
+    compile) with the same ``_write_outer_pak`` build-sdk uses, so
+    validate-sdk sees what build-sdk would ship. Its per-file progress lines
+    (``  bundled content: content/...``, ``  content/files/...``) are not
+    printed; every other line it writes (warnings) is, after the render.
+    Other render errors propagate (validate-sdk reports them).
+    """
+    views, dashboards, sms, symptoms, alerts, reports, recs = bundled
+    if not any((views, dashboards, sms, symptoms, alerts, reports, recs)):
+        return []
+    owning_rk = None
+    describe_xml = project_dir / "describe.xml"
+    captured = io.StringIO()
+    problems: List[str] = []
+    try:
+        with tempfile.TemporaryDirectory(prefix="vcfcf-content-gate-") as tmp, \
+                contextlib.redirect_stderr(captured):
+            if describe_xml.is_file():
+                owning_rk = _find_world_resource_kind(describe_xml)
+            try:
+                _write_outer_pak(
+                    project, b"", Path(tmp), project_dir,
+                    views=views, dashboards=dashboards,
+                    owning_adapter_kind=project.adapter_kind,
+                    owning_resource_kind=owning_rk,
+                    supermetrics=sms, symptoms=symptoms, alerts=alerts,
+                    reports=reports, recommendations=recs,
+                )
+            except PakContentGateError as exc:
+                problems = [f"pak content: {p}" for p in exc.problems]
+    finally:
+        for line in captured.getvalue().splitlines():
+            if line.startswith(("  bundled content: content/", "  content/files/")):
+                continue
+            print(line, file=sys.stderr)
+    return problems
+
+
 def validate_sdk_project(project_dir: Path) -> List[str]:
     """Validate a Tier 2 adapter project without building.
 
@@ -5961,6 +6270,10 @@ def validate_sdk_project(project_dir: Path) -> List[str]:
             ]
             loc_errors = _validate_localization_key_contract(bundled_views, sm_scope=_val_sm_scope)
             errors.extend(loc_errors)
+        # Pak content gate without a build (2026-11-14): render the content/
+        # tree exactly as build-sdk writes it (no adapter, no compile) and
+        # read it back the way the pak installer does.
+        errors.extend(_dry_render_content_problems(project, project_dir, _bundled))
     except SdkBuildError as exc:
         # bundled_content path errors (missing files, bad YAML) surface here —
         # report them but don't abort the rest of validation.

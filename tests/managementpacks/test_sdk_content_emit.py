@@ -564,10 +564,13 @@ class TestSymptomEmit:
         names = _pak_namelist(pak_path)
         sym_entries = [n for n in names if n.startswith("content/symptomdefs/") and n.endswith(".xml")]
         alert_entries = [n for n in names if n.startswith("content/alertdefs/") and n.endswith(".xml")]
-        assert sym_entries and alert_entries
+        # The alert references the symptom, so the symptom is defined once,
+        # in the alert's file, and content/symptomdefs/ carries no copy
+        # (a second definition fails the import on 9.0.2, 2026-11-14).
+        assert alert_entries and not sym_entries
 
-        sym_raw = _pak_read(pak_path, sym_entries[0]).decode("utf-8")
         alert_raw = _pak_read(pak_path, alert_entries[0]).decode("utf-8")
+        sym_raw = alert_raw
 
         expected_id = f"SymptomDefinition-{_SYMPTOM_UUID}"
         assert f'id="{expected_id}"' in sym_raw, (
@@ -700,15 +703,16 @@ class TestAlertEmit:
         )
 
         names = _pak_namelist(pak_path)
-        # Read symptom XML to extract id=
+        # The referenced symptom is defined in the alert's own file only
+        # (2026-11-14: each id once; no content/symptomdefs/ copy).
         sym_entries = [n for n in names if n.startswith("content/symptomdefs/") and n.endswith(".xml")]
-        assert sym_entries, "No symptom XML in pak"
-        sym_raw = _pak_read(pak_path, sym_entries[0]).decode("utf-8")
+        assert not sym_entries, f"Referenced symptom also in symptomdefs: {sym_entries}"
 
-        # Read alert XML to extract ref=
+        # Read alert XML to extract ref= and the symptom's id=
         alert_entries = [n for n in names if n.startswith("content/alertdefs/") and n.endswith(".xml")]
         assert alert_entries, "No alert XML in pak"
         alert_raw = _pak_read(pak_path, alert_entries[0]).decode("utf-8")
+        sym_raw = alert_raw
 
         # Extract id= from symptom XML: id="SymptomDefinition-..."
         import re
@@ -896,9 +900,10 @@ class TestFullCombinedPak:
         view_entries = [n for n in names if "content/reports/" in n and n.endswith("content.xml")]
         assert len(view_entries) == 1, f"Expected 1 view XML; got {view_entries}"
 
-        # Symptom
+        # Symptom: referenced by the alert, so defined in the alert's file
+        # only (2026-11-14: each id once).
         sym_entries = [n for n in names if n.startswith("content/symptomdefs/") and n.endswith(".xml")]
-        assert len(sym_entries) == 1, f"Expected 1 symptom XML; got {sym_entries}"
+        assert sym_entries == [], f"Expected no standalone symptom XML; got {sym_entries}"
 
         # Alert
         alert_entries = [n for n in names if n.startswith("content/alertdefs/") and n.endswith(".xml")]
@@ -1215,7 +1220,11 @@ class TestSafeNameCollisionDedup:
         )
 
     def test_alert_collision_both_files_present(self, tmp_path: Path) -> None:
-        """Two alerts with identical display names → <name>.xml and <name>-2.xml."""
+        """Two alerts with identical display names → <name>.xml and <name>-2.xml.
+
+        Each alert references its own symptom here: alerts that share a
+        symptom go in one file (2026-11-14), see the next test.
+        """
         from vcfcf_symptoms.loader import load_file as load_sym
         from vcfcf_alerts.loader import load_file as load_alert
 
@@ -1224,12 +1233,22 @@ class TestSafeNameCollisionDedup:
             _write_yaml_to(tmp_path / "sym.yaml", _SYMPTOM_YAML_COLL_A),
             enforce_framework_prefix=False,
         )
+        sym_b = load_sym(
+            _write_yaml_to(
+                tmp_path / "sym_b.yaml",
+                _SYMPTOM_YAML_COLL_B.replace('name: "High CPU"', 'name: "High CPU B"'),
+            ),
+            enforce_framework_prefix=False,
+        )
         alert_a = load_alert(
             _write_yaml_to(tmp_path / "alert_a.yaml", _ALERT_YAML_COLL_A),
             enforce_framework_prefix=False,
         )
         alert_b = load_alert(
-            _write_yaml_to(tmp_path / "alert_b.yaml", _ALERT_YAML_COLL_B),
+            _write_yaml_to(
+                tmp_path / "alert_b.yaml",
+                _ALERT_YAML_COLL_B.replace('- name: "High CPU"', '- name: "High CPU B"'),
+            ),
             enforce_framework_prefix=False,
         )
 
@@ -1240,7 +1259,7 @@ class TestSafeNameCollisionDedup:
             _minimal_adapters_zip(),
             output_dir,
             project_dir=project_dir,
-            symptoms=[sym],
+            symptoms=[sym, sym_b],
             alerts=[alert_a, alert_b],
         )
 
@@ -1259,6 +1278,38 @@ class TestSafeNameCollisionDedup:
         assert f"{base_stem}-2" in stems, (
             f"Expected dedup suffix '-2' on second entry; got stems: {stems}"
         )
+
+    def test_alerts_sharing_a_symptom_share_one_file(self, tmp_path: Path) -> None:
+        """Two alerts naming the same symptom: one alertdefs file holds both
+        alerts and the symptom once, so neither alert depends on another file."""
+        from vcfcf_symptoms.loader import load_file as load_sym
+        from vcfcf_alerts.loader import load_file as load_alert
+
+        project_dir = tmp_path / "adapter"
+        sym = load_sym(
+            _write_yaml_to(tmp_path / "sym.yaml", _SYMPTOM_YAML_COLL_A),
+            enforce_framework_prefix=False,
+        )
+        alert_a = load_alert(
+            _write_yaml_to(tmp_path / "alert_a.yaml", _ALERT_YAML_COLL_A),
+            enforce_framework_prefix=False,
+        )
+        alert_b = load_alert(
+            _write_yaml_to(tmp_path / "alert_b.yaml", _ALERT_YAML_COLL_B),
+            enforce_framework_prefix=False,
+        )
+        pak_path = _write_outer_pak(
+            _make_project(), _minimal_adapters_zip(), tmp_path / "out",
+            project_dir=project_dir, symptoms=[sym], alerts=[alert_a, alert_b],
+        )
+        names = _pak_namelist(pak_path)
+        alert_entries = [n for n in names
+                         if n.startswith("content/alertdefs/") and n.endswith(".xml")]
+        assert alert_entries == ["content/alertdefs/CPU Alert.xml"]
+        assert not any(n.startswith("content/symptomdefs/") for n in names)
+        raw = _pak_read(pak_path, alert_entries[0]).decode("utf-8")
+        assert raw.count("<AlertDefinition ") == 2
+        assert raw.count("<SymptomDefinition ") == 1
 
 
 # ---------------------------------------------------------------------------

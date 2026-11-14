@@ -78,7 +78,20 @@ field here. The REST path cannot: the Suite API `alert-definition` and
   fields are deliverable only through the content-import XML path of a pak
   build. The installer templates are unchanged. A symptom `id:` predates
   this page and is unaffected.
-- Tier 2 pak builds (`build-sdk`): every field renders.
+- Tier 2 pak builds (`build-sdk`): every field renders. Each symptom and
+  alert id is defined once per pak (2026-11-14, factory policy and the
+  vendor shape, not a measured import failure: a symptom defined twice
+  updates in place on 9.0.2, probe T2 of
+  `investigations/2026-11-14-symptom-duplicate-key-on-902.md`). An alert's
+  `content/alertdefs/` file carries every bundled symptom and recommendation
+  it references (alerts sharing a symptom share a file; a recommendation
+  shared across files is copied, identical), and `content/symptomdefs/`
+  only symptoms no bundled alert references. A `symptom_def_type`
+  (`condition_self`, `condition_population`) symptom is the alert editor's
+  inline condition: REST shows it only inside its alert, as
+  `alertConditions[].id = "Condition-<x>"`, never on
+  `/api/symptomdefinitions`. Layout and its reasons:
+  `../tier2_architecture.md` §Pak content gate and content layout.
 
 ## Alert definition
 
@@ -129,6 +142,34 @@ release payloads (`render_bundle_payloads`), and Tier 2 paks
 pak writes one file per alert with its symptoms inline, so no single render
 sees symptoms from two alerts together). The same file listed twice is one
 definition. Helper: `alerts.render.rendered_id_collisions`.
+
+### Symptom ids are burned after a delete (2026-11-14)
+
+**Rule.** On an instance, a symptom id that a released pak version stops
+shipping, that an uninstall removes, or that anyone deletes, must never be
+shipped again on that instance once the retention window has passed. A
+dropped symptom that comes back gets a **new id**. Every release keeps
+shipping the symptom ids it shipped before, or retires them for good.
+
+**Why (9.0.2 measured; same code read on 8.18.7 and 9.1.1).** Deletes are
+soft: the `SymptomDefinition-<id>` row stays as a tombstone with its
+`SymptomRelationship-SymptomDefinition-<id>` row, and a re-import inside
+the window revives it. The daily `DeletedSymptomAlertDefinitionsCleaner`
+hard-deletes tombstones older than the global setting
+`CANCELLED_ALERTS_SYMPTOMS_RETENTION_TIME_IN_DAYS` (45 days on devel, set per
+instance) but leaves the relationship row. From then on every create of that
+id fails (`duplicate key ... kv_symptomproblemdefinition_pkey`), every other
+symptom in the same import file fails with it, and an alert that references
+it installs with empty symptom sets. No API removes the orphan row. The
+factory cannot see an instance's history, so a pak cannot be checked for
+this before install; `install`'s content check names it as the likely cause.
+Alert ids are likely purged the same way but have no relationship row, so no
+create failure is expected for them (not tested). Reading an id's state:
+`GET /api/symptomdefinitions/{id}` answers 200 for a live **and** a
+tombstoned symptom; only the list endpoint drops a tombstone; a purged id is
+404. Evidence: `../investigations/2026-11-14-symptom-duplicate-key-on-902.md`.
+This is about re-using an id on one instance; identity rules for authoring
+(RULE-007) are unchanged.
 
 ## Symptom definition
 
