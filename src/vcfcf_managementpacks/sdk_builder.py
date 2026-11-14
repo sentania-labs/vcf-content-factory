@@ -98,6 +98,8 @@ from vcfcf_core.stock_ids import guard as _stock_ids
 # entries, and content ids defined twice. In the sdk-buildkit this is the
 # flat pak_content.py.
 from vcfcf_core.packaging import pak_content as _pak_content
+# The java.util.Properties reader the localization bundles are checked with.
+from vcfcf_core import java_properties as _jprops
 
 from .sdk_project import (
     CONTENT_NAMING_DEFAULT,
@@ -2995,48 +2997,95 @@ def _dashboard_short_name(dashboard_name: str, name_path: str) -> str:
     return dashboard_name
 
 
-def _java_properties_escape_key(key: str) -> str:
-    """Escape a Java properties key (backslash-escape spaces and special chars).
+_PROPS_CONTROL_ESCAPES = {"\t": "\\t", "\n": "\\n", "\r": "\\r", "\f": "\\f"}
 
-    Java .properties format requires spaces in keys to be backslash-escaped.
-    Equals signs and colons in keys must also be escaped.
+
+def _java_properties_escape(text: str, *, key: bool) -> str:
+    """Escape one key or value of a content ``.properties`` file so
+    ``java.util.Properties.load`` reads it back exactly, under either reader.
+
+    Backslash and the four control escapes always; in a key also space,
+    ``=``, ``:``, ``#`` and ``!`` (a key starting with ``#`` or ``!`` made the
+    line a comment); in a value a leading space. Every other character
+    outside printable ASCII is written as ``\\uXXXX`` (UTF-16 code units), so
+    the file is ASCII and reads the same through a UTF-8 ``Reader`` and the
+    ISO-8859-1 ``Properties.load(InputStream)``: which one the importer uses
+    for ``content/reports/*/resources/`` and the dashboard bundles is not
+    recorded. Only for these content bundles: the pak-root
+    ``resources/resources.properties`` is read by Python ``configparser``,
+    which knows no ``\\u`` escapes (``_generate_outer_resources_properties``).
     """
-    key = key.replace("\\", "\\\\")
-    key = key.replace(" ", "\\ ")
-    key = key.replace("=", "\\=")
-    key = key.replace(":", "\\:")
-    return key
+    out = []
+    for i, ch in enumerate(text):
+        if ch == "\\":
+            out.append("\\\\")
+        elif ch in _PROPS_CONTROL_ESCAPES:
+            out.append(_PROPS_CONTROL_ESCAPES[ch])
+        elif key and ch in " =:#!":
+            out.append("\\" + ch)
+        elif not key and ch == " " and i == 0:
+            out.append("\\ ")
+        elif " " <= ch <= "~":
+            out.append(ch)
+        else:
+            units = ch.encode("utf-16-be", "surrogatepass")
+            out.extend(f"\\u{int.from_bytes(units[j:j + 2], 'big'):04x}"
+                       for j in range(0, len(units), 2))
+    return "".join(out)
+
+
+def _java_properties_escape_key(key: str) -> str:
+    """Escape a Java properties key (``_java_properties_escape``)."""
+    return _java_properties_escape(key, key=True)
 
 
 def _java_properties_escape_value(value: str) -> str:
     """Escape a Java properties value so ``Properties.load`` reads it back whole.
 
-    Backslash, line breaks and leading whitespace are escaped; everything
-    else is written as is (UTF-8, as before). An unescaped line break ended
-    the value and turned the next line into a key of its own: 0.0.0.15 of
-    the vCommunity Java pak carried 34 such stray entries, each a localized
-    description cut to its first line (2026-11-14,
+    An unescaped line break ended the value and turned the next line into a
+    key of its own: 0.0.0.15 of the vCommunity Java pak carried 34 such stray
+    entries, each a localized description cut to its first line (2026-11-14,
     knowledge/context/investigations/2026-11-14-pak-content-silent-drops.md).
     """
-    value = value.replace("\\", "\\\\").replace("\n", "\\n").replace("\r", "\\r")
-    if value[:1] in (" ", "\t", "\f"):
-        value = "\\" + value
-    return value
+    return _java_properties_escape(value, key=False)
 
 
-def _properties_line(key: str, value) -> Optional[str]:
-    """``key=value`` with the value escaped, or None when the text is empty.
+def _has_text(value) -> bool:
+    """Whether a localization text is worth an entry.
 
     The content schema gives a localization value ``minLength 1``: one
     ``key=`` line fails the import of its whole ``content/reports/<dir>/``
-    (``cvc-minLength-valid``, 9.0.2 and 9.1.1, 2026-11-14). An empty text has
-    nothing to localize, so no entry is written (the ViewDef XML carries no
-    ``localizationKey`` for it either, so nothing dangles).
+    (``cvc-minLength-valid``, 9.0.2 and 9.1.1, 2026-11-14). An empty or blank
+    text has nothing to localize, so no entry is written (the ViewDef XML
+    carries no ``localizationKey`` for it either, so nothing dangles).
     """
-    text = "" if value is None else str(value)
-    if not text.strip():
-        return None
-    return f"{key}={_java_properties_escape_value(text)}"
+    return value is not None and bool(str(value).strip())
+
+
+def _render_properties(entries: List[Tuple[str, str]], header: str = "",
+                       where: str = "", blank_after: Optional[int] = None) -> str:
+    """The ``.properties`` text for ``(key, value)`` entries (unescaped).
+
+    Read back with the factory's ``java.util.Properties`` reader before it
+    is returned: an entry that does not come back exactly (a key read as a
+    comment, a value cut at a line break) is a build error naming the
+    entry, never a silently different bundle.
+    """
+    lines = [header] if header else []
+    for i, (k, v) in enumerate(entries):
+        lines.append(f"{_java_properties_escape_key(k)}={_java_properties_escape_value(v)}")
+        if blank_after is not None and i + 1 == blank_after:
+            lines.append("")
+    lines.append("")
+    text = "\n".join(lines)
+    read = [(k, v) for _line, k, v in _jprops.load_entries(text)]
+    if read != [(k, str(v)) for k, v in entries]:
+        bad = next((e for e, r in zip(entries, read + [None] * len(entries)) if e != r), None)
+        raise SdkBuildError(
+            f"{where or 'localization bundle'}: the entry {bad!r} does not read back "
+            f"as written from the generated properties file (a builder bug)."
+        )
+    return text
 
 
 def _generate_dashboard_resources_properties(dashboard, name_path: str) -> str:
@@ -3054,38 +3103,24 @@ def _generate_dashboard_resources_properties(dashboard, name_path: str) -> str:
         dashboard: Dashboard dataclass instance.
         name_path: The dashboard's namePath (folder label, e.g. "VCF Content Factory").
     """
-    lines = ["#Dashboard Localization"]
-
-    # Folder label — the namePath itself gets a top-level entry
-    folder_line = (
-        _properties_line(_java_properties_escape_key(name_path), name_path)
-        if name_path else None
-    )
-    if folder_line:
-        lines.append(folder_line)
-        lines.append("")
-
+    entries: List[Tuple[str, str]] = []
+    blank_after = None
+    # Folder label — the namePath itself gets a top-level entry (and a blank
+    # line after it, as before)
+    if _has_text(name_path):
+        entries.append((name_path, name_path))
+        blank_after = 1
     # Dashboard entry — key is the dashboard name, value is the display name
-    dash_key = _java_properties_escape_key(dashboard.name)
-    dash_line = _properties_line(dash_key, dashboard.name)
-    if dash_line:
-        lines.append(dash_line)
-
+    if _has_text(dashboard.name):
+        entries.append((dashboard.name, dashboard.name))
     # Per-widget entries — key is "<dashboard_name>.<widget_title>"
     # (an empty or blank title has no entry: values are never empty).
     for w in dashboard.widgets:
-        if not w.title or not w.title.strip():
-            continue
-        # Compound key: escaped dashboard name + "." + escaped widget title
-        compound_key = (
-            _java_properties_escape_key(dashboard.name)
-            + "."
-            + _java_properties_escape_key(w.title)
-        )
-        lines.append(_properties_line(compound_key, w.title))
-
-    lines.append("")
-    return "\n".join(lines)
+        if _has_text(w.title):
+            entries.append((f"{dashboard.name}.{w.title}", w.title))
+    return _render_properties(entries, "#Dashboard Localization",
+                              where=f"dashboard '{dashboard.name}' resources.properties",
+                              blank_after=blank_after)
 
 
 def _generate_view_content_properties(view) -> str:
@@ -3117,18 +3152,21 @@ def _generate_view_content_properties(view) -> str:
     description stays one entry.
     """
     uuid = view.id
-    lines = [_properties_line(f"view.{uuid}.title", view.name)]
-    if view.description:
-        lines.append(_properties_line(f"view.{uuid}.desc", view.description.strip()))
+    entries: List[Tuple[str, str]] = []
+    if _has_text(view.name):
+        entries.append((f"view.{uuid}.title", view.name))
+    if _has_text(view.description):
+        entries.append((f"view.{uuid}.desc", view.description.strip()))
     for col in view.columns:
         # Derive the localizationKey from the attribute key.
         # We use the same sanitization as the XML renderer will use:
         # replace '|' with '_', replace spaces with '_', keep alphanumerics and hyphens.
-        loc_key = _attribute_to_localization_key(col.attribute)
-        lines.append(_properties_line(f"view.{uuid}.{loc_key}", col.display_name))
-    lines = [line for line in lines if line]
-    lines.append("")
-    return "\n".join(lines)
+        # Two columns whose attribute keys sanitize alike give the same key
+        # twice; harmless, the XML references no key (view_column_wire_format.md).
+        if _has_text(col.display_name):
+            loc_key = _attribute_to_localization_key(col.attribute)
+            entries.append((f"view.{uuid}.{loc_key}", col.display_name))
+    return _render_properties(entries, where=f"view '{view.name}' content.properties")
 
 
 # The platform's ViewDef Localization Property `key` attribute is XSD-capped
@@ -3284,16 +3322,28 @@ def plan_alert_content_files(symptoms: list, alerts: list, recommendations: list
     Returns ``(groups, standalone)``. ``groups`` is a list of
     ``(alerts, symptoms, recommendations)``, one per
     ``content/alertdefs/`` file: the alerts connected by a shared bundled
-    symptom or recommendation, with every bundled symptom and recommendation
-    they reference. ``standalone`` is the bundled symptoms no bundled alert
-    references, one ``content/symptomdefs/`` file each. Every bundled symptom
-    and referenced recommendation lands in exactly one file, so no id is
-    defined twice and no alert file depends on another being imported first
-    (``installContent`` imports alertdefs before symptomdefs, and in
-    ``File.listFiles`` order within a directory). Order is the bundled
-    order: groups by their first alert, symptoms and recommendations by first
-    reference. A referenced name the pak does not bundle (a built-in) is left
-    to the renderer, as before.
+    SYMPTOM, with every bundled symptom and recommendation they reference.
+    ``standalone`` is the bundled symptoms no bundled alert references, one
+    ``content/symptomdefs/`` file each.
+
+    Each bundled symptom lands in exactly one file, so no alert file depends
+    on another being imported first (``installContent`` imports alertdefs
+    before symptomdefs, and in ``File.listFiles`` order within a directory;
+    an alert whose symptoms do not exist yet is not created). This is the
+    vendor shape and factory policy; it is not what failed on 9.0.2: a
+    duplicated symptom updates in place there (probe T2,
+    ``knowledge/context/investigations/2026-11-14-symptom-duplicate-key-on-902.md``).
+
+    Alerts that share only a recommendation keep separate files, each
+    carrying its own identical copy of the recommendation (allowed by the
+    content gate). One file is one symptom import batch, all-or-nothing:
+    one bad or purged symptom id fails every symptom in its file, and the
+    file's alerts install with empty sets. Merging on a recommendation would
+    widen that for no symptom-level reason.
+
+    Order is the bundled order: groups by their first alert, symptoms and
+    recommendations by first reference. A referenced name the pak does not
+    bundle (a built-in) is left to the renderer, as before.
     """
     symptoms = list(symptoms or [])
     alerts = list(alerts or [])
@@ -3311,7 +3361,6 @@ def plan_alert_content_files(symptoms: list, alerts: list, recommendations: list
     owner: Dict[Tuple[str, str], int] = {}
     for i, alert in enumerate(alerts):
         keys = [("s", n) for n in _alert_symptom_names(alert) if n in sym_by_name]
-        keys += [("r", n) for n in _alert_recommendation_names(alert) if n in rec_by_name]
         for key in keys:
             if key in owner:
                 a, b = _find(owner[key]), _find(i)
@@ -3414,9 +3463,9 @@ def _write_outer_pak(
 
     Symptom and alert layout (``plan_alert_content_files``; each id once):
       content/alertdefs/<safe_name>.xml   [<alertContent><AlertDefinitions><SymptomDefinitions>...]
-        one file per group of alerts that share a bundled symptom or
-        recommendation (usually one alert), carrying every bundled symptom
-        and recommendation they reference
+        one file per group of alerts that share a bundled symptom (usually
+        one alert), carrying every bundled symptom and recommendation they
+        reference (a recommendation shared across groups is copied, identical)
       content/symptomdefs/<safe_name>.xml   [<alertContent><SymptomDefinitions>...]
         one file per bundled symptom NO bundled alert references
 
@@ -3754,7 +3803,7 @@ def _write_outer_pak(
                     file=sys.stderr,
                 )
 
-        # --- Symptoms and alerts: each id written exactly once ---
+        # --- Symptoms and alerts: each symptom id written exactly once ---
         # Layout (plan_alert_content_files): an alert's file carries the
         # alert, every bundled symptom and recommendation it references, so
         # its import never depends on another file. installContent imports
@@ -3762,13 +3811,14 @@ def _write_outer_pak(
         # (summary_dashboard_pak_binding.md, the 9.0.2 bytecode order) and an
         # alert whose symptoms do not exist yet is not created (synology
         # 0.0.0.35, symptomdef_dt_condition_import.md). Alerts that share a
-        # symptom or a recommendation go in one file for the same reason.
-        # content/symptomdefs/ then holds only the symptoms no bundled alert
-        # references. Writing a symptom in both places (the layout until
-        # 2026-11-14) fails on 9.0.2 with `duplicate key value violates
-        # unique constraint "kv_symptomproblemdefinition_pkey"` and the alert
-        # loses the conditions: knowledge/context/investigations/
-        # 2026-11-14-pak-content-silent-drops.md.
+        # symptom go in one file for the same reason; alerts that share only
+        # a recommendation each carry an identical copy of it. content/
+        # symptomdefs/ then holds only the symptoms no bundled alert
+        # references. This is the vendor shape and factory policy. The old
+        # layout (every symptom also in symptomdefs/) imports fine on 9.0.2
+        # (probe T2); the 0.0.0.15 duplicate-key losses were ids purged on
+        # that instance: knowledge/context/investigations/
+        # 2026-11-14-symptom-duplicate-key-on-902.md.
         _alert_groups, _standalone_syms = plan_alert_content_files(
             symptoms, alerts, recommendations
         )
@@ -6088,30 +6138,39 @@ def _dry_render_content_problems(project: SdkProjectDef, project_dir: Path,
     Writes the pak's content/ tree to a temporary pak (no adapters.zip, no
     compile) with the same ``_write_outer_pak`` build-sdk uses, so
     validate-sdk sees what build-sdk would ship. Its per-file progress lines
-    are not printed. Other render errors propagate (validate-sdk reports
-    them).
+    (``  bundled content: content/...``, ``  content/files/...``) are not
+    printed; every other line it writes (warnings) is, after the render.
+    Other render errors propagate (validate-sdk reports them).
     """
     views, dashboards, sms, symptoms, alerts, reports, recs = bundled
     if not any((views, dashboards, sms, symptoms, alerts, reports, recs)):
         return []
     owning_rk = None
     describe_xml = project_dir / "describe.xml"
-    with tempfile.TemporaryDirectory(prefix="vcfcf-content-gate-") as tmp, \
-            contextlib.redirect_stderr(io.StringIO()):
-        if describe_xml.is_file():
-            owning_rk = _find_world_resource_kind(describe_xml)
-        try:
-            _write_outer_pak(
-                project, b"", Path(tmp), project_dir,
-                views=views, dashboards=dashboards,
-                owning_adapter_kind=project.adapter_kind,
-                owning_resource_kind=owning_rk,
-                supermetrics=sms, symptoms=symptoms, alerts=alerts,
-                reports=reports, recommendations=recs,
-            )
-        except PakContentGateError as exc:
-            return [f"pak content: {p}" for p in exc.problems]
-    return []
+    captured = io.StringIO()
+    problems: List[str] = []
+    try:
+        with tempfile.TemporaryDirectory(prefix="vcfcf-content-gate-") as tmp, \
+                contextlib.redirect_stderr(captured):
+            if describe_xml.is_file():
+                owning_rk = _find_world_resource_kind(describe_xml)
+            try:
+                _write_outer_pak(
+                    project, b"", Path(tmp), project_dir,
+                    views=views, dashboards=dashboards,
+                    owning_adapter_kind=project.adapter_kind,
+                    owning_resource_kind=owning_rk,
+                    supermetrics=sms, symptoms=symptoms, alerts=alerts,
+                    reports=reports, recommendations=recs,
+                )
+            except PakContentGateError as exc:
+                problems = [f"pak content: {p}" for p in exc.problems]
+    finally:
+        for line in captured.getvalue().splitlines():
+            if line.startswith(("  bundled content: content/", "  content/files/")):
+                continue
+            print(line, file=sys.stderr)
+    return problems
 
 
 def validate_sdk_project(project_dir: Path) -> List[str]:

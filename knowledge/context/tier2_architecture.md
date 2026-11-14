@@ -510,18 +510,84 @@ content-only render, no compile. It refuses:
   schema gives the value `minLength 1`; one bad line fails the whole
   directory, a report and every view it embeds);
 - any content id defined more than once across the pak's files, naming
-  every location. A ViewDef embedded byte-identical in a report's directory
-  as well as its own is allowed (the importer upserts views).
+  every location. This is factory policy (the vendor shape; which of two
+  differing copies the importer keeps is not specified), not a measured
+  import failure: on 9.0.2 a symptom defined twice updates in place (probe
+  T2, `investigations/2026-11-14-symptom-duplicate-key-on-902.md`).
+  Byte-identical copies are allowed for a ViewDef embedded in a report's
+  directory as well as its own (the importer upserts views; measured) and
+  for a recommendation carried in each alert file that names it (inferred,
+  see below).
 
-Layout this enforces: no localization entry for an empty text, values
-escaped for `java.util.Properties`; each `content/alertdefs/` file carries
-its alerts with every bundled symptom and recommendation they reference
-(alerts that share one go in one file), and `content/symptomdefs/` only the
-symptoms no bundled alert references. Writing a symptom in both (the layout
-until 2026-11-14) fails on 9.0.2 with a duplicate key and strips the
-alert's conditions. Evidence: `investigations/2026-11-14-pak-content-silent-drops.md`.
+Layout this enforces: no localization entry for an empty text; keys and
+values escaped for `java.util.Properties` (non-ASCII as `\uXXXX`, so the
+file reads the same under a UTF-8 or an ISO-8859-1 reader, and every entry
+is read back before the bundle is written); each `content/alertdefs/` file
+carries its alerts with every bundled symptom and recommendation they
+reference, and `content/symptomdefs/` only the symptoms no bundled alert
+references.
+
+Why the alert file carries its symptoms: `installContent` imports
+`alertdefs/` before `symptomdefs/`, and an alert whose symptoms do not exist
+yet is not created (Synology 0.0.0.35). The vendor paks with content-tree
+alerts (Physical SAN, Kubernetes) ship every symptom inside the alert file
+and no `symptomdefs/`.
+
+**Grouping and blast radius.** One file is one symptom import batch, and a
+batch is all-or-nothing: one bad definition (Synology's DT symptom) or one
+purged symptom id (the 9.0.2 mechanism below) fails every symptom in the
+file, and the file's alerts install with empty symptom sets. So files stay
+small: alerts are grouped only when they share a bundled **symptom** (it can
+be defined once and still sit beside each alert that uses it). Alerts that
+share only a recommendation keep separate files, each carrying an identical
+copy of it. The trade-off: a recommendation defined in several files is not
+measured. It is inferred safe because a duplicated symptom updates in place
+on 9.0.2, and Synology 0.0.0.35 carried one recommendation in two alert
+files on 8.18.7 and 9.1.1 and lost only its DT symptom and that symptom's
+alert (whether the recommendation was attached to both alerts was not
+recorded). It is the old layout's recommendation handling, unchanged; only
+the symptoms moved. Merging would have
+put unrelated alerts' symptoms in one batch (unifi's three offline alerts,
+synology's Storage Pool and Volume alerts).
+
+**What actually lost the 0.0.0.15 content on 9.0.2:** symptom ids with
+history on that instance. A delete (uninstall, an upgrade that drops the
+id, a REST delete) is a soft delete; a daily cleaner purges the tombstone
+after `CANCELLED_ALERTS_SYMPTOMS_RETENTION_TIME_IN_DAYS` (45 on devel) but
+leaves its `SymptomRelationship-` row, and every later create of that id
+fails (`duplicate key ... kv_symptomproblemdefinition_pkey`). Same code on
+8.18.7 and 9.1.1. Rule: `alert_fidelity_wire_format.md` §Symptom ids are
+burned after a delete.
+
+**Upgrading a pak built with the old layout.** Known, 9.0.2 only: pak
+content is tracked by id per type from both directories, file names play no
+part (installer bytecode: one symptom-id set for `alertdefs/` and
+`symptomdefs/`; obsolete = recorded before minus this run), and an
+old-to-new upgrade with the same ids updates every symptom and alert in
+place and deletes nothing (probe T4b, re-read 10 minutes later). Unknown:
+9.1.1 and 8.18.7 (no bytecode read, no probe), real pak scale (synology's
+DT group, unifi's recommendation in three files), and whether active alerts
+keep their ids and start times. Before synology, unifi or vsanperf are
+rebuilt and released, prove live (list endpoints, not GET by id):
+
+1. On 9.1.1 and 8.18.7: upgrade synology and unifi from the shipped build to
+   the new layout; before and after, symptom ids, alert symptom sets and
+   conditions, recommendations attached to each alert; nothing deleted in
+   the minutes after the import.
+2. The same upgrade on 9.0.2 at synology scale, DT group included.
+3. Uninstall after each upgrade: the alert-file-only symptoms are removed,
+   and nothing else.
+4. Active alerts survive the upgrade with the same ids and start times.
+5. The post-install content check agrees with list-endpoint truth on every
+   run above and gives no false alarm on 9.1.1.
+6. On 9.0.2, a fresh-id rebuild of vCommunity Java (the purged ids
+   re-minted) installs complete; and a view column with no localization
+   entry shows the metric's default label in the browser.
+
 `install` then counts the pak's views, report templates, symptoms and
-alerts on the instance (`post_install_content.py`, exit 3 on a shortfall).
+alerts on the instance (`post_install_content.py`, exit 3 on a shortfall,
+naming a purged symptom id as the likely cause of a missing symptom or an
+emptied alert).
 
 ### Defect gate in pak repos (generated vendored copy, #226)
 
@@ -1739,7 +1805,7 @@ built from the change.
 
 | Date | Change |
 |---|---|
-| 2026-11-14 | **Buildkit 1.0.29: the pak content gate; each symptom defined once; no empty localization values.** vCommunity Java 0.0.0.15 installed "successfully" on 9.0.2 and 9.1.1 with 14 views and a report template missing (`view.<id>.<key>=` lines with an empty value, `cvc-minLength-valid`) and, on 9.0.2, two alerts without their conditions (every symptom written in `content/symptomdefs/` and again in its alert's file; duplicate key). `_generate_view_content_properties` and `_generate_dashboard_resources_properties` write no entry for an empty text and escape values; `plan_alert_content_files` writes each bundled symptom and recommendation once, in the file of the alerts that reference it (alerts sharing one share a file), leaving `content/symptomdefs/` for unreferenced symptoms. `_write_outer_pak` ends with the content gate (`vcfcf_core/packaging/pak_content.py`), validate-sdk runs it on a content-only render, and `install` counts views, reports, symptoms and alerts (`post_install_content.py`, `--skip-content-check`). The kit ships `pak_content.py` and `java_properties.py` (flat copies of the core modules). Evidence: `investigations/2026-11-14-pak-content-silent-drops.md`. **Versioning:** `BUILDKIT_VERSION` 1.0.29, the same unreleased kit as the rows below. Factory zips: no template-version bump (no file of the template-version list changed; `alerts/render.py` and `dashboards/render.py` are untouched). **Adapter adoption:** rebuild every pak with bundled alerts (synology, unifi, vsanperf, vcommunity-java: their built paks define symptoms twice today) and vcommunity-java for the localization fix; no source change. |
+| 2026-11-14 | **Buildkit 1.0.29: the pak content gate; each symptom defined once; no empty localization values.** vCommunity Java 0.0.0.15 installed "successfully" on 9.0.2 and 9.1.1 with 14 views and a report template missing (`view.<id>.<key>=` lines with an empty value, `cvc-minLength-valid`) and, on 9.0.2, two alerts without their conditions (`duplicate key`: symptom ids purged on that instance by earlier installs, `investigations/2026-11-14-symptom-duplicate-key-on-902.md`; the pak's duplicated symptoms are not the cause, probe T2). `_generate_view_content_properties` and `_generate_dashboard_resources_properties` write no entry for an empty text, escape keys and values (non-ASCII as `\uXXXX`) and read every entry back; `plan_alert_content_files` writes each bundled symptom once, in the file of the alerts that reference it (alerts sharing a symptom share a file; a recommendation shared across files is copied, identical), leaving `content/symptomdefs/` for unreferenced symptoms (the vendor shape; factory policy). `_write_outer_pak` ends with the content gate (`vcfcf_core/packaging/pak_content.py`), validate-sdk runs it on a content-only render (render warnings still shown), and `install` counts views, reports, symptoms (list endpoint) and alerts (`post_install_content.py`, `--skip-content-check`). The kit ships `pak_content.py` and `java_properties.py` (flat copies of the core modules); the duplicate `_IMPORT_REWRITES` keys for `alerts_loader.py` and `symptoms_loader.py` are merged, so their `rendered_id_collisions` rewrites apply. Evidence: `investigations/2026-11-14-pak-content-silent-drops.md`. **Versioning:** `BUILDKIT_VERSION` 1.0.29, the same unreleased kit as the rows below. Factory zips: no template-version bump (no file of the template-version list changed; `alerts/render.py` and `dashboards/render.py` are untouched). **Adapter adoption:** rebuild vcommunity-java for the localization fix. synology, unifi and vsanperf: rebuild only after the live upgrade list in §Pak content gate and content layout is green; no source change. |
 | 2026-11-13 | **Buildkit 1.0.29: `section_fallback: omit` on bundled dashboards; `build-sdk --sections`.** A bundled dashboard that sets `section_fallback: omit` ships without its Section widgets (rows closed up) while the oldest supported line (`_oldest_supported_line()`, 8.18.7) is below 9.1.1, the first build proven to import Section, and with them once the line rises; each omission prints `build-sdk: SECTIONS OMITTED: dashboard '<name>': <n> Section widget(s) left out (section_fallback: omit): <reason>` (`validate-sdk` the same). A Section dashboard without the key still fails the build below the floor, and the error now names the key. `build-sdk --sections auto|ship|omit` (kit and factory CLI) forces a variant on a dev build (`ship` leaves Section out of the floor gate and prints `SECTIONS KEPT BELOW FLOOR`); with `--release` anything but `auto` is refused. New kit rewrite rule for `sdk_builder`'s `from vcfcf_dashboards.loader import apply_section_fallback`. Reference: `wire-formats/dashboard_fidelity_wire_format.md` §Section fallback. **Versioning:** ships in 1.0.29 (`BUILDKIT_VERSION` already 1.0.29 and not tagged; not bumped again). Published kits (1.0.27 and earlier) have neither this nor the Section build gate of 2026-11-12: they warn and ship the Sections, which 8.18.7 and 9.0.x lose with the dashboard's directory. **Adapter adoption:** a pak with Section dashboards (the vCommunity Java port) adds the key to each and builds on 1.0.29 or later; no registered pak bundles a Section dashboard today. |
 | 2026-11-12 | **Buildkit 1.0.29: stitcher `post`, `pushEvents`, numeric properties; icon hints; key differential.** `SuiteApiStitchClient` and `SuiteApiStitcher` gain `post(path, jsonBody)` and `post(path, jsonBody, maxResponseBytes)` (read-style query paths only, checked against an allowlist before any request; response read whole up to 8 MiB by default, else `ResponseTooLargeException`; `get`'s error contract), `pushEvents` (with the new `SuiteApiEvent`; `NOTIFICATION` refused; a cancel time of 0 or less is unset) and `pushTypedPropertiesBatch` / `pushTypedBatch` (numeric property values as `data`, every number a double, integers beyond 2^53 dropped and counted); contract and evidence in "Stitcher reads, events and numeric properties". Internals: the batch code's `boolean stats` became a package-private `Kind` enum; the string pushes keep their String-only serializer, pinned by golden bodies captured from `origin/main` (`SuiteApiStitchBatchTest`). Icon library: `content_library`, `library_item`, `vm_template` (`knowledge/context/mpb/mp_icon_library.md`). New read-only CLI `python3 -m vcfcf_common keydiff` compares two instances or snapshots (GETs plus each live side's token acquire and release; per-request timeout; exit 4 when nothing was compared, 5 when some objects were not, 6 on an internal error; numbers and tolerances compare exactly in `Decimal`, rounding trapped); see `vcfcf_common/keydiff.py`. Review: `reviews/framework/stitch-post-events-numeric-keydiff-2026-11-12.md`, every finding fixed. **Versioning:** ships in 1.0.29 (`BUILDKIT_VERSION` already 1.0.29 from the stock-id guard; not bumped again). **Adapter adoption:** additive; no pak changes until it calls the new methods. |
 | 2026-11-12 | **Buildkit 1.0.29: the factory content-name prefix is `[VCF CF] ` (was `[VCF Content Factory] `), with a pak transition rule.** The kit ships `naming.py` (the factory's `vcfcf_core/naming.py`, the one definition of the prefix). For a `factory_prefixed` pak (declared or default), validate-sdk and build-sdk accept a pak whose prefixed names are all in the old spelling with one warning naming `python3 -m vcfcf_common migrate-prefix <pak dir>`, reject the two spellings mixed in one pak (an error per old-spelled name), and pass a pak in the new spelling silently; `unprefixed` paks reject either spelling. A factory-prefixed dashboard name over 50 characters is a build error. Ids derived from names, the in-pak paths (`content/dashboards/<dir>/`, `content/reports/<dir>/`, the supermetrics, symptomdefs and alertdefs file names) and the `dashboards.properties` Summary binding key are computed from the old spelling (`id_basis_name`), so they do not change. Reference: §Bundled content naming and `authoring/prefix_migration.md`. **Versioning:** `BUILDKIT_VERSION` 1.0.29, the same kit as the stock-id guard below. **Adapter adoption:** none required during the transition (old-spelled paks build with a warning); a migrated pak's display names and localization strings change. |

@@ -79,21 +79,31 @@ class _Resp:
 
 
 class FakeSuite:
-    """GET by path; ``state`` is what the instance holds."""
+    """GET by path, answering as 9.0.2 did in the 2026-11-14 probes: a
+    ``tombstoned`` symptom is 200 by id and absent from the list."""
 
-    def __init__(self, reports, symptoms, alerts):
+    def __init__(self, reports, symptoms, alerts, tombstoned=()):
         self.reports, self.symptoms, self.alerts = reports, symptoms, alerts
+        self.tombstoned = set(tombstoned)
         self.calls = []
+
+    @staticmethod
+    def _list(key, ids):
+        items = [{"id": i} for i in ids]
+        return _Resp(200, {key: items, "pageInfo": {"totalCount": len(items)}})
 
     def _request(self, method, path, params=None):
         self.calls.append(path)
         if path == "/api/reportdefinitions":
-            items = [{"id": r} for r in self.reports]
-            return _Resp(200, {"reportDefinitions": items,
-                               "pageInfo": {"totalCount": len(items)}})
+            return self._list("reportDefinitions", self.reports)
+        if path == "/api/symptomdefinitions":
+            return self._list("symptomDefinitions", sorted(self.symptoms))
+        if path == "/api/alertdefinitions":
+            return self._list("alertDefinitions", sorted(self.alerts))
         if path.startswith("/api/symptomdefinitions/"):
             sid = path.rsplit("/", 1)[1]
-            return _Resp(200, {"id": sid}) if sid in self.symptoms else _Resp(404, {})
+            alive = sid in self.symptoms or sid in self.tombstoned
+            return _Resp(200, {"id": sid}) if alive else _Resp(404, {})
         if path.startswith("/api/alertdefinitions/"):
             aid = path.rsplit("/", 1)[1]
             return _Resp(200, self.alerts[aid]) if aid in self.alerts else _Resp(404, {})
@@ -142,9 +152,54 @@ def test_all_present_with_conditions_as_alert_conditions(pak):
     rc, out, err, slept = _run(pak, suite, FakeUI([V1, V2]))
     assert rc == 0 and err == [] and slept == []
     assert out[-1].startswith("CONTENT OK: 2 view(s), 1 report template(s), 1 symptom")
-    # The conditions were never looked up as symptoms.
-    assert not any(C1[len("SymptomDefinition-"):] in c for c in suite.calls
-                   if c.startswith("/api/symptomdefinitions/"))
+    # Symptoms are never read by id (a tombstone answers 200 there), and the
+    # conditions were never looked up as symptoms.
+    assert not any(c.startswith("/api/symptomdefinitions/") for c in suite.calls)
+
+
+def test_tombstoned_symptom_is_missing_although_200_by_id(pak):
+    """9.0.2, probes T3a/T5: a deleted symptom answers 200 by id and is gone
+    from the list. The check reads the list, so it reports it missing."""
+    suite = FakeSuite([R1], set(), {
+        A1: _alert_json(([], [_cond(C1)]), ([], [_cond(C2)])),
+        A2: _alert_json(([S1], [])),
+    }, tombstoned={S1})
+    assert suite._request("GET", f"/api/symptomdefinitions/{S1}").status_code == 200
+    rc, _out, err, _ = _run(pak, suite, FakeUI([V1, V2]))
+    assert rc == 3
+    assert any(e.startswith(f"CONTENT MISSING: symptom definition {S1}") for e in err)
+    assert any(e.startswith("PURGED ID:") and "new id" in e
+               and "2026-11-14-symptom-duplicate-key-on-902.md" in e for e in err)
+
+
+def test_non_json_answer_is_unchecked_not_a_traceback(pak):
+    class Proxy(FakeSuite):
+        def _request(self, method, path, params=None):
+            if path == "/api/symptomdefinitions":
+                class R:
+                    status_code = 200
+
+                    def json(self):
+                        raise ValueError("Expecting value: line 1 column 1")
+                return R()
+            return super()._request(method, path, params)
+
+    rc, out, err, _ = _run(pak, Proxy([R1], {S1}, {}), FakeUI([V1, V2]))
+    assert rc == 0 and not any(o.startswith("CONTENT OK") for o in out)
+    assert err[0].startswith("WARNING: CONTENT UNCHECKED") and "not JSON" in err[0]
+
+
+def test_view_thumbnails_with_only_id_are_matched(pak):
+    class IdOnly(FakeUI):
+        def list_views(self):
+            return [{"id": v, "name": v} for v in self.views]
+
+    suite = FakeSuite([R1], {S1}, {
+        A1: _alert_json(([], [_cond(C1)]), ([], [_cond(C2)])),
+        A2: _alert_json(([S1], [])),
+    })
+    rc, out, err, _ = _run(pak, suite, IdOnly([V1, V2]))
+    assert rc == 0 and err == [], err
 
 
 def test_shortfall_lists_missing_ids_by_type_and_exits_3(pak):
@@ -158,11 +213,17 @@ def test_shortfall_lists_missing_ids_by_type_and_exits_3(pak):
     assert rc == pic.CONTENT_FAILED_RC == 3
     assert f"CONTENT MISSING: view {V1} 'View One'" in err
     assert f"CONTENT MISSING: report template {R1} 'Report One'" in err
-    assert f"CONTENT MISSING: symptom definition {S1} 'Plain Symptom'" in err
+    assert (f"CONTENT MISSING: symptom definition {S1} 'Plain Symptom'"
+            + pic.PURGED_ID_SHORT) in err
     lost = [e for e in err if e.startswith("CONTENT INCOMPLETE")]
     assert len(lost) == 2
-    assert any("'Cond Alert' lost 2 of 2" in e and "Condition_1" in e for e in lost)
+    assert any("'Cond Alert' lost 2 of 2" in e and "(its symptom sets are empty)" in e
+               and "Condition_1" in e and "purged symptom id" in e for e in lost)
     assert any("'Plain Alert' lost 1 of 1" in e for e in lost)
+    # The cause and the way out, once, naming the probe note.
+    hints = [e for e in err if e.startswith("PURGED ID:")]
+    assert len(hints) == 1 and "Ship the symptom under a new id" in hints[0]
+    assert "retention" in hints[0]
     assert err[-1].startswith("ERROR: CONTENT SHORTFALL: 5 problem(s)")
     # Re-read every 30 s for 120 s while something was missing.
     assert slept == [30, 30, 30, 30]
@@ -205,7 +266,7 @@ def test_unreadable_is_a_warning_not_a_failure(pak):
 def test_unexpected_status_is_unreadable(pak):
     class Odd(FakeSuite):
         def _request(self, method, path, params=None):
-            if path.startswith("/api/symptomdefinitions/"):
+            if path == "/api/symptomdefinitions":
                 return _Resp(500, {})
             return super()._request(method, path, params)
 

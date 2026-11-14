@@ -241,6 +241,12 @@ _IMPORT_REWRITES: dict[str, list[tuple[str, str]]] = {
             r"from vcfcf_core\.packaging import pak_content as _pak_content",
             "from . import pak_content as _pak_content",
         ),
+        # from vcfcf_core import java_properties as _jprops  (module-level;
+        # the localization bundles' read-back check, kit 1.0.29)
+        (
+            r"from vcfcf_core import java_properties as _jprops",
+            "from . import java_properties as _jprops",
+        ),
         # from vcfcf_core.supermetrics import crossref as _crossref  (module-level;
         # the shared @supermetric:"<name>" formula cross-reference resolver)
         (
@@ -374,21 +380,6 @@ _IMPORT_REWRITES: dict[str, list[tuple[str, str]]] = {
             "from . import dashboard_widget_versions as _wv",
         ),
     ],
-    # alerts_loader.py: load_dir / load_recommendations check rendered-id
-    # collisions through the renderer (inline import).
-    "alerts_loader.py": [
-        (
-            r"from \.render import rendered_id_collisions",
-            "from .alerts_render import rendered_id_collisions",
-        ),
-    ],
-    # symptoms_loader.py: load_dir checks rendered-id collisions (inline import).
-    "symptoms_loader.py": [
-        (
-            r"from vcfcf_core\.alerts\.render import rendered_id_collisions",
-            "from .alerts_render import rendered_id_collisions",
-        ),
-    ],
     # dashboard_render.py: rewrite .loader import (it's a relative import within
     # vcfcf_dashboards, which becomes .dashboard_loader in the kit)
     "dashboard_render.py": [
@@ -433,11 +424,19 @@ _IMPORT_REWRITES: dict[str, list[tuple[str, str]]] = {
             "from .naming import",
         ),
     ],
+    # One entry per file: a second literal key for the same file silently
+    # replaced the first (the rendered_id_collisions rules below were lost
+    # until 2026-11-14; tests/managementpacks/test_buildkit_rewrite_keys.py).
     "symptoms_loader.py": [
         # from vcfcf_core.naming import ...  (the content-name prefix constants)
         (
             r"from vcfcf_core\.naming import",
             "from .naming import",
+        ),
+        # load_dir checks rendered-id collisions (inline import).
+        (
+            r"from vcfcf_core\.alerts\.render import rendered_id_collisions",
+            "from .alerts_render import rendered_id_collisions",
         ),
     ],
     "alerts_loader.py": [
@@ -445,6 +444,12 @@ _IMPORT_REWRITES: dict[str, list[tuple[str, str]]] = {
         (
             r"from vcfcf_core\.naming import",
             "from .naming import",
+        ),
+        # load_dir / load_recommendations check rendered-id collisions
+        # through the renderer (inline import).
+        (
+            r"from \.render import rendered_id_collisions",
+            "from .alerts_render import rendered_id_collisions",
         ),
     ],
     "reports_loader.py": [

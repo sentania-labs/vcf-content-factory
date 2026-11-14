@@ -573,6 +573,17 @@ whatever the XML references. A column with no `display_name` (`omit:
 `<Title>` / `<Description>` either.
 `../investigations/2026-11-14-pak-content-silent-drops.md`.
 
+**Duplicate keys in one bundle are tolerated (proven).** Two columns whose
+attribute keys sanitize to the same localization key (for example two
+`net|usage_average` columns with different transformations) write the same
+`view.<id>.<key>` twice. vCommunity Java 0.0.0.15 had such keys in 10
+directories (`config_storageDevice_multipathInfo_numberofActivePath`,
+`net_usage_average`, ...) and those views imported on 9.0.2 and 9.1.1
+(`8f50f651...`, `a54e74b2...` present). Harmless because the XML references
+no key; the pak content gate does not refuse them. If column
+`localizationKey`s are ever emitted again, this becomes the `6c59f6b`
+collision and must be gated.
+
 ## Limitations
 
 Things VCF Ops does NOT support on list view columns, documented so

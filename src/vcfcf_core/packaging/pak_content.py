@@ -15,11 +15,14 @@ factory check and were found only in the appliance logs (vCommunity Java pak
    carries ``minLength 1`` (``cvc-minLength-valid ... for type
    '#AnonType_valuePropertyLocaleLocalizationViewDefViewsContent'``) and whose
    ``key`` carries ``maxLength 64``. One bad line fails the whole directory.
-2. **A content id defined twice.** Every symptom was written once in
-   ``content/symptomdefs/`` and again inside its alert's file in
-   ``content/alertdefs/``; on 9.0.2 the second insert fails with
-   ``duplicate key value violates unique constraint
-   "kv_symptomproblemdefinition_pkey"`` and the alert loses its conditions.
+2. **A content id defined twice.** 0.0.0.15 wrote every symptom once in
+   ``content/symptomdefs/`` and again inside its alert's ``content/alertdefs/``
+   file. That duplicate is harmless on 9.0.2 (probe paks: the second copy
+   updates the first,
+   ``knowledge/context/investigations/2026-11-14-symptom-duplicate-key-on-902.md``);
+   the 9.0.2 losses came from ids purged on that instance. One definition per
+   id is factory policy all the same: it is the vendor shape, and which of two
+   differing copies the importer keeps is not specified.
 
 :func:`check_pak_content` returns one error line per problem so a build can
 refuse the pak. :func:`read_pak_content_inventory` gives the ids the pak
@@ -100,63 +103,92 @@ def content_definitions(members: Dict[str, bytes]) -> Tuple[List["_guard.Definit
     return defs, [f"{u.location}: {u.reason}" for u in unreadable]
 
 
-def _view_def_texts(members: Dict[str, bytes]) -> Dict[Tuple[str, str], bytes]:
-    """``(member, normalized view id)`` to the canonical bytes of that ViewDef."""
+def _element_texts(members: Dict[str, bytes], prefix: str, tag: str,
+                   id_attr: str) -> Dict[Tuple[str, str], bytes]:
+    """``(member, normalized id)`` to the canonical bytes of each defining
+    ``tag`` element (identified by ``id_attr``) in the XML members under
+    ``prefix``."""
     out: Dict[Tuple[str, str], bytes] = {}
     for name, data in members.items():
-        if not (name.startswith(REPORTS_DIR) and name.endswith(".xml")):
+        if not (name.startswith(prefix) and name.endswith(".xml")):
             continue
         try:
             root = ET.fromstring(data)
         except ET.ParseError:
             continue
         for elem in root.iter():
-            if _local(elem.tag) == "ViewDef" and elem.get("id"):
-                out[(name, _guard.normalize_id(elem.get("id")))] = ET.tostring(elem)
+            if (_local(elem.tag) == tag and elem.get(id_attr)
+                    and elem.get("ref") is None):
+                out[(name, _guard.normalize_id(elem.get(id_attr)))] = ET.tostring(elem)
     return out
+
+
+#: Types whose byte-identical copies are allowed, all under one directory:
+#: content type to (directory, XML tag, id attribute). Why: the docstring of
+#: :func:`duplicate_definition_errors`.
+IDENTICAL_COPIES_ALLOWED = {
+    "view": (REPORTS_DIR, "ViewDef", "id"),
+    "recommendation": (ALERTDEFS_DIR, "Recommendation", "key"),
+}
 
 
 def duplicate_definition_errors(members: Dict[str, bytes],
                                 defs: Optional[List["_guard.Definition"]] = None) -> List[str]:
     """An error per content id the pak defines more than once.
 
-    One exception, by evidence: a ViewDef may appear in its own
-    ``content/reports/<dir>/`` and again, byte-identical, inside a report's
-    directory that embeds the views its sections name (the vendor TVS shape
-    the builder follows). The importer upserts views by id: on 9.0.2 and
-    9.1.1 every such view of the vCommunity Java 0.0.0.15 pak was present
-    after install, and the source vCommunity 0.8.1 pak ships 59 such copies.
-    Copies that differ are an error (which one wins is not known).
+    Factory policy: one definition per content id per pak. It is the vendor
+    shape, and which copy the importer keeps when two copies differ is not
+    specified. A duplicate is not by itself an import failure: on 9.0.2 a
+    symptom defined twice updates in place (probe T2,
+    ``knowledge/context/investigations/2026-11-14-symptom-duplicate-key-on-902.md``).
+    Two exceptions, byte-identical copies only:
+
+    - a ViewDef in its own ``content/reports/<dir>/`` and again in a
+      report's directory that embeds the views its sections name (the vendor
+      TVS shape). On 9.0.2 and 9.1.1 every such view of vCommunity Java
+      0.0.0.15 was present after install; the source vCommunity 0.8.1 pak
+      ships 59 such copies;
+    - a recommendation carried in the ``content/alertdefs/`` file of each
+      alert that names it, so alerts that share only a recommendation keep
+      separate files and separate symptom batches. Inferred safe, not
+      measured for recommendations: a duplicated symptom updates in place on
+      9.0.2 (probe T2), and it is how every factory pak carried a shared
+      recommendation before this gate existed (Synology 0.0.0.35 on 8.18.7
+      and 9.1.1).
+
+    Differing copies are an error.
     """
     if defs is None:
         defs, _ = content_definitions(members)
     by_key: Dict[Tuple[str, str], List[_guard.Definition]] = {}
     for d in defs:
         by_key.setdefault((d.type, _guard.normalize_id(d.id)), []).append(d)
-    view_texts: Optional[Dict[Tuple[str, str], bytes]] = None
+    texts: Dict[str, Dict[Tuple[str, str], bytes]] = {}
     errors: List[str] = []
     for (ctype, nid), found in sorted(by_key.items()):
         if len(found) < 2:
             continue
         where = [d.location for d in found]
         name = next((d.name for d in found if d.name), "")
-        if ctype == "view" and all(w.startswith(REPORTS_DIR) for w in where):
-            if view_texts is None:
-                view_texts = _view_def_texts(members)
-            copies = {view_texts.get((w, nid)) for w in where}
+        label = _guard.type_label(ctype)
+        allowed = IDENTICAL_COPIES_ALLOWED.get(ctype)
+        if allowed and all(w.startswith(allowed[0]) for w in where):
+            if ctype not in texts:
+                texts[ctype] = _element_texts(members, *allowed)
+            copies = {texts[ctype].get((w, nid)) for w in where}
             if len(copies) == 1 and None not in copies:
                 continue
             errors.append(
-                f"view {found[0].id} ('{name}') is defined {len(found)} times and the "
-                f"copies differ: {', '.join(where)}. Which one the importer keeps is "
-                f"not known; every copy must be the same ViewDef."
+                f"{label} {found[0].id} ('{name}') is defined {len(found)} times and "
+                f"the copies differ: {', '.join(where)}. Which copy the importer keeps "
+                f"is not specified; every copy must be identical."
             )
             continue
         errors.append(
-            f"{_guard.type_label(ctype)} {found[0].id} ('{name}') is defined "
-            f"{len(found)} times in the pak: {', '.join(where)}. Each content id "
-            f"must be defined once: on VCF Operations 9.0.2 the second definition "
-            f"fails the import (duplicate key) and what referenced it loses it."
+            f"{label} {found[0].id} ('{name}') is defined {len(found)} times in the "
+            f"pak: {', '.join(where)}. Factory policy is one definition per content "
+            f"id per pak (the vendor shape; which copy the importer keeps is not "
+            f"specified)."
         )
     return errors
 

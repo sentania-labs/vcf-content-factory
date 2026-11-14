@@ -438,3 +438,119 @@ def test_validate_sdk_reports_empty_value_and_duplicate(tmp_path, monkeypatch):
     assert any("pak content:" in e and "'Instance_Name' has an empty value" in e for e in errs)
     dups = [e for e in errs if "is defined 2 times" in e]
     assert len(dups) == 3, errs
+
+
+def test_validate_sdk_shows_render_warnings(tmp_path, monkeypatch, capsys):
+    """A condition symptom no alert references: the render's warning reaches
+    the validate-sdk output (the per-file progress lines do not)."""
+    d = _project(tmp_path)
+    (d / "symptoms" / "orphan.yaml").write_text(
+        _symptom("5a5a5a5a-6666-4777-8888-99990000aaaa", "Condition_orphan", 5,
+                 "condition_self"), encoding="utf-8")
+    text = (d / "adapter.yaml").read_text(encoding="utf-8").replace(
+        "symptoms/cond-b.yaml]", "symptoms/cond-b.yaml, symptoms/orphan.yaml]")
+    (d / "adapter.yaml").write_text(text, encoding="utf-8")
+    assert _validate(d, monkeypatch) == []
+    err = capsys.readouterr().err
+    assert "symptom 'Condition_orphan' is an alert's inline condition" in err
+    assert "bundled content: content/alertdefs/" not in err
+
+
+# ---------------------------------------------------------------------------
+# W3: alerts sharing only a recommendation keep separate files
+# ---------------------------------------------------------------------------
+
+def _alert_with_rec(name, symptoms, rec):
+    return _alert(name, symptoms) + f'recommendations:\n  - name: "{rec}"\n    priority: 1\n'
+
+
+def test_shared_recommendation_does_not_merge_alert_files(tmp_path, monkeypatch):
+    rec = f"{P}Gate Fix It"
+    d = _project(tmp_path)
+    (d / "recommendations").mkdir()
+    (d / "recommendations" / "fix.yaml").write_text(
+        f'name: "{rec}"\ndescription: Do the thing.\nadapter_kind: VMWARE\n', encoding="utf-8")
+    (d / "symptoms" / "other.yaml").write_text(
+        _symptom("6b6b6b6b-7777-4888-8999-aaaabbbbcccc", f"{P}Gate Mem High", 80),
+        encoding="utf-8")
+    (d / "alerts" / "first.yaml").write_text(
+        _alert_with_rec(f"{P}Gate CPU First", [SHARED], rec), encoding="utf-8")
+    (d / "alerts" / "mem.yaml").write_text(
+        _alert_with_rec(f"{P}Gate Mem Alert", [f"{P}Gate Mem High"], rec), encoding="utf-8")
+    text = (d / "adapter.yaml").read_text(encoding="utf-8")
+    text = text.replace("symptoms/cond-b.yaml]", "symptoms/cond-b.yaml, symptoms/other.yaml]")
+    text = text.replace("alerts/second.yaml]", "alerts/second.yaml, alerts/mem.yaml]")
+    text += "  recommendations: [recommendations/fix.yaml]\n"
+    (d / "adapter.yaml").write_text(text, encoding="utf-8")
+    _stub_java(monkeypatch)
+    pak = sb.build_sdk_pak(d, tmp_path / "out")
+    m = _members(pak)
+    alert_files = sorted(n for n in m if n.startswith("content/alertdefs/"))
+    # the conditions alert, the two CPU alerts (shared symptom), the memory alert
+    assert len(alert_files) == 3, alert_files
+    with_rec = [n for n in alert_files if b"<Recommendation " in m[n]]
+    assert len(with_rec) == 2
+    assert pak_content.check_pak_content(pak) == []
+
+
+def test_gate_recommendation_copies_identical_pass_differing_fail(tmp_path):
+    def _f(desc):
+        return ('<alertContent><Recommendations><Recommendation key="R1">'
+                f"<Description>{desc}</Description></Recommendation>"
+                "</Recommendations></alertContent>")
+    ok = _pak_with(tmp_path, {"content/alertdefs/a.xml": _f("x"),
+                              "content/alertdefs/b.xml": _f("x")})
+    assert pak_content.check_pak_content(ok) == []
+    (tmp_path / "t.pak").unlink()
+    bad = _pak_with(tmp_path, {"content/alertdefs/a.xml": _f("x"),
+                               "content/alertdefs/b.xml": _f("y")})
+    errs = pak_content.check_pak_content(bad)
+    assert len(errs) == 1 and "copies differ" in errs[0]
+
+
+def test_duplicate_message_is_neutral(tmp_path):
+    sm = '{"u1": {"name": "SM", "formula": "1"}}'
+    p = _pak_with(tmp_path, {"content/supermetrics/a.json": sm,
+                             "content/supermetrics/b.json": sm})
+    errs = pak_content.check_pak_content(p)
+    assert len(errs) == 1 and "Factory policy is one definition" in errs[0]
+    assert "9.0.2" not in errs[0] and "duplicate key" not in errs[0]
+
+
+# ---------------------------------------------------------------------------
+# N1, N2: properties escaping, read back by the Properties reader
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("text", [
+    "#Dash: a=b c", "!bang", "tab\there", "line\nbreak", "cr\rlf", "ff\fx",
+    " leading", "back\\slash", "Grüße", "日本", "emoji \U0001F600", "a b",
+])
+def test_properties_keys_and_values_read_back_exactly(text):
+    out = sb._render_properties([(text, text), (f"{text}.w", text)], "#hdr")
+    assert out.isascii()
+    assert [(k, v) for _l, k, v in java_properties.load_entries(out)] == [
+        (text, text), (f"{text}.w", text)]
+
+
+def test_dashboard_named_like_a_comment_keeps_its_entry():
+    class W:
+        title = "Widget"
+
+    class D:
+        name = "#Dash: a=b c"
+        widgets = [W()]
+
+    text = sb._generate_dashboard_resources_properties(D(), "")
+    keys = [k for _l, k, _v in java_properties.load_entries(text)]
+    assert keys == ["#Dash: a=b c", "#Dash: a=b c.Widget"]
+
+
+def test_render_properties_refuses_an_entry_that_does_not_read_back(monkeypatch):
+    monkeypatch.setattr(sb, "_java_properties_escape_value", lambda v: v)  # broken escaper
+    with pytest.raises(sb.SdkBuildError, match="does not read back"):
+        sb._render_properties([("k", "line\nbreak")], where="test bundle")
+
+
+def test_java_properties_joins_escaped_surrogate_pairs():
+    assert java_properties.unescape("\\ud83d\\ude00") == "\U0001F600"
+    assert java_properties.unescape("\\ud83d") == "\ud83d"  # a lone one stays
