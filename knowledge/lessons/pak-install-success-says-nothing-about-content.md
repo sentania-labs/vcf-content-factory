@@ -47,5 +47,13 @@ ids from another pak months earlier.
    probe that separates the candidate causes. The fresh-id probe took an hour
    and overturned the explanation.
 
+6. An element that is valid on 9.x can be a schema error on 8.18.7 that drops
+   just that object, and the content gate cannot see it because the file is
+   well formed (a report cover page's `FontColor`, 2026-11-15: five of sixteen
+   report templates missing on 8.18.7 only). An element first seen on
+   third-party content gets a measured floor in a version table before it
+   ships in a pak, and the post-install count on the oldest supported line is
+   the check that finds the next one.
+
 Evidence: `knowledge/context/investigations/2026-11-14-pak-content-silent-drops.md`,
 `knowledge/context/investigations/2026-11-14-symptom-duplicate-key-on-902.md`.
