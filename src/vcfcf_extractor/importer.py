@@ -137,7 +137,8 @@ def add_parser(sub) -> None:
                         "object's description, matched as --rename matches, before renaming (repeatable)")
     p.add_argument("--target-min", choices=("8.18.7", "9.0.2", "9.1.1"),
                    help="oldest VCF Operations the output must import on: omit: entries proven only on "
-                        "newer builds are not emitted (each deviation listed); a dashboard with a widget "
+                        "newer builds are not emitted, nor is a report feature above its floor (CoverPage "
+                        "font_color, 9.0.2), each deviation listed; a dashboard with a widget "
                         "type the target lacks is not deliverable to it")
     p.add_argument("--prefer-source", action="append", default=[], metavar="FRAGMENT",
                    help="when one id is defined differently in several files, the copy from the one file "
@@ -1110,8 +1111,12 @@ def run(args) -> int:
             _say(f"wrote {len(plan.emitted)} YAML file(s) under {out} ({args.layout} layout); report, id map"
                  f"{' and bundled_content snippet' if args.layout == 'pak' else ''} in {report_dir}")
         else:
+            pak_refused = args.layout == "pak" and v is not None and bool(v["pak_problems"])
             _say(f"nothing written to {out}: the run did not succeed (exit {rc}); the tree was staged, "
-                 f"verified and removed. Fix what is reported, or pass --allow-partial to accept what it accepts")
+                 f"verified and removed. Fix what is reported"
+                 + (" (a PAK CHECK failure is never accepted by --allow-partial: a pak build refuses it; "
+                    "see the PAK CHECK lines for what to do)" if pak_refused
+                    else ", or pass --allow-partial to accept what it accepts"))
             if report_inside is None:
                 _write_external_report(report_dir, rep_files)
                 _say(f"report and id map written to {report_dir}")
@@ -1178,6 +1183,18 @@ def _print_verify(v, args) -> None:
         _say(f"  LOAD ERROR: {le}")
     for pp in v["pak_problems"]:
         _say(f"  PAK CHECK: {pp}")
+    # The PAK CHECK hints name a key to set on a file this run does not
+    # write; say what to do instead (once per kind).
+    if any("feature_fallback: {font_color: omit}" in pp for pp in v["pak_problems"]):
+        _say("  PAK CHECK, what to do: this tree is not written, so the key cannot be set on it here. "
+             "Convert at --target-min 8.18.7 (font_color is left out, each TARGET line names the section and "
+             "its value), then restore font_color on those sections of the written report YAML and add "
+             "feature_fallback: {font_color: omit}; the pak then ships it once its oldest line reaches 9.0.2")
+    if any("set section_fallback: omit on the dashboard" in pp for pp in v["pak_problems"]):
+        _say("  PAK CHECK, what to do: this tree is not written, so the key cannot be set on it here, and "
+             "the pak layout never writes a Section dashboard its oldest line cannot import. --drop the "
+             "dashboard here, or convert it in the content or third-party layout, add section_fallback: omit "
+             "to the written dashboard YAML, and bundle that file in the pak")
     for g in v["guard"]:
         _say(f"  STOCK-ID (loaded tree): {g}")
     if v["loss_classes"]:

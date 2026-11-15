@@ -491,6 +491,10 @@ def test_verify_round_trip_identical_through_layout_loader(source, tmp_path, cap
         # Section needs 9.1.1; the pak gate says so (reported, not converted
         # away), and a pak check failure is never accepted: nothing written.
         assert "PAK CHECK" in text and "Section" in text
+        # the hint names a key on a file this run does not write: say what to do
+        assert "PAK CHECK, what to do: this tree is not written" in text and "--drop the dashboard" in text
+        assert "PAK CHECK, what to do: this tree is not written, so the key cannot be set on it here. Convert" in text
+        assert "a PAK CHECK failure is never accepted by --allow-partial" in text
         assert rc == 1
         assert not out.exists() and "nothing written to" in text
         rc, text = _run(source, out, capsys, "--layout", layout, "--ids", "keep", "--naming", "unprefixed",
@@ -739,7 +743,12 @@ def test_target_min_drops_newer_omit_and_lists_the_deviation(source, tmp_path, c
     assert "TARGET 8.18.7: dashboards/probe-dashboard-a.yaml" in text and "omit: temporary not emitted" in text
     assert "set aside only at dashboard.temporary" in text
     assert "dashboard: dashboard.temporary [extra]" in text  # forced, listed under deviations
-    assert "1 identical apart from keys forced by --target-min" in text
+    # The report's CoverPage font_color (floor 9.0.2) is not emitted at 8.18.7:
+    # a second object identical apart from forced keys, its path listed.
+    assert "2 identical apart from keys forced by --target-min" in text
+    assert "TARGET 8.18.7: reports/probe-report.yaml" in text and "font_color not emitted" in text
+    assert "set aside only at ReportDef/Sections/Section[0]/ContentFormatting/FontColor" in text
+    assert _yaml(out, "reports/probe-report.yaml")["sections"][0] == {"type": "CoverPage", "colorize": False}
     # Section is reported, not converted away
     assert any(w["type"] == "Section" for w in _yaml(out, "dashboards/probe-dashboard-b.yaml")["widgets"])
 

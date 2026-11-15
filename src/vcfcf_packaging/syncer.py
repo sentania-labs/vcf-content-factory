@@ -241,6 +241,26 @@ def _refuse_unimportable_widgets(bundle, session) -> bool:
     return False
 
 
+def _refuse_unimportable_reports(bundle, session) -> bool:
+    """True (after printing why) when the instance's version refuses a
+    report feature one of the bundle's reports keeps (CoverPage font_color
+    on 8.18.7; ``vcfcf_reports.client.plan_report_import``). Checked before
+    anything of the bundle is imported, as for widget types; a report that
+    sets ``feature_fallback`` is checked as the reports handler will import
+    it, and the handler, which imports, says each omission."""
+    reports = list(getattr(bundle, "reports", None) or [])
+    if not reports:
+        return False
+    from vcfcf_reports.client import plan_report_import
+    _planned, refusal, notes = plan_report_import(session, reports, omission_notes=False)
+    for note in notes:
+        _print_warn(note)
+    if refusal:
+        print(f"FATAL: {refusal}", file=sys.stderr)
+        return True
+    return False
+
+
 def sync_bundle(
     bundle_path: str | Path,
     handlers: Optional[List[ContentHandler]] = None,
@@ -281,6 +301,8 @@ def sync_bundle(
     if _check_sm_referents_before_import(bundle, session):
         return 1
     if _refuse_unimportable_widgets(bundle, session):
+        return 1
+    if _refuse_unimportable_reports(bundle, session):
         return 1
     # Symptoms and alerts sync by name: warn on a stock name (#345 W8).
     from .stock_ids import warn_bundle_stock_names

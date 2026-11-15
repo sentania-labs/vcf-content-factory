@@ -65,6 +65,35 @@ def find_by_name(client: VCFOpsClient, name: str) -> Optional[dict]:
     return None
 
 
+def plan_report_import(client: VCFOpsClient, reports, *, omission_notes: bool = True) -> "tuple":
+    """``(reports, refusal, notes)`` for a content import of ``reports`` on
+    ``client``, the report counterpart of
+    ``vcfcf_dashboards.client.plan_dashboard_import``.
+
+    ``reports``: the input, except that each report listing a feature in
+    ``feature_fallback`` is its variant without it when the instance is
+    below the feature's floor (CoverPage ``font_color``: 9.0.2) or its
+    version cannot be read (``unknown_target="omit"``, as for Section).
+    ``refusal``: a report keeps a feature on a build measured to refuse it
+    (8.18.7 for font_color); the caller must not import.
+    ``notes``: one ``FEATURE OMITTED`` line per omission (unless
+    ``omission_notes=False``), then any WARNING under which the import goes
+    ahead. No request is made and nothing changes when no report carries a
+    floored feature.
+    """
+    from vcfcf_core.reports.loader import apply_feature_fallback, feature_import_check
+    from vcfcf_dashboards.client import get_ops_version
+    reports = list(reports)
+    if not any(r.features_used() for r in reports):
+        return reports, None, []
+    version = get_ops_version(client)
+    planned, notes = apply_feature_fallback(reports, version, unknown_target="omit")
+    if not omission_notes:
+        notes = []
+    refusal, warning = feature_import_check(planned, version)
+    return planned, refusal, notes + ([warning] if warning else [])
+
+
 def import_reports_zip(
     client: VCFOpsClient,
     zip_bytes: bytes,

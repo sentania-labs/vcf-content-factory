@@ -304,7 +304,9 @@ class TestOtherTypesWarnOnly:
         monkeypatch.setattr(rp_handler, "build_import_zip", lambda *a, **k: b"zip")
         monkeypatch.setattr(rp_handler, "import_reports_zip",
                             lambda s, b: _envelope(_summary("REPORTS", 2, imported=1)))
-        rd = types.SimpleNamespace(name="[VCF CF] Report")
+        # features_used: the report feature floors (none floored here, so
+        # plan_report_import makes no version request)
+        rd = types.SimpleNamespace(name="[VCF CF] Report", features_used=lambda: [])
         result = rp_handler.ReportsHandler().sync_loaded([rd], [], object())
         assert [i.status for i in result.items] == ["ok"]
         assert "WARNING: IMPORT SHORTFALL: REPORTS: the import accounted for 1 of 2" \

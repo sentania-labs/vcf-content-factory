@@ -51,7 +51,9 @@ Order of decisions, each reported:
    object, naming the field.
 7. **Target version.** With ``target_min``, an ``omit:`` entry whose proven
    floor is above it is not emitted (the key renders), and each such
-   deviation is listed with the exact path it changes; a dashboard carrying
+   deviation is listed with the exact path it changes; a report feature
+   whose floor is above it (``REPORT_FEATURE_MIN_OPS_VERSION``, CoverPage
+   ``font_color``) is not emitted, listed the same way; a dashboard carrying
    a widget type that needs a newer product than the target is *converted,
    not deliverable to the stated target*. Without a target the source is
    reproduced and the same things are warned about.
@@ -80,7 +82,13 @@ from ..dashboards.widget_versions import (
     parse_ops_version,
 )
 from ..naming import FACTORY_PREFIX, has_factory_prefix, has_legacy_prefix, strip_factory_prefix
-from ..reports.loader import SECTION_OMIT_MIN_OPS_VERSION
+from ..reports.loader import (
+    REPORT_FEATURE_MIN_OPS_VERSION,
+    REPORT_FEATURE_WIRE,
+    REPORT_FEATURE_WIRE_PATH,
+    SECTION_OMIT_MIN_OPS_VERSION,
+    _feature_floor_sentence,
+)
 from ..symptoms.loader import SYMPTOM_OMIT_MIN_OPS_VERSION
 from . import accounting as _acct
 from . import alerts as _alerts
@@ -1425,6 +1433,33 @@ class _Planner:
                     else:
                         del s["omit"]
                         s["colorize"] = True
+                # Report features (REPORT_FEATURE_MIN_OPS_VERSION): an element
+                # a build below the floor refuses. Below a stated target it
+                # is not emitted; with no target it is reproduced and warned.
+                for feature in [f for f in REPORT_FEATURE_MIN_OPS_VERSION if f in s]:
+                    floor = REPORT_FEATURE_MIN_OPS_VERSION[feature]
+                    where = f"report {e.name!r} section {si} ({s.get('type')})"
+                    if self.target is None:
+                        e.version_warnings.append(
+                            f"{where}: {feature} reproduces {REPORT_FEATURE_WIRE[feature]}, whose floor is "
+                            f"{_feature_floor_sentence(feature)}; a build below it drops the template "
+                            f"(install still reports success), and a Tier 2 pak build (and the pak layout's "
+                            f"check here) fails on it unless the report sets feature_fallback: "
+                            f"{{{feature}: omit}}, which the importer never adds: pass --target-min 8.18.7 "
+                            f"to leave it out, or add the key to the written report YAML")
+                    elif self.target < parse_ops_version(floor):
+                        value = s.pop(feature)
+                        mark = Mark(f"ReportDef/Sections/Section[{si}]/{REPORT_FEATURE_WIRE_PATH[feature]}",
+                                    "missing", subtree=True)
+                        e.deviations.append(Deviation(feature, (
+                            f"{where}: {feature} not emitted: {REPORT_FEATURE_WIRE[feature]} has floor "
+                            f"{_feature_floor_sentence(feature)}, above the target "
+                            f"{format_ops_version(self.target)}; the render leaves it out where the source "
+                            f"carries it, so the cover page has no font colour setting, as no built-in template "
+                            f"has (set aside only at {mark.path}). To ship it where the target imports it, "
+                            f"restore {feature}: \"{value}\" on that section of the written report YAML and "
+                            f"add feature_fallback: {{{feature}: omit}} (the importer never adds that key)"),
+                            [mark]))
         elif e.type == "symptom":
             so = y.get("omit") or []
             if so:

@@ -16,6 +16,7 @@ from .client import (
     list_reports,
     discover_marker_filename,
     get_current_user,
+    plan_report_import,
 )
 from .loader import ReportDef, ReportValidationError, load_dir, load_file
 from .render import build_import_zip
@@ -115,6 +116,14 @@ def cmd_sync(args) -> int:
     profile, default = resolve_profile_from_args(args)
     client = VCFOpsClient.from_env(profile=profile, default_profile=default)
     try:
+        # Report feature floors: the variant the instance version takes, or
+        # a refusal before anything is sent (plan_report_import).
+        defs, refusal, notes = plan_report_import(client, defs)
+        for note in notes:
+            print(note if note.startswith("FEATURE OMITTED") else f"WARNING: {note}", file=sys.stderr)
+        if refusal:
+            print(f"FATAL: {refusal}", file=sys.stderr)
+            return 1
         user = get_current_user(client)
         marker = discover_marker_filename(client)
         blob = build_import_zip(

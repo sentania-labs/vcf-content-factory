@@ -42,6 +42,10 @@ YAML schema (see .claude/agents/report-author.md for the canonical spec):
         - pdf
         - csv
 
+    # optional: ship without a floored feature where the target is below
+    # its floor (template_fidelity_wire_format.md §Feature version floors)
+    feature_fallback: {font_color: omit}
+
 Cross-reference resolution:
   - View names are resolved by scanning views/ (or a configurable dir).
   - Dashboard names are resolved by scanning dashboards/.
@@ -118,6 +122,80 @@ SECTION_OMIT_MIN_OPS_VERSION = {
 }
 OLDEST_OMIT_EVIDENCE = (8, 18, 7)
 
+# ---------------------------------------------------------------------------
+# Report-template feature floors (2026-11-14; measured 2026-11-15 UTC)
+# ---------------------------------------------------------------------------
+#
+# A feature here is an element the renderer emits only when the YAML key is
+# set, and that an older product's report schema refuses. The pak installer
+# validates each content/reports/<dir>/content.xml against that schema and a
+# refused element costs the whole template (JAXB unmarshal error in the
+# analytics log, ``importSolutionContent failed to import reports``), while
+# the install still reports success. Evidence and the decision table:
+# knowledge/context/wire-formats/template_fidelity_wire_format.md
+# §Feature version floors. One table; every door reads it (load warning,
+# import-local --target-min, the Tier 2 pak floor gate, live sync).
+
+#: Report feature (the factory YAML key) -> the builds MEASURED, by a pak
+#: install of templates carrying it: ``imported`` (the template exists
+#: afterwards) and ``refused`` (it does not). font_color, 2026-11-14/15, one
+#: pak whose 5 CoverPage sections carry <FontColor>: 9.0.2 and 9.1.1 imported
+#: all 16 of its templates and their exports carry the element back; 8.18.7
+#: refused the 5 (``cvc-complex-type.2.4.d: Invalid content was found
+#: starting with element 'FontColor'. No child element is expected at this
+#: point.``). The upstream pack it was converted from shows the same 5
+#: missing on 8.18.7.
+#: PENDING: opt-in output on 8.18.7 (CoverPage with ColorizeListView and no
+#: FontColor): live result pending.
+REPORT_FEATURE_MEASURED = {
+    "font_color": {"imported": ((9, 0, 2), (9, 1, 1)), "refused": ((8, 18, 7),)},
+}
+
+#: Report feature -> the lowest version proven to import it (its floor): the
+#: lowest ``imported`` build. Below it and above the highest ``refused``
+#: build (8.18.8 to 9.0.1 for font_color) nothing is measured.
+REPORT_FEATURE_MIN_OPS_VERSION = {
+    f: min(m["imported"]) for f, m in REPORT_FEATURE_MEASURED.items()
+}
+
+#: Report feature -> the wire element it renders, for messages.
+REPORT_FEATURE_WIRE = {
+    "font_color": "<FontColor> in the CoverPage <ContentFormatting>",
+}
+
+#: Report feature -> its flat source path below ``ReportDef/Sections/Section[i]``
+#: (importer ``flat`` grammar), where import-local sets a forced omission aside.
+REPORT_FEATURE_WIRE_PATH = {
+    "font_color": "ContentFormatting/FontColor",
+}
+
+#: Allowed values in the report YAML mapping ``feature_fallback`` (feature ->
+#: value), the same vocabulary as the dashboard key ``section_fallback``.
+FEATURE_FALLBACK_VALUES = ("omit",)
+
+
+def _fmt_version(v) -> str:
+    t = _version_tuple(v)
+    return ".".join(str(p) for p in (list(t) + [0, 0])[:max(3, len(t))])
+
+
+def feature_refused_on(feature: str, target) -> bool:
+    """True when ``target`` is at or below a build measured to refuse
+    ``feature`` (an older build is taken to refuse it too)."""
+    refused = REPORT_FEATURE_MEASURED.get(feature, {}).get("refused") or ()
+    if not refused:
+        return False
+    # First three components: a build-suffixed 8.18.7.24000 is 8.18.7.
+    t = tuple(list(_version_tuple(target)) + [0, 0])[:3]
+    return t <= max(tuple(list(_version_tuple(r)) + [0, 0])[:3] for r in refused)
+
+
+def _feature_floor_sentence(feature: str) -> str:
+    m = REPORT_FEATURE_MEASURED[feature]
+    refused = ", ".join(_fmt_version(r) for r in m.get("refused") or ())
+    return (f"{_fmt_version(REPORT_FEATURE_MIN_OPS_VERSION[feature])}, the first VCF Operations "
+            f"build proven to import it" + (f" (refused on {refused})" if refused else ""))
+
 
 @dataclass
 class SubjectType:
@@ -169,6 +247,85 @@ class ReportDef:
     # `subject_types: []` written explicitly: a report with no SubjectType
     # (five third-party templates). An absent key is still an error.
     no_subject_types: bool = False
+    # ``feature_fallback: {font_color: omit}``: where the target is below a
+    # listed feature's floor (REPORT_FEATURE_MIN_OPS_VERSION), this report
+    # ships without it (feature_fallback_variant). Unlisted: the feature
+    # always ships, and a target below its floor is refused or fails.
+    feature_fallback: dict = field(default_factory=dict)
+
+    def features_used(self) -> List[tuple]:
+        """``(section index, feature)`` for each floored feature set."""
+        return [(i, "font_color") for i, sec in enumerate(self.sections) if sec.font_color is not None]
+
+    def feature_version_problems(self, target_version=None) -> List[str]:
+        """One message per section feature whose floor is above
+        ``target_version``; with no target (content bundles declare none),
+        per feature whose floor is above the oldest export read (8.18.7)."""
+        return [msg for _f, msg in self.feature_version_entries(target_version)]
+
+    def feature_version_entries(self, target_version=None) -> List[tuple]:
+        """``(feature, message)`` per entry ``feature_version_problems`` reports."""
+        target = _version_tuple(target_version) if target_version is not None else OLDEST_OMIT_EVIDENCE
+        out: List[tuple] = []
+        for i, feature in self.features_used():
+            floor = REPORT_FEATURE_MIN_OPS_VERSION[feature]
+            if _version_tuple(floor) <= target:
+                continue
+            scope = (f"the target VCF Operations {_fmt_version(target)} is below it"
+                     if target_version is not None else "no target version is declared")
+            out.append((feature,
+                f"{self.source_path or self.name}: report {self.name!r}: sections[{i}] "
+                f"({self.sections[i].type}): {feature} renders {REPORT_FEATURE_WIRE[feature]}, "
+                f"whose floor is {_feature_floor_sentence(feature)}; {scope}, and a build "
+                f"that refuses it drops the whole template while the install reports success"
+            ))
+        return out
+
+    def without_features(self, features) -> "ReportDef":
+        """This report with each named feature removed (a new object;
+        ``self`` is not changed). font_color: the CoverPage keeps its
+        ``colorize`` (ColorizeListView), so a CoverPage that sets both still
+        renders ContentFormatting, without FontColor."""
+        import dataclasses
+        drop = set(features)
+        if "font_color" not in drop or not any(s.font_color is not None for s in self.sections):
+            return self
+        return dataclasses.replace(
+            self,
+            sections=[dataclasses.replace(s, font_color=None) if s.font_color is not None else s
+                      for s in self.sections],
+        )
+
+    def feature_fallback_variant(self, target_version, unknown_target: str = "ship"):
+        """``(report, notes)``: this report as an output whose lowest target
+        is ``target_version`` ships it. Each feature listed in
+        ``feature_fallback`` and set here is left out when the target is
+        below its floor, or unknown with ``unknown_target="omit"`` (live
+        sync, version unreadable); ``"ship"`` (no target declared: a content
+        bundle) keeps it. An unlisted feature is never removed here. One note
+        per omission: report, element, reason."""
+        if unknown_target not in ("ship", "omit"):
+            raise ValueError(f"unknown_target must be ship or omit; got {unknown_target!r}")
+        used = sorted({f for _i, f in self.features_used()})
+        drop, notes = [], []
+        for feature in used:
+            if self.feature_fallback.get(feature) != "omit":
+                continue
+            if target_version is None:
+                if unknown_target == "ship":
+                    continue
+                reason = (f"the target version could not be read, and {feature} needs VCF Operations "
+                          f"{_feature_floor_sentence(feature)}")
+            elif _version_tuple(target_version) >= _version_tuple(REPORT_FEATURE_MIN_OPS_VERSION[feature]):
+                continue
+            else:
+                reason = (f"the target is VCF Operations {_fmt_version(target_version)}, below "
+                          f"{_feature_floor_sentence(feature)}")
+            drop.append(feature)
+            n = sum(1 for _i, f in self.features_used() if f == feature)
+            notes.append(f"FEATURE OMITTED: report {self.name!r}: {feature} ({REPORT_FEATURE_WIRE[feature]}, "
+                         f"{n} section(s)) left out (feature_fallback: {feature}: omit): {reason}.")
+        return (self.without_features(drop) if drop else self), notes
 
     def validate(self, enforce_framework_prefix: bool = True) -> None:
         if not self.name.strip():
@@ -244,6 +401,24 @@ class ReportDef:
                         f"{self.name}: Dashboard section orientation must be one of "
                         f"{sorted(VALID_ORIENTATIONS)}; got {sec.orientation!r}"
                     )
+        for feature, value in self.feature_fallback.items():
+            if feature not in REPORT_FEATURE_MIN_OPS_VERSION:
+                raise ReportValidationError(
+                    f"{self.name}: feature_fallback: {feature!r} is not a floored report feature "
+                    f"(one of {', '.join(sorted(REPORT_FEATURE_MIN_OPS_VERSION))})"
+                )
+            if value not in FEATURE_FALLBACK_VALUES:
+                raise ReportValidationError(
+                    f"{self.name}: feature_fallback: {feature} must be one of "
+                    f"{', '.join(FEATURE_FALLBACK_VALUES)}; got {value!r}"
+                )
+            # Meaningless when no section sets the feature: an error, as
+            # section_fallback on a dashboard without a Section is.
+            if not any(f == feature for _i, f in self.features_used()):
+                raise ReportValidationError(
+                    f"{self.name}: feature_fallback: {feature}: {value} says what to do with "
+                    f"this report's {feature}, and no section sets it; remove the key"
+                )
         for fmt in self.settings.output_formats:
             if fmt not in VALID_OUTPUT_FORMATS:
                 raise ReportValidationError(
@@ -502,8 +677,21 @@ def load_file(
     released = bool(released_raw) if isinstance(released_raw, bool) else False
     version = str(data.get("version", "1.0.0") or "1.0.0").strip() or "1.0.0"
 
+    raw_ff = data.get("feature_fallback")
+    if raw_ff is None:
+        feature_fallback = {}
+    elif isinstance(raw_ff, dict):
+        feature_fallback = dict(raw_ff)
+    else:
+        raise ReportValidationError(
+            f"{path}: feature_fallback must be a mapping of feature to "
+            f"{'/'.join(FEATURE_FALLBACK_VALUES)} (for example feature_fallback: "
+            f"{{font_color: omit}}); got {raw_ff!r}"
+        )
+
     raw_st = data.get("subject_types")
     rd = ReportDef(
+        feature_fallback=feature_fallback,
         no_subject_types=isinstance(raw_st, list) and raw_st == [],
         id=report_id,
         name=name,
@@ -525,6 +713,17 @@ def load_file(
         raise ReportValidationError(f"{path}: {exc}") from None
     import warnings
     for _problem in rd.omit_version_problems():
+        warnings.warn(_problem, UserWarning, stacklevel=2)
+    # Feature floors: a warning here (no target is known at load); the Tier 2
+    # pak build gates it, live sync omits or refuses by the instance version.
+    for feature, _problem in rd.feature_version_entries():
+        if rd.feature_fallback.get(feature) == "omit":
+            _problem += (f". feature_fallback: {feature}: omit applies where a target version is "
+                         f"known: live sync and Tier 2 pak builds leave it out below the floor; "
+                         f"content bundles declare no target, so they ship it")
+        else:
+            _problem += (f". To ship the report without it below the floor (and with it once the "
+                         f"floor is met), set feature_fallback: {{{feature}: omit}}")
         warnings.warn(_problem, UserWarning, stacklevel=2)
     return rd
 
@@ -560,3 +759,66 @@ def load_dir(
         seen[rd.name] = p
         out.append(rd)
     return out
+
+
+def apply_feature_fallback(reports, target_version, unknown_target: str = "ship"):
+    """``(reports, notes)``: each report as an output whose lowest target is
+    ``target_version`` ships it (``ReportDef.feature_fallback_variant``). A
+    report with nothing to omit is returned as it is, the same object."""
+    out: List[ReportDef] = []
+    notes: List[str] = []
+    for rd in reports:
+        variant, n = rd.feature_fallback_variant(target_version, unknown_target)
+        out.append(variant)
+        notes.extend(n)
+    return out, notes
+
+
+def feature_import_check(reports, version):
+    """``(refusal, warning)`` for importing ``reports`` (after
+    ``apply_feature_fallback``) into an instance at ``version`` (a tuple or
+    dotted string; None when unreadable). ``refusal``: a report keeps a
+    feature on a build at or below one measured to refuse it; the caller
+    must not import. ``warning``: a kept feature on a build below its floor
+    that nothing has measured, or on an unreadable version: the import goes
+    ahead and its result check is the backstop. Both None when no report
+    carries a floored feature."""
+    used = [(rd, i, f) for rd in reports for i, f in rd.features_used()]
+    if not used:
+        return None, None
+    if version is None:
+        names = sorted({rd.name for rd, _i, _f in used})
+        return None, (
+            f"could not read the instance version (GET /api/versions/current), so the report "
+            f"feature floors were not checked: {', '.join(repr(n) for n in names)} carry a "
+            f"feature an older build refuses; a refused report template is dropped from the "
+            f"import, which the import result check reports."
+        )
+    refused, unmeasured = [], []
+    for rd, i, f in used:
+        if _version_tuple(version) >= _version_tuple(REPORT_FEATURE_MIN_OPS_VERSION[f]):
+            continue
+        where = f"report {rd.name!r} sections[{i}] {f} ({REPORT_FEATURE_WIRE[f]})"
+        (refused if feature_refused_on(f, version) else unmeasured).append((where, f))
+    have = _fmt_version(version)
+    if refused:
+        feats = sorted({f for _w, f in refused})
+        return (
+            f"this instance is VCF Operations {have}, which refuses "
+            + "; ".join(w for w, _f in refused)
+            + f": floor {'; '.join(f + ' ' + _feature_floor_sentence(f) for f in feats)}. A pak install "
+            f"loses each such template; a content import sends every report in one content.xml, "
+            f"which the schema check may refuse whole (unmeasured). Nothing was imported. Set "
+            f"feature_fallback: "
+            f"{{{feats[0]}: omit}} on the report to ship it without the element below the floor, "
+            f"or remove the key.",
+            None,
+        )
+    if unmeasured:
+        return None, (
+            f"this instance is VCF Operations {have}, below the floor of "
+            + "; ".join(w for w, _f in unmeasured)
+            + "; whether this build imports it is unmeasured. Importing anyway; if it does not, the "
+            "import result check reports the loss."
+        )
+    return None, None
