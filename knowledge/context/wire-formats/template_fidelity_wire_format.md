@@ -80,7 +80,7 @@ on the CoverPage, 2026-11-15 UTC):
 | Aria Operations 8.18.7 | the 5 refused, 11 imported. Analytics log, once per template: `cvc-complex-type.2.4.d: Invalid content was found starting with element 'FontColor'. No child element is expected at this point.`, then `SolutionManagerDistributedTask.installReportContent - importSolutionContent failed to import reports. Error: JAXB unmarshalling exception`. The install reported success; the post-install content check named the 5 missing. The upstream pack they were converted from shows the same 5 missing on 8.18.7. |
 | VCF Operations 9.0.2 | all 16 imported; the instance's own REPORT_DEFINITIONS export carries the element back (2026-11-12 and 2026-11-13 runs) |
 | VCF Operations 9.1.1 | all 16 imported; its export carries it back (2026-11-11 and 2026-11-12 runs) |
-| Aria Operations 8.18.7, opt-in output | **PENDING:** opt-in output on 8.18.7 (CoverPage with ColorizeListView and no FontColor): live result pending |
+| Aria Operations 8.18.7, opt-in output | Measured 2026-11-15: a pak whose five cover pages carry `ColorizeListView` and no `FontColor` (the `feature_fallback: {font_color: omit}` output) imported all five on 8.18.7 with no schema error in the appliance logs; one of them generated a PDF whose cover page renders. The same pak one build earlier, with `FontColor`, lost those five on the same instance. |
 
 "No child element is expected" after `ColorizeListView` means the 8.18.7
 `ContentFormatting` type ends at `ColorizeListView`: a CoverPage with
