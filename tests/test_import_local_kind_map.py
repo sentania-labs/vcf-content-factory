@@ -142,7 +142,7 @@ SOURCES = {
         description: report on {OLD}
         subject_types: [{{adapter_kind: {OLD}, resource_kind: Probe Library, type: self}}]
         sections:
-          - {{type: CoverPage, colorize: false, font_color: "000000"}}
+          - {{type: CoverPage, colorize: false}}
           - {{type: View, view: Probe Library List, orientation: Portrait}}
         settings: {{show_page_footer: true, output_formats: [pdf]}}
     """,

@@ -137,7 +137,8 @@ def add_parser(sub) -> None:
                         "object's description, matched as --rename matches, before renaming (repeatable)")
     p.add_argument("--target-min", choices=("8.18.7", "9.0.2", "9.1.1"),
                    help="oldest VCF Operations the output must import on: omit: entries proven only on "
-                        "newer builds are not emitted (each deviation listed); a dashboard with a widget "
+                        "newer builds are not emitted, nor is a report feature above its floor (CoverPage "
+                        "font_color, 9.0.2), each deviation listed; a dashboard with a widget "
                         "type the target lacks is not deliverable to it")
     p.add_argument("--prefer-source", action="append", default=[], metavar="FRAGMENT",
                    help="when one id is defined differently in several files, the copy from the one file "

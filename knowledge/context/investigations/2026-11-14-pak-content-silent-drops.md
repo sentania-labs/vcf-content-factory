@@ -256,3 +256,20 @@ alert files are allowed now, so those rows no longer fail.) These
 duplicates are a policy finding, not an import failure: Synology 0.0.0.35
 imported every symptom but the DT one on 8.18.7 and 9.1.1 with them, and the
 old layout imports on 9.0.2 (probe T2).
+
+## C. A report element 8.18.7's schema refuses drops that template (2026-11-15)
+
+A third silent drop, found by the post-install count on a fresh 8.18.7
+install of the vCommunity Java port (0.0.0.18): 5 of 16 report templates
+missing, each with `<FontColor>` in its CoverPage `<ContentFormatting>`. The
+analytics log names it once per template (`cvc-complex-type.2.4.d: Invalid
+content was found starting with element 'FontColor'. No child element is
+expected at this point.`, then `importSolutionContent failed to import
+reports`). The same pak imports all 16 on 9.0.2 and 9.1.1, and the upstream
+pack shows the same 5 missing on 8.18.7. Unlike A, the content gate cannot
+see it (the file is well formed and the element is valid on 9.x); the
+build-time floor gate does: `font_color` has floor 9.0.2, and a bundled
+report carrying it fails `build-sdk` / `validate-sdk` unless it sets
+`feature_fallback: {font_color: omit}`. Table, decision table and
+semantics: `../wire-formats/template_fidelity_wire_format.md` §Feature
+version floors.

@@ -739,7 +739,12 @@ def test_target_min_drops_newer_omit_and_lists_the_deviation(source, tmp_path, c
     assert "TARGET 8.18.7: dashboards/probe-dashboard-a.yaml" in text and "omit: temporary not emitted" in text
     assert "set aside only at dashboard.temporary" in text
     assert "dashboard: dashboard.temporary [extra]" in text  # forced, listed under deviations
-    assert "1 identical apart from keys forced by --target-min" in text
+    # The report's CoverPage font_color (floor 9.0.2) is not emitted at 8.18.7:
+    # a second object identical apart from forced keys, its path listed.
+    assert "2 identical apart from keys forced by --target-min" in text
+    assert "TARGET 8.18.7: reports/probe-report.yaml" in text and "font_color not emitted" in text
+    assert "set aside only at ReportDef/Sections/Section[0]/ContentFormatting/FontColor" in text
+    assert _yaml(out, "reports/probe-report.yaml")["sections"][0] == {"type": "CoverPage", "colorize": False}
     # Section is reported, not converted away
     assert any(w["type"] == "Section" for w in _yaml(out, "dashboards/probe-dashboard-b.yaml")["widgets"])
 

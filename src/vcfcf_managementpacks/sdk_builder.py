@@ -5120,6 +5120,11 @@ def build_sdk_pak(project_dir: Path, output_dir: Optional[Path] = None,
         bundled_dashboards, sections)
     for _n in _section_notes:
         print(f"  build-sdk: {_n}", file=sys.stderr)
+    # feature_fallback: each report that leaves a floored element out is
+    # named, with the element and the version reason.
+    bundled_reports, _feature_notes = apply_bundled_report_fallback(bundled_reports)
+    for _n in _feature_notes:
+        print(f"  build-sdk: {_n}", file=sys.stderr)
     _floor_errors = check_bundled_version_floors((
         bundled_views, bundled_dashboards, bundled_supermetrics, bundled_symptoms,
         bundled_alerts, bundled_reports, bundled_recommendations,
@@ -6063,6 +6068,28 @@ def apply_bundled_section_fallback(dashboards, sections: str = "auto"):
     return apply_section_fallback(dashboards or [], _oldest_supported_line(), sections)
 
 
+def apply_bundled_report_fallback(reports):
+    """``(reports, notes)``: the bundled reports as this pak ships them.
+
+    The same target as ``apply_bundled_section_fallback``: the oldest
+    supported line (RULE-019). A report that lists a feature in
+    ``feature_fallback`` (``feature_fallback: {font_color: omit}``) ships
+    without it while that line is below the feature's floor
+    (``reports.loader.REPORT_FEATURE_MIN_OPS_VERSION``; font_color 9.0.2)
+    and with it once the line rises to it. A report without the key is never
+    changed: below the floor ``check_bundled_version_floors`` fails it. One
+    note per omission (report, element, reason); the caller prints them.
+    Methods only, no import: the kit's report loader is a renamed copy.
+    """
+    out, notes = [], []
+    oldest = _oldest_supported_line()
+    for r in reports or []:
+        variant, n = r.feature_fallback_variant(oldest)
+        out.append(variant)
+        notes.extend(n)
+    return out, notes
+
+
 def check_bundled_version_floors(bundled: tuple, sections: str = "auto") -> List[str]:
     """Bundled content the oldest supported platform line may not import.
 
@@ -6070,10 +6097,12 @@ def check_bundled_version_floors(bundled: tuple, sections: str = "auto") -> List
     dashboard widget type above the oldest line's floor (issue #199), or an
     ``omit:`` entry whose key no export at or below that line shows absent
     (dashboards, reports, symptoms; alerts have no ``omit:``; W3 of the
-    2026-11-12 fidelity review), is an error. ``build-sdk`` fails on it;
+    2026-11-12 fidelity review), or a report feature above its floor
+    (CoverPage ``font_color``, 9.0.2; ``REPORT_FEATURE_MIN_OPS_VERSION``) on
+    a report that does not list it in ``feature_fallback``, is an error. ``build-sdk`` fails on it;
     ``validate-sdk`` reports it under its own label. ``bundled`` is the
     tuple ``_load_bundled_content`` returns, after
-    ``apply_bundled_section_fallback``. ``sections="ship"`` (``build-sdk
+    ``apply_bundled_section_fallback`` and ``apply_bundled_report_fallback``. ``sections="ship"`` (``build-sdk
     --sections ship``, a dev build) leaves Section out of the widget-type
     check; ``apply_bundled_section_fallback`` names each such dashboard.
     """
@@ -6101,6 +6130,13 @@ def check_bundled_version_floors(bundled: tuple, sections: str = "auto") -> List
     for r in reports or []:
         for problem in r.omit_version_problems(oldest):
             errors.append(f"bundled_content.reports: {problem}." + tail)
+        for feature, problem in r.feature_version_entries(oldest):
+            errors.append(
+                f"bundled_content.reports: {problem}." + tail
+                + " To ship this report without the element where the oldest line refuses it "
+                f"(and with it once that line is retired), set feature_fallback: "
+                f"{{{feature}: omit}} on the report."
+            )
     for sym in symptoms or []:
         for problem in sym.omit_version_problems(oldest):
             errors.append(f"bundled_content.symptoms: {problem}." + tail)
@@ -6239,6 +6275,10 @@ def validate_sdk_project(project_dir: Path) -> List[str]:
         # section_fallback: the dashboards as build-sdk (auto) would ship them.
         _bdc_dash, _section_notes = apply_bundled_section_fallback(_bdc_dash)
         for _n in _section_notes:
+            print(f"  validate-sdk: {_n}", file=sys.stderr)
+        # feature_fallback: the reports as build-sdk would ship them.
+        _bdc_reports, _feature_notes = apply_bundled_report_fallback(_bdc_reports)
+        for _n in _feature_notes:
             print(f"  validate-sdk: {_n}", file=sys.stderr)
         _bundled = (bundled_views, _bdc_dash, _bdc_sms, _bdc_syms, _bdc_alerts,
                     _bdc_reports, _bdc_recs)

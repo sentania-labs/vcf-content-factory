@@ -655,6 +655,21 @@ then puts the folder back into the name, said on that line),
 interaction under it is a difference). Everything else in that object is
 compared normally.
 
+A report feature works the other way round: an element the source carries
+that an older product refuses. CoverPage `font_color` (`<FontColor>`) has
+floor 9.0.2 (8.18.7 drops the template;
+`../wire-formats/template_fidelity_wire_format.md` §Feature version floors).
+Below the target it is not emitted, listed as `TARGET` with the path
+`ReportDef/Sections/Section[i]/ContentFormatting/FontColor` (missing) and
+the source value; the object is "identical apart from forced target keys"
+and the CoverPage keeps `colorize`. At 9.0.2 or later it is carried; with
+no target it is carried and a `VERSION:` warning. The pak layout's floor
+check (oldest line 8.18.7) then refuses a carried `font_color`, so in that
+layout convert at `--target-min 8.18.7`. To keep it where the target
+imports it, restore it in the written YAML and add
+`feature_fallback: {font_color: omit}`; the importer never writes that key,
+for the same reason as `section_fallback`.
+
 A dashboard carrying a widget type that needs a newer product than the
 target (Section on 8.18.7 or 9.0.2) is **converted, not deliverable to the
 stated target** (`NOT DELIVERABLE` line): the run exits 1. `--allow-partial`
@@ -670,8 +685,9 @@ below 9.1.1 then leave the Sections out and say so
 The importer never writes that key itself: no source key maps to it, and
 it is the author's decision that the dashboard is complete without its
 header rows. The `NOT DELIVERABLE` and `VERSION:` lines for a Section name
-it. Floors: `widget_versions.py`, `reports/loader.py`,
-`symptoms/loader.py` (dashboard fidelity doc §Omit version floors).
+it. Floors: `widget_versions.py`, `reports/loader.py` (`omit:` and report
+features), `symptoms/loader.py` (dashboard fidelity doc §Omit version
+floors; template fidelity doc §Feature version floors).
 
 ## Verification and its limits
 
@@ -829,6 +845,9 @@ preferred). Each run takes 2 to 4 seconds.
   "vSphere Cluster Capacity 2.0" carry Sections, so they are not deliverable
   to 8.18.7, and the pak layout never accepts that: the run exits 1 even
   with `--allow-partial` (raise the target to 9.1.1 or drop them).
+  Since the report feature floor (2026-11-14) the 5 templates with a
+  CoverPage `FontColor` are identical apart from forced keys too
+  (`font_color` not emitted, one line per template); nothing else changes.
 - `content/` layout with `--naming factory-prefixed`: 4 dashboards fail the
   50-character limit with the prefix and one template that names one of them
   cascades; 250 compared, 149 identical, 101 only at recorded losses, 0

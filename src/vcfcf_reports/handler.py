@@ -12,6 +12,7 @@ so bundle uninstall does not abort on reports.
 """
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 from typing import List
 
@@ -29,6 +30,7 @@ from .client import (
     discover_marker_filename,
     get_current_user,
     import_reports_zip,
+    plan_report_import,
 )
 from vcfcf_dashboards.client import import_shortfall_errors, print_import_count_warnings
 from .loader import ReportValidationError, load_file
@@ -84,6 +86,17 @@ class ReportsHandler(ContentHandler):
             return result
 
         try:
+            # Report feature floors (feature_fallback, as section_fallback
+            # for dashboards): omit below the floor where the report opts in;
+            # refuse a measured-refusing build before anything is sent.
+            reports, refusal, notes = plan_report_import(session, reports)
+            for note in notes:
+                print(f"WARNING: {note}" if not note.startswith("FEATURE OMITTED") else f"  {note}",
+                      file=sys.stderr)
+            if refusal:
+                for rd in reports:
+                    result.items.append(ItemResult(name=rd.name, status="failed", message=refusal))
+                return result
             user = get_current_user(session)
             marker = discover_marker_filename(session)
             blob = build_import_zip(
