@@ -85,6 +85,7 @@ from ..naming import FACTORY_PREFIX, has_factory_prefix, has_legacy_prefix, stri
 from ..reports.loader import (
     REPORT_FEATURE_MIN_OPS_VERSION,
     REPORT_FEATURE_WIRE,
+    REPORT_FEATURE_WIRE_PATH,
     SECTION_OMIT_MIN_OPS_VERSION,
     _feature_floor_sentence,
 )
@@ -1448,7 +1449,7 @@ class _Planner:
                             f"to leave it out, or add the key to the written report YAML")
                     elif self.target < parse_ops_version(floor):
                         value = s.pop(feature)
-                        mark = Mark(f"ReportDef/Sections/Section[{si}]/ContentFormatting/FontColor",
+                        mark = Mark(f"ReportDef/Sections/Section[{si}]/{REPORT_FEATURE_WIRE_PATH[feature]}",
                                     "missing", subtree=True)
                         e.deviations.append(Deviation(feature, (
                             f"{where}: {feature} not emitted: {REPORT_FEATURE_WIRE[feature]} has floor "

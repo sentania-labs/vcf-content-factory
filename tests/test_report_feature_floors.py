@@ -81,6 +81,8 @@ def test_floor_is_the_lowest_measured_import_and_8_18_7_refuses():
     assert rl.REPORT_FEATURE_MEASURED["font_color"] == {
         "imported": ((9, 0, 2), (9, 1, 1)), "refused": ((8, 18, 7),)}
     assert rl.REPORT_FEATURE_MIN_OPS_VERSION == {"font_color": (9, 0, 2)}
+    assert set(rl.REPORT_FEATURE_WIRE_PATH) == set(rl.REPORT_FEATURE_WIRE) == set(rl.REPORT_FEATURE_MEASURED)
+    assert rl.REPORT_FEATURE_WIRE_PATH["font_color"] == "ContentFormatting/FontColor"
     assert rl.feature_refused_on("font_color", "8.18.7")
     assert rl.feature_refused_on("font_color", "8.18.6")
     assert not rl.feature_refused_on("font_color", "9.0.1")  # unmeasured, not refused
@@ -161,12 +163,22 @@ def test_without_the_key_nothing_is_removed(tmp_path):
         assert out[0] is rd and notes == []
 
 
-def test_the_key_on_a_report_without_the_element_renders_byte_identical(tmp_path):
-    with_key = _load(_write(tmp_path / "a.yaml", _report_yaml(font_color=None)))
+def test_the_key_on_a_report_without_the_element_is_a_load_error(tmp_path):
+    """As section_fallback on a dashboard without a Section: the key says
+    what to do with an element no section sets, so remove it."""
+    p = _write(tmp_path / "a.yaml", _report_yaml(font_color=None))
+    with pytest.raises(ReportValidationError,
+                       match="feature_fallback: font_color: omit says what to do with this report's "
+                             "font_color, and no section sets it; remove the key"):
+        _load(p)
+
+
+def test_a_report_without_the_element_renders_byte_identical_at_every_target(tmp_path):
     no_key = _load(_write(tmp_path / "b.yaml", _report_yaml(font_color=None, fallback=None)))
-    out, notes = apply_feature_fallback([with_key], "8.18.7")
-    assert out[0] is with_key and notes == []
-    assert render_report_xml(out) == render_report_xml([no_key])
+    before = render_report_xml([no_key])
+    for target in ("8.18.7", "9.0.2", None):
+        out, notes = apply_feature_fallback([no_key], target, "omit")
+        assert out[0] is no_key and notes == [] and render_report_xml(out) == before
 
 
 def test_shipped_variant_renders_like_no_key(tmp_path):
@@ -214,6 +226,10 @@ def test_import_check(tmp_path):
     refusal, warning = feature_import_check([rd], "8.18.7")
     assert warning is None and "VCF Operations 8.18.7, which refuses report 'Probe Cover Report'" in refusal
     assert "Nothing was imported" in refusal and "feature_fallback: {font_color: omit}" in refusal
+    # a build-suffixed version is compared on its first three components
+    refusal, warning = feature_import_check([rd], (8, 18, 7, 24000))
+    assert warning is None and "VCF Operations 8.18.7.24000, which refuses" in refusal
+    assert rl.feature_refused_on("font_color", "8.18.7.24000")
     refusal, warning = feature_import_check([rd], "9.0.1")
     assert refusal is None and "unmeasured" in warning
     assert feature_import_check([rd], "9.0.2") == (None, None)
@@ -329,6 +345,10 @@ def test_import_local_pak_layout(xml_source, tmp_path, capsys):
     line = next(l for l in text.splitlines() if "PAK CHECK" in l and "Probe Cover Report" in l)
     assert "font_color renders <FontColor>" in line and "9.0.2" in line
     assert "set feature_fallback: {font_color: omit} on the report" in line
+    assert ("PAK CHECK, what to do: this tree is not written, so the key cannot be set on it here. "
+            "Convert at --target-min 8.18.7") in text
+    assert "a PAK CHECK failure is never accepted by --allow-partial" in text
+    assert "or pass --allow-partial to accept what it accepts" not in text
 
 
 # --- 6. Tier 2 pak build ----------------------------------------------------------

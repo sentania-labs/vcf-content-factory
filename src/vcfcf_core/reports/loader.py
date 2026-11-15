@@ -145,6 +145,8 @@ OLDEST_OMIT_EVIDENCE = (8, 18, 7)
 #: starting with element 'FontColor'. No child element is expected at this
 #: point.``). The upstream pack it was converted from shows the same 5
 #: missing on 8.18.7.
+#: PENDING: opt-in output on 8.18.7 (CoverPage with ColorizeListView and no
+#: FontColor): live result pending.
 REPORT_FEATURE_MEASURED = {
     "font_color": {"imported": ((9, 0, 2), (9, 1, 1)), "refused": ((8, 18, 7),)},
 }
@@ -161,6 +163,12 @@ REPORT_FEATURE_WIRE = {
     "font_color": "<FontColor> in the CoverPage <ContentFormatting>",
 }
 
+#: Report feature -> its flat source path below ``ReportDef/Sections/Section[i]``
+#: (importer ``flat`` grammar), where import-local sets a forced omission aside.
+REPORT_FEATURE_WIRE_PATH = {
+    "font_color": "ContentFormatting/FontColor",
+}
+
 #: Allowed values in the report YAML mapping ``feature_fallback`` (feature ->
 #: value), the same vocabulary as the dashboard key ``section_fallback``.
 FEATURE_FALLBACK_VALUES = ("omit",)
@@ -175,7 +183,11 @@ def feature_refused_on(feature: str, target) -> bool:
     """True when ``target`` is at or below a build measured to refuse
     ``feature`` (an older build is taken to refuse it too)."""
     refused = REPORT_FEATURE_MEASURED.get(feature, {}).get("refused") or ()
-    return bool(refused) and _version_tuple(target) <= max(_version_tuple(r) for r in refused)
+    if not refused:
+        return False
+    # First three components: a build-suffixed 8.18.7.24000 is 8.18.7.
+    t = tuple(list(_version_tuple(target)) + [0, 0])[:3]
+    return t <= max(tuple(list(_version_tuple(r)) + [0, 0])[:3] for r in refused)
 
 
 def _feature_floor_sentence(feature: str) -> str:
@@ -399,6 +411,13 @@ class ReportDef:
                 raise ReportValidationError(
                     f"{self.name}: feature_fallback: {feature} must be one of "
                     f"{', '.join(FEATURE_FALLBACK_VALUES)}; got {value!r}"
+                )
+            # Meaningless when no section sets the feature: an error, as
+            # section_fallback on a dashboard without a Section is.
+            if not any(f == feature for _i, f in self.features_used()):
+                raise ReportValidationError(
+                    f"{self.name}: feature_fallback: {feature}: {value} says what to do with "
+                    f"this report's {feature}, and no section sets it; remove the key"
                 )
         for fmt in self.settings.output_formats:
             if fmt not in VALID_OUTPUT_FORMATS:

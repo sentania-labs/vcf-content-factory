@@ -80,6 +80,7 @@ on the CoverPage, 2026-11-15 UTC):
 | Aria Operations 8.18.7 | the 5 refused, 11 imported. Analytics log, once per template: `cvc-complex-type.2.4.d: Invalid content was found starting with element 'FontColor'. No child element is expected at this point.`, then `SolutionManagerDistributedTask.installReportContent - importSolutionContent failed to import reports. Error: JAXB unmarshalling exception`. The install reported success; the post-install content check named the 5 missing. The upstream pack they were converted from shows the same 5 missing on 8.18.7. |
 | VCF Operations 9.0.2 | all 16 imported; the instance's own REPORT_DEFINITIONS export carries the element back (2026-11-12 and 2026-11-13 runs) |
 | VCF Operations 9.1.1 | all 16 imported; its export carries it back (2026-11-11 and 2026-11-12 runs) |
+| Aria Operations 8.18.7, opt-in output | **PENDING:** opt-in output on 8.18.7 (CoverPage with ColorizeListView and no FontColor): live result pending |
 
 "No child element is expected" after `ColorizeListView` means the 8.18.7
 `ContentFormatting` type ends at `ColorizeListView`: a CoverPage with
@@ -126,8 +127,9 @@ prints `FEATURE OMITTED: report '<name>': font_color (<FontColor> in the
 CoverPage <ContentFormatting>, <n> section(s)) left out (feature_fallback:
 font_color: omit): <reason>.`; at or above the floor it ships with it, so
 retiring the old line restores the element with no content edit. An unknown
-feature or a value other than `omit` is a load error. A report without the
-key is never changed.
+feature, a value other than `omit`, or a listed feature that no section
+sets (as `section_fallback` on a dashboard without a Section) is a load
+error. A report without the key is never changed.
 
 | Door | Target | With `feature_fallback` | Without |
 |---|---|---|---|
@@ -143,7 +145,8 @@ key is never changed.
 The `9.0` row is conservative: the platform line includes builds below the
 proven 9.0.2. The pak layout of `import-local` checks the pak floor too, so
 at `--target-min 9.0.2` or with no target a source carrying `FontColor`
-writes nothing in that layout; convert at 8.18.7, then restore `font_color`
+writes nothing in that layout (`--allow-partial` does not change that; the
+run prints a `PAK CHECK, what to do` line); convert at 8.18.7, then restore `font_color`
 and add `feature_fallback` to the written YAML where the full form is
 wanted (the `TARGET` line names the value). Code:
 `ReportDef.feature_version_problems`, `ReportDef.feature_fallback_variant`,
@@ -156,7 +159,8 @@ wanted (the `TARGET` line names the value). Code:
 import the report XML the release builder rendered with no target, so a
 bundle report carrying `font_color` is lost on an 8.18.7 instance whatever
 its `feature_fallback`. Version-aware variants there are an installer
-template change (every distribution zip goes stale): a follow-up. A content
+template change (every distribution zip goes stale): a follow-up, issue
+#369. A content
 import sends every report in one `content.xml`; whether the 8.18.7 schema
 check then refuses the whole batch or the one template is unmeasured, which
 is why live sync refuses rather than warns.

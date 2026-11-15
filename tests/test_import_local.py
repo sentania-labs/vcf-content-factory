@@ -491,6 +491,10 @@ def test_verify_round_trip_identical_through_layout_loader(source, tmp_path, cap
         # Section needs 9.1.1; the pak gate says so (reported, not converted
         # away), and a pak check failure is never accepted: nothing written.
         assert "PAK CHECK" in text and "Section" in text
+        # the hint names a key on a file this run does not write: say what to do
+        assert "PAK CHECK, what to do: this tree is not written" in text and "--drop the dashboard" in text
+        assert "PAK CHECK, what to do: this tree is not written, so the key cannot be set on it here. Convert" in text
+        assert "a PAK CHECK failure is never accepted by --allow-partial" in text
         assert rc == 1
         assert not out.exists() and "nothing written to" in text
         rc, text = _run(source, out, capsys, "--layout", layout, "--ids", "keep", "--naming", "unprefixed",
