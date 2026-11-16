@@ -756,9 +756,59 @@ def test_cli_check_without_paths_reads_the_live_pak_registry(tmp_path, monkeypat
     assert lines[2].startswith("FAIL") and str(template) in lines[2]
 
 
-def test_cli_check_without_paths_uses_the_reader_not_a_glob():
-    """N3: the default set is the reader's live paks, so retired clones never appear."""
+_REGISTRY = Path(__file__).resolve().parents[1] / "knowledge" / "context" / "managed_paks.md"
+_RETIRED_HEADING = "## Retired paks"
+
+
+def _retired_pak_names(registry: Path, tmp_path: Path) -> frozenset:
+    """The ``Target:`` names under the registry's ``## Retired paks`` heading.
+
+    Derived from the registry text itself, not from the live reader, so the
+    check below is not circular: the section after the heading is written to
+    its own file and read with ``registered_pak_names`` (which reads every
+    section and only collects ``Target:`` names).
+    """
     from vcfcf_packaging import managed_paks
 
-    live = {p.name for p in managed_paks.load_registry()}
-    assert live and not any(name.startswith("vcommunity") for name in live)
+    lines = registry.read_text(encoding="utf-8").splitlines()
+    starts = [i for i, line in enumerate(lines) if line.rstrip() == _RETIRED_HEADING]
+    assert len(starts) == 1, f"expected one {_RETIRED_HEADING!r} heading in {registry}"
+    section = tmp_path / "retired_section.md"
+    section.write_text("\n".join(lines[starts[0] + 1:]) + "\n", encoding="utf-8")
+    return managed_paks.registered_pak_names(section)
+
+
+def _live_retired_overlap(registry: Path, retired: frozenset) -> set:
+    """Retired names the live reader returns from ``registry``."""
+    from vcfcf_packaging import managed_paks
+
+    live = {p.name for p in managed_paks.load_registry(registry)}
+    assert live, f"no live paks read from {registry}"
+    return live & retired
+
+
+def test_cli_check_without_paths_uses_the_reader_not_a_glob(tmp_path):
+    """N3: the default set is the reader's live paks, so retired clones never appear.
+
+    A live pak may share a prefix with a retired one (vcommunity-java and the
+    retired vcommunity family); the check is on the exact retired names the
+    registry lists under ``## Retired paks``.
+    """
+    retired = _retired_pak_names(_REGISTRY, tmp_path)
+    # Floor: the derivation finds the October retirements, so it is not vacuous.
+    assert {"vcommunity", "vcommunity-vsphere", "vcommunity-os"} <= retired, retired
+    assert _live_retired_overlap(_REGISTRY, retired) == set()
+
+
+def test_reader_retired_check_fails_when_a_retired_pak_reads_as_live(tmp_path):
+    """The check above goes red if the reader ever returns a retired pak:
+    a copy of the real registry with the Retired heading demoted (so the
+    reader no longer stops there) shows the retired names as live."""
+    lines = _REGISTRY.read_text(encoding="utf-8").splitlines()
+    doctored = tmp_path / "managed_paks.md"
+    doctored.write_text("\n".join(
+        "### Retired paks (doctored)" if line.rstrip() == _RETIRED_HEADING else line
+        for line in lines) + "\n", encoding="utf-8")
+    retired = _retired_pak_names(_REGISTRY, tmp_path)
+    assert _live_retired_overlap(doctored, retired), (
+        "a registry whose reader returns retired paks must fail the check")
