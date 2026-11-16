@@ -217,6 +217,26 @@ it is not a published pak.
   Connection shadows a logging.properties DEBUG). Closed 2026-11-07: #310
   (#321), #311/#315 (#319), #313 (#323, buildkit 1.0.25).
 
+### vcommunity-java
+
+- **Remote:** https://github.com/sentania-labs/vcf-content-factory-sdk-vcommunity-java
+- **Target:** `content/sdk-adapters/vcommunity-java/`
+- **adapter_kind:** vcfcf_vcommunity
+- **Owner:** sentania-labs. Public repo (public since 2026-11-16; MIT, with the
+  upstream authors credited in its NOTICE).
+- **Notes:** Java port of the upstream vCommunity pack 0.8.1: the same
+  `vCommunity|` metric and property keys on the same vSphere objects, its own
+  content libraries, library items and VM templates, the derived KPIs and
+  periodic cluster check, guest and Windows event collection (off by default,
+  not yet proven on a real guest), and the pack's dashboards, views, reports,
+  super metrics, symptoms and alerts converted with `import-local` under ids
+  minted in the pak's own namespace. A new effort begun 2026-11-12, not the
+  ports retired in October (below), whose adapter kind it reuses. Dev build
+  0.0.0.20; installed fresh on 8.18.7, 9.0.2 and 9.1.1 and compared key by key
+  with the Python pack. Moving from the Python pack is uninstall, then install
+  fresh. To be released as the 3.0.x line; no release tag yet. Design and
+  reviews live in the pak repo under `docs/`.
+
 ## Third-party Python Integration SDK paks (forks, contribute upstream)
 
 Registered 2026-10-13 on Scott's instruction ("I would like to fork these so we
