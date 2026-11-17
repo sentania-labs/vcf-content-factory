@@ -14,7 +14,7 @@
 One zip, one throwaway list view on `NSXTAdapter / NSXT World`, two
 otherwise identical dashboards, each with one `selfProvider: true` View
 widget pinned to that kind. `NSXT World` is the kind key; the single
-resource of that kind is displayed as `NSX World` on both devel and qa
+resource of that kind is displayed as `NSX World` on devel
 (`GET /api/resources?adapterKind=NSXTAdapter&resourceKind=NSXT World`).
 
 | Dashboard | `entries.resource[].name` / `config.resource.resourceName` |

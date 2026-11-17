@@ -4,12 +4,11 @@
 **Instance:** devel (VCF Operations 9.1.1.0).
 **Method:** enumerated every dashboard on the instance through the UI
 Struts layer (`/ui/dashboard.action` `getDashboardList` ->
-`getDashboardConfig` + `getWidgetConfigs` per tab), pulled a Suite API
-content export (`POST /api/content/operations/export`, scope ALL,
-`DASHBOARDS`) for the export form, and read the un-minified widget sources
+`getDashboardConfig` + `getWidgetConfigs` per tab) and read the un-minified widget sources
 that ship on the appliance under
 `/usr/lib/vmware-vcops/tomcat-web-app/webapps/ui/js/widgets/` (widget,
-`editors/`, `components/gridster/GridsterPanel.js`). No content was created
+`editors/`, `components/gridster/GridsterPanel.js`); the export form comes
+from the vendor dashboard templates listed below. No content was created
 on the instance; nothing to clean up.
 
 Verbatim samples (RULE-017): `reference/docs/extracted/dashboard-widgets/`
