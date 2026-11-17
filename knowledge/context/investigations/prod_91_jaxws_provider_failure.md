@@ -178,8 +178,7 @@ All three converge on the same fix space: **make a complete, self-consistent JAX
 
 ## Prod confirmation (2026-06-09) — root SSH obtained, READ-ONLY
 
-Root SSH now works with the **doubled** password (`VMware123!VMware123!`,
-length 20) as `root@vcf-lab-operations.int.sentania.net`. Entire pass was
+Root SSH now works as `root@vcf-lab-operations.int.sentania.net`. Entire pass was
 read-only: `cat`, `ls`, `/proc` reads, `unzip -l`/`-p` to stdout. Nothing
 created, changed, restarted, or reinstalled. `/tmp` verified clean of any
 artifacts. Adapter on prod is `Implementation-Version=0.42` (build 42).
