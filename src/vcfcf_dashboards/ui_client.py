@@ -319,7 +319,7 @@ class VCFOpsUIClient:
     # knowledge/context/api-surface/summary_dashboard_assignment.md. No
     # Suite API exists for any of them. They may change between releases.
     # Parameter names come from the disassembled DashboardAction: the
-    # 2026-08-25 note in that file (confirmed live on 9.1 and 9.2 dailies)
+    # 2026-08-25 note in that file (confirmed live on 9.1.1)
     # and the 2026-10-24 per-build read for 9.0.2 and 8.18 (issue #260).
 
     def get_resource_kind_list(self, adapter_kind: str, limit: int = 2000) -> dict:
@@ -371,7 +371,7 @@ class VCFOpsUIClient:
         build, knowledge/context/api-surface/summary_dashboard_assignment.md
         "Two request forms"):
 
-        - ``"two-map"`` (9.1.1 Build 25794169, 9.2, a 9.0.0.0 pre-release):
+        - ``"two-map"`` (9.1.1 Build 25794169):
           ``assignedAssociations`` plus ``resetAssociations``, both always
           sent (``{}`` when empty); reset values are the plain name.
         - ``"single-map"`` (9.0.2 Build 25429562, 8.18.6 Build 25423535):
@@ -386,7 +386,7 @@ class VCFOpsUIClient:
         Any other answer that is not ``ok`` (a 4xx or 5xx, a login page, a
         proxy timeout the server may have completed) raises at once,
         without a second write. The call goes out in the two-map form first
-        (the form proven live on 9.1.1 and 9.2); the form that answered
+        (the form proven live on 9.1.1); the form that answered
         ``ok`` is remembered on the client (``association_form``) and tried
         first next time. The version string is not used: the 9.1.1
         appliance's lastbuildversion.txt reads 9.0.0.0.

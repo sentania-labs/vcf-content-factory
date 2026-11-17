@@ -180,8 +180,7 @@ Off-box jars and local decompile scratch were under `/tmp/ambient_probe/` on the
 (`vrops-init-9.1.0.0100-25434855`; the cosmetic `vmware-vcops` rpm still reads
 `9.0.0.0-25434844`, but init/build is the 9.1 line). Collector pid **6350**,
 runs as **admin** (uid 1000), `vcops-collector` / OpenJDK 17.0.16.
-**Posture: strictly READ-ONLY** — root SSH (`sshpass`, doubled password,
-length 20) used for `cat`/`ls`/`stat`/`ss`/`grep`/`unzip -l`/`/proc` reads only.
+**Posture: strictly READ-ONLY** — root SSH (`sshpass`) used for `cat`/`ls`/`stat`/`ss`/`grep`/`unzip -l`/`/proc` reads only.
 No Suite API token acquired as maintenanceAdmin. Nothing created, modified,
 restarted, or deleted. `/tmp` verified clean (no artifacts created this session).
 

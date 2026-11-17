@@ -22,9 +22,9 @@ to follow them. Anyone with an appliance of 9.1.1 Build 25794169 can re-derive t
 9.0.2 counterpart of the Q1 evidence is kept on the holding share (see
 `2026-11-11-owner-mapping-dashboard-skip-reproduction.md`).
 
-The bundle under test came from a customer. Customer-identifying strings (AD domain, LDAP
-host, user names, the customer's dashboard, widget, group and resource-kind names, and
-the adapter kinds the bundle referenced) are generalized below.
+Identifying strings in the bundle under test (AD domain, LDAP host, user names,
+dashboard, widget, group and resource-kind names, and the adapter kinds the bundle
+referenced) are generalized below.
 All log timestamps are UTC unless marked CST; access-log and catalina files on this
 appliance print local (CST) time even where they carry a `Z`.
 
@@ -137,15 +137,15 @@ shows this.
 
 - Custom Groups **completed**: `CUSTOM_GROUP.IMPORT result="success"` at 14:58:01.410Z (4
   groups), task finished at 14:58:01.514Z. The phase took about 1 m 45 s. Most of that time
-  went on creating new Container resource kinds for the customer's group types
+  went on creating new Container resource kinds for the bundle's group types
   (`AdapterKindDescribeDataServiceSqlImpl.addNewResourceKinds` at 14:56:19Z, 14:57:18Z,
-  14:57:33Z, 14:57:39Z and 14:57:44Z, five customer-named kinds), all on the import thread.
+  14:57:33Z, 14:57:39Z and 14:57:44Z, five bundle-named kinds), all on the import thread.
   The UI had stopped polling at 08:58:04 CST, three seconds after completion, so the
   spinner in the screenshot was a stale view. Nothing hung.
 - Views (4) and super metrics (5) landed, per the audit success lines above. Not
   re-verified by API read-back because the Suite API was returning 503 (Q2).
 - Side effect worth knowing: the custom group import registered five new Container
-  resource kinds named after the customer's group types. They outlive any deletion of the
+  resource kinds named after the bundle's group types. They outlive any deletion of the
   groups, but are removable one by one with
   `DELETE /api/resources/groups/types/<key>` (done on devel_9_1 2026-11-11, all five).
 
@@ -251,7 +251,7 @@ afternoon of Nov 10".
 
 ## Implications
 
-- Third-party and customer bundles exported from an AD-, SSO- or vIDM-backed instance will
+- Third-party bundles exported from an AD-, SSO- or vIDM-backed instance will
   silently skip every dashboard owned by a directory user on any instance that lacks the
   identical auth source. The UI shows this as "skipped", with no failure. Our extractor and
   any bundle migrator should rewrite `usermappings.json` to the source-less `admin` shape
@@ -267,11 +267,11 @@ afternoon of Nov 10".
 ## Q3. Hand import of the same dashboard: why it stays "configuring"
 
 Added 2026-11-11 around 09:55 to 10:05 CST. Scott authorized one write: importing the
-customer's single-dashboard zip unmodified as the lab `admin`. That zip is the nested
+bundle's single-dashboard zip unmodified as the lab `admin`. That zip is the nested
 `dashboards/<owner-uuid>` file of the bundle, holding `dashboard/dashboard.json` and
 `dashboard/resources/*.properties`. The import is left in place for Scott:
 
-- **id `1a020f53-535b-41b3-915a-909c080a3c30`**, the customer's dashboard. Owner after import: `admin` (`33ebfccb-...`). Remove it later.
+- **id `1a020f53-535b-41b3-915a-909c080a3c30`**, the bundle's dashboard. Owner after import: `admin` (`33ebfccb-...`). Remove it later.
 
 ### How it was imported (the real Manage > Import path)
 
@@ -354,9 +354,9 @@ configs:
   reference the five groups were not reported as blocked. That includes the 4 groups
   imported this morning, which resolved, and the View and TextDisplay widgets.
 - **The used-and-missing custom groups block.** The five groups not shipped in the bundle
-  are exactly the five "didn't found" entries, across six widgets. The customer-named group
+  are exactly the five "didn't found" entries, across six widgets. The bundle's group
   *types* resolved here only because this morning's custom group import registered them as
-  Container kinds. On the customer's own instance they exist anyway.
+  Container kinds. On the source instance they exist anyway.
 - **Owner, sharing group, `homeTab`, name collision:** not involved. The dashboard landed,
   owned by the importer.
 - **Degraded instance (GemFire split, collector down):** ruled out as the cause. The pass
@@ -430,7 +430,7 @@ internalIdToTransferredIdMap = {...}
 The global KV key holding per-widget failures is `DashboardImportErrorMap`
 (`WidgetImportErrorMap`).
 
-### Customer fix or workaround (hypotheses, not tested)
+### Fix or workaround (hypotheses, not tested)
 
 1. **Create or import the five missing custom groups first, with the exact names**: the two
    vCenter version groups and the three ESXi host groups named in the bundle. Then trigger a pass by re-importing the

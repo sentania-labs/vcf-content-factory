@@ -105,7 +105,7 @@ other four use only types the enum knows, and they imported.
 4. **Fixes (none run):**
    - **bind-summary:** will not work, because there is no source dashboard to bind (it resolves by name). A content-zip import of the same JSON first would probably fail the same way. That is unverified: the content-import path may reach the same `importDashboard`, and checking would require a write.
    - **Fresh install (uninstall, then install 88):** will not work. The same parser rejects the same `Section` widget. It costs an uninstall, the adapter instances and their config, and the collection history.
-   - **Smallest fix:** remove the `Section` widget from World Summary, or flatten it into plain widgets, then rebuild as build 89 and upgrade-install over 88. The upgrade path does import and bind (`forceUpdateContent` is true on upgrade, as shown above). Cost: one rebuild and one upgrade install, with the installer's content phase taking about 4 minutes. The other option is to target only builds whose enum has `Section`, which is not checked here. The 2026-08-25 smoke used qa 9.2 through bind-summary.
+   - **Smallest fix:** remove the `Section` widget from World Summary, or flatten it into plain widgets, then rebuild as build 89 and upgrade-install over 88. The upgrade path does import and bind (`forceUpdateContent` is true on upgrade, as shown above). Cost: one rebuild and one upgrade install, with the installer's content phase taking about 4 minutes. The other option is to target only builds whose enum has `Section`, which is not checked here.
 
 ## Side observations
 

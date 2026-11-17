@@ -17,7 +17,8 @@ minutes later the product's pak-removal job deleted every view the pak had
 shipped, by id, in one call: 109 views. **64 of those ids are VMware stock
 views.** The pak carried copies of them under the stock UUIDs, inherited
 verbatim from the upstream vmbro/VCF-Operations-vCommunity content it was
-ported from. When the pak was installed on 2026-07-16, those copies overwrote
+ported from (fixes were offered upstream in vmbro/VCF-Operations-vCommunity
+PR 100 and e1-rahabok/VCF-vCommunity-Adapter PR 92). When the pak was installed on 2026-07-16, those copies overwrote
 the stock definitions. When it was removed, the product deleted them as pak
 content. The stock dashboards that use them stayed.
 
@@ -33,7 +34,7 @@ uninstall, `delete-view`, probe cleanups) played no part. Every
 
 ### The 64 ids
 
-Regenerated (the earlier `classified.json` holds the customer worklist, not
+Regenerated (the earlier `classified.json` holds a different worklist, not
 this list). There are 63 distinct view ids that devel's stock dashboards
 reference but devel lacks. 62 of them exist on both 8.18.7 and 9.1.1. Two more
 stock views are on both labs and missing from devel without any dashboard
@@ -100,7 +101,9 @@ committed, because they are working data, not knowledge.
 - The upstream `reference/references/vmbro_vcf_operations_vcommunity/Management Pack/content/`
   (`reports/View - Set 1..4.xml`, `View - Collection01.xml`, and the 2.0
   dashboards) contains all 64 stock ids. So the stock ids came from upstream,
-  and the port kept them.
+  and the port kept them. Fixes were offered upstream in
+  vmbro/VCF-Operations-vCommunity PR 100 and
+  e1-rahabok/VCF-vCommunity-Adapter PR 92.
 
 ### Who sent the remove (inferred)
 
@@ -184,7 +187,7 @@ had vCommunity) would be the cleaner source.
 - The only mechanism seen to restore them is the core upgrade re-applying
   built-in content (10-14). Running an upgrade or reinstall to get that is a
   platform operation with far more reach than 64 views. Reaching it by
-  removing the vSphere solution is ruled out: `pak-isunremovable-vendor-bug.md`.
+  removing the vSphere solution is ruled out: `knowledge/lessons/pak-isunremovable-not-enforced-server-side.md`.
 - A UI "Reset Default Content" was not checked in the browser on 9.0.2. If it
   exists, what it would overwrite is unknown (inferred: all of the solution's
   content, including any edits to stock views).
@@ -250,7 +253,9 @@ Yes, by the same path, and it is not limited to devel:
   upgrade.
   (Correction 2026-11-12: the upstream pack carries 117 built-in view
   ids, not 64; 64 is the subset the factory's port shipped. See
-  `2026-11-12-vcommunity-upstream-builtin-view-ids.md`.)
+  `2026-11-12-vcommunity-upstream-builtin-view-ids.md`. Fixes were offered
+  upstream in vmbro/VCF-Operations-vCommunity PR 100 and
+  e1-rahabok/VCF-vCommunity-Adapter PR 92.)
 - **Name-based factory deletes (latent, not involved here).**
   `_uninstall_views` (`templates/install.py`), `ViewsHandler.delete`
   (`vcfcf_dashboards/handler.py`) and `cmd_delete_view` resolve by display

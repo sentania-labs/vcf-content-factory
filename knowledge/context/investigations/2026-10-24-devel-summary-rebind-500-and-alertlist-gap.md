@@ -111,7 +111,7 @@ POST /ui/dashboard.action
 
 ### Correction to existing docs
 
-`knowledge/context/api-surface/summary_dashboard_assignment.md` (sections "Write (bulk)" and "`associateResourceKindDashboards`: wrong parameter name") says `dashboardAssociations` "does not exist on any build" and that the two-map shape returned `200 ok` "on both builds". That was measured on a 9.0.0.0 pre-release build and 9.2 builds. It is wrong for 9.0.2 Build 25429562 and 8.18.6 Build 25423535, which accept only `dashboardAssociations`. The `ui_client.py` docstring repeats the same claim.
+`knowledge/context/api-surface/summary_dashboard_assignment.md` (sections "Write (bulk)" and "`associateResourceKindDashboards`: wrong parameter name") says `dashboardAssociations` "does not exist on any build" and that the two-map shape returned `200 ok` "on both builds". That was measured on 9.1.1. It is wrong for 9.0.2 Build 25429562 and 8.18.6 Build 25423535, which accept only `dashboardAssociations`. The `ui_client.py` docstring repeats the same claim.
 
 ## Part 2: Environment Overview, Open Compliance Alerts
 

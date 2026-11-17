@@ -248,13 +248,13 @@ No developer-focused HOL specifically covering MP *building* was confirmed in re
 
 ---
 
-## 5. Blog Posts / Tutorials (Community & VMware Employee Authors)
+## 5. Blog Posts / Tutorials
 
 ### 5.1 Management Pack Builder (MPB) Tutorials
 
 | Title | Author/Site | Technology Monitored | Date | SDK/Tool |
 |-------|------------|---------------------|------|----------|
-| [Building a Management Pack with the Aria Operations Management Pack Builder](https://www.brockpeterson.com/post/building-a-management-pack-with-the-aria-operations-management-pack-builder) | Brock Peterson (VMware TAM/employee) | Rubrik Cloud Data Management | Sept 2024 (updated Aug 2025) | MPB v2.0 |
+| [Building a Management Pack with the Aria Operations Management Pack Builder](https://www.brockpeterson.com/post/building-a-management-pack-with-the-aria-operations-management-pack-builder) | Brock Peterson | Rubrik Cloud Data Management | Sept 2024 (updated Aug 2025) | MPB v2.0 |
 | [vROps Management Pack Builder — TrueNAS](https://www.brockpeterson.com/post/vrops-management-pack-builder) | Brock Peterson | TrueNAS storage | May 2022 | MPB Beta |
 | [vRealize Operations Management Pack Builder — Veeam](https://veducate.co.uk/vrealize-operations-management-pack-builder/) | vEducate.co.uk (Sharon Bhella) | Veeam Backup and Replication | Mar 2022 | MPB (HTTP data source) |
 | [Learn how to monitor Pi-hole with vROps using the Management Pack Builder](https://enterpriseadmins.org/blog/virtualization/learn-how-to-monitor-pi-hole-with-vrops-using-the-management-pack-builder/) | Enterprise Admins.org | Pi-hole DNS ad-blocker | Feb 2023 | MPB v1.0.0 |
@@ -282,14 +282,14 @@ The phpIPAM series is notable for being a 4-part build walkthrough:
 | Title | Author/Site | Technology | Date | Notes |
 |-------|------------|-----------|------|-------|
 | [VMware Aria Operations / ServiceNow Management Pack (CMDB)](https://www.vcrocs.info/aria-operations-servicenow-mp-cmdb/) | vCROCS (Dale Hassinger) | ServiceNow CMDB | Feb 2024 | Uses official MP; covers config + customization |
-| [Monitoring the VMware Event Broker Appliance with vROps](https://rguske.github.io/post/monitoring-the-vmware-event-broker-appliance-with-vrealize-operations-manager/) | Robert Guske (VMware employee) | VEBA via Kubernetes MP + cAdvisor | May 2020 | Uses official Kubernetes MP; DaemonSet approach |
+| [Monitoring the VMware Event Broker Appliance with vROps](https://rguske.github.io/post/monitoring-the-vmware-event-broker-appliance-with-vrealize-operations-manager/) | Robert Guske | VEBA via Kubernetes MP + cAdvisor | May 2020 | Uses official Kubernetes MP; DaemonSet approach |
 | [Monitor QNAP NAS devices with vROps SNMP Adapter](https://vmguru.com/2020/05/monitor-qnap-nas-devices-with-vrops-snmp-adapter/) | VMGuru.com | QNAP NAS devices | May 2020 | Uses official SNMP MP |
 | [Monitoring TKGs cluster using VMware Aria Operations](https://vmattroman.com/monitoring-tkgs-cluster-using-aria-operations/) | vMattroman | Tanzu Kubernetes (TKGs) | 2024 | Official K8s MP |
 
 ### 5.4 Community MP for VCF Operations (Complex SDK Example)
 
 - **vCommunity Management Pack for VCF Operations**
-  Author: Onur Yuvseven (Broadcom TAM), content by Iwan Rahabok.
+  Author: Onur Yuvseven, content by Iwan Rahabok.
   Ships 44 dashboards, 169 views, 16 reports, 37 super metrics. Built with the Operations Integration SDK (not MPB). Requires Operations 9.0 + Cloud Proxy.
   Published: Nov 2025.
   URL: [brockpeterson.com/post/vcommunity-management-pack-for-vcf-operations](https://www.brockpeterson.com/post/vcommunity-management-pack-for-vcf-operations) — blog
@@ -304,7 +304,7 @@ The phpIPAM series is notable for being a 4-part build walkthrough:
 |------|--------|-----------|------------------|-------|
 | **HPE SimpliVity Plugin for vROps** | Hewlett Packard Enterprise | [HewlettPackard/simplivity-vrops-plugin](https://github.com/HewlettPackard/simplivity-vrops-plugin) | vROps 8.10 / OmniStack 4.3 | Performance, capacity, efficiency metrics. Includes user guide PDF + demo video. Apache 2.0 license. |
 | **Pure Storage Management Pack for vROps** | Pure Storage | [PureStorage-Connect/vROPs-MgmtPak](https://github.com/PureStorage-Connect/vROPs-MgmtPak) | 2022 (v3.2.0 for vROps 8.6) | FlashArray monitoring; multiple release branches for different vROps versions. |
-| **vROps Kubernetes Container Monitoring** | moffzilla (VMware employee) | [moffzilla/vrops-k8-monitoring](https://github.com/moffzilla/vrops-k8-monitoring) | ~2019-2020 | Pre-dates official K8s MP; community reference implementation. |
+| **vROps Kubernetes Container Monitoring** | moffzilla | [moffzilla/vrops-k8-monitoring](https://github.com/moffzilla/vrops-k8-monitoring) | ~2019-2020 | Pre-dates official K8s MP; community reference implementation. |
 | **vROps PowerFlex Custom Report** | vineethac (community) | [vineethac/vROps_PowerFlex_Report](https://github.com/vineethac/vROps_PowerFlex_Report) | 2021 | Custom storage report for Dell EMC PowerFlex; companion to the official PowerFlex MP. |
 | **NSX Edge Monitoring (vmware-nsx)** | VMware NSX team | [vmware-nsx/vrops-edge-monitoring](https://github.com/vmware-nsx/vrops-edge-monitoring) | Late 2024 | Python; raw REST push to Aria Operations 8.18.2. Not SDK-packaged. |
 

@@ -355,12 +355,12 @@ SynologyNAS  — keyed by serial number
 9. Build and install .pak
 10. Dashboards come after — in VCF Operations, not MPB
 
-## Khriss Research vs Live Testing — Corrections
+## Desk Research vs Live Testing — Corrections
 
-Khriss's brief (2026-04-15) had some API names from community docs
+The desk-research brief (2026-04-15) had some API names from community docs
 that don't match what's actually on this NAS (DSM 7.3.2):
 
-| Khriss said | Actual on this NAS | Notes |
+| Desk research said | Actual on this NAS | Notes |
 |-------------|-------------------|-------|
 | `SYNO.Core.Storage.Volume` `list` | `SYNO.Storage.CGI.Volume` | Different namespace |
 | `SYNO.Core.Storage.Disk` `list` | Disk data in `SYNO.Storage.CGI.Storage` `load_info` | No separate disk list API |
@@ -368,7 +368,7 @@ that don't match what's actually on this NAS (DSM 7.3.2):
 | Auth v6 recommended | Auth v7 available (v6 also works) | v7 is max on DSM 7.3.2 |
 | `SYNO.Backup.Task` `list` | `SYNO.ActiveBackup.*` namespace | ABB has its own API tree |
 
-**Key finding Khriss missed:** `SYNO.Core.System.Utilization` returns
+**Key finding the desk research missed:** `SYNO.Core.System.Utilization` returns
 **per-LUN I/O metrics** (IOPS, throughput, latency per iSCSI LUN by name
 and UUID). This is the critical bridge for ESXi-to-storage mapping — you
 can correlate ESXi datastore latency with the Synology-side LUN latency
@@ -381,5 +381,5 @@ directly.
 - [synology-api Python library](https://github.com/N4S4/synology-api) — community wrapper, 300+ APIs
 - [kwent/syno definitions](https://github.com/kwent/syno/tree/master/definitions) — extracted DSM API schema files
 - `/usr/syno/synoman/webapi/*.lib` — authoritative API definitions on-NAS (178 files)
-- Khriss research notes in `agents/khriss/outbox/2026-04-15-synology-*.md` (4 notes)
+- Desk-research notes, 2026-04-15 (4 notes, not committed)
 - Dale Hassinger MPB JSON reference in vcf-content-factory workspace

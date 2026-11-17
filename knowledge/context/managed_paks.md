@@ -346,21 +346,21 @@ below it is the defect gate's name check (`registered_pak_names()`, issue
 paks included, so a defect naming one is attributed to it. Local clones under
 `content/sdk-adapters/` may remain; they are gitignored, and
 `scripts/path_reference_audit.sh` still counts their paths as known roots on
-purpose, because older docs cite them. Retiring a pak is the orchestrator's edit on Scott's word, and
-the word is quoted in the entry.
+purpose, because older docs cite them. Retiring a pak is the orchestrator's edit on the owner's decision, and
+the entry records the decision and its date.
 
 ### vcommunity, vcommunity-vsphere, vcommunity-os (retired 2026-10-15)
 
-Scott, verbatim (2026-10-15): "vcommunity <- these are deprecated and
-experiemnts that we shouldn't worry about for now. I'm not sure how we
-handle/mark this so it doesn't keep coming up."
+Retired 2026-10-15 by owner decision: these were the factory's own
+experimental ports and are no longer maintained. The single Java port
+registered above as vcommunity-java is the active line.
 
 Three repos, one experiment: the Java rewrite of
 vmbro/VCF-Operations-vCommunity and its three-adapter split. The three
-unsigned-pak README PRs were squash-merged 2026-10-26 on Scott's word
-("just merge the outstanding work on them"); no open PRs remain, open
-issues stay as they are, nothing further is scheduled. Scott, verbatim (2026-10-27): "how many times do I have to ask you to
-drop the vcommunity ports?" All three GitHub repos were archived that day,
+unsigned-pak README PRs were squash-merged 2026-10-26 on the owner's
+decision; no open PRs remain, open issues stay as they are, nothing
+further is scheduled. On 2026-10-27 the owner confirmed the ports are
+dropped, and all three GitHub repos were archived that day,
 and the local clones were moved out of `content/sdk-adapters/` to
 `/mnt/holding/vcf-content-factory/retired-paks/` (clean, nothing unpushed),
 so no sweep of that folder finds them. Do not re-clone, survey, release,

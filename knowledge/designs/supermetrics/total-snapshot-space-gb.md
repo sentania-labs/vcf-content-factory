@@ -33,7 +33,7 @@ live snapshots). A snapshot's instanced properties, including Age,
 populate once the snapshot is 24 hours old; `RECLAIM_SNAPSHOTS_DAYS`
 governs reclamation/cost math only, not property materialization (see
 `knowledge/context/investigations/vm-snapshot-instanced-fanout-2026-07-27.md`,
-citing `reference/docs/extracted/brockpeterson-vm-snapshots-aria-operations/article.txt`).
+citing `knowledge/context/brockpeterson-vm-snapshots-aria-operations.md`).
 The scoreboard must align with the same gate. Same predicate change as
 applied to the companion count SM
 (`knowledge/designs/supermetrics/vms-with-snapshots-count.md`):

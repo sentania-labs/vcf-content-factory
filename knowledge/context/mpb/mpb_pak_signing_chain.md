@@ -186,7 +186,7 @@ If VCF-CF generates paks that will be installed on customer appliances:
    zip <name>.pak signature.cert signature.mf <other files>
    ```
 
-5. **The current scheme has multiple cryptographic weaknesses Broadcom should fix** (SHA-256 hashes, RSA-PSS or ECDSA signatures, per-vendor signing identity, automated cert rotation) — but VCF-CF is a consumer of the existing format, not its custodian. If Broadcom modernizes the format, VCF-CF will need to follow.
+5. **The current scheme differs from current signing practice** (which uses SHA-256 hashes, RSA-PSS or ECDSA signatures, per-vendor signing identity and automated cert rotation). VCF-CF is a consumer of the existing format, not its custodian; if the format changes in a later release, VCF-CF will need to follow.
 
 ## Open follow-ups
 

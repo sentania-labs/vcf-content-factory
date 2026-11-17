@@ -12,7 +12,7 @@
 
 ## The shared classpath: `common-lib/`
 
-Located at `/home/scott/vault/workspaces/vcf-mp-cleanroom/inputs/from-devel/sdk/common-lib/` in the devel bundle. Contents (verified 2026-05-16):
+Located at `inputs/from-devel/sdk/common-lib/` in the devel bundle. Contents (verified 2026-05-16):
 
 ```
 alive_common.jar                          — legacy SDK common code (com.integrien.alive.common.*)

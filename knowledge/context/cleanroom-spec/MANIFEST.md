@@ -1,6 +1,6 @@
 # MP Java SDK — transfer bundle
 
-**Generated**: 2026-06-09 from `vcf-mp-cleanroom` (Mraize).
+**Generated**: 2026-06-09 from `vcf-mp-cleanroom`.
 **Purpose**: everything VCF-CF needs for the **Tier 2 (Native / Java SDK)**
 pipeline — the reverse-engineered SPEC plus the supporting analysis
 conclusions.

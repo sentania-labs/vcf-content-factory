@@ -6,7 +6,7 @@
 > 1. **From a pak at install time**: `<pak>/content/dashboards/dashboards.properties`,
 >    read by the server-side pak installer. This is the route an SDK or
 >    MPB pak uses. Documented, with the decompilation evidence and the
->    version boundary (9.0 and 9.2 confirmed, 8.x unknown), in
+>    version boundary (seen on 8.18.7, 9.0.2 and 9.1.1), in
 >    `summary_dashboard_pak_binding.md`. That file is the primary record
 >    for pak work.
 > 2. **From the UI after install**: the Struts "Manage Summary Dashboards"
@@ -104,7 +104,7 @@ built-in summary page a per-entry `defaultTemplateName` (for example
 (`adapterKind`, `resourceKind`) pair.
 
 Write (bulk). **The request form depends on the build** (issue #260; see
-"Two request forms" below). The two-map form, from the 9.1.1/9.2 SPA's
+"Two request forms" below). The two-map form, from the 9.1.1 SPA's
 `DashboardAssociateWindow.save()` and the disassembled `DashboardAction`
 (provenance in the 2026-08-25 note at the end of this file):
 
@@ -125,7 +125,7 @@ the kind's **plain** `defaultTemplateName` (the per-entry one from
 `getResourceKindList` when present, e.g. `Host System Summary`; no
 `_::_null` suffix). **Corrected 2026-10-24 (#260):** this section used to
 say `dashboardAssociations` exists on no build. That held for the builds
-measured on 2026-08-25 (a 9.0.0.0 pre-release and 9.2) and for 9.1.1, and
+measured on 2026-08-25 and later on 9.1.1, and
 is wrong for 9.0.2 Build 25429562 and 8.18.6 Build 25423535, which read
 only `dashboardAssociations`.
 
@@ -142,7 +142,7 @@ part 1):
 | 8.18.6 Build 25423535 (devel_8_18) | `dashboardAssociations` only | `<templateName>_::_null` | bytecode and SPA (2026-10-26 evidence file); NPE stack trace of the two-map call. **The single-map call has not been sent live.** |
 | 9.0.2.0 Build 25429562 (devel) | `dashboardAssociations` only | `<templateName>_::_null` | bytecode and SPA (2026-10-26 evidence file; same method as 8.18.6); NPE stack trace of the two-map call. **The single-map call has not been sent live.** |
 | 9.1.1 Build 25794169 (devel_9_1; its `lastbuildversion.txt` reads 9.0.0.0) | `assignedAssociations` + `resetAssociations` | plain `<defaultTemplateName>` | bytecode and SPA (2026-10-26 evidence file); the two-map call is the one the factory has always sent |
-| 9.0.0.0 pre-release, 9.2.0.0 pre-release | `assignedAssociations` + `resetAssociations` | plain | 2026-08-25 note below: two empty maps answered `200 ok` live |
+| 9.1.1 (devel on 2026-08-25) | `assignedAssociations` + `resetAssociations` | plain | 2026-08-25 note below: two empty maps answered `200 ok` live |
 
 The single-map request, from bytecode and SPA:
 
@@ -163,7 +163,7 @@ POST /ui/dashboard.action
   association map and the old template is **not** deleted.
 - A dashboard the caller cannot see is skipped silently and the action
   still takes the success path.
-- What the success answer's body is (`ok` on 9.1.1 and 9.2) has not been
+- What the success answer's body is (`ok` on 9.1.1) has not been
   read for this form. The factory treats only `ok` as success, but never
   calls a non-`ok` answer a refusal before reading `getSummaryTabId` back:
   a moved tab is reported as "written, unexpected answer".
@@ -466,7 +466,7 @@ Two routes carry the binding, one implementation each:
 
 The wire shape is unit-tested with a fake client
 (`tests/test_dashboard_summary_for.py`) and the parameter names were
-confirmed with a no-op call (two empty maps) on 9.1 and 9.2 dailies. Live
+confirmed with a no-op call (two empty maps) on 9.1.1. Live
 binds belong to `content-installer`, after install, on explicit
 confirmation.
 
@@ -478,15 +478,13 @@ that carries the `X-Ops-API-use-unsupported` caveat and can change between
 releases without notice. Anything the factory builds on it should treat
 that as a stated, conscious dependency, not an implementation detail.
 
-## 2026-08-25 note: 9.2 pre-release build and the ERRPANEL failures
+## 2026-08-25 note: the ERRPANEL failures
 
 Diagnosed against `DashboardAction.class` pulled read-only from the
 appliance UI webapp and disassembled, plus `web.log` on the appliance,
-plus the SPA's `DashboardAssociateWindow.save()`. Checked on two builds:
-a 9.2.0.0 pre-release build and the devel instance (its
-`lastbuildversion.txt` reads a 9.0.0.0 pre-release build). **Both builds carry
-byte-identical logic for the three actions below; nothing here is a 9.2
-change.** Classification for all three: **(c) request shape, client
+plus the SPA's `DashboardAssociateWindow.save()`. Checked on the devel
+instance, then 9.1.1 (its `lastbuildversion.txt` reads 9.0.0.0).
+Classification for all three: **(c) request shape, client
 defect**, not a regression, not a privilege check, not environmental.
 
 ### `associateResourceKindDashboards`: wrong parameter name
@@ -529,8 +527,8 @@ Two maps, both always present (send `{}` when empty). Binds go in
 `assignedAssociations`; "Use Default" goes in `resetAssociations`, whose
 value is the plain default template name (the SPA does not append
 `_::_null` there). Verified: the corrected shape with two empty maps
-returns `200 ok` on both builds; the same call with `dashboardAssociations`
-returns the ERRPANEL on both builds. The earlier "Write (bulk)" section
+returns `200 ok` on 9.1.1; the same call with `dashboardAssociations`
+returns the ERRPANEL on 9.1.1. The earlier "Write (bulk)" section
 above was therefore wrong on the parameter name and on the restore value
 for these builds (and right for 9.0.2 GA and 8.18.6, #260).
 
@@ -584,7 +582,7 @@ found.
 
 ### `getSummaryTabId` returning only `{"isDashboard": false}`
 
-From `execute()` lines 227-258 (identical on both builds):
+From `execute()` lines 227-258 (9.1.1):
 
 ```
 tabId = dataRetriever.getSummaryDashboardId(resourceKindId)   // may be null
@@ -596,7 +594,7 @@ if (tabId != null && !isDashboard) json.put("pluginExist", UtilityAction.pluginE
 
 So `{"isDashboard": false}` is the null-tabId answer: `org.json` omits a
 key whose value is null, which is why `tabId` is absent rather than
-`null`. The shape is not a 9.2 change. Three shapes are possible:
+`null`. Three shapes are possible:
 
 - `{"isDashboard": false}`: no association, native page renders.
 - `{"tabId": "<uuid>", "isDashboard": true}`: dashboard-backed.

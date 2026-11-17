@@ -1,4 +1,4 @@
-# War Story: Foreign Resource Property Push — ResourceCollection Is a Dead End
+# Foreign Resource Property Push — ResourceCollection Is a Dead End
 
 **Target:** VCF Compliance Adapter — push compliance properties onto VMWARE HostSystem resources  
 **Verdict:** Use `suiteAPIClient.getClient()` via reflection. Do NOT use `ResourceCollection.add()`.  

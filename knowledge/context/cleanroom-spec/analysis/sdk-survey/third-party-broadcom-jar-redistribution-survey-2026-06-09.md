@@ -40,7 +40,7 @@ re-wraps of paks already counted. Partitioned by authorship:
 Binary pak inspected; the repo's Java source was **not** read
 (clean-room hygiene). **ControlUp / Lenovo:** dropped into the corpus
 2026-06-09 (SHA256 `cccc…dec4` / `81e2…778f`). No NetApp / Pure /
-Cisco / F5 / Veeam / Hitachi / Nutanix pak is present. (Khriss research
+Cisco / F5 / Veeam / Hitachi / Nutanix pak is present. (external research
 notes Pure Storage also ships a binary-only pak elsewhere, not yet
 fetched. A `dxenterprise_23.0.297.0_amd64.tgz` (DH2i) was also dropped
 but is the **product install package, not a vROps pak** — no `.pak`,
@@ -57,14 +57,9 @@ other six match by the same bundled jar.
 `microsoftsqlserver`, `mongodb`, `mysql`, `networkingdevices`,
 `oracledatabase`, `postgresql`, `servicenow`.
 
-### Excluded — Broadcom-TAM-authored, **zero-jar** — **1 pak**
+### Excluded — TAM Management Pack, **zero-jar** — **1 pak**
 
-`tam-mpak_1.2.0.2_signed.pak` (`TAMManagementPack`). **TAM = Technical
-Adoption Manager** (formerly Technical Account Manager) — a Broadcom/
-VMware customer-success role, **not** a third-party vendor and **not**
-"Technology Alliance Management." This pack is authored within Broadcom's
-own TAM orbit, the same lineage as the vCommunity reference (also
-Broadcom-TAM-authored). Its inner archive ships **0 jars**
+`tam-mpak_1.2.0.2_signed.pak` (`TAMManagementPack`). Its inner archive ships **0 jars**
 (declarative-only: `conf/describe.xml` + resources; no `vrops-adapters-sdk`,
 no `alive_*`, no `aria-ops-core`, no suiteapi). Triaged 2026-05-15 as
 **ELIMINATE-B** (Track B / Integration SDK by structural match to
@@ -150,7 +145,7 @@ Third-party population is now **M = 5** paks across **4 vendors**
 
 ### SDK jar internals — what `vrops-adapters-sdk.jar` itself carries
 
-Cracked open the bundled jar's `META-INF` across all 5 paks + the devel
+Inspected the bundled jar's `META-INF` across all 5 paks + the devel
 kit (entry lists, `MANIFEST.MF`, embedded Maven `pom.xml` — no bytecode):
 
 - **3 of 5 paks ship a byte-identical jar** (SHA `16db2823…`, 2019-10-16
@@ -340,7 +335,7 @@ Two different answers for the two jars VCF-CF cares about:
 
 - **`vrops-adapters-sdk.jar` (the adapter-side SDK):** **no public
   out-of-pak distribution.** Not on Maven Central, no public developer
-  docs, not in Broadcom's SDK support matrix (Khriss research, High
+  docs, not in Broadcom's SDK support matrix (external research, High
   confidence). It exists outside a pak only **internally** — physically
   on every appliance (`common-lib/`, `suite-api` `WEB-INF/lib/`) and in
   the devel SDK kit captured at `inputs/from-devel/sdk/vrops-adapters-sdk-2.2.jar`
@@ -349,7 +344,7 @@ Two different answers for the two jars VCF-CF cares about:
   redistribution of this jar outside a pak is observed anywhere.**
 - **`vcops-suiteapi-client` (the Suite-API REST consumer client):**
   **does have public out-of-pak distribution** — it appears as an
-  artifact in the **Unified VCF SDK 9.0 on Maven Central** (Khriss
+  artifact in the **Unified VCF SDK 9.0 on Maven Central** (external
   research). That is the REST-API *consumer* client, not the adapter
   SDK, but it is the one Broadcom-origin jar in these paks with a
   legitimate public, non-pak distribution channel.

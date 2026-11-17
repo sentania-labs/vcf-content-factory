@@ -1,4 +1,4 @@
-# War Story: VCF Operations `isUnremovable` Flag Not Enforced
+# VCF Operations `isUnremovable` flag is not enforced server-side
 
 **Product:** VCF Operations 9.0.2  
 **Date:** 2026-04-16  
@@ -11,9 +11,8 @@ whether VCF Ops enforces the `isUnremovable: true` flag server-side. It doesn't.
 
 The `POST /ui/solution.action mainAction=remove` endpoint accepts and executes a
 remove call against any pak, including those marked `isUnremovable: true` (vSAN,
-vCenter, Service Discovery). The flag is advisory-only — presumably consumed by
-the UI to disable the remove affordance, but not rechecked when the remove call
-arrives.
+vCenter, Service Discovery). Observed behaviour: the UI hides the remove action
+for these paks, but the endpoint does not check the flag when the call arrives.
 
 The vSAN pak was successfully removed from the lab instance. The adapter kind
 deregistered. Content targeting vSAN became non-functional.
@@ -30,8 +29,8 @@ Every reactivation path was tried. None restored the pak:
 - `mainAction=resetSolutionUninstallState` — no observable effect
 - `mainAction=finishStage` — no observable effect
 
-The enable/activate pipeline serializes through a queue that's never drained
-after an `isUnremovable: true` pak is incorrectly removed. The only practical
+The enable/activate pipeline serializes through a queue that was not drained
+after the `isUnremovable: true` pak was removed. The only practical
 recovery is cluster restart or restore from snapshot.
 
 ## What the rule should be

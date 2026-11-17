@@ -26,9 +26,9 @@ When Scott provides a value out-of-band before a cross-workspace
 response arrives, use Scott's value. Acknowledge the response file for
 cleanliness but don't re-install.
 
-### Riker to: field = workspace directory name
-The `--to` slug for cross-workspace requests must match a directory
-name under `~/pka/workspaces/` exactly. Run `ls ~/pka/workspaces/` to
+### Cross-workspace `--to` field = workspace directory name
+The `--to` slug for cross-workspace requests must match the target
+workspace's directory name exactly. List the workspace directory to
 confirm.
 
 ## File paths

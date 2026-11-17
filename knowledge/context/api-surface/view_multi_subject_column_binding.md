@@ -1,12 +1,12 @@
 # Multi-subject views: per-column kind binding (`subject:`)
 
-**Finding date:** 2026-08-29 (api-explorer, live render on a 9.2.0.0 lab,
-verbatim vendor ViewDefs, 26 multi-subject views surveyed). **Implemented:**
+**Finding date:** 2026-08-29 (api-explorer). **Implemented:**
 2026-08-29 (tooling), reviewed in
 `knowledge/context/reviews/framework/2026-08-29-multi-subject-column-binding.md`.
-The product-bound evidence (lab name, adapter and view names, raw extracts)
-is held out of git under `embargo/`; this file carries the generic contract
-that the code implements. Wire-format detail and the vendor sample live in
+This file carries the generic contract that the code implements. The
+live-render evidence behind it is not recorded on a released version in
+this repo; re-verify the render behaviour below on a released version.
+Wire-format detail and the public sample live in
 `knowledge/context/wire-formats/view_column_wire_format.md` §Multi-subject
 views.
 
@@ -16,9 +16,9 @@ On a list ViewDef, a column Item's `adapterKind` / `resourceKind` Properties
 are a **kind filter, not metadata**. A column bound to one kind renders
 `null` (a dash in the UI) on rows of every other subject kind; a column
 carrying neither Property resolves its `attributeKey` against every
-`<SubjectType>` the view declares. Broadcom's own multi-subject list views
-leave most columns unbound (59 of 68 in the survey) and bind the rest to the
-single kind that owns the key, which is not necessarily the first subject.
+`<SubjectType>` the view declares. The public multi-subject sample in
+`reference/docs/extracted/view-multi-subject/` follows the same pattern:
+most columns unbound, the rest bound to the single kind that owns the key.
 
 Until 2026-08-29 the factory bound every column to `subjects[0]`, which is
 why factory multi-subject views populated only first-kind rows.

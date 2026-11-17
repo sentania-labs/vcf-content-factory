@@ -1697,8 +1697,8 @@ class MetricSpec:
         red_bound:        Threshold value when color_method=0.
 
     Bound semantics (replayed against the product's own Scoreboard
-    ``.action`` calls on 9.2, 2026-08-25; lesson
-    ``scoreboard-partial-bounds-render-unknown``):
+    ``.action`` calls on a lab instance, 2026-08-25, not yet re-verified on
+    a released version; lesson ``scoreboard-partial-bounds-render-unknown``):
 
     - With ``color_method: 0`` the three bounds are all-or-nothing. The
       server answers ``value: "?"`` / ``state: Unknown`` for a metric
@@ -1789,8 +1789,8 @@ class ScoreboardConfig:
     Gauge recipe (``visual_theme: 9``)
     ----------------------------------
     A gauge is a Scoreboard whose tiles render as dials; the editor's
-    Score/Gauge toggle is literally ``visualTheme == 9``. Surveyed on 9.2
-    (15 gauge widgets, ``getWidgetConfigs`` captures, 2026-08-25; see
+    Score/Gauge toggle is literally ``visualTheme == 9``. Surveyed on 9.1.1
+    (``getWidgetConfigs`` captures, 2026-08-25; see
     knowledge/context/wire-formats/dashboard_section_gauge_viewdetails.md):
     ``mode.layoutMode`` is ``"fixedView"`` and ``showMetricName`` is true
     on every one, both of which this renderer already emits. What makes a
@@ -2173,8 +2173,8 @@ class AlertVolumeConfig:
     ``IntSummaryAlertVolume``, palette name "Alert Volume").
 
     Source: knowledge/context/api-surface/dashboard_widgets_alertvolume_section_viewdetails.md
-    §1 (appliance widget + editor source, 9.1.1 and 9.2, Suite API export
-    samples under reference/docs/extracted/dashboard-widgets/).
+    §1 (appliance widget + editor source on 9.1.1; the export form from the
+    vendor dashboard templates under reference/docs/extracted/dashboard-widgets/).
 
     The stored config is ONLY ``title``, ``refreshContent``,
     ``refreshInterval``, ``selfProvider`` and, with self provider ON, a
@@ -2244,8 +2244,8 @@ class SectionConfig:
     widgets beneath it; the Ops UI renders a collapse/expand chevron on
     it and hides the member widgets when collapsed. Source of truth:
     knowledge/context/api-surface/dashboard_widgets_alertvolume_section_viewdetails.md
-    §3 (appliance ``widgets/Section.js`` + ``GridsterPanel.js``, 9.1.1 and
-    9.2 captures, Suite API export samples under
+    §3 (appliance ``widgets/Section.js`` + ``GridsterPanel.js`` on 9.1.1;
+    the export form from the vendor dashboard templates under
     reference/docs/extracted/dashboard-widgets/).
 
     Export (import-bundle) shape::

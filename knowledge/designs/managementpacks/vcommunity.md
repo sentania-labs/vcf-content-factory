@@ -1,65 +1,46 @@
 # Design note — vcommunity (Tier 2 Java SDK rewrite)
 
-## Initial prompt
+## Request and decisions
 
-> Let's talk about a plan to create a new tier 2 MP that is a rewrite
-> of the vCommunity MP into a native java sdk pak. I don't think we
-> need to make it "upgrade compatile" rewrite - thought that would be
-> cool, but just get ride of the docker requirement.
+Goal: plan a Tier 2 MP that rewrites the vCommunity MP as a native Java
+SDK pak, removing the Docker requirement. Upgrade compatibility with the
+original is not required.
 
-Scope clarification turns (2026-06-10):
+Scope decisions (2026-06-10 and follow-up turns):
 
-- v1 scope ("What's in scope for v1? The guest-ops chunk is the
-  biggest single piece of work"): **"Full parity in v1"** — everything
-  including Windows guest-ops in the first release.
-- Content port ("How much of the bundled content do we port?"):
-  **"Port everything now"** — all ~100 artifacts in v1 regardless of
-  collector phasing.
-- Naming: **"let's go with vCommunity - this is more an exercise in
-  how strong/effective you can be with this as it is about creating
-  lessons, etc. I think part of this should also be breaking
-  dashboards and the like into yaml as references, to strengthen our
-  MP pipeline."**
-- Upgrade pak (follow-up turn): **"could we reimplement this as a
-  true upgrade pak? it does exist on prod"** → explored empirically;
-  ruled out (see
+- v1 scope: full parity in v1, including Windows guest-ops.
+- Content port: port all ~100 bundled artifacts in v1, regardless of
+  collector phasing, by converting them to factory YAML as references
+  that also exercise the factory's MP content pipeline.
+- Naming: vCommunity.
+- Upgrade pak: whether the rewrite could be a true upgrade pak for the
+  installed original was explored empirically and ruled out (see
   `knowledge/context/investigations/vcommunity_upgrade_path_experiment.md` and
-  `knowledge/lessons/cross-runtime-pak-upgrade-split-brain.md`). User then
-  asked **"Is the upgrade option we are exploring to
-  complicated/uneeded?"** — agreed to side-by-side + migration
-  runbook.
-- Config UX: **"there a shit ton of custom options and events - so
-  an input file seems to make the most sense (as long as they don't
-  have to be on all collectors...."** → pak-bundled default
-  check-list files + optional `custom_config_dir` override on the
-  hosting collector only.
-- Report scope + final scope confirmation: **"we want to make this
-  as close to a pure rewrite as possible so include them, as well as
-  the config file/defaults behavior (for now)"** — port ALL reports
-  including the generic "Report - VOA -" set; keep the original's
-  config-file/defaults behavior.
-- Build-gate decisions (post-build turn): pak-compare B1
-  (two CredentialKinds vs compliance reference's one) — **"so 1> is
-  just me acknowleding he new pattern (which would be needed if say
-  we wanted to make a join enphase + franklinwh MP)?"** → yes;
-  user ACCEPTS B1 as a reference-topology divergence (pending
-  reviewer concurrence). Once installed/verified, vcommunity becomes
-  the factory's 2-credential reference pak. Gap handling — **"2>
-  lets get as far as we can and can close gaps in subsequent builds -
-  so it's important to document them."** → v1 ships with documented
+  `knowledge/lessons/cross-runtime-pak-upgrade-split-brain.md`); the
+  decision is side-by-side install plus a migration runbook.
+- Config UX: the original has many custom options and events, so they
+  are driven by input files rather than instance fields, and the files
+  must not have to live on every collector.
+- Report scope: stay as close to a pure rewrite as possible; port all
+  reports, including the generic "Report - VOA -" set, and keep the
+  original's config-file and defaults behaviour.
+- Build-gate decisions (post-build): pak-compare B1 (two
+  CredentialKinds vs the compliance reference's one) is accepted as a
+  reference-topology divergence (pending reviewer concurrence); once
+  installed and verified, vcommunity becomes the factory's
+  2-credential reference pak. Gap handling: v1 ships with documented
   gaps (event push degraded to properties; EMPIRICAL-VERIFY items
-  smoke-tested at install); each gap must be durably recorded in the
-  pak repo CHANGELOG/README and the design doc, with v1.1 items
-  routed to `tooling` (SuiteApiStitcher.pushEvents).
-- Config storage (follow-up turn): **"the config file has to be on
-  teh running collector and not central?"** → re-checked the
-  original: it stores config CENTRALLY in the Ops configuration-file
-  store (`api/configurations/files?path=SolutionConfig/<name>.xml`,
-  adapter.py:261), fetched via Suite API each cycle; instance fields
-  hold file *names*. The rewrite matches that (pure-rewrite spirit):
-  pak imports default XMLs centrally at install; six file-name
-  identifier fields with defaults; no files on collectors. The
-  earlier `custom_config_dir` on-collector design is dead.
+  smoke-tested at install); each gap is recorded in the pak repo
+  CHANGELOG/README and the design doc, with v1.1 items routed to
+  `tooling` (SuiteApiStitcher.pushEvents).
+- Config storage: re-checking the original showed it stores config
+  centrally in the Ops configuration-file store
+  (`api/configurations/files?path=SolutionConfig/<name>.xml`,
+  adapter.py:261), fetched via Suite API each cycle, with instance
+  fields holding file *names*. The rewrite matches that: the pak
+  imports default XMLs centrally at install, six file-name identifier
+  fields carry defaults, and no files live on collectors. The earlier
+  `custom_config_dir` on-collector design is dead.
 
 ## Vision
 
@@ -90,8 +71,7 @@ Scope clarification turns (2026-06-10):
   ~35 reports/views, 2 symptoms + 3 alerts) — and do it by
   **converting to factory YAML as the canonical source**, rendered
   into the pak by the factory pipeline. Strengthening the MP content
-  pipeline (and harvesting lessons/toolset gaps) is an explicit goal
-  of this build, co-equal with shipping the pak.
+  pipeline is a goal of this build alongside shipping the pak.
 - Repo: `sentania-labs/vcf-content-factory-sdk-vcommunity` from the
   sdk-template; one line in `knowledge/context/managed_paks.md`; official
   release is CI on a `v*` tag. Display name: prose prefix per

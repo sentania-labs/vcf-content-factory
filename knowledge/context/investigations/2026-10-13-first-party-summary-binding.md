@@ -293,7 +293,7 @@ five-directory pak is close to the worst case.
 
 - Whether the stock cost dashboards stay unresolved on a clean customer
   instance without the Azure pack. One `getDashboardList` read on another
-  instance (qa or main) would settle it, and with it the "works on
+  instance would settle it, and with it the "works on
   customer instances" question.
 - A decisive test of the race (a write, needs Scott's go): install the
   compliance pak on an instance where `getDashboardList` shows zero
@@ -304,14 +304,11 @@ five-directory pak is close to the worst case.
 
 ## Addendum: the other lab instance (read about 10:20 PM, 2026-10-13)
 
-**Scope.** The coordinator asked for qa and main. `.env` has no `main`
-profile: it has `prod`, `qa` and `devel`, and `prod` and `qa` point at the
+**Scope.** `.env` has `prod`, `qa` and `devel`, and `prod` and `qa` point at the
 same appliance (`vcf-lab-operations`). So there is one other instance, read
 here through the `qa` profile. It runs **VCF Operations 9.1.1.0 Build
 25679751**, not 9.0.2, so it differs from devel by version as well as by
-history. The "qa 9.2" and "main 9.2" appliances in
-`../api-surface/summary_dashboard_pak_binding.md` (2026-08-25) are no longer
-in `.env`.
+history.
 
 **Posture.** Read only, as on devel: Suite API `GET /api/versions/current`,
 `/api/solutions` and `/api/resources`; UI Struts `getDashboardList`,
@@ -549,7 +546,7 @@ and not caused by my reads.
   installer's `GenericTemplates*` branch. The other two do not differ.
 - `../api-surface/summary_dashboard_pak_binding.md` says the
   `GenericTemplates` branch is absent on 9.0.2 GA. It is present again on
-  9.1.1 (and was seen on the 9.2 pre-release builds in August).
+  9.1.1.
 
 ### Open
 

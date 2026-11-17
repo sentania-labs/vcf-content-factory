@@ -19,7 +19,7 @@ knowledge/context/api-surface/summary_dashboard_assignment.md (the dated
 - ``getSummaryTabId`` omits the ``tabId`` key when it is null; a missing
   key is treated as null everywhere here.
 - The association call is sent in whichever request form the build reads
-  (two maps on 9.1.1 and 9.2, one ``dashboardAssociations`` map on 9.0.2
+  (two maps on 9.1.1, one ``dashboardAssociations`` map on 9.0.2
   and 8.18; issue #260, ``VCFOpsUIClient.associate_resource_kind_dashboards``).
   9.0.2 answers ``getSummaryTabId`` without an ``isDashboard`` key, so a
   bound tab is read with ``summary_dashboard_tab``.

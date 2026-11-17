@@ -1,7 +1,7 @@
 # Triage report — first pass — 2026-05-15
 
-**Investigator**: Mraize
-**Corpus**: marketplace `Downloads.zip` (extracted) + lab-admin devel
+**Investigator**: clean-room pass
+**Corpus**: marketplace `Downloads.zip` (extracted) + devel lab
 pull (`from-devel/paks/`) + 1 downloaded calibration reference
 
 ## Headline
@@ -81,7 +81,7 @@ All 12 share the structural fingerprint: outer pak has JSON manifest,
 outer `content/` (dashboards/alertdefs/supermetrics/reports), nested
 `adapter.zip` whose contents are `describe.xml` + `describeSchema.xsd`
 + resources + images **and no jars**. Container image lives on an
-external registry (`projects.packages.broadcom.com` per Khriss
+external registry (`projects.packages.broadcom.com` per external
 research) and is pulled by Cloud Proxy at install time.
 
 | Pak | Inner manifest `name` |
@@ -151,7 +151,7 @@ Per CLAUDE.md workflow steps 1–4:
 
 1. **Decompile selected adapters** into `analysis/decompiled/`. Start
    with the two priority targets:
-   - `mpb-adapter` (use Navani's already-decompiled
+   - `mpb-adapter` (use the already-decompiled
      `inputs/from-devel/installed/mpb-adapter-installed.tar.gz` to
      skip the decompile step)
    - `vim` (use `vim-installed.tar.gz` from the same source)
@@ -171,7 +171,7 @@ Per CLAUDE.md workflow steps 1–4:
 ## Open questions for future passes
 
 - Does any Track A content pack actually exist in the marketplace
-  today, or has the path been fully superseded by Track B? (Khriss
+  today, or has the path been fully superseded by Track B? (external
   research suggests Track A's older packaging convention may be
   end-of-life.)
 - The C2 sub-shape (`SupervisorAdapter`, `mpforaggregator`) — is the

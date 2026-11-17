@@ -78,7 +78,7 @@ differs from Track B's containerized model). The platform:
 | 13 | `13-classloading-and-classpath.md` — appliance shared classpath + per-pak classloader isolation; pak shape bundling guidance | DRAFT (pass 13) | common-lib/ + per-adapter lib/ + entry-class import analysis |
 | 14 | `14-ui-and-operational-surfaces.md` — Methods + Actions + Faults + LaunchConfigurations + PowerState + Icon | DRAFT (pass 20) | vSphere (canonical) + vSAN (Faults at scale) + AppOSUCPAdapter3 |
 | 15 | `15-tier2-handoff-for-vcf-cf.md` — **consolidated Tier 2 (Native Java) handoff for VCF-CF**; stands alone for strategic picture | HANDOFF | all Tier 2 passes synthesized |
-| 16 | `16-platform-install-and-signing.md` — appliance install pipeline (CASA→Python 7-phase state machine) + empirical signature-validation behavior (unsigned-accept, skip-dates, opt-in checkSignature) | DRAFT (pass 23) | Navani field-evidence bundle from live devel appliance |
+| 16 | `16-platform-install-and-signing.md` — appliance install pipeline (CASA→Python 7-phase state machine) + empirical signature-validation behavior (unsigned-accept, skip-dates, opt-in checkSignature) | DRAFT (pass 23) | Field-evidence bundle from the live devel appliance |
 | 17 | `17-vcfcf-framework-design-guidance.md` — **forward-looking design guidance for `vcfcf-adapter-base.jar`**: 4-layer architecture, what belongs in framework vs per-pak, MVP build order, design tenets, open decisions | DESIGN-GUIDE (pass 26) | synthesis across all spec sections |
 | 99 | `99-summary-and-vcf-cf-recommendations.md` — final synthesis | DRAFT | all passes |
 
@@ -96,7 +96,7 @@ differs from Track B's containerized model). The platform:
 
 ## Source of authority
 
-The SDK jar `vrops-adapters-sdk-2.2.jar` (Navani 2026-05-15 devel pull)
+The SDK jar `vrops-adapters-sdk-2.2.jar` (2026-05-15 devel pull)
 is the **canonical API surface source** for this SPEC. Adapter
 implementations corroborate usage patterns but do not extend or
 override the contract — they compile against the SDK and obey its

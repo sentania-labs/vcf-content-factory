@@ -50,7 +50,7 @@ Ask these questions in order. Accept free-form answers; don't coerce. Defaults a
    - Default: slugified dashboard name with the `[VCF CF]` prefix stripped if present, lowercased, spaces→hyphens, non-alphanum stripped.
    - Example: `IDPS Planner` → `idps-planner`.
 2. **Author / attribution** — free-form string shown in the bundle README.
-   - Example: `"Scott Bowe"` or `"Community — Various"` or `"Brock Peterson (Broadcom)"`.
+   - Example: `"Scott Bowe"` or `"Community — Various"` or `"Brock Peterson"`.
 3. **License** — SPDX identifier preferred, free-form accepted.
    - Suggested list: `MIT`, `Apache-2.0`, `BSD-3-Clause`, `CC-BY-4.0`, `CC-BY-SA-4.0`, `Proprietary`.
 4. **Short description** — one sentence describing the bundle's purpose. Goes into the manifest's `description` field.
@@ -128,7 +128,7 @@ Final summary:
 - Any WARNs the extractor emitted that need follow-up attention
 - Next steps:
   - To iterate: hand-edit the manifest or content YAMLs, then re-run `python3 -m vcfcf_packaging build bundles/third_party/<slug>.yaml`
-  - To distribute: copy the zip to `pka/workspaces/vcf-content-factory-bundles/` (Riker's pipeline work) and publish through whatever mechanism lives there
+  - To distribute: `/release` the item, then `/publish` to ship it to the distribution repo
   - To install the extracted content on a lab (sanity-check round-trip): `python3 install.py` from inside the unzipped bundle
 
 ## Safety

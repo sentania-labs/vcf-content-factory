@@ -13,5 +13,5 @@ Per-deployment state. Not part of the framework soul — specific to this instan
 
 ## Known capability gaps
 
-- MPB: no JMESPath filter projections (targeting 9.2)
+- MPB: no JMESPath filter projections
 - `isUnremovable` flag not enforced server-side (see lessons/)

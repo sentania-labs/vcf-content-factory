@@ -1,4 +1,4 @@
-# War Story: UniFi Metric Key Parity — MPB Ignores Your Keys
+# UniFi Metric Key Parity — MPB Ignores Your Keys
 
 **Campaign:** UniFi MP .13 release  
 **Date:** 2026-05-16  
@@ -31,8 +31,7 @@ now an authoring-side identifier only — never written on the wire.
 While investigating the radio metrics (TX retries per radio), we confirmed that
 MPB's runtime doesn't support JMESPath filter projections. The expression grammar
 is dot-path + single `data.*`, backed by Jackson `JsonNode` — zero predicates.
-Cleanroom corpus analysis (54 paths, all dot-path) confirmed this. First-party
-engineer confirmed JQ filter targets MPB 9.2, not present in current runtime.
+Cleanroom corpus analysis (54 paths, all dot-path) confirmed this.
 
 The tempting workaround was `radio_table[0]` / `radio_table[1]` index access.
 We chose to drop the radio metrics instead:
@@ -43,7 +42,7 @@ We chose to drop the radio metrics instead:
   operators
 
 The math is asymmetric. Drop wins. Refuse fragile early; re-add cleanly when
-the capability lands (MPB 9.2 or Tier 2 promotion).
+the capability lands (in MPB, or by Tier 2 promotion).
 
 ## Verification timing pitfall
 
@@ -72,4 +71,4 @@ All three agreed before making a decision.
 
 - `knowledge/context/mpb/mpb_explicit_key_investigation_2026_05_16.md` — derivation algorithm
 - `knowledge/context/authoring/mp_authoring_design_principles.md` — codified design rules
-- `knowledge/context/known_limitations.md` — "MPB <9.2 runtime: no JMESPath filter projections"
+- `knowledge/context/known_limitations.md` — "MPB runtime: no JMESPath filter projections"

@@ -335,7 +335,7 @@ and both installer templates read the instance's version
 (`GET /api/versions/current` `releaseName`, the first dotted number after
 `Operations`; the body's `major`/`minor` are the API version on 8.18.7 and
 9.0.2 but the product version on 9.1, so only `releaseName` is consistent
-across lines). Measured vs unmeasured: Section is measured failing on 8.18.7 and 9.0.2 and proven importing on 9.1.1 (and 9.2); 9.1.0 is unmeasured. So they refuse before importing, naming
+across lines). Measured vs unmeasured: Section is measured failing on 8.18.7 and 9.0.2 and proven importing on 9.1.1; 9.1.0 is unmeasured. So they refuse before importing, naming
 the dashboards, below 9.1.0 (`WIDGET_TYPE_REFUSE_BELOW_OPS_VERSION`), and on
 9.1.0 warn, naming them, and import (`widget_versions.import_check`). An
 unreadable version is a warning and the import goes ahead; in both cases the

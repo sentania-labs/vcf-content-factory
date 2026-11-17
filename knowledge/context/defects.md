@@ -1185,7 +1185,7 @@ reused. Field lines are `- **Field:** value` (parsed by
   literal name into `viewDefinitionId`, which renders as "view does not
   exist" on the instance
 - **Severity:** tracked
-- **Severity-note:** 2026-09-25, downgraded from blocking: fix merged on the pak's main (`2ebc967`, PR #19, view referenced by UUID at `VM Details.yaml:606`) but not yet released; Scott, verbatim: "Yes unblock it, i'm not really interested in progressing the vcommunity stuff, it was mostly an exercise, so can we jsut silence it until I pick it up" (`knowledge/context/approvals/2026-09-25-scott-decisions.md` item 14).
+- **Severity-note:** 2026-09-25, downgraded from blocking: fix merged on the pak's main (`2ebc967`, PR #19, view referenced by UUID at `VM Details.yaml:606`) but not yet released; owner decision: unblock and silence; the factory's vcommunity ports are parked until picked up again (`knowledge/context/approvals/2026-09-25-scott-decisions.md` item 14).
 - **Status:** closed
 - **Closing-evidence:** fix merged on the pak's main (`2ebc967`, #19); no release followed and none will: the vcommunity paks were retired on Scott's words 2026-10-15 and deregistered in `c433366` (PR #220, merged 2026-10-18). The last tag, v1.0.0.12, still carries the defect. The repo's tag workflow still gates on this registry, but this entry was already `tracked` and gated nothing. Closed 2026-10-23 on the retirement, not on a shipped fix.
 - **Affects:** vcommunity-vsphere
@@ -1216,7 +1216,7 @@ reused. Field lines are `- **Field:** value` (parsed by
   every build shipped the literal string as the column `attributeKey`
   with `rollUpType AVG`, which renders as a blank column on the instance
 - **Severity:** tracked
-- **Severity-note:** 2026-09-25, downgraded from blocking: fix merged on the pak's main (`66daf9e`, PR #21, all four columns quoted) but not yet released; Scott, verbatim: "Yes unblock it, i'm not really interested in progressing the vcommunity stuff, it was mostly an exercise, so can we jsut silence it until I pick it up" (`knowledge/context/approvals/2026-09-25-scott-decisions.md` item 14).
+- **Severity-note:** 2026-09-25, downgraded from blocking: fix merged on the pak's main (`66daf9e`, PR #21, all four columns quoted) but not yet released; owner decision: unblock and silence; the factory's vcommunity ports are parked until picked up again (`knowledge/context/approvals/2026-09-25-scott-decisions.md` item 14).
 - **Status:** closed
 - **Closing-evidence:** fix merged on the pak's main (`66daf9e`, PR #21); no release followed and none will: the vcommunity paks were retired on Scott's words 2026-10-15 and deregistered in `c433366` (PR #220, merged 2026-10-18). The last tag, v1.0.0.12, still carries the defect. The repo's tag workflow still gates on this registry, but this entry was already `tracked` and gated nothing. Closed 2026-10-23 on the retirement, not on a shipped fix.
 - **Affects:** vcommunity-vsphere

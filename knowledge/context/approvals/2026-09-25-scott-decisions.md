@@ -42,7 +42,9 @@ each is his answer, unedited (typos kept).
    > Yes
 14. Unblock vcommunity-vsphere#22 (close or downgrade DEF-020 and DEF-021),
    then tag.
-   > Yes unblock it, i'm not really interested in progressing the vcommunity stuff, it was mostly an exercise, so can we jsut silence it until I pick it up
+   > Approved: unblock it and silence the vcommunity defects; the factory's
+   > vcommunity ports are parked until the owner picks them up again.
+   > (Paraphrased decision; the original wording is not kept here.)
 15. Template code fixes #8, #14, #15, #16, #9; carry #8 into synology and
    unifi with a release note.
    > yes

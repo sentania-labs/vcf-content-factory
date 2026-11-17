@@ -356,7 +356,7 @@ def _scan_json(text: str, location: str, scan: InputScan, raw: bytes) -> None:
 
 BINDING_FILE = "dashboards.properties"
 _SEP = re.compile(r"[/\\!]")
-#: A pak dashboard directory the 9.2 installer imports as a template (never
+#: A pak dashboard directory the 9.1.1 installer imports as a template (never
 #: shared, never bound); 9.0.2 GA has no such rule (pak binding doc §Install).
 _TEMPLATE_DIR = re.compile(r"(?:^|[/\\!])dashboards[/\\](GenericTemplates[^/\\!]*)[/\\]")
 
@@ -457,7 +457,7 @@ def _attach_bindings(scan: InputScan) -> None:
         b.dashboards = [(o.id, o.location) for o in dashes if _bound_directory(o.location, b.dir_location) == b.key]
         b.kinds, b.problem = _binding_value(b.value)
         if b.problem is None and b.key.startswith("GenericTemplates"):
-            b.problem = (f"the directory {b.key!r} starts with GenericTemplates: the 9.2 installer imports it as a "
+            b.problem = (f"the directory {b.key!r} starts with GenericTemplates: the 9.1.1 installer imports it as a "
                          f"template and never binds it, 9.0.2 GA binds it; the factory YAML cannot carry either")
         n = len({i.lower() for i, _ in b.dashboards})
         if b.problem is None and n > 1:

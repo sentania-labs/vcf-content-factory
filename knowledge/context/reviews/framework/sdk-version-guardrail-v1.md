@@ -45,7 +45,7 @@ The only pre-stamp read of `project.version` is the cosmetic
 `declared_version=` log line at :2939. No persisted surface is derived before
 the mutation.
 
-**Empirical proof — cracked open both built paks:**
+**Empirical proof — inspected both built paks:**
 
 | surface | dev build (default) | release build (`--release`) |
 |---|---|---|

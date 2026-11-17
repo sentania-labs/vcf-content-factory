@@ -28,10 +28,8 @@ from the released paks. The released 0.1.5 pak ships views its repository
 tag does not, so the tag is not evidence for early versions.
 
 The matching ids show where these views came from: they are the product's
-own views, not look-alikes (random UUIDs do not collide). Most likely each
-was edited in place on an instance, which keeps the id where the Clone
-action would have assigned a new one, and then exported into the pack;
-editing an exported file by hand would give the same result. Of the 117: 8
+own views, not look-alikes (random UUIDs do not collide). Editing a
+built-in view in place keeps its id; Clone assigns a new one. Of the 117: 8
 are identical to the built-in view, 11 differ only in title or description
 (three of those also set one explicit default, `isSum=false`), and 98
 carry real changes to columns, filters or presentation. The factory's own

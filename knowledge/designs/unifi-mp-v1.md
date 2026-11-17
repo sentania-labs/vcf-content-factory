@@ -12,17 +12,17 @@ built for Synology, or does it surface shortcut-or-gap evidence that
 the grammar still has Synology-specific bumps in it?
 
 Ecosystem context: no UniFi MP exists anywhere for VCF Ops / Aria
-Operations (exhaustive search by Khriss, April 2026) — this is a
+Operations (exhaustive search, April 2026) — this is a
 genuine gap. It is also concrete "framework is the product" evidence
 for the Explore 2026 abstract Scott and Tim Hanchon are co-submitting.
 
 Source material driving this design:
 
-- `/home/scott/pka/kb/reference/2026-04-17-unifi-api-mp-authoring-briefing.md` — the
-  authoritative intent doc (Jasnah synthesis + Khriss external
-  research + Pattern fact-check).
-- `/home/scott/pka/agents/khriss/outbox/2026-04-17-unifi-api-external-supplement.md` — 446-line
-  supplement with per-surface detail.
+- The UniFi API MP authoring briefing (2026-04-17, not committed) — the
+  authoritative intent doc (synthesis, external research and a
+  fact-check pass).
+- An external-research supplement (2026-04-17, 446 lines, not
+  committed) with per-surface detail.
 - `knowledge/designs/synology-mp-v1.md` — structural template and the 12-axis
   framework-vs-target review whose shape this artifact mirrors.
 - `vcfcf_managementpacks/loader.py`, `render.py` — the post-Tier-3
@@ -32,7 +32,7 @@ Source material driving this design:
 
 - **2026-04-18** — initial draft. Produced as **starting-point
   artifact** before three dependencies land: (a) Scott's controller's
-  actual Network Application version (briefing §5 flags Navani's
+  actual Network Application version (briefing §5 flags the earlier recon's
   "5.0.16" as probably a conflation of UniFi OS and Network App
   versions — the real version affects which auth surface is viable);
   (b) an `api-cartographer` pass landing under
@@ -77,7 +77,7 @@ threshold alerting is never MPB territory.
 | Bundled content | Basic dashboard in the .pak (device liveness heatmap + site health scoreboard); rich dashboard via factory pipeline post-install. | Synology precedent; framework doctrine axis 9. |
 | Collection intervals | 30s device liveness/util, 5min per-port / per-radio stats, 15min config-drift (deferred). Matches briefing §3 cadence recommendations. | Briefing §3 cadence column. |
 | Controller version assumption | v9.3.43+ (Network Integration API eligible) — needs verification via `stat/sysinfo`. If below, fall back to cookie-session + CSRF. | Briefing §5, §2 auth decision table. |
-| Lab target | `unifi.int.sentania.net` (UDM Pro). Base URL `/proxy/network/api/` (classic) or `/proxy/network/integration/v1/` (official). | Briefing §2; Navani's recon. |
+| Lab target | `unifi.int.sentania.net` (UDM Pro). Base URL `/proxy/network/api/` (classic) or `/proxy/network/integration/v1/` (official). | Briefing §2; earlier recon. |
 
 ## Object Model
 
@@ -1058,7 +1058,7 @@ motivates but doesn't block on. No grammar-level extensions needed
    constraint in the MP's README so operators know they can't add
    write-based content on pre-9.3.43 controllers.
 
-3. **Network Application version ambiguity on Navani's recon.**
+3. **Network Application version ambiguity in the earlier recon.**
    The briefing §5 flags "Network app 5.0.16" as probably a
    UniFi-OS / Network-App version conflation. v1 authoring should
    not start until `GET /proxy/network/api/s/default/stat/sysinfo`
@@ -1110,7 +1110,7 @@ motivates but doesn't block on. No grammar-level extensions needed
    framework design.
 
 10. **No api-cartographer pass yet for UniFi.** The design is
-    grounded in Khriss's briefing plus published community sources
+    grounded in the briefing plus published community sources
     (UnPoller, aiounifi, ubntwiki). Every metric path in this
     design should survive `api-cartographer` running against
     `unifi.int.sentania.net` — but path-level detail (exact

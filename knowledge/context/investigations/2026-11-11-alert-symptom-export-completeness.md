@@ -14,12 +14,11 @@ Tool under study: `sentania-labs/vcf-cf-migrator` at `7dead31`
 (`src/vcfcf_migrator/graph.py`, `_alert_refs`, `_rule_refs`). It refuses to
 build a bundle that includes an alert whose `<SymptomSet ref>` or `<Symptom
 ref>` names a symptom id absent from `symptomdefs.xml`, and its message says
-"an export carries custom content only". On a customer's scope-`ALL` export it
-reports 289 such alert-to-symptom edges and 3 notification-rule-to-alert
-edges. Companion note for views and dashboards:
+"an export carries custom content only". On a large scope-`ALL` exported
+content set it reports 289 such alert-to-symptom edges and 3
+notification-rule-to-alert edges. Companion note for views and dashboards:
 `2026-11-11-stock-content-ships-dangling-refs-migrator-false-missing.md`. The
-ids below are product content ids. None is a name, owner or other
-customer-identifying string.
+ids below are product content ids.
 
 Labels: **verified** means measured on these instances today. **Inferred**
 means it follows from verified facts but was not measured directly.
@@ -37,8 +36,8 @@ out, and recommendations are exported complete (verified, zero exceptions in
 about 8,300 symptoms, 5,300 alerts and 4,300 recommendations). The rule is
 keyed on adapter kind and condition key, not on ownership: three
 uuid-id symptoms on the `timeRemaining` key on `prod` are left out too. All
-52 symptom ids behind the customer's 289 edges are of these families.
-They exist on the 8.18.7 lab, and the customer's 289 edges are
+52 symptom ids behind those 289 edges are of these families.
+They exist on the 8.18.7 lab, and the 289 edges are
 **identical, edge for edge,** to the 289 the tool reports on the clean
 8.18.7 lab export (verified). The 3 notification-rule edges name
 `AlertDefinition-vCenter Operations Adapter-AdapterInstanceIsDownAlert`, an
@@ -96,7 +95,7 @@ Notes:
   (`/api/adapterkinds/{ak}/resourcekinds/{rk}/statkeys`), so "the key is not
   a declared stat key" is not the rule. `OnlineCapacityAnalytics|cpu|demand|timeRemaining`,
   `...|mem|demand|timeRemaining` and `...|diskspace|demand|timeRemaining`
-  symptoms **are** exported (8.18.7 and the customer export carry them).
+  symptoms **are** exported (the 8.18.7 export and the large exported set carry them).
 - The `timeRemaining` family includes the stock `SymptomDefinition-VMWARE-VMTimeRemaining{Critical,Immediate,Warning}`
   (all four instances) and, on `prod`, three bare-uuid symptoms
   (`SymptomDefinition-27141143-...`, `-699cb1d1-...`, `-8c8b692b-...`,
@@ -128,7 +127,7 @@ symptomDefType="...">` and the alert's `<SymptomSet ref>` points at that id.
 Mapping `Condition-<x>` to `SymptomDefinition-<x>` matched 206 of 213 on
 `prod`; the other 7 (6 on 9.0.2, 7 on `devel_9_1`, 1 on 8.18.7) are
 referenced by no alert, so the export also carries orphaned inline
-conditions. The customer export has 96 (76 self, 20 population). The tool
+conditions. The large exported set has 96 (76 self, 20 population). The tool
 already sees them as symptoms, so they produce no false "missing" edge.
 
 ### A dangling stock reference that REST hides (verified)
@@ -143,7 +142,7 @@ between two populated sets); the export keeps `<SymptomSet ref="SymptomDefinitio
 So the instance stores the reference, the product install accepted it, and a
 REST read of the alert cannot reveal it.
 
-## Q2. The customer's 289 alert-to-symptom edges and 3 rule-to-alert edges
+## Q2. The 289 alert-to-symptom edges and 3 rule-to-alert edges
 
 Regenerated with `vcfcf_migrator tree <zip> --json` from the pinned venv: 289
 `alert -> symptom` edges, 52 distinct symptom ids, 34 source alerts.
@@ -154,9 +153,9 @@ with 9.0.2 and none with 9.1.1.
 
 | Class | Symptom ids | Edges | Label |
 |---|---|---|---|
-| (a) exists on a lab instance as product or pak content, left out of every export by the Q1 rule | 52 | 289 | verified on the lab; that they exist on the customer's instance is inferred from the identical edge set |
+| (a) exists on a lab instance as product or pak content, left out of every export by the Q1 rule | 52 | 289 | verified on the lab; that they exist on the source instance is inferred from the identical edge set |
 | (b) of a pak the lab does not have | 0 | 0 | verified |
-| (c) customer-authored, absent everywhere | 0 | 0 | verified |
+| (c) user-authored, absent everywhere | 0 | 0 | verified |
 
 Class (a) by family and by the symptom's adapter kind:
 
@@ -184,7 +183,7 @@ Notification-rule edges: all 3 rules name
 `AlertDefinition-vCenter Operations Adapter-AdapterInstanceIsDownAlert`
 ("Adapter instance Object is down", adapter kind `ALL`). It is on REST on all
 four lab instances and in no export. Class (a), 3 of 3 (verified on the lab;
-inferred for the customer's instance).
+inferred for the source instance).
 
 ## Q3. What does import do with an alert whose symptom is not, or is, on the target?
 
@@ -234,7 +233,7 @@ pre-snapshot. Repeat on 8.18.7 if 9.0.2 drops A1.
 | 9.1.1 `prod` | 4 (1, 4) | same | 1 symptom-to-super-metric; 3 rule-to-outbound-setting (outbound settings not in this zip) |
 
 Every one is blocking in the tool. No edge in this table comes from
-customer-authored content. The 4 on 9.1.1 agree with the "4 symptom refs" in
+user-authored content. The 4 on 9.1.1 agree with the "4 symptom refs" in
 the companion note's §Q5.
 
 ## Q5. A rule the tool can apply offline, and what a live check adds
@@ -305,7 +304,7 @@ What a live check adds:
 - Export took 10 s (`prod`) to about 2.5 min (`devel_9_1`) per instance for
   these four types.
 - Comparison scripts parse the zips with `xml.etree` under `python3 -I`. The
-  customer zip was only read as data (unzip of the four XML/JSON members to
+  large exported zip was only read as data (unzip of the four XML/JSON members to
   their own directory; the migrator walk run from an empty working
   directory).
 - The `prod` `notificationrules.json` carries a webhook URL (a secret). The

@@ -119,7 +119,7 @@ Result: zero new objects at the host, disk and VM layers (70 if a
 cluster object is kept). The "9 tree structures" become vCenter's one
 tree. Series per cycle do not change by this move, which is why section
 4 still matters; 1.36M series on existing objects is a sizing line,
-177,000 objects is a redesign of the customer's deployment.
+177,000 objects is a redesign of the target deployment.
 
 ### This is stitching, as the compliance adapter does it
 

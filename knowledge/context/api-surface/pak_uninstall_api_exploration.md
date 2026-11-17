@@ -520,12 +520,11 @@ aren't `/internal/` REST endpoints, they are Struts handlers backing
 the web console. Tested against VCF Operations 9.0.2.0 build 25137838
 only.
 
-The `mainAction=remove` handler's silent behaviour on
-`isUnremovable=true` paks is almost certainly a Broadcom bug (the
-UI-layer guard is the ONLY enforcement). If Broadcom patches this to
-return a proper error, the CLI's own client-side guard still
-protects users but the "stale queue" failure mode documented above
-may also be fixed at the same time.
+Observed on 9.0.2: the `mainAction=remove` handler accepts a remove
+call on an `isUnremovable=true` pak without error; the UI-layer guard
+is the only enforcement. If a later release returns an error instead,
+the CLI's own client-side guard still protects users, and the "stale
+queue" failure mode documented above may change with it.
 
 ## References
 
