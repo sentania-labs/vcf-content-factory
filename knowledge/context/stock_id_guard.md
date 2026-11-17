@@ -420,7 +420,7 @@ catches either.
   an excluded adapter kind, or listing it as `--known-content` or
   `--exclude-content` keeps it out; the review step is the backstop.
 - **Versions not measured.** 9.0.2.0200 and 9.1.1.0100 are not separate
-  sources; 9.2 is absent.
+  sources; later releases are not covered.
 - **Names, not ids.** See "Symptoms and alerts: names, not ids".
 
 ### Adding a version

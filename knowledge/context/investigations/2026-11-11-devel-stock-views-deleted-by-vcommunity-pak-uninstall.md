@@ -17,7 +17,8 @@ minutes later the product's pak-removal job deleted every view the pak had
 shipped, by id, in one call: 109 views. **64 of those ids are VMware stock
 views.** The pak carried copies of them under the stock UUIDs, inherited
 verbatim from the upstream vmbro/VCF-Operations-vCommunity content it was
-ported from. When the pak was installed on 2026-07-16, those copies overwrote
+ported from (fixes were offered upstream in vmbro/VCF-Operations-vCommunity
+PR 100 and e1-rahabok/VCF-vCommunity-Adapter PR 92). When the pak was installed on 2026-07-16, those copies overwrote
 the stock definitions. When it was removed, the product deleted them as pak
 content. The stock dashboards that use them stayed.
 
@@ -100,7 +101,9 @@ committed, because they are working data, not knowledge.
 - The upstream `reference/references/vmbro_vcf_operations_vcommunity/Management Pack/content/`
   (`reports/View - Set 1..4.xml`, `View - Collection01.xml`, and the 2.0
   dashboards) contains all 64 stock ids. So the stock ids came from upstream,
-  and the port kept them.
+  and the port kept them. Fixes were offered upstream in
+  vmbro/VCF-Operations-vCommunity PR 100 and
+  e1-rahabok/VCF-vCommunity-Adapter PR 92.
 
 ### Who sent the remove (inferred)
 
@@ -250,7 +253,9 @@ Yes, by the same path, and it is not limited to devel:
   upgrade.
   (Correction 2026-11-12: the upstream pack carries 117 built-in view
   ids, not 64; 64 is the subset the factory's port shipped. See
-  `2026-11-12-vcommunity-upstream-builtin-view-ids.md`.)
+  `2026-11-12-vcommunity-upstream-builtin-view-ids.md`. Fixes were offered
+  upstream in vmbro/VCF-Operations-vCommunity PR 100 and
+  e1-rahabok/VCF-vCommunity-Adapter PR 92.)
 - **Name-based factory deletes (latent, not involved here).**
   `_uninstall_views` (`templates/install.py`), `ViewsHandler.delete`
   (`vcfcf_dashboards/handler.py`) and `cmd_delete_view` resolve by display
