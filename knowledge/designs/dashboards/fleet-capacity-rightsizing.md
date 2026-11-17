@@ -149,11 +149,11 @@ Interactions unchanged: Band B selection drives D-1, D-2 and E.
 
 | Column | Key | Transformation |
 |---|---|---|
-| Cluster | `summary|parentCluster` | last |
-| vCPU | `cpu|corecount_provisioned` | last |
-| Memory (GB) | `config|hardware|memoryKB` | last |
-| vCPUs to Remove / to Add | `summary|oversized|vcpus` / `summary|undersized|vcpus` | last |
-| Memory to Remove / to Add (GB) | `summary|oversized|memory` / `summary|undersized|memory` | last |
+| Cluster | `summary|parentCluster` | current (latest value, ignores the window) |
+| vCPU | `cpu|corecount_provisioned` | current (latest value, ignores the window) |
+| Memory (GB) | `config|hardware|memoryKB` | current (latest value, ignores the window) |
+| vCPUs to Remove / to Add | `summary|oversized|vcpus` / `summary|undersized|vcpus` | current (latest value, ignores the window) |
+| Memory to Remove / to Add (GB) | `summary|oversized|memory` / `summary|undersized|memory` | current (latest value, ignores the window) |
 | CPU Demand Avg % | `cpu|demandPct` | average |
 | CPU Demand Max % | `cpu|demandPct` | maximum |
 | CPU Demand P95 % | `cpu|demandPct` | 95th percentile |
