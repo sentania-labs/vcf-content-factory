@@ -3200,7 +3200,7 @@ is the wrong path.
 ### 5. Cloudproxy service identity
 
 The `cloudproxy_<uuid>` account does NOT appear in `/api/auth/users` (5 visible users:
-claude, navani, sadmin, admin, vcf). It is a system-level service account below the
+claude, sadmin, admin, vcf and one operator account). It is a system-level service account below the
 user management tier, used for node-to-node internal communication, not for suite-api
 user auth. The 403 on `localhost/suite-api` with that identity is expected behavior —
 it has no role grant on the public API, and that endpoint is the wrong one anyway.

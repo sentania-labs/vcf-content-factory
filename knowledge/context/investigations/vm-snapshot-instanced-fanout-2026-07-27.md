@@ -977,7 +977,7 @@ day** by `content-installer` on devel, and the answer is **no**.
   snapshot instance, on two snapshot-bearing VMs:
   - `docker` — creator `VSPHERE.LOCAL\Administrator`, description
     carrying the Synology Active Backup for Business text.
-  - `vcf-lab-avi-wld01-node0` — creator `INT.SENTANIA.NET\navani`.
+  - `vcf-lab-avi-wld01-node0` — creator a lab domain user.
 - One VM (`ca`) had not populated at the same check. Treat as
   **propagation lag, not a contradiction** — enablement takes effect on
   the next collection cycle per resource, so a single-cycle sample can

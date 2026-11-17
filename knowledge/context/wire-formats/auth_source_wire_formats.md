@@ -179,7 +179,7 @@ from `sourceType`:
 | `CSP` | VMware Cloud Services token, header `Authorization: CSPToken <token>` |
 | `ACTIVE_DIRECTORY` (UPN form) | unexpected — see "Server-side surprises" below |
 
-Confirmed for: `VIDB` (prod, both this probe and Jasnah's
+Confirmed for: `VIDB` (prod, both this probe and the earlier
 2026-04-23 probe), `ACTIVE_DIRECTORY` with UPN-form principal
 (devel).
 

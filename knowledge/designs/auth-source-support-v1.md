@@ -1,7 +1,7 @@
 # Auth-source support — design plan v1
 
 Empirical investigation 2026-04-28, both labs. Builds on
-`context/auth_vidb_oauth_flow.md` (Jasnah, 2026-04-23).
+`context/auth_vidb_oauth_flow.md` (2026-04-23).
 
 The factory currently hard-codes Local authentication everywhere
 the `/ui/login.action` UI session is needed (uninstall + a few
@@ -61,9 +61,9 @@ with `authSource` = the source `name`.
 | devel | `ad` (UPN form `vcf@int...`) | ACTIVE_DIRECTORY | 401 | **B** | HTML refusal; `WWW-Authenticate: OpsToken, VCToken, SSO2Token, CSPToken, VIDBToken` |
 | devel | `ad` (NETBIOS `int\vcf`) | ACTIVE_DIRECTORY | 401 | **B'** | JSON `"provided username/password or token is not valid"` — server attempted password validation, rejected it (no `WWW-Authenticate` challenge) |
 | devel | `ad` (DN form `CN=vcf,...`) | ACTIVE_DIRECTORY | 401 | **B'** | Same JSON refusal |
-| prod | `VCF SSO` | VIDB | 401 | **B** | Same HTML + WWW-Authenticate as Jasnah documented; finding holds |
+| prod | `VCF SSO` | VIDB | 401 | **B** | Same HTML + WWW-Authenticate as previously documented; finding holds |
 
-**Surprise vs. Jasnah's framework**: VC sources mint a token via
+**Surprise vs. the earlier analysis**: VC sources mint a token via
 Suite-API password grant **without** a SAML pre-mint. The Ops
 server proxies the password to vCenter SSO server-side. No
 vCenter STS SOAP exchange needed for VC at the Suite-API layer.
@@ -93,7 +93,7 @@ endpoint the UI dropdown uses).
 | devel | `All vCenters` | (UUID, `All vCenters`, `VC_GROUP`) | 200 | `ok` | **yes** |
 | devel | `ad` (UPN) | (UUID, `ad`, `ACTIVE_DIRECTORY`) | 200 | `role` | n/a (UI rejects: no role assigned) |
 | devel | `ad` (NETBIOS) | same triplet | 200 | `?` | n/a (opaque; likely the password-rejection path) |
-| prod | `VCF SSO` | (UUID, `VCF SSO`, `VIDB`) | 200 | `?` | n/a (form-POST cannot drive the OAuth redirect path; Jasnah confirmed) |
+| prod | `VCF SSO` | (UUID, `VCF SSO`, `VIDB`) | 200 | `?` | n/a (form-POST cannot drive the OAuth redirect path; confirmed earlier) |
 
 **Key finding**: VC and VC_GROUP work **headlessly** via the
 existing UI form with the right `(id, name, type)` triplet. No
@@ -132,7 +132,7 @@ triplet without acquiring an admin token first.
 | `OPEN_LDAP` | unprobed (no source configured) | unprobed | none expected | not supported | likely same shape as AD; configurable triplet probably sufficient |
 | `SSO_SAML` | refused (would need SAML2 bearer pre-mint) | redirect path (UI calls `logInSSOUser()`); form-POST cannot drive | external SAML IdP STS exchange | not supported | **defer** — requires SAML STS client in tooling |
 | `VIDM` | refused (would need VIDM token pre-mint) | redirect path (`logInVidmUser()`); form-POST cannot drive | external VIDM OAuth | not supported | **defer** — requires VIDM OAuth client (similar to VIDB) |
-| `VIDB` | refused per Jasnah; re-confirmed | redirect path (`loginVIDBUser()`); form-POST cannot drive (returns `?`) | OAuth code exchange w/ confidential `client_secret` we cannot reach | not supported | **unreachable** for headless flow — Jasnah's conclusion stands; document as "use a Local service account when VIDB is the only source" |
+| `VIDB` | refused per the earlier analysis; re-confirmed | redirect path (`loginVIDBUser()`); form-POST cannot drive (returns `?`) | OAuth code exchange w/ confidential `client_secret` we cannot reach | not supported | **unreachable** for headless flow — Jasnah's conclusion stands; document as "use a Local service account when VIDB is the only source" |
 | `CSP` | refused (would need CSP token) | unprobed (no source configured) | external CSP OAuth | not supported | **defer** — relevant only to VMC SaaS |
 
 `roles=[]` on minted tokens means the test principal has no Ops
@@ -214,7 +214,7 @@ account for automation, or run uninstall as the admin
 user via the UI.
 ```
 
-Keep the message specific — Jasnah's VIDB analysis covers the
+Keep the message specific — the earlier VIDB analysis covers the
 "why"; for SSO_SAML / VIDM / CSP the answer is "we'd need a SAML
 STS / OAuth client we haven't built yet."
 
