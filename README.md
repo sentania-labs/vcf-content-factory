@@ -99,7 +99,9 @@ What you get:
 - **The framework learns.** Every hard-won correction you make
   becomes a rule the agents follow next time. Auto-memory is off by
   design, knowledge lives in the repo where it can be diffed,
-  reviewed, and shared.
+  reviewed, and shared. Investigation notes record the maintainers'
+  own lab, so the hostnames and addresses in them are lab-only and not
+  reachable from outside.
 
 ---
 

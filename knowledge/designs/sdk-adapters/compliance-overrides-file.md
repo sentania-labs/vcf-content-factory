@@ -11,7 +11,7 @@
 
 > I clicked on Custom Profile format in the readme, and came here:
 > https://github.com/sentania-labs/vcf-content-factory-sdk-compliance/blob/main/CANONICAL_SCHEMA.md
-> and immediately when ugh - how do I do anything with this
+> [paraphrased: it was not clear how to use it]
 
 > The documentation is for the user, not for an engineer. we need clear
 > instructions how to create a custom profile to turn alerts/metrics on/off
