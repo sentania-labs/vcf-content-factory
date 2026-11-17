@@ -175,9 +175,7 @@ The stock SUMMARY templates were not read. They are OOTB ids
 they do not hit this. The HostSystem smoke dashboard
 ("[VCF Content Factory] Summary Widget Smoke (HostSystem)") is not installed
 on devel (`getDashboardList`, 181 dashboards; HostSystem has no summary
-binding). Per `2026-08-25`, it was bound on qa 9.2 with `bind-summary`, a UI
-`associateResourceKindDashboards` call made long after import. By then the
-source was resolved, which is consistent with it rendering correctly.
+binding).
 
 ## Smallest fix, and the evidence that would prove it
 
@@ -192,7 +190,7 @@ cannot reorder them.
    --dashboard "[VCF Content Factory] Compliance World Summary"`. That calls
    `associateResourceKindDashboards`, which runs the same
    `saveDashboardAsTemplate`, but now on widgets whose `config` is resolved.
-   Per the 2026-08-25 decompile (9.2, not re-checked on 9.0.2), the UI
+   Per the 2026-08-25 decompile (9.1.1, not re-checked on 9.0.2), the UI
    action also deletes the template previously bound to that kind, which
    would remove the dead clone `4cfb2eb2`.
    **Proof:** `getSummaryTabId` returns a new tabId. Then
@@ -219,5 +217,5 @@ cannot reorder them.
 
 Open: whether a node or service restart starts a templates-key importer
 (the `restoreAttempts` / `allDashboardsTransferred` logic hints at a startup
-path). Whether pak installs on 9.1/9.2 lose the same race also needs one
+path). Whether pak installs on 9.1 lose the same race also needs one
 install with a bound dashboard, followed by the `isTemplate=true` read above.

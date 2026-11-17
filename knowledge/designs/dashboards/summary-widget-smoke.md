@@ -41,7 +41,7 @@ None. Everything inherits the page object.
 - `summary_for` requires `self_provider: false` everywhere and no pinned
   resources (validated by the loader).
 - Section row rule: no other widget on row 1.
-- Test target: a disposable lab build (`qa` or `main` profiles), admin
+- Test target: a disposable lab instance, admin
   account. Bind replaces the native HostSystem summary page on that
   build only; `bind-summary --unbind` restores it, then the dashboard is
   deleted.

@@ -41,7 +41,7 @@ Write the Tier 2 design for a native Java SDK management pack that replaces
 the Python vsanhostmetrics pack with a scale-safe adapter. The Python pack
 creates one Ops object per vSAN entity (460 objects and 6,184 series per
 cycle on the lab's 5-host cluster, FOOT §3 and §4) and calls the
-Performance Service serially; a prospective customer has 70 vSAN clusters
+Performance Service serially; a target deployment has 70 vSAN clusters
 on one vCenter. The port owns no objects, stitches the vSAN metrics onto
 vCenter's own HostSystem, runs clusters through a bounded pool, and is built
 to a collector heap budget (PLAN §2, §3, §6).
@@ -810,7 +810,7 @@ author can proceed on the recommendation unless told otherwise.
    name, INV §4) or one own-kind object per cluster.
 7. **Q7 Supported vCenter range.** Recommended: vCenter 8.0 U3 and later
    (oldest release id accepted is 8.0.3.0; the 8.0 U1/U2 JSON surface is
-   unverified). Needs the target customer's vCenter version (PLAN
+   unverified). Needs the target vCenter version (PLAN
    §Decisions, still open).
 8. **Q8 Prerequisite P1.** Closed 2026-11-06: the round ran (Addendum).
 

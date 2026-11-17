@@ -2,7 +2,7 @@
 
 **Question asked**: "MP signing. What is the chain of that?"
 
-**Short answer**: It's broken in multiple, instructive ways. There IS a signing chain, but it's a single self-signed VMware root, signed with cryptographically deprecated primitives, **and the cert expired on 2026-01-03** — yet paks dated 2025-12-30 are being signed with it and presumably accepted by appliances 4+ months past expiry.
+**Short answer**: There IS a signing chain, but it's a single self-signed VMware root, signed with cryptographically deprecated primitives, **and the cert expired on 2026-01-03** — yet paks dated 2025-12-30 are being signed with it and presumably accepted by appliances 4+ months past expiry.
 
 ## Pak structure on disk
 
@@ -186,7 +186,7 @@ If VCF-CF generates paks that will be installed on customer appliances:
    zip <name>.pak signature.cert signature.mf <other files>
    ```
 
-5. **The current scheme has multiple cryptographic weaknesses Broadcom should fix** (SHA-256 hashes, RSA-PSS or ECDSA signatures, per-vendor signing identity, automated cert rotation) — but VCF-CF is a consumer of the existing format, not its custodian. If Broadcom modernizes the format, VCF-CF will need to follow.
+5. **The current scheme uses older primitives** (observed: SHA-1 hashes, a raw RSA signature with exponent 3, one ecosystem-wide signing identity, no cert rotation; current practice is SHA-256, RSA-PSS or ECDSA, per-vendor identity and automated rotation) — but VCF-CF is a consumer of the existing format, not its custodian. If Broadcom modernizes the format, VCF-CF will need to follow.
 
 ## Open follow-ups
 
@@ -200,8 +200,8 @@ If VCF-CF generates paks that will be installed on customer appliances:
 ## 2026-05-16 — Pass 23 update: empirical appliance behavior
 
 Field-confirmed against `vcf-lab-operations-devel` (VCF Operations
-9.0.2.0.25137838) via Navani's cross-workspace data pull (bundle at
-`workspaces/lab-admin/exports/vcf-mp-cleanroom-2026-05-16/sig-logs/`).
+9.0.2.0.25137838) via the lab data pull (bundle at
+the lab export bundle (`sig-logs/`)).
 Three findings updating the questions above:
 
 1. **Cert-validity is NOT enforced.** Paks built 2025-12-30 (signed

@@ -1,9 +1,8 @@
 # CLAUDE.md — vcf-mp-cleanroom
 
-You are **Mraize**, the cleanroom investigator. You observe, classify,
-and synthesize evidence into a SPEC — you never copy source. The SPEC
-is your case file. Be patient and methodical; every classification gets
-logged.
+Session instructions for the clean-room investigation. The investigator
+observes, classifies, and synthesizes evidence into a SPEC and never
+copies source. Every classification gets logged.
 
 ## Mission
 
@@ -14,8 +13,8 @@ adapters.
 
 ## Hard rules
 
-- **This workspace is local-only. NEVER add a git remote. NEVER push.**
-  Decompiled SDK jars and analysis must not leave this disk.
+- Decompiled SDK jars and raw decompiler output stay out of the SPEC
+  and out of version control (`analysis/decompiled/` is gitignored).
 - **Never reference or copy decompiled source code into the SPEC.**
   The SPEC describes the API surface, lifecycle contracts, and patterns
   observed — not the implementation. This is the clean-room boundary.
@@ -157,7 +156,7 @@ Track C.
   "VENDOR"`, `"description": "DESCRIPTION"` are **iSDK template
   placeholders** — when you see them, the build is iSDK
 - **The container image is NOT in the pak.** It lives on a registry
-  (`projects.packages.broadcom.com` per Khriss research) and is pulled
+  (`projects.packages.broadcom.com` per external research) and is pulled
   by Cloud Proxy at install time. No `Dockerfile`, no `conf.yml`, no
   `*.py`, no `lib/` jars appear in released `.pak` files even though
   the source repo for the adapter has all of those.
@@ -222,11 +221,11 @@ For each pak triaged, append to `audit-log.md`:
 
 - **Full external research** (three-track distinction, partner program,
   legal posture, community precedent):
-  `inputs/khriss-research/2026-05-15-vcf-cf-tier2-native-mp-research.md`
+  `inputs/external-research/2026-05-15-vcf-cf-tier2-native-mp-research.md`
 - **Strategic context**:
-  `/home/scott/vault/kb/work/2026-05-15-reference-doc-vcf-cf-tier2-native-pipeline-strategy.md`
-- **Architectural seed evidence** (lab-admin's appliance findings):
-  `/home/scott/vault/kb/work/2026-05-15-reference-doc-vcfops-mp-architecture-reference.md`
+  maintainer's strategy note, 2026-05-15 (not in this repo)
+- **Architectural seed evidence** (lab appliance findings):
+  architecture reference note, 2026-05-15 (not in this repo)
 
 ## Workflow
 
@@ -283,7 +282,7 @@ and start triaging the contents per the criteria above. Expect a mix
 of Java SDK, MPB, and Cloud Native paks — your first deliverable is a
 clean classification of the corpus.
 
-A separate fetch from Navani (lab-admin) will land in `inputs/from-devel/`
+A separate fetch from the lab appliance will land in `inputs/from-devel/`
 with the Broadcom-included MPs from the operations devel appliance
 (NSXTAdapter3, vim, vSAN, etc.) — these are the canonical Java SDK
 reference set. When that lands, triage and add to the analysis pool.

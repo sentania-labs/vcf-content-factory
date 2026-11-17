@@ -23,9 +23,7 @@ bind the summary dashboards. I thought we had solved this problem".
   Summary and let the admin bind it via Manage Summary Dashboards.
   Broadcom's own objects use compiled pages or a plugin path closed to
   third parties.
-- **The HostSystem smoke test on qa 9.2 bound after materialization** with
-  the factory's `bind-summary`, which is why it worked. Whether 9.1 and 9.2
-  installs lose the same race is unknown.
+- Whether 9.1 installs lose the same race is unknown.
 
 ## What exists, in what state
 

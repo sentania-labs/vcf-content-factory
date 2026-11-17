@@ -1,7 +1,9 @@
 # Scoreboard tiles with a partial bound set render "?" with no error
 
-**Date:** 2026-08-25. **Where:** VCF Operations 9.2 pre-release lab build; the same
-widget code path exists on 9.1.
+**Date:** 2026-08-25. **Where:** a lab instance; the same widget code path
+exists on 9.1. The partial-set `"?"` answer is not yet recorded on a
+released version and needs re-verification there; the descending-bounds
+behaviour below is verified on 9.0.2.
 
 ## What happened
 

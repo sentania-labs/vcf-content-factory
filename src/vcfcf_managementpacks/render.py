@@ -2,7 +2,7 @@
 
 Wire format derived from:
   - reference/references/sentania_aria_operations_dsm_mp/Management Pack JSON/Synology DSM MP.json
-    (Scott's build-8 ground truth — CUSTOM auth, globalHeaders, sessionVariables)
+    (build-8 export used as ground truth — CUSTOM auth, globalHeaders, sessionVariables)
   - reference/references/brockpeterson_operations_management_packs/Rubrik Management Pack Design.json
     (only reference with populated relationships + events)
   - knowledge/context/mpb/mp_schema_vs_existing_mp.md (full cross-check document)

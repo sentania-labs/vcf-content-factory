@@ -593,8 +593,8 @@ def repair_summary_bindings(
                     continue
                 out(f"SUMMARY REBOUND: {label} now shows copy {new} of '{d.name}' ({d.id}); "
                     f"the installer's copy {old} was {state}. The previous copy may remain as "
-                    f"an unused template (the bind action deletes it on 9.2, and per the "
-                    f"bytecode on 9.0.2 and 8.18; not seen live there). New copy state: "
+                    f"an unused template (the bind action deletes it on 9.1.1, 9.0.2 and 8.18 "
+                    f"by inspection of the product code; not seen live). New copy state: "
                     f"{new_state}{_forms_tried(ui, refused)}.{unexpected}")
             except Exception as exc:  # noqa: BLE001  one kind's failure must not stop the rest
                 err(f"WARNING: SUMMARY UNCHECKED: {label}: could not check or repair the "

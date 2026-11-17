@@ -1,4 +1,4 @@
-# War Story: Synology DSM — No Common Key, MPB Can't Model It
+# Synology DSM — No Common Key, MPB Can't Model It
 
 **Target:** Synology DiskStation Manager (DSM) API  
 **Verdict:** Tier 2 (Java SDK). Do not attempt Tier 1 (MPB).  

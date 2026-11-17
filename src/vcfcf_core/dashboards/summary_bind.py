@@ -120,7 +120,7 @@ def summary_dashboard_tab(answer) -> Optional[str]:
     """The template id a ``getSummaryTabId`` answer shows on the Summary
     tab, or None when the tab is not dashboard-backed.
 
-    Shapes per build: ``{"tabId", "isDashboard": true}`` (9.1.1, 9.2),
+    Shapes per build: ``{"tabId", "isDashboard": true}`` (9.1.1),
     ``{"tabId"}`` with NO ``isDashboard`` key (9.0.2, read 2026-10-24),
     ``{}`` or ``{"isDashboard": false}`` with no ``tabId`` (no association;
     org.json drops a null key), ``{"tabId": "<non-uuid>", "isDashboard":

@@ -243,7 +243,7 @@ If a `vcf-ops-data-sdk-2.x.jar` ships and starts appearing in non-vSphere paks, 
 
 ## Open questions
 
-1. **Where do non-VC Broadcom-internal teams get stream-based collection?** Either they don't have it, or they have their own SDK that didn't ship in the corpus. Worth asking lab-admin (Navani) if there's a non-vc sibling jar in the devel appliance.
+1. **Where do non-VC Broadcom-internal teams get stream-based collection?** Either they don't have it, or they have their own SDK that didn't ship in the corpus. Worth checking whether there is a non-vc sibling jar in the devel appliance.
 2. **What's the Kafka topic schema for the `routes.kafka=true` destination?** If VCF-CF wants to consume stats downstream (e.g., feed a separate analytics pipeline), knowing the topic + schema would matter.
 3. **Is the `QuerySpec` JSON format documented anywhere?** Adapters loaded specs from `<classpath>/specsDir/*.json` — the JSON shape (counter names, instance lists, aggregation declarations) is the user-facing authoring surface. Pull a sample spec next pass.
 4. **Token renewal cadence?** `renewToken(int)` exists; what triggers it? SAML token expiry is normally 8-24 hours; the adapter must refresh proactively.

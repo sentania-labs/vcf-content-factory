@@ -447,8 +447,8 @@ return `true` to opt-in:
 ## Pass 23 confirmations (2026-05-16, field evidence)
 
 Confirmed against live `vcf-lab-operations-devel` appliance via
-Navani's DEBUG-level collector log capture; full bundle at
-`workspaces/lab-admin/exports/vcf-mp-cleanroom-2026-05-16/`.
+A DEBUG-level collector log capture; full bundle at
+the lab export bundle vcf-mp-cleanroom-2026-05-16.
 
 ### Semaphore scope: **per-instance**
 

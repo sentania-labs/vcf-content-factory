@@ -86,7 +86,7 @@ scripts/bootstrap_references.sh --update # also git pull existing
 
 - **URL:** https://github.com/brockpeterson/operations_supermetrics
 - **Local path:** `reference/references/brockpeterson_operations_supermetrics/`
-- **Owner:** Brock Peterson (Broadcom/VCF field). Public repo.
+- **Owner:** Brock Peterson. Public repo.
 - **Scope:** Curated VCF Operations super metrics.
 - **What to grep for:** formula DSL examples, metric keys, resource
   kinds. Cross-check against `docs/vcf9/` before adapting.
@@ -201,7 +201,7 @@ scripts/bootstrap_references.sh --update # also git pull existing
 
 - **URL:** https://github.com/brockpeterson/operations_management_packs
 - **Local path:** `reference/references/brockpeterson_operations_management_packs/`
-- **Owner:** Brock Peterson (Broadcom/VCF field). Public repo.
+- **Owner:** Brock Peterson. Public repo.
 - **Scope:** VCF Operations management packs — `.pak` files and/or
   MPB JSON designs for third-party integrations (Rubrik, etc.).
   Ground-truth examples of production management packs built by the
@@ -370,8 +370,8 @@ scripts/bootstrap_references.sh --update # also git pull existing
 
 - **URL:** https://github.com/vmware/vcf-security-and-compliance-guidelines
 - **Local path:** `reference/references/vcf-security-and-compliance-guidelines/`
-- **Owner:** VMware / Broadcom. Primarily driven by Bob Plankers
-  (VMware Compliance & Cybersecurity Engineer). Public repo.
+- **Owner:** VMware / Broadcom. Primarily driven by Bob Plankers.
+  Public repo.
 - **Scope:** Authoritative VMware Security Configuration Guide (SCG)
   control sets for VCF and vSphere. Ships per-version CSVs of
   hardening controls — what setting, what baseline value, what
@@ -418,7 +418,7 @@ scripts/bootstrap_references.sh --update # also git pull existing
 - **Attribution:** cite `vmware-vcf-operations-integration-sdk/<path>`.
   See the repo LICENSE before redistributing any of it.
 
-### brockpeterson.com — blog articles (NOT a clone; extracts only)
+### brockpeterson.com — blog articles (NOT a clone; digests only)
 
 - **URL:** https://www.brockpeterson.com/
 - **Local path:** *none* — this is a website, not a clonable repo, so
@@ -428,22 +428,22 @@ scripts/bootstrap_references.sh --update # also git pull existing
 - **Scope:** long-form explanations of VCF Ops / Aria Ops behaviour that
   is not documented in the vendor PDFs — collector timing, metric
   semantics, "why is this property -1" class of questions.
-- **How to cite (RULE-015/017):** a live URL is **not** re-fetchable by a
-  fresh clone, so do **not** cite the URL alone. Commit a verbatim
-  extract under
-  `reference/docs/extracted/brockpeterson-<article-slug>/article.txt`
-  with a header carrying SOURCE URL, author, publish/update dates and
-  retrieval date; then cite the **extract path** from `knowledge/context/`.
-- **Extracts committed so far:**
-  - `reference/docs/extracted/brockpeterson-vm-snapshots-aria-operations/article.txt`
+- **How to cite (RULE-015/017):** do **not** reproduce an article's
+  text in the repo. Write a short digest in the factory's own words
+  under `knowledge/context/` carrying title, author, URL, publish/update
+  dates and retrieval date, a one-paragraph summary, and the specific
+  facts the factory relies on, credited to the author. Short quotes with
+  attribution are fine; cite the digest path from other files.
+- **Digests committed so far:**
+  - `knowledge/context/brockpeterson-vm-snapshots-aria-operations.md`
     — "Everything you wanted to know about VM Snapshots in Aria
     Operations" (2024-11-17, upd. 2025-10-23). Authority for the **24 h**
     snapshot property/metric materialisation gate, the Age `-1` sentinel
     semantics, Creator/Description being off by default, and Reclaimable
-    Snapshot Space being computed once daily. Digested in
+    Snapshot Space being computed once daily. Applied in
     `knowledge/context/investigations/vm-snapshot-instanced-fanout-2026-07-27.md`.
-- **Attribution:** cite the extract path plus the SOURCE URL in its
-  header. Third-party blog content — reproduced for provenance only;
-  check with the author before redistributing in shipped content.
+  - `knowledge/context/vrops-content-management.md` — "vROps Content
+    Management and the Suite-API" (2021-12-28, upd. 2025-09-06).
+- **Attribution:** credit the author by name and link the article URL.
 
 <!-- Add new sources below. Keep entries in the same shape. -->

@@ -214,9 +214,8 @@ snapshots.)*
 > the `-1` → real-value flip was gated by the global
 > `RECLAIM_SNAPSHOTS_DAYS` (= 7). **That inference was wrong.** The gate is
 > **24 hours**, per Brock Peterson's article (allowlisted reference author;
-> verbatim extract committed at
-> `reference/docs/extracted/brockpeterson-vm-snapshots-aria-operations/article.txt`,
-> source URL in its header).
+> summary and source URL at
+> `knowledge/context/brockpeterson-vm-snapshots-aria-operations.md`).
 >
 > My sampling could not have distinguished them: the observed VMs were
 > **0.1 days** (no instances) and **11–12 days** (instances present). The
@@ -227,7 +226,7 @@ snapshots.)*
 > observation is equally consistent with 24 h, and 24 h is what the source
 > documents.
 
-### What the source says (short quotes, full text in the extract)
+### What the source says (short quotes; summary and URL in `knowledge/context/brockpeterson-vm-snapshots-aria-operations.md`)
 
 > "Properties appear after the VM Snapshot is 24 hours old."
 >
@@ -788,7 +787,7 @@ instances are all aged ghosts.
 **Strongly indicated (not proven):** a per-snapshot instance is only
 materialised once the snapshot is **24 hours** old — **confirmed by the
 cited source**, see the snapshot-ageing section
-(`reference/docs/extracted/brockpeterson-vm-snapshots-aria-operations/article.txt`).
+(`knowledge/context/brockpeterson-vm-snapshots-aria-operations.md`).
 (An earlier draft here guessed `RECLAIM_SNAPSHOTS_DAYS` = 7; wrong — the
 1–6 day band that would have discriminated was never sampled.) The model
 explains every observation — sub-24 h live snapshot → flat metrics only, no
@@ -978,7 +977,7 @@ day** by `content-installer` on devel, and the answer is **no**.
   snapshot instance, on two snapshot-bearing VMs:
   - `docker` — creator `VSPHERE.LOCAL\Administrator`, description
     carrying the Synology Active Backup for Business text.
-  - `vcf-lab-avi-wld01-node0` — creator `INT.SENTANIA.NET\navani`.
+  - `vcf-lab-avi-wld01-node0` — creator a lab domain user.
 - One VM (`ca`) had not populated at the same check. Treat as
   **propagation lag, not a contradiction** — enablement takes effect on
   the next collection cycle per resource, so a single-cycle sample can

@@ -25,7 +25,7 @@
 
 ### Why Network App version ambiguity resolved
 
-Briefing §5 flagged Navani's "5.0.16" as probably a conflation.
+Briefing §5 flagged the earlier recon's "5.0.16" as probably a conflation.
 **Direction of the flag was right; the specifics were not.**
 
 - **`5.0.16` is the UniFi OS / console display version** — shown in
@@ -35,13 +35,13 @@ Briefing §5 flagged Navani's "5.0.16" as probably a conflation.
   It is NOT the Network App version.
 - **`10.2.105` is the Network Application version** — emitted by
   `stat/sysinfo.version` and `stat/sysinfo.build = atag_10.2.105_33556`.
-  This is what Khriss expected based on release cadence (current
+  This is what the desk research expected based on release cadence (current
   stable is 10.3.55 per briefing, and 10.2.105 is one minor behind).
 - **Implication for auth decision**: 10.2.105 > 9.3.43, so the
   Official Network Integration API is available. Confirmed by live
   probe — see "Integration API probe" below.
 
-Navani's "Network app 5.0.16 on UniFi OS 5.0.16" was the conflation
+The earlier recon's "Network app 5.0.16 on UniFi OS 5.0.16" was the conflation
 the briefing suspected. The correct phrasing for any public / Explore
 talk is: "UniFi OS 5.0.16 running Network Application 10.2.105."
 
@@ -89,7 +89,7 @@ controller — see Integration API Probe section below.
 
 ---
 
-## URL layout (mirroring Navani's recon)
+## URL layout (mirroring the earlier recon)
 
 | Layer | Base path | Notes |
 |-------|-----------|-------|
@@ -750,7 +750,7 @@ with mandatory window params).
 - **Properties**: same common device set as AP, plus `has_temperature`,
   `has_fan`, `overheating`, `total_max_power`
   (nullable on non-PoE), `total_max_effective_power`,
-  `total_used_power` (observed to exist — not in Navani's recon).
+  `total_used_power` (observed to exist — not in the earlier recon).
 - **Metrics (device-level)**: same as AP.
 - **Metrics (per-port, from `port_table[]`)**: `up`, `speed`,
   `tx_bytes`, `rx_bytes`, `tx_errors`, `rx_errors`, `tx_dropped`,

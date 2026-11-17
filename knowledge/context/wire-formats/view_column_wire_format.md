@@ -1305,14 +1305,14 @@ Per kind: `descendant` then `self`; kinds in sequence. The public
 Kubernetes MP views carry the same shape with three kinds.
 
 **Per-column `adapterKind` / `resourceKind` are a kind filter, not
-metadata** (2026-08-29, api-explorer, live render on a 9.2.0.0 lab:
-`knowledge/context/api-surface/view_multi_subject_column_binding.md`,
-verbatim vendor ViewDefs, 26 multi-subject views surveyed; the extract is held under embargo, see `embargo/reference/`).
+metadata** (2026-08-29, api-explorer:
+`knowledge/context/api-surface/view_multi_subject_column_binding.md`;
+the render behaviour needs re-verification on a released version).
 A column bound to one kind renders `null` on rows of every other kind;
 a column with neither Property resolves against all subject kinds.
-Broadcom's multi-subject list views leave 59 of 68 columns unbound and
-bind the rest to the single kind that owns the key (not necessarily the
-first). The vendor sample above also does this: its 4 metric columns
+Multi-subject list views leave most columns unbound and bind the rest
+to the single kind that owns the key (not necessarily the first). The
+public sample above does this: its 4 metric columns
 are unbound, only the `summary|parentVcenter` property column names
 Datacenter. Until 2026-08-29 the factory bound every column to
 `subjects[0]`, which is why factory multi-subject views populated only

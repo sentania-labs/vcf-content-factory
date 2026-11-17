@@ -73,7 +73,7 @@ HoL uses short list ids (`"*"`) while we use full paths
 cross-refs match), and the roundtrip works with this same style.
 
 ### `from_attribute: id` binding a non-declared metric — OPEN
-Riker flagged this as suspect #1. The HoL `getProjects` response
+An earlier review flagged this as suspect #1. The HoL `getProjects` response
 has `id` declared as a metric ("ID", PROPERTY, STRING) on the
 consumer object. Our chain1 does not declare `id` as a metric on
 Volume (we use `volume_id`, `volume_path`, etc.). The renderer

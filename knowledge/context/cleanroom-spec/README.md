@@ -1,13 +1,11 @@
 # vcf-mp-cleanroom
 
-Local-only clean-room for reverse-engineering VCF Operations management
+Clean-room analysis of VCF Operations management
 pack architecture. Output: a SPEC consumed by VCF-CF's Tier 2 (Native)
 pipeline.
 
 ## Hard rules
 
-- **NEVER push this repo to GitHub.** No remote should ever be added.
-  Decompiled artifacts and analysis live on disk only.
 - **VCF-CF must NEVER be dispatched into this workspace.** The clean-room
   boundary depends on VCF-CF only consuming the finished SPEC, not the
   decompiled sources.
@@ -15,9 +13,9 @@ pipeline.
 
 ## Layout
 
-- `inputs/from-devel/` — `.pak` files Navani fetches from operations devel
+- `inputs/from-devel/` — `.pak` files fetched from the operations devel lab appliance
 - `inputs/from-marketplace/` — `.paks` Scott provides from VCF Solution Marketplace
-- `inputs/khriss-research/` — symlinks/copies of Khriss findings from `kb/work/`
+- `inputs/external-research/` — copies of the external research notes
 - `analysis/per-adapter/` — one folder per MP analyzed
 - `analysis/decompiled/` — raw CFR/jadx/javap output (gitignored)
 - `spec/` — THE deliverable; clean SPEC for VCF-CF to author from
@@ -25,9 +23,9 @@ pipeline.
 
 ## Provenance
 
-- Strategy + cleanroom approach: `kb/work/` note (filed 2026-05-15)
-- Architectural seed evidence: lab-admin handoff 2026-05-15 (filed to `kb/work/`)
-- External research: Khriss findings (`kb/work/` when produced)
+- Strategy + clean-room approach: maintainer's strategy note (2026-05-15)
+- Architectural seed evidence: lab appliance findings (2026-05-15)
+- External research: the external research notes under `inputs/external-research/`
 
 ## Status
 

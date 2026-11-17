@@ -174,7 +174,7 @@ needed.
 - **`GenericTemplates*` GAP:** across 96 paks under `reference/`,
   `/mnt/holding` and `content/`, no `GenericTemplates*` directory exists,
   so nothing that converted before is stopped. The GAP is justified by the
-  binding doc §Install-time behavior (template on 9.2, shared on 9.0.2 GA,
+  binding doc §Install-time behavior (template on 9.1.1, shared on 9.0.2 GA,
   which the YAML cannot carry). The regex needs a trailing separator, so
   content-export owner members (`dashboards/<owner>!...`) are not caught.
 - **Marks:** no recorded-loss or deviation `Mark` can match

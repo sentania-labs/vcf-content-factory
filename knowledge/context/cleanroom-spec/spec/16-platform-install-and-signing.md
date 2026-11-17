@@ -13,7 +13,7 @@
 **Status**: DRAFT (Pass 23, 2026-05-16). Field-confirmed against the
 devel ops appliance via cross-workspace request (request_id
 `6d25e88d-...`); evidence bundle at
-`workspaces/lab-admin/exports/vcf-mp-cleanroom-2026-05-16/`.
+the lab export bundle vcf-mp-cleanroom-2026-05-16.
 
 **Source appliance**: `vcf-lab-operations-devel` running VCF Operations
 9.0.2.0.25137838.
@@ -296,8 +296,8 @@ but it is not mandatorily enforced on the install path.
 
 ## Provenance — Pass 23 evidence bundle
 
-All findings in this section are sourced from Navani's lab-admin
-bundle at `/home/scott/vault/workspaces/lab-admin/exports/vcf-mp-cleanroom-2026-05-16/`,
+All findings in this section are sourced from the lab
+bundle at the lab export bundle vcf-mp-cleanroom-2026-05-16,
 specifically:
 
 | Subdir | Files | Use |
@@ -308,10 +308,10 @@ specifically:
 | `sig-logs/sig-uploadlocal.log` | 200 raw `uploadLocal` lines | Source for the corpus-wide signature distribution table |
 | `sig-logs/casa_pak_history_*.json` | 3 sample histories | Unsigned-and-installed (Rubrik, GitLab) + signed-and-installed (Synology) |
 | `sig-logs/sig-pakManager-query.log` | Full query log | `checkSignature` flag distribution |
-| `sig-logs/signature-validation-summary.md` | Navani's writeup | Cross-check for this section |
+| `sig-logs/signature-validation-summary.md` | Lab writeup | Cross-check for this section |
 
-Cross-workspace request: `agents/riker/inbox/archive/2026-05-16-1500-vcf-mp-cleanroom-to-navani-tier2-spec-gap-asks.md`,
-response in `agents/riker/inbox/archive/2026-05-16-1526-lab-admin-to-vcf-mp-cleanroom-response-tier2-spec-gap-asks.md`.
+Cross-workspace request: lab data request of 2026-05-16,
+response in lab response of 2026-05-16.
 
 ## Open follow-ups
 

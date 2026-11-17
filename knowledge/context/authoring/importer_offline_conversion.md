@@ -134,8 +134,8 @@ loader refuses it; decided on the dashboards left after duplicate merging
 and `--drop`, so a pak given with its unpacked tree is one claimant, and
 dropping one of two claimants clears the conflict), a directory holding more than one dashboard (the installer binds the
 first tab of a `HashMap`), or a `GenericTemplates*` directory (a template on
-9.2, bound on 9.0.2 GA). A dashboard in a `GenericTemplates*` pak directory
-stops on its own too, bound or not: the 9.2 installer imports it as a
+9.1.1, bound on 9.0.2 GA). A dashboard in a `GenericTemplates*` pak directory
+stops on its own too, bound or not: the 9.1.1 installer imports it as a
 template (not shared), which the YAML cannot carry. Two copies of one
 dashboard id that differ only in their binding are differing copies
 (`--prefer-source` picks one). `--map-kind` stops a dashboard whose binding

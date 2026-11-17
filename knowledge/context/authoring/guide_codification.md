@@ -66,8 +66,8 @@ A good codification entry has all of:
    (DSL doc section, OpenAPI path, an export specimen under
    `reference/references/`).
 
-Bad codification is just a war story. Good codification is a rule
-the next session can apply without re-reading the war story.
+Bad codification is just an anecdote. Good codification is a rule
+the next session can apply without re-reading the anecdote.
 
 ## Things that should never be codified
 

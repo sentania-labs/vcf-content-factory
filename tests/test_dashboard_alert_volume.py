@@ -1,7 +1,7 @@
 """AlertVolume widget (wire type IntSummaryAlertVolume).
 
 Shape per knowledge/context/api-surface/dashboard_widgets_alertvolume_section_viewdetails.md
-§1 and the export samples under reference/docs/extracted/dashboard-widgets/.
+§1 and the vendor dashboard templates under reference/docs/extracted/dashboard-widgets/.
 Public VMWARE kinds only; tmp_path-local, no network.
 """
 from __future__ import annotations

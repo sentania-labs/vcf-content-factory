@@ -13,11 +13,10 @@ metadata only.**
 
 ## Access (documented for future probes)
 
-Root SSH to the prod CP works with the **doubled** appliance password
-(same convention as the primary, per `suiteapi_ambient_auth_devel_2026_06_09.md`):
+Root SSH to the prod CP works:
 
 ```
-export SSHPASS='<doubled appliance root pw>'
+export SSHPASS='<appliance root password>'
 sshpass -e ssh -o StrictHostKeyChecking=no root@172.27.8.51
 ```
 

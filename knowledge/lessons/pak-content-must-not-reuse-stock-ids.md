@@ -15,7 +15,9 @@ shows "The view does not exist.". Nothing warns at either step.
 
 **Reproducer (devel 9.0.2, 2026).** The factory's vCommunity vSphere port
 copied upstream vmbro/VCF-Operations-vCommunity content. That content carries
-64 VMware stock view ids.
+64 VMware stock view ids (fixes were offered upstream in
+vmbro/VCF-Operations-vCommunity PR 100 and e1-rahabok/VCF-vCommunity-Adapter
+PR 92).
 - Install, 2026-07-16: the audit log shows the stock ids written under the
   pak's names. For example, `2788178d` "Configuration
   | Resource Pool" became "vSphere Resource Pool Configuration".

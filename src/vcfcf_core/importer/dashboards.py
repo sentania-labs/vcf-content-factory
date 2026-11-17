@@ -208,7 +208,7 @@ class _DashMapper:
             y["summary_for"] = b.kinds[0] if len(b.kinds) == 1 else list(b.kinds)
         tdir = template_dir(self.location)
         if tdir is not None:
-            self.loss(f"the dashboard sits in the pak directory {tdir!r}: the 9.2 installer imports a GenericTemplates* "
+            self.loss(f"the dashboard sits in the pak directory {tdir!r}: the 9.1.1 installer imports a GenericTemplates* "
                       f"directory as a template (not shared, never bound) and 9.0.2 GA as a shared dashboard; the "
                       f"factory YAML cannot carry the template install")
         for k in _RENDER_CONSTANTS:

@@ -1,7 +1,7 @@
 """Summary binding per build line (#260) and the still-building refusal (#256).
 
 #260: 9.0.2 Build 25429562 and 8.18.6 Build 25423535 read one
-``dashboardAssociations`` map; 9.1.1 and 9.2 read ``assignedAssociations``
+``dashboardAssociations`` map; 9.1.1 reads ``assignedAssociations``
 plus ``resetAssociations``. Each build NPEs before any write when its
 parameter is absent and answers HTTP 200 with the generic error panel, so
 the client sends the two-map form, then the single-map form on a non-``ok``
@@ -181,7 +181,7 @@ def test_bind_and_reset_of_one_kind_is_refused_before_any_call():
 # --- getSummaryTabId shapes per build ---------------------------------------------------
 
 @pytest.mark.parametrize("answer,expected", [
-    ({"tabId": NEW, "isDashboard": True}, NEW),          # 9.1.1, 9.2
+    ({"tabId": NEW, "isDashboard": True}, NEW),          # 9.1.1
     ({"tabId": NEW}, NEW),                               # 9.0.2: no isDashboard key
     ({"tabId": "hostSummaryTab"}, None),                 # no key, not a template id
     ({"tabId": "legacy", "isDashboard": False, "pluginExist": True}, None),

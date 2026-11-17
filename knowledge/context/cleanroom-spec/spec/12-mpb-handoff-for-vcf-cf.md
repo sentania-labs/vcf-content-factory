@@ -33,7 +33,7 @@ This handoff stands alone for the strategic picture. Cross-references are for "I
 
 8. **MPB shares iSDK template infrastructure.** Generated `manifest.txt` has un-filled `"display_name": "DISPLAY_NAME"` and `"vendor": "VENDOR"` placeholders — the same placeholders observed in Integration-SDK (Track B) paks. Don't assume these are MPB-specific bugs; they're shared scaffolding.
 
-9. **Pak signing is broken in instructive ways — and the appliance doesn't enforce.** Single self-signed VMware cert signs everything (Broadcom-internal + marketplace re-signed third-party). Cert **expired 2026-01-03** but paks dated 2025-12-30 still ship with it. SHA-1 hashes + sha1WithRSAEncryption + RSA exponent 3. **Pass 23 empirical confirmation**: appliance accepts unsigned paks and installs them in full with NO admin override required (42 records observed across the devel log corpus), and **does NOT enforce cert validity dates** ("skip dates" behavior — expired-2026-01-03 cert still trusted on Dec-2025 paks). `checkSignature` is opt-in at the API layer. VCF-CF can ship unsigned MPB-built paks for any internal-deployment scenario without friction; marketplace distribution still requires re-signing via the Broadcom marketplace pipeline. See `spec/16-platform-install-and-signing.md` for full appliance behavior, `analysis/pak-signing-chain.md` for on-disk cryptographic format.
+9. **Pak signing: observed format and appliance enforcement.** Single self-signed VMware cert signs everything (Broadcom-internal + marketplace re-signed third-party). Cert **expired 2026-01-03** but paks dated 2025-12-30 still ship with it. SHA-1 hashes + sha1WithRSAEncryption + RSA exponent 3. **Pass 23 empirical confirmation**: appliance accepts unsigned paks and installs them in full with NO admin override required (42 records observed across the devel log corpus), and **does NOT enforce cert validity dates** ("skip dates" behavior — expired-2026-01-03 cert still trusted on Dec-2025 paks). `checkSignature` is opt-in at the API layer. VCF-CF can ship unsigned MPB-built paks for any internal-deployment scenario without friction; marketplace distribution still requires re-signing via the Broadcom marketplace pipeline. See `spec/16-platform-install-and-signing.md` for full appliance behavior, `analysis/pak-signing-chain.md` for on-disk cryptographic format.
 
 10. **VCF-CF Tier 1 is fundamentally a Kotlin code generation task**, not just declarative-pak emission. Two implementation paths (§ 7 below) with concrete recommendations and risk tradeoffs.
 
@@ -590,7 +590,7 @@ VCF-CF options (in order of operational maturity):
 2. **Generate paks signed with a VCF-CF / customer-supplied cert.** Requires confirming the appliance accepts certs other than the VMware-pinned root.
 3. **Submit to the marketplace re-signing pipeline.** Requires understanding the marketplace ingestion process (likely internal-only to Broadcom).
 
-Whatever you pick, design the signing step as a **pluggable strategy** — Broadcom should modernize the format eventually (SHA-256, PSS or ECDSA, per-vendor identity, automated rotation) and VCF-CF should follow without architectural surgery.
+Whatever you pick, design the signing step as a **pluggable strategy** — the format may change in a later release (for example SHA-256, PSS or ECDSA, per-vendor identity, automated rotation) and VCF-CF should follow without architectural surgery.
 
 ### iSDK template placeholder hygiene
 

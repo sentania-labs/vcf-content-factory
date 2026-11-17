@@ -12,7 +12,7 @@ CLAUDE.md:
 
 ## 2026-05-15 — First triage pass
 
-Corpus: marketplace `Downloads.zip` (extracted) + lab-admin's devel
+Corpus: marketplace `Downloads.zip` (extracted) + the devel lab's
 pull (`from-devel/paks/`) + downloaded calibration reference
 (`VCFOperationsvCommunity_0.2.8.pak`). Triage methodology: recurse
 into outer pak's nested `adapter.zip`/`adapters.zip`/`<name>.zip`;
@@ -46,7 +46,7 @@ target is resolved by appliance via external metadata.
 
 ### ELIMINATE-B (Track B, Integration SDK) — moved to `inputs/_excluded/integration-sdk/`
 
-- `VCFOperationsvCommunity_0.2.8.pak` — ELIMINATE-B — evidence: confirmed Track B reference (Khriss research, line 194); inner archive ships zero jars; outer manifest `name=iSDK_VCFOperationsvCommunity` (template prefix) + placeholder `display_name`/`vendor`/`description`; downloaded as calibration anchor — 2026-05-15
+- `VCFOperationsvCommunity_0.2.8.pak` — ELIMINATE-B — evidence: confirmed Track B reference (external research, line 194); inner archive ships zero jars; outer manifest `name=iSDK_VCFOperationsvCommunity` (template prefix) + placeholder `display_name`/`vendor`/`description`; downloaded as calibration anchor — 2026-05-15
 - `application-insight-flopsar-vcfmp2026-0.6.1.pak` — ELIMINATE-B — evidence: inner `adapter.zip` ships zero jars (describe.xml + resources + images only); JSON manifest with placeholder fields; structural identity to vCommunity reference; vendor naming `Indevops*` — 2026-05-15
 - `datacenter-insight-uptimedc-2026-0.1.0.pak` — ELIMINATE-B — evidence: zero-jar inner archive; structural shape matches vCommunity Track B reference; `name=UptimeDCAdapter` — 2026-05-15
 - `indevopsbrocadeswitches_0.0.3.pak` — ELIMINATE-B — evidence: zero-jar inner archive; structural shape matches vCommunity Track B reference; vendor `Indevops` — 2026-05-15
@@ -869,7 +869,7 @@ Sources: bytecode constant-pool inspection of MPB enum classes (BuilderAlertType
 
 ---
 
-## 2026-05-16 — RE pass 22: Tier 2 handoff doc + Navani gap-ask request
+## 2026-05-16 — RE pass 22: Tier 2 handoff doc + lab data gap request
 
 Closes the Tier 2 (Native Java) RE arc.
 
@@ -879,15 +879,15 @@ Closes the Tier 2 (Native Java) RE arc.
   vcfcf-adapter-base.jar shape recommendation (Option A AdapterBase-direct
   vs Option B aria-ops-core wrapper). Stands alone as a strategic-picture
   document for VCF-CF Tier 2 implementers, parallel to spec/12 for MPB.
-- **NEW — cross-workspace request filed to lab-admin (Navani)** for 4
+- **NEW — lab data request filed** for 4
   narrow data/log gaps: CustomGroupMetrics example, install lifecycle
   log, collect() debug trace, signature validation logs. Request ID
   `6d25e88d-6aad-42f7-af62-eea3db2ec61d`. Lives in PKA infrastructure
-  at `agents/riker/inbox/archive/`, not in this workspace tree.
+  outside this workspace tree.
 
 ### Architectural impact
 
-- Tier 2 spec is shippable as-is to VCF-CF. The Navani request is for
+- Tier 2 spec is shippable as-is to VCF-CF. The lab data request is for
   upgrading "inferred" claims to "confirmed" — not blocking on Tier 2
   work starting.
 
@@ -897,10 +897,10 @@ Closes the Tier 2 (Native Java) RE arc.
 
 ---
 
-## 2026-05-16 — RE pass 23: integrate Navani field confirmations
+## 2026-05-16 — RE pass 23: integrate lab field confirmations
 
-Source: Navani's response bundle at
-`/home/scott/vault/workspaces/lab-admin/exports/vcf-mp-cleanroom-2026-05-16/`
+Source: The lab response bundle at
+the lab export bundle vcf-mp-cleanroom-2026-05-16
 (8.9MB, structured per-ask). All 4 requested asks answered; 3 are
 substantive deltas, 1 is a confirmed-negative.
 
@@ -982,9 +982,9 @@ substantive deltas, 1 is a confirmed-negative.
 
 ### Provenance
 
-Request: `agents/riker/inbox/archive/2026-05-16-1500-vcf-mp-cleanroom-to-navani-tier2-spec-gap-asks.md`
-Response: `agents/riker/inbox/archive/2026-05-16-1526-lab-admin-to-vcf-mp-cleanroom-response-tier2-spec-gap-asks.md`
-Bundle: `workspaces/lab-admin/exports/vcf-mp-cleanroom-2026-05-16/` (8.9MB; install-logs, sig-logs, collect-logs, customgroup-metrics subdirs).
+Request: lab data request of 2026-05-16
+Response: lab response of 2026-05-16
+Bundle: the lab export bundle vcf-mp-cleanroom-2026-05-16 (8.9MB; install-logs, sig-logs, collect-logs, customgroup-metrics subdirs).
 
 ### Files committed
 
