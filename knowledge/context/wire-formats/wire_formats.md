@@ -136,7 +136,7 @@ that is not a loaded view is rejected twice: `Dashboard.validate()` raises
 The renderer guard exists because the import API accepts a bare name in
 `viewDefinitionId` without complaint; the widget then fails at view time
 with "view does not exist" and `GET /internal/views/{id}/data/export`
-returns 400 `Cannot convert ... to uuid` (9.2.0.0 lab, 2026-08-29). Every
+returns 400 `Cannot convert ... to uuid` (2026-08-29). Every
 render path must load the referenced views alongside the dashboard; see
 `knowledge/lessons/dashboard-import-without-views-corrupts-refs.md`.
 

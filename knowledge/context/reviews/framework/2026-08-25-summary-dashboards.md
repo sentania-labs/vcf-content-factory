@@ -20,7 +20,8 @@ Verdict: **CHANGES REQUESTED** (1 BLOCKING, 6 WARNING, 4 NIT).
 - pak-compare: n/a (no pak built; `dashboards.properties` emission checked
   by test `test_bound_dashboard_emits_properties`).
 - Wire shapes: AlertVolume config key set and Section config/height match
-  `reference/docs/extracted/dashboard-widgets/qa-9.2.0-export-*.json`.
+  the export samples recorded in
+  `knowledge/context/api-surface/dashboard_widgets_alertvolume_section_viewdetails.md`.
 - `resourceKindId` formula checked against three captured
   `getResourceKindList` responses in the session scratchpad (three captured responses,
   adapter-kind lengths 4..32): zero mismatches.

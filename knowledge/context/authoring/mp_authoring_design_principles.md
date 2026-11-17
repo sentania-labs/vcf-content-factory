@@ -43,16 +43,12 @@ choose one of three exits — never invent a fragile workaround:
    deferral in the design artifact (`designs/<mp>.md` §Risks) and
    move on. Most cases land here.
 
-2. **Wait for MPB grammar support.** If the gap is a known
-   roadmap item (jq filter projection is targeted for MPB 9.2 per
-   first-party confirmation), park the work. The YAML stays clean
+2. **Wait for MPB grammar support.** If the gap is one the MPB
+   runtime may close later, park the work. The YAML stays clean
    and ships when the runtime catches up. Note the deferral in
-   `knowledge/context/known_limitations.md`. Caveat: 9.2's jq addon is
-   bolted onto a Jackson-`JsonNode`/dot-path engine, not a
-   replacement of it — predicate support will be a feature flag
-   on top of the existing grammar, not a generalized JMESPath
-   evaluator. Re-verify the actual capability surface when 9.2
-   ships.
+   `knowledge/context/known_limitations.md`. The runtime is a
+   Jackson-`JsonNode`/dot-path engine, so re-verify the actual
+   capability surface of any new MPB release before relying on it.
 
 3. **Escalate to Tier 2 (native SDK pak).** Some patterns require
    imperative collection logic that no declarative grammar will
@@ -155,18 +151,14 @@ phpIPAM):
   path uses pure dot-notation. No nested `data.*.X.*` observed.
 - **Backing engine:** Jackson `JsonNode` via
   `BuilderQueryJsonNodeParserKt` — NOT Jayway JsonPath, NOT
-  JMESPath. So even when MPB 9.2 adds a jq tag-on, it's bolted
-  onto a dot-path engine, not a replacement of it.
+  JMESPath.
 
-**Verification (three independent confirmations).**
+**Verification (two independent confirmations).**
 1. Empirical: side-by-side test of factory pak (prod) and MPB
    pipeline (devel) — both produced only the 8 base metrics, no
    radio metrics or properties.
 2. Cleanroom corpus analysis: 54 compiled paths sampled across
    UniFi + phpIPAM reference paks, zero predicate use.
-3. First-party: MPB's principal engineer confirmed jq filter
-   support is planned for MPB 9.2 — but this is an addon, not a
-   change to the underlying grammar.
 
 **The fragile alternative we rejected.** Index access
 (`radio_table[0]` / `radio_table[1]`) would have shipped, but
@@ -180,8 +172,7 @@ from UniFi 1.0.0.13. Documented in `knowledge/context/known_limitations.md`
 §"MPB runtime: dot-path + `data.*` grammar only" and in the UniFi
 YAML header comment.
 
-**The structural pattern (for the future).** Even with 9.2's jq
-addon, the natural MPB shape for per-element data is a **separate
+**The structural pattern (for the future).** The natural MPB shape for per-element data is a **separate
 ResourceKind per band**, fed by either (a) a flat `radios`
 endpoint iterated via `data.*`, or (b) a chained request per band
 using `objectBinding.requestMatchIdExpression` with

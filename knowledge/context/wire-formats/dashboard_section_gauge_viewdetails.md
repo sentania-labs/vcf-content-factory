@@ -1,21 +1,21 @@
 # Dashboard widget wire shapes: Section, gauge scoreboard, viewDetails, AlertVolume
 
-Learned 2026-08-25 from cached 9.1.1 / 9.2 UI captures
-(`getDashboardConfig` and `getWidgetConfigs` for four vendor dashboards,
-18 Section widgets, 15 gauge scoreboards). Structure only was lifted; no
+Learned 2026-08-25 from cached 9.1.1 UI captures
+(`getDashboardConfig` and `getWidgetConfigs` for vendor dashboards with
+Section widgets and gauge scoreboards). Structure only was lifted; no
 vendor names or keys are reproduced here. Implemented in
 `src/vcfcf_core/dashboards/loader.py` and `render.py`; tests in
 `tests/test_dashboard_section_widget.py`.
 
 The captures are the UI's *runtime* representation (`key`, `gridsterX`,
-...); the import-bundle form was later confirmed from Suite API export
-samples (`reference/docs/extracted/dashboard-widgets/`). The factory
+...); the import-bundle form was later confirmed from the vendor
+templates in `reference/docs/extracted/dashboard-widgets/`. The factory
 output has NOT yet been round-tripped through a live content-import;
 treat "installs and renders" as unverified until qa-tester exercises it.
 
 ## Section (collapsible row header)
 
-Authoritative source (from appliance JS and Suite API export samples):
+Authoritative source (from appliance JS and vendor templates):
 `knowledge/context/api-surface/dashboard_widgets_alertvolume_section_viewdetails.md`
 §3. Summary of what the factory relies on:
 
@@ -65,38 +65,37 @@ See the `ScoreboardConfig` docstring in `loader.py` for the recipe, and
 `showPercentText` / `focusOnPercent` as gauge switches, `fixedView` vs
 `floatingView` as a row-stretch setting unrelated to gauge). The factory
 emits the three gauge switches only when `visual_theme` is 9. Field
-observations across the 15 captured gauge widgets:
+observations across the captured gauge widgets:
 
-- `mode.layoutMode` is `"fixedView"` on all 15 (same as every non-gauge
-  scoreboard captured), `showMetricName.showMetricName` true on all 15.
-- Per-metric `maxValue` is either the integer `0` (38 entries, the
-  UI's unset default) or a non-empty *string* (32 entries). Non-gauge
+- `mode.layoutMode` is `"fixedView"` on all of them (same as every
+  non-gauge scoreboard captured), `showMetricName.showMetricName` true on
+  all of them.
+- Per-metric `maxValue` is either the integer `0` (the UI's unset
+  default) or a non-empty *string*. Non-gauge
   scoreboards carry `""` or a string. The factory emits `""` when unset
   (unchanged) and the stringified number when `max_value` is authored.
 - Bounds ride in the per-metric entry as `yellowBound` / `orangeBound` /
   `redBound` with `colorMethod: 0`, which the renderer already emitted.
-  Replayed against the product's own Scoreboard `.action` calls on 9.2
-  (2026-08-25, lesson `scoreboard-partial-bounds-render-unknown`): with
-  `colorMethod: 0` the entry must carry **all three** numeric bounds. A
-  partial set (only `redBound`, or yellow and orange without red) makes
-  the server answer `value: "?"` / `state: Unknown` although the value
-  exists. Ascending thresholds are inclusive: `>= yellowBound`
+  With `colorMethod: 0` the entry must carry **all three** numeric
+  bounds (lesson `scoreboard-partial-bounds-render-unknown`; the
+  server's `"?"` / Unknown answer to a partial set needs re-verification
+  on a released version). Ascending thresholds are inclusive: `>= yellowBound`
   Warning, `>= orangeBound` Immediate, `>= redBound` Critical; "red at
   >= 1" is `(1, 1, 1)`, which is what the vendor's flag metrics use.
   Descending thresholds (`yellow >= orange >= red`) mean lower is worse
   (issue #176, `dashboard_sort_color_default_summary_rows.md`); the
   loader rejects a mixed-order triple.
   The loader rejects a partial set on `color_method: 0`; none at all is
-  an uncolored tile. `colorMethod: 3` (15 entries) is the same three
+  an uncolored tile. `colorMethod: 3` is the same three
   bounds read as a percent of `maxValue`; that is a reading note for
   vendor exports only. The factory emits bounds solely for
   `color_method: 0` and nulls them for every other method (the
   partial-set behaviour on 3 is unverified server-side), and the loader
   rejects any bound supplied with `color_method: 3`.
-- `oldMetricValues: false`, `roundDecimals: null` on all 15; the factory
+- `oldMetricValues: false`, `roundDecimals: null` on all of them; the factory
   defaults (`true`, `1`) are left alone so existing output is untouched.
 - `focusOnPercent`, `showPercentText`, `showRemaining` (all false) appear
-  on 9 of 15 gauges AND on several non-gauge themes (4, 7, 8): the editor
+  on some gauges AND on several non-gauge themes (4, 7, 8): the editor
   writes them whenever it has run, and only the gauge reads them.
 
 ## `viewDetails`

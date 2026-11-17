@@ -262,7 +262,7 @@ the templates key.
 
 `summary_dashboard_pak_binding.md` quotes an `isTemplate =
 dir.getName().startsWith("GenericTemplates")` branch, from a 2026-08-25
-CFR decompile of 9.2 pre-release and 9.0 pre-release builds. The 9.0.2 GA
+CFR decompile of the 9.1.1 devel build. The 9.0.2 GA
 `installDashboardContent` above has no such branch. It always passes
 `getAdminUserId()`. The string `GenericTemplates` appears in **none** of
 the four jars in scratch (`vcops-view-server`, `vcops-bridge-server`,
@@ -273,7 +273,7 @@ dashboard, shared and bindable. Section 3 of the earlier
 `GenericTemplates*` directory starts a templates importer in the pak
 installer, does not hold for 9.0.2.
 
-On builds that do have the branch (9.2 pre-release, per the 2026-08-25
+On builds that do have the branch (9.1.1, per the 2026-08-25
 note), a `GenericTemplates*` import would start a templates importer.
 Whether it then resolves the clone depends on `File.listFiles()` order
 (unsorted) and on whether that thread is still alive when the clone is

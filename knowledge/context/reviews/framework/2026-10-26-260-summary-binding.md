@@ -23,7 +23,7 @@ Bytecode and SPA: the class files and JS the investigation read were not retaine
 | Claim | Verified? | How |
 |---|---|---|
 | Two-map first, then single-map once on non-`ok`, form remembered | Yes, as coded (`ui_client.py:382-406`) | Code read; tests `test_two_map_build_takes_one_call`, `..._falls_back_and_remembers`, `..._stops_working_still_falls_back`. |
-| Retry is safe: each build NPEs before writing | Holds for the four builds read, on the HTTP 200 error-panel answer | Investigation part 1: `getParameter` then `new JSONObject(null)` at 2607 (9.0.2) and 2578 (8.18.6); the 2026-08-25 note gives the same for 9.0.0-pre and 9.2; 9.1.1 reads the two maps (bytecode table). On those builds a single-map call to a two-map build, or the reverse, NPEs before any lookup. The trigger is broader than that evidence (W2). |
+| Retry is safe: each build NPEs before writing | Holds for the builds read, on the HTTP 200 error-panel answer | Investigation part 1: `getParameter` then `new JSONObject(null)` at 2607 (9.0.2) and 2578 (8.18.6); 9.1.1 reads the two maps (bytecode table). On those builds a single-map call to a two-map build, or the reverse, NPEs before any lookup. The trigger is broader than that evidence (W2). |
 | Single-map keeps resets | Yes | `association_params` merges `reset` as `<name>_::_null`. The overlap guard refuses a kind that is both bound and reset before any POST. Tested. Matches the SPA's `templateName + "_::_" + tabId`. |
 | Remembered form cannot leak across profiles or clients | Yes | `association_form` is an instance attribute set in `__init__`. There is no class or module state. `from_env` and the pak `ui_factory` build a fresh client per profile and per install. |
 | 9.0.2 readback without `isDashboard` | Yes | `summary_dashboard_tab`: an explicit `isDashboard` decides, otherwise a UUID `tabId` counts. That mirrors the server's own `isDashboard = UUID.fromString(tabId) parses` (assignment doc, `getSummaryTabId` section). The 9.0.2 shape is documented live (`{"tabId": "1680c6bc-..."}`, 2026-10-24). The pak repair path rejects only an explicit `isDashboard: false`, so it already copes. |
@@ -65,7 +65,7 @@ Fix: when the associate call raises, read `getSummaryTabId` back before reportin
 
 Authority: investigation part 1 and the build-98 record. Both refusals were HTTP 200 with the Ext "Internal Server Error" panel, from the NPE on the first line.
 
-A 401 or 403, a login-page redirect, a 502 or 504 from a proxy, or an expired CSRF token now trigger a write in the other form. That retry is still safe on the four builds read only because the other form NPEs there too. On a build nobody has read (another 9.0.x or 8.18.x patch, 9.1.0, 9.2 GA), the second write rests on inference. A gateway timeout that the server completed is exactly the case where a second form must not go out.
+A 401 or 403, a login-page redirect, a 502 or 504 from a proxy, or an expired CSRF token now trigger a write in the other form. That retry is still safe on the builds read only because the other form NPEs there too. On a build nobody has read (another 9.0.x or 8.18.x patch, 9.1.0, a later release), the second write rests on inference. A gateway timeout that the server completed is exactly the case where a second form must not go out.
 
 Fix: fall back only when the answer is HTTP 200 and its body carries the error-panel marker. Raise on anything else without sending the other form. Change the 500 parametrization to assert there is no fallback.
 
@@ -101,4 +101,4 @@ Fix: add the `javap -c -p -l` text of `associateResourceKindDashboards` for 9.0.
 
 ## If shipped as-is
 
-On 9.1.1 and 9.2, nothing visible changes except a longer wait budget and new SUMMARY line wording. On 9.0.2 and 8.18, every pak install with a Summary binding makes a first-ever, unproven single-map write on the operator's instance. If its answer body or its copy is not what the bytecode reading predicts, the install exits 3 with a possibly false "refused" line.
+On 9.1.1, nothing visible changes except a longer wait budget and new SUMMARY line wording. On 9.0.2 and 8.18, every pak install with a Summary binding makes a first-ever, unproven single-map write on the operator's instance. If its answer body or its copy is not what the bytecode reading predicts, the install exits 3 with a possibly false "refused" line.

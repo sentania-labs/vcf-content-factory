@@ -104,9 +104,7 @@ export:
    after dashboards were re-imported
    (`def014-view-binding-loss-2026-07-22.md` §4;
    `../api-surface/dashboard_selfprovider_pin_wire_format.md`, "scope=ALL
-   DASHBOARDS exported zero dashboard bodies"). The same build later exported
-   all 228 dashboards (`../api-surface/dashboard_widgets_alertvolume_section_viewdetails.md`
-   §Parity and caveats). The trigger was not isolated. A migrator that sees a
+   DASHBOARDS exported zero dashboard bodies"). The trigger was not isolated. A migrator that sees a
    zip with zero dashboards should treat it as a failed export, not as an
    instance with none.
 3. **Not seen:** a single dashboard silently missing from an otherwise

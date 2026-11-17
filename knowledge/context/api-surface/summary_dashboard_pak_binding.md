@@ -7,20 +7,18 @@ pak corpora and the UI layer only. The mechanism lives in the server-side
 pak installer, not in `describe.xml`, not in `post-install.py`, and no
 pak in the earlier 51-pak corpus happened to use it.
 
-Established 2026-08-25 by decompiling the installer on three disposable
-lab builds (CFR 0.152 run on the appliance JRE, output kept in the
-session scratchpad, not committed):
+Established 2026-08-25 by decompiling the installer on the devel lab
+build, VCF Operations 9.1.1 (its `lastbuildversion.txt` reads 9.0.0.0;
+CFR 0.152 run on the appliance JRE, output kept in the session
+scratchpad, not committed): `dashboards.properties` handling is present
+in `installDashboardContent` and `associateResourceKindDashboards`.
 
-| profile | build | `dashboards.properties` handling present |
-|---|---|---|
-| `qa`    | 9.2.0.0 pre-release build   | yes |
-| `main`  | 9.2.0.0 pre-release build  | yes (same class list, plus one unrelated class) |
-| `devel` | 9.0.0.0 pre-release build  | yes, `installDashboardContent` and `associateResourceKindDashboards` are byte-for-byte identical after decompilation |
-
-So the feature exists at least since VCF Operations 9.0. Whether 8.x
-had it was not checked (no 8.x appliance available; the 8.12-era HOL
-paks in `reference/references/` do not ship the file, which proves
-nothing either way).
+Later records show the binding running on 9.0.2 (the first-party vSAN
+pak, `../investigations/2026-10-13-first-party-summary-binding.md`, and
+compliance build 89, below) and on 8.18.7 (compliance 0.0.0.95,
+`../investigations/2026-10-15-devel-8-18-compliance-install.md`). The
+8.12-era HOL paks in `reference/references/` do not ship the file, which
+proves nothing either way.
 
 ## Where it lives
 
@@ -65,7 +63,7 @@ case-sensitive).
   documented one; the undocumented extra is that one directory can bind
   to several resource kinds via a comma list.
 
-Decompiled core (9.2, identical on 9.0):
+Decompiled core (9.1.1):
 
 ```java
 File dashboardsPropertiesFile = new File(dashboardsDir + File.separator + "dashboards.properties");
@@ -159,7 +157,7 @@ result now fails on it for DASHBOARDS
 installer templates), and sync and bundle install refuse a Section dashboard
 before importing on a build measured not to import it (below 9.1.0) and warn
 on the unmeasured 9.1.0 (`vcfcf_core.dashboards.widget_versions.import_check`).
-Measured vs unmeasured: Section is measured failing on 8.18.7 and 9.0.2 and proven importing on 9.1.1 (and 9.2); 9.1.0 is unmeasured.
+Measured vs unmeasured: Section is measured failing on 8.18.7 and 9.0.2 and proven importing on 9.1.1; 9.1.0 is unmeasured.
 
 ## The Summary clone can carry no widget config (9.0.2)
 
@@ -382,25 +380,16 @@ Summary Dashboards) is the way to clear it; the installer never does.
 Same class, `installFeatureContent`. Keys are `AdapterKind:ResourceKind`,
 values are ignored. Each key's resource kind id is mapped in the same
 association map to the **pak id** (spaces stripped) instead of a tab id.
-On the read side, 9.2's `getSummaryTabId` now returns
-`{tabId, isDashboard, pluginExist}`: `isDashboard` is true when the
+On the read side, `getSummaryTabId` on 9.1.1 returns
+`{tabId, isDashboard, pluginExist}` (9.0.2 returns `tabId` with no
+`isDashboard` key, see below): `isDashboard` is true when the
 value parses as a UUID; otherwise the SPA treats the value as a plugin
 key and mounts an Angular plugin component (`addPluginComponent`) for
 the Summary tab, falling back to the native `ResourceSummaryBuilder`
 with a "deprecated page" toast when the plugin is absent. These ids ARE
 tracked and removed on uninstall. This is how the new VCF-native
 summary tabs ship; it is not a dashboard and is out of scope for the
-factory. It exists on the 9.0 devel build too.
-
-## 9.2 SPA delta vs the 9.1 notes
-
-- `RESKND_ASSOCIATION` in `app.part4.min.js` is still static: 51
-  entries on 9.2, same first keys (`002006VMWAREVirtualMachine` ...).
-- `getSummaryTabId` moved from `app.part6` to `app.part4` and now
-  branches three ways (dashboard UUID / plugin key / native), see above.
-  The `002016AmazonAWSAdapter` prefix is hard-forced to `tabId = null`
-  server-side.
-- No `isTemplate` or `disabled` logic on the Summary path.
+factory. It exists on the 9.1.1 devel build.
 
 ## Field check: no installed pak uses it yet
 
@@ -411,10 +400,10 @@ the pak zip (`/storage/db/casa/pak/dist_pak_files/`) and the installer's temp di
 materialized because it was installed at first boot before any stuck admin dashboards existed. See
 `../investigations/2026-10-13-first-party-summary-binding.md`.
 
-`find / -name dashboards.properties` on all three appliances: zero
+`find / -name dashboards.properties` on the lab appliances: zero
 hits. The installed solutions that ship `content/dashboards/`
 (several Broadcom first-party packs) bind nothing. `feature.properties` is likewise absent.
-The mechanism exists in the product, but no shipped 9.2 pak on these
+The mechanism exists in the product, but no installed pak on these
 builds exercises it.
 
 ## Pak upgrade and the configuration-file store
@@ -680,7 +669,7 @@ was not traced past `ViewDataRetrieverServer`, which passes it through.
   was correct after all: the 9.0.2 SAN (vSAN) pak ships one (corrected
   2026-10-13, `../investigations/2026-10-13-first-party-summary-binding.md`).
 - Runtime not exercised: the code was read, not run. Before relying on
-  it, repackage a small pak with one bound dashboard on `main`, install, read
+  it, repackage a small pak with one bound dashboard on a lab instance, install, read
   `getResourceKindList?appendDetailPageMappings=true` and
   `getSummaryTabId`, uninstall, then clear the binding via the UI
   because uninstall will not).

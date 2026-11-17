@@ -1,8 +1,8 @@
 # Dashboard widgets: Alert Volume, Section, `viewDetails`, Scoreboard gauge
 
 **Date:** 2026-08-25
-**Instances:** qa (VCF Operations 9.2.0.0) primary; devel (9.1.1.0) parity check.
-**Method:** enumerated every dashboard on both instances through the UI
+**Instance:** devel (VCF Operations 9.1.1.0).
+**Method:** enumerated every dashboard on the instance through the UI
 Struts layer (`/ui/dashboard.action` `getDashboardList` ->
 `getDashboardConfig` + `getWidgetConfigs` per tab), pulled a Suite API
 content export (`POST /api/content/operations/export`, scope ALL,
@@ -10,13 +10,9 @@ content export (`POST /api/content/operations/export`, scope ALL,
 that ship on the appliance under
 `/usr/lib/vmware-vcops/tomcat-web-app/webapps/ui/js/widgets/` (widget,
 `editors/`, `components/gridster/GridsterPanel.js`). No content was created
-on either instance; nothing to clean up.
+on the instance; nothing to clean up.
 
 Verbatim samples (RULE-017): `reference/docs/extracted/dashboard-widgets/`
-- `qa-9.2.0-export-alertvolume-section-viewdetails.json`: Suite API export
-  of four qa dashboards (Alert Volume, Section, `viewDetails` populated);
-  four widgets describing unreleased features were removed from the
-  built-in health dashboard, see the directory README.
 - `vendor-template-Home.json`, `vendor-template-ComputeOps-dashboard.json`:
   Broadcom's own dashboard templates shipped on the appliance
   (`webapps/ui/dashboards/templates/`), which use all three features.
@@ -48,11 +44,11 @@ There is **no time window, no severity filter, no chart option** in the
 stored config. The editor exposes exactly: title, description, refresh
 content on/off, refresh interval, self provider on/off, and (when self
 provider is ON) a single-object picker. The 7-day window is fixed in the
-component and the chart always shows all criticalities. This was the same
-on qa 9.2 and devel 9.1, and the vendor Home template stores the same keys.
+component and the chart always shows all criticalities. The vendor Home
+template stores the same keys.
 
-`getWidgetConfigs` entry (qa, built-in "Environment Health Summary",
-self provider ON, pinned to vSphere World):
+`getWidgetConfigs` entry, self provider ON, pinned to vSphere World
+(illustrative, not a capture):
 
 ```json
 {
@@ -73,13 +69,14 @@ template: `refreshContent`, `refreshInterval`, `selfProvider`, `title`
 only).
 
 Export form (content zip `dashboard/dashboard.json`, same widget; note the
-resource id is symbolized to an `entries.resource` placeholder):
+resource id is symbolized to an `entries.resource` placeholder;
+illustrative, not a capture):
 
 ```json
 {
-  "tabId": "36fc9547-60b9-40ae-bf53-b19c921788b0",
+  "tabId": "<dashboard uuid>",
   "collapsed": false,
-  "id": "8789982e-628a-4755-a959-fbe98500baa7",
+  "id": "<widget uuid>",
   "gridsterCoords": {"w": 12, "x": 1, "h": 10, "y": 12},
   "state": "",
   "type": "IntSummaryAlertVolume",
@@ -153,7 +150,7 @@ Alert Volume with `selfProvider:false` fed by a Datacenter picker.
   next to `key`/gridster fields) when non-empty, and the Section widget
   config carries it too (GridsterPanel copies `title`, `description`,
   `viewDetails` into each section config).
-- On qa and devel exactly one dashboard populates it (built-in
+- On devel 9.1.1 exactly one dashboard populates it (built-in
   "VCF Operations Health", Scoreboard "License Server").
 
 ### Rendering / click behaviour (`WidgetBase.createViewDetailsBottomBar`)
@@ -199,12 +196,12 @@ Consequences:
 
 ### Route prefix: `operate`, not `operations`
 
-The 9.2 and 9.1 Angular bundles both define the dashboard route as
+The 9.1.1 Angular bundle defines the dashboard route as
 `/ui/operate/dashboards/dashboards;tabId=...` and the object page as
 `/ui/operate/inventory;mode=hierarchy;resourceId=...;tab=...`. The earlier
 `ui_deep_links.md` recorded `/ui/operations/dashboards/...`; only
-`operate/` appears in either bundle, and the one vendor-populated value on
-both labs uses `operate/`. Prefer `operate/`.
+`operate/` appears in the bundle, and the one vendor-populated value on
+devel 9.1.1 uses `operate/`. Prefer `operate/`.
 
 Vendor-shipped values (from the appliance templates), for reference:
 
@@ -219,12 +216,12 @@ Vendor-shipped values (from the appliance templates), for reference:
 ### Worked examples
 
 Link to another dashboard by tabId (the value is the dashboard UUID the
-factory assigns in YAML `id:`):
+factory assigns in YAML `id:`; illustrative, not a capture):
 
 ```json
 "config": {
   "title": "License Server",
-  "viewDetails": "/ui/operate/dashboards/dashboards;tabId=2061bfa9-b20e-404a-8ef3-4f094539ebed",
+  "viewDetails": "/ui/operate/dashboards/dashboards;tabId=<dashboard uuid>",
   ...
 }
 ```
@@ -255,32 +252,34 @@ treat it as high-confidence but unverified visually.
 
 ### Layout entry (`getDashboardConfig`)
 
+Illustrative, not a capture:
+
 ```json
 {"tabId": "...", "isLoading": false, "collapsed": true, "gridsterX": 1,
  "gridsterY": 6, "gridsterW": 12, "gridsterH": 1, "id": "<section uuid>",
- "title": "Ingestion", "key": "Section", "height": 0}
+ "title": "Section A", "key": "Section", "height": 0}
 ```
 
 `Ext.vcops.dashboard.widget.Section` declares statics `gridsterH: 1,
-gridsterW: 12`; every Section observed on both labs is exactly 12 x 1,
+gridsterW: 12`; every Section observed on devel 9.1.1 is exactly 12 x 1,
 `height: 0`. `collapsed` is the persisted expand/collapse state.
 
 ### It DOES have a widget-config entry
 
 `getWidgetConfigs` returns `widget_<id>` for Sections just like any other
 widget, and it is not decorative: it carries the **explicit membership
-list**.
+list** (illustrative, not a capture):
 
 ```json
-"widget_b5a33f68-4988-4644-b5aa-45df86875dbe": {
-  "title": "Ingestion",
-  "titleLocalized": "Ingestion",
+"widget_<section uuid>": {
+  "title": "Section A",
+  "titleLocalized": "Section A",
   "description": "",
-  "widgets": ["39f107d7-...", "1cca7c43-...", "640a2f84-...", "..."]
+  "widgets": ["<child uuid 1>", "<child uuid 2>", "<child uuid 3>"]
 }
 ```
 
-Export form:
+Export form (illustrative, not a capture):
 
 ```json
 {
@@ -290,12 +289,12 @@ Export form:
   "gridsterCoords": {"w": 12, "x": 1, "h": 1, "y": 21},
   "state": "",
   "type": "Section",
-  "title": "VCF Health",
+  "title": "Section B",
   "config": {
-    "title": "VCF Health",
-    "titleLocalized": "VCF Health",
+    "title": "Section B",
+    "titleLocalized": "Section B",
     "description": "",
-    "widgets": ["0a6e7792-0259-4e03-81b6-8d220b537462", "44d4360f-acfe-4cfa-827d-4ae499a76c1f"]
+    "widgets": ["<child uuid 1>", "<child uuid 2>"]
   },
   "height": 0
 }
@@ -415,142 +414,12 @@ Minimal gauge Scoreboard config (the rest of the Scoreboard keys as in
 
 ## Widgets bound to many resource kinds
 
-**Date:** 2026-08-26. **Instance:** qa (9.2.0.0 pre-release lab build).
-**Question:** when one summary dashboard is bound (via
-`associateResourceKindDashboards`, see `summary_dashboard_assignment.md`)
-to several resource kinds, how does a Scoreboard / PropertyList whose
-`metric.resourceKindMetrics[]` entries carry a `resourceKindId` behave on
-a page object of another kind, and is there an "any kind" form?
-
-**Method:** replayed the exact two calls the widgets issue on render
-(`utility.action getTopImportantMetrics`, then
-`widgetScoreboard.action getMetricValues`), taken verbatim from
-`webapps/ui/js/widgets/Scoreboard.js` (lines 280-330 and 405-445) and
-`widgets/PropertyList.js` (`getResourceMetricsByResourceKind`), with a
-hand-built `resourceKindMetrics` list against live VMWARE objects
-(`resourceStatus=DATA_RECEIVING`), then confirmed the client-side rules
-from those sources. A throwaway dashboard carrying the same entries was
-also imported and deleted (three ids, all confirmed gone), but its widget
-configs never landed on this build (see the "Import regression" note at
-the end), so the replay is the evidence.
-
-### 1. Selection is server-side, by the page object's kind
-
-The widget JS does **no** filtering. It sends the whole
-`resourceKindMetrics` array plus the object(s) in context to
-`getTopImportantMetrics` and renders exactly the `resourceMetrics` rows
-that come back. The server keeps only the entries whose `resourceKindId`
-equals the object's kind id and drops the rest silently.
-
-Entry list sent (one key, once per kind; `resourceKindId` is
-`"0020" + len(adapterKind) as 2 digits + adapterKind + resourceKind`):
-
-```json
-[{"metricKey": "cpu|usage_average", "resourceKindId": "002006VMWAREVirtualMachine",
-  "resourceKindName": "VirtualMachine", "label": "VM CPU Usage",
-  "colorMethod": 0, "yellowBound": 70, "orangeBound": 85, "redBound": 100,
-  "id": "x-VirtualMachine", "isStringMetric": false, "handleOldColoring": false,
-  "link": "", "maxValue": "", "metricName": "CPU Usage", "metricUnitId": null, "unit": null},
- {"metricKey": "cpu|usage_average", "resourceKindId": "002006VMWAREHostSystem",
-  "resourceKindName": "HostSystem", "label": "Host CPU Usage",
-  "colorMethod": 0, "yellowBound": 70, "orangeBound": 85, "redBound": 100,
-  "id": "x-HostSystem", "isStringMetric": false, "handleOldColoring": false,
-  "link": "", "maxValue": "", "metricName": "CPU Usage", "metricUnitId": null, "unit": null}]
-```
-
-Request (form-encoded POST, UI session, `X-Requested-With: XMLHttpRequest`):
-`mainAction=getTopImportantMetrics`, `resourceKindMetrics=<json above>`,
-`resources=[{"id":"<object uuid>"}]`, `relationshipMode=0`, `depth=1`,
-`xmlConfigFileName=` (empty; that is `resInteractionMode: null`),
-`limit=100`, `secureToken=<csrf>`. PropertyList sends the same plus
-`propertyMetricsOnly=true` and `limit=10000`.
-
-| Page object | `resourceProcessed/Total` | `metricProcessed/Total` | `resourceMetrics` returned |
-|---|---|---|---|
-| VirtualMachine (`vcfops-arm-m01-w01`) | 1/1 | 1/1 | one row: `002006VMWAREVirtualMachine` / `cpu\|usage_average`, label `VM CPU Usage` |
-| HostSystem (`10.161.121.16`) | 1/1 | 1/1 | one row: `002006VMWAREHostSystem` / `cpu\|usage_average`, label `Host CPU Usage` |
-| Datastore (kind not in the list) | 0/0 | 0/0 | `[]` |
-
-`getMetricValues` on each returned row produced a real tile: VM
-`value "11.5"`, Host `value "3.3"`, both `state Normal`, `colorHex
-#8ABF5B`, bounds echoed as strings (`"70"/"85"/"100"`). So on a
-multi-kind bound dashboard a Scoreboard gets **exactly its own kind's
-tile(s), with values**; the other kinds' entries produce nothing, and an
-object whose kind has no entry gets an empty widget (the JS path for an
-empty `resourceMetrics` clears the container and fires `widgetLoad`
-without calling `getMetricValues`).
-
-PropertyList behaves identically (`propertyMetricsOnly=true`, entries
-`config|version` for VirtualMachine and `summary|version` /
-`config|hyperThread|active` for HostSystem): VM object returns only the
-VM row (`isPropertyMetric: true`), Host only the Host row, Datastore
-nothing.
-
-Note the `metricTotalCount` is the count **after** kind filtering (1, not
-2), so the "showing N of M metrics" warning in PropertyList never fires
-for dropped foreign-kind entries.
-
-### 2. Non-matching entries are hidden, not "?" tiles, and there is no wildcard
-
-- **Hidden.** Tiles are created only from `getMetricValues` rows, which
-  are created only from `getTopImportantMetrics` rows. A foreign-kind
-  entry never reaches the client's tile loop (`Scoreboard.js`
-  `loadScoreBoardPanel` -> `applyScoreboardConfig`). The `?` / `Unknown`
-  grey tile is a different mechanism (a returned row whose `colorMethod: 0`
-  bounds are incomplete; see the lesson
-  `scoreboard-partial-bounds-render-unknown`). The only client-side use
-  of `resourceKindId` is a cosmetic re-apply of `colorMethod` on rows
-  whose `(resourceKindId, metricKey)` matches a config entry
-  (`Scoreboard.js` line 355), which is why per-kind duplicates of the
-  same key with different `colorMethod` are safe: each row matches its
-  own kind's entry.
-- **No wildcard.** Every "any kind" form of `resourceKindId` tried on the
-  Host object made `getTopImportantMetrics` return the Struts ERRPANEL
-  page (HTTP 200, HTML body, `Internal Server Error`) instead of JSON, so
-  the widget's `success` handler would throw on decode and the widget
-  would stay blank: `""`, `"*"`, `null`, key omitted, and the adapter-only
-  prefix `"002006VMWARE"`. A syntactically valid but wrong kind id is the
-  silent `resourceMetrics: []` case above. There is no
-  `adapterKindKey`/`resourceKindKey` alternative in the entry, and the
-  `metric.subMode: "resourceKindAll"` value seen in stored configs is the
-  editor's interaction mode 2 ("all objects of this kind" for
-  self-provider widgets: `widgets/editors/Scoreboard.js` lines 553-565),
-  not an any-kind switch; the render path checks `selfProvider` before
-  it looks at `subMode`, so it is inert on inherited-object widgets.
-- The Suite API and both OpenAPI specs have nothing for this layer
-  (no `dash` paths); the server-side filter lives in the UI webapp's
-  `UtilityAction.getTopImportantMetrics`, whose jars are not readable on
-  the appliance without a decompiler (no `javap`/`unzip` shipped).
-
-### 3. What Broadcom does
-
-`getResourceKindList?appendDetailPageMappings=true` across every adapter
-kind on qa (96 distinct `resourceKindTemplate` values): every
-dashboard-backed kind maps to a template name bound to **exactly one
-kind**. Broadcom's own summary dashboards are one dashboard per kind
-(for example `Host System Summary`, `Datastore Summary`, `Cluster Compute
-Resource Summary` as native pages). The
-only template name shared across kinds is the generic default `Summary
-Detail`. When a factory dashboard is bound to N kinds the server
-materializes N template copies and the list shows them as `<name>`,
-`<name> 1`, `<name> 2`, ... (`resourceKindTemplate` is a plain name here,
-not `name_::_uuid`).
-
-### Recommendation for `summary_for` lists
-
-Per-kind entries. A widget on a dashboard whose `summary_for` lists K
-kinds should carry each metric once per kind (K entries with the same
-`metric_key`, each with its own `adapter_kind`/`resource_kind`); the
-server picks the one matching the page object and hides the rest, and
-`getWidgetConfigs` stores them verbatim. A wildcard does not exist
-(server error), and one dashboard per kind is what Broadcom does but
-multiplies content K-fold for no rendering gain. The remaining cost of
-per-kind entries is authoring bulk (K x metrics), which is a renderer
-concern: a `resource_kinds:` list or an "expand over `summary_for`" flag
-on `MetricSpec` would let YAML stay single-entry while the emitted
-`resourceKindMetrics[]` fans out per kind. Non-metric widgets (Section,
-View, AlertVolume, TextDisplay) have no `resourceKindMetrics` and need
-nothing.
+The factory renderer fans `resourceKindMetrics[]` out per kind for a
+dashboard bound to several resource kinds. The server-side behaviour this
+relies on (the widget's metric lookup keeps only the entries whose
+`resourceKindId` matches the page object's kind, with no wildcard form)
+is not recorded on a released version in this repo and needs
+re-verification on one.
 
 ### Renderer behaviour (implemented)
 
@@ -574,35 +443,16 @@ fanned kind gets its own slot there; the importer rewrites it to the
 
 Validation note: the loader does not check that a metric key exists on
 every listed kind. A key missing on one kind is a hidden entry on that
-kind's page (server-side drop, section 1 above), not an error.
-
-### Import regression on the 9.2 pre-release lab build (qa, 2026-08-26)
-
-Three content-zip dashboard imports on this build (two factory-rendered,
-one re-import of the server's **own** `POST /api/content/operations/export`
-output of an existing dashboard under a new id and name) all reported
-`imported=1 failed=0 FINISHED`, created the tab with the right widgets,
-titles and coordinates, yet every widget's stored config was empty:
-`getWidgetConfigs` returned `{"title": "Scoreboard"}` /
-`{"title": "Property List"}` (default titles) per widget, and a fresh
-export showed `"config": {}` for each, while the pre-existing dashboards
-on the same instance (imported on an earlier lab build) still export and read
-back full configs. The renderer output was verified intact in the zip
-(`dashboard/dashboard.json` `widgets[].config` populated,
-`entries.resourceKind` placeholders `resourceKind:id:N_::_` present).
-Treat any content-installer run against this build as suspect until a
-newer lab build is checked; `bind-summary` of such a dashboard would bind
-empty widgets.
+kind's page, not an error.
 
 ---
 
 ## Parity and caveats
 
-- devel 9.1.1: identical `IntSummaryAlertVolume` config keys and identical
-  Section `config.widgets` shape; same single `viewDetails` value on the
-  same built-in dashboard; same `operate/` routes in the bundle.
-- The Suite API export with `scope: ALL` returned all 228 qa dashboards
-  this time (contrast the deferred-import note in
+- A Suite API export with `scope: ALL` carries every listed dashboard on
+  8.18.7, 9.0.2 and 9.1.1
+  (`../investigations/2026-11-11-stock-content-ships-dangling-refs-migrator-false-missing.md`;
+  contrast the deferred-import note in
   `dashboard_selfprovider_pin_wire_format.md`; that caveat is about freshly
   imported, un-materialized dashboards, not the export in general).
 - The export zip nests: outer `dashboards/<uuid>` is itself a zip whose
@@ -622,5 +472,6 @@ empty widgets.
 - 2026-08-25 (review follow-up): Section `x` must be 1 and no other
   widget may share a Section's row (loader errors); `summary_for` is
   stored normalized and must be unique across a dashboard set.
-- 2026-08-26: added "Widgets bound to many resource kinds": server-side kind selection in `getTopImportantMetrics`, no wildcard `resourceKindId`, per-kind entry recommendation, and the widget-config import regression seen on the 9.2 pre-release lab build.
+- 2026-08-26: added "Widgets bound to many resource kinds" (per-kind entries).
 - 2026-08-26: "Renderer behaviour (implemented)" under that section: multi-kind `summary_for` fan-out of `resourceKindMetrics[]` in `render.py`.
+- 2026-11-16: samples and statements limited to the released version (9.1.1); the multi-kind server behaviour is pending re-verification on a released version.

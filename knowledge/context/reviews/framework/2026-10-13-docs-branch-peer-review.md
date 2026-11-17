@@ -71,8 +71,8 @@ install flow must wait ...") and
 ("Re-bind (`bind-summary`) once ...") present the re-bind as the remedy. On
 this branch: the re-bind has never been run on 9.0.2 (the proof plan in
 `investigations/2026-10-13-compliance-summary-clone-config-loss.md:187-203`
-is unexecuted and "needs Scott's go"); it was only seen working on qa 9.2
-(`2026-10-13-summary-dashboard-parked.md:26-28`); the #200 tooling branch is
+is unexecuted and "needs Scott's go"); it has not been seen working on a
+released version; the #200 tooling branch is
 CHANGES REQUESTED and unpushed (`parked.md:36`); and
 `investigations/2026-10-13-dashboard-import-deferral-trigger.md:377-379`
 says this route was "already rejected by Scott", with no approval record

@@ -17,7 +17,7 @@ The 9.0.x dashboard importer has no `Section` widget type (47 types on
 skip message with capitalised JSON keys the dashboard does not carry, that
 log call throws `JSONObject["Title"] not found`, and the whole dashboard
 import aborts. No share, no Summary binding, no install error. The mock
-had been proven on a 9.2 instance and a 9.1 devel build in August; devel
+had been proven on a 9.1 devel build in August; devel
 had since been rebuilt at 9.0.2 and nobody re-read the version.
 
 Build 89 removed the Section row and the dashboard imported and bound.
@@ -64,7 +64,7 @@ never created, not even partly, on either path.
   path (`vcfcf_dashboards.client.import_count_findings`, pinned copies in
   both installer templates).
 - Measured vs unmeasured: Section fails on 8.18.7 and 9.0.2 (measured) and
-  imports on 9.1.1 and 9.2 (proven); 9.1.0 is unmeasured. So the factory
+  imports on 9.1.1 (proven); 9.1.0 is unmeasured. So the factory
   refuses below 9.1.0 and only warns on 9.1.0.
 - After every pak install, count the pak's dashboards on the instance
   (same discipline as `new-metric-alerts-need-two-samples.md`) and, for a

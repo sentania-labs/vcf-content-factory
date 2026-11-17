@@ -2,7 +2,7 @@
 
 - Date: 2026-08-26, tooling. Instance: devel (VCF Operations 9.1.1.0,
   profile `devel`, admin, disposable). One throwaway content-zip import,
-  deleted afterwards. Resource listing cross-checked on qa (9.2.0.0).
+  deleted afterwards.
 - Question: a pinned View widget carries `config.resource.resourceId:
   "resource:id:N_::_"` plus `entries.resource[N].name`. Does the importer
   resolve `name` against the resource kind key or the resource display
@@ -49,7 +49,7 @@ Resolution order is now: explicit `pin.name` > leaf-kind redirect table
 display-name table (`_WORLD_DISPLAY_NAME`) > kind key.
 
 `_WORLD_DISPLAY_NAME` seeds: `NSXTAdapter/NSXT World -> NSX World`
-(live-verified 9.1.1 and 9.2), `CASAdapter/CAS World -> Automation World`
+(live-verified 9.1.1), `CASAdapter/CAS World -> Automation World`
 and `VMWARE_INFRA_HEALTH/LICENSE_USAGE_WORLD -> License Usage` (both from
 the public VCF License Consumption Overview export's `entries.resource[]`
 and the VCFAutomation reference dashboard; neither kind has an instance on
