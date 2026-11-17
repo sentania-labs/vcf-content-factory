@@ -50,7 +50,7 @@ Ask these questions in order. Accept free-form answers; don't coerce. Defaults a
    - Default: slugified dashboard name with the `[VCF CF]` prefix stripped if present, lowercased, spaces→hyphens, non-alphanum stripped.
    - Example: `IDPS Planner` → `idps-planner`.
 2. **Author / attribution** — free-form string shown in the bundle README.
-   - Example: `"Scott Bowe"` or `"Community — Various"` or `"Brock Peterson (Broadcom)"`.
+   - Example: `"Scott Bowe"` or `"Community — Various"` or `"Brock Peterson"`.
 3. **License** — SPDX identifier preferred, free-form accepted.
    - Suggested list: `MIT`, `Apache-2.0`, `BSD-3-Clause`, `CC-BY-4.0`, `CC-BY-SA-4.0`, `Proprietary`.
 4. **Short description** — one sentence describing the bundle's purpose. Goes into the manifest's `description` field.
