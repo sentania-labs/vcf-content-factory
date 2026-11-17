@@ -132,7 +132,7 @@ triplet without acquiring an admin token first.
 | `OPEN_LDAP` | unprobed (no source configured) | unprobed | none expected | not supported | likely same shape as AD; configurable triplet probably sufficient |
 | `SSO_SAML` | refused (would need SAML2 bearer pre-mint) | redirect path (UI calls `logInSSOUser()`); form-POST cannot drive | external SAML IdP STS exchange | not supported | **defer** — requires SAML STS client in tooling |
 | `VIDM` | refused (would need VIDM token pre-mint) | redirect path (`logInVidmUser()`); form-POST cannot drive | external VIDM OAuth | not supported | **defer** — requires VIDM OAuth client (similar to VIDB) |
-| `VIDB` | refused per the earlier analysis; re-confirmed | redirect path (`loginVIDBUser()`); form-POST cannot drive (returns `?`) | OAuth code exchange w/ confidential `client_secret` we cannot reach | not supported | **unreachable** for headless flow — Jasnah's conclusion stands; document as "use a Local service account when VIDB is the only source" |
+| `VIDB` | refused per the earlier analysis; re-confirmed | redirect path (`loginVIDBUser()`); form-POST cannot drive (returns `?`) | OAuth code exchange w/ confidential `client_secret` we cannot reach | not supported | **unreachable** for headless flow — the earlier conclusion stands; document as "use a Local service account when VIDB is the only source" |
 | `CSP` | refused (would need CSP token) | unprobed (no source configured) | external CSP OAuth | not supported | **defer** — relevant only to VMC SaaS |
 
 `roles=[]` on minted tokens means the test principal has no Ops

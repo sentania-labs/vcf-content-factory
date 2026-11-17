@@ -33,7 +33,7 @@ This handoff stands alone for the strategic picture. Cross-references are for "I
 
 8. **MPB shares iSDK template infrastructure.** Generated `manifest.txt` has un-filled `"display_name": "DISPLAY_NAME"` and `"vendor": "VENDOR"` placeholders — the same placeholders observed in Integration-SDK (Track B) paks. Don't assume these are MPB-specific bugs; they're shared scaffolding.
 
-9. **Pak signing is broken in instructive ways.** Single self-signed VMware cert signs everything (Broadcom-internal + marketplace re-signed third-party). Cert **expired 2026-01-03** but paks dated 2025-12-30 still ship with it; appliance presumably skips validity checks. SHA-1 hashes + sha1WithRSAEncryption + RSA exponent 3. Community/dev paks ship UNSIGNED (zero-byte `signature.cert`). VCF-CF needs to decide signing posture; the unsigned/admin-override path is the path of least resistance. See `analysis/pak-signing-chain.md`.
+9. **Pak signing: observed format.** Single self-signed VMware cert signs everything (Broadcom-internal + marketplace re-signed third-party). Cert **expired 2026-01-03** but paks dated 2025-12-30 still ship with it; appliance presumably skips validity checks. SHA-1 hashes + sha1WithRSAEncryption + RSA exponent 3. Community/dev paks ship UNSIGNED (zero-byte `signature.cert`). VCF-CF needs to decide signing posture; the unsigned/admin-override path is the path of least resistance. See `analysis/pak-signing-chain.md`.
 
 10. **VCF-CF Tier 1 is fundamentally a Kotlin code generation task**, not just declarative-pak emission. Two implementation paths (§ 7 below) with concrete recommendations and risk tradeoffs.
 
