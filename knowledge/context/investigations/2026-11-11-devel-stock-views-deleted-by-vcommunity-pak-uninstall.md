@@ -308,3 +308,14 @@ not exact:
   returning no series are unexplained.
 
 An exact restore needs a 9.0.2 export of the same ids, which was not available.
+
+(Correction 2026-11-16: the title differences above are an artifact. Audit
+lines name a view by its raw XML `<Title>`, and exports show the localized
+English title. On the product's own shipped files, 9.0.2.0200 and 9.1.1
+have the same titles for all 117 ids, and `9e427b59` is the same view on
+both. Their XML differs only for `4d9b6ad6` and `524d0468`. So this restore
+was exact apart from those two and the es/fr/ja strings. Devel also had
+upstream vCommunity 0.2.8 installed and removed on 2026-06-11, which deleted
+117 built-in views; the 10-14 update re-imported them. The shipped source
+files are in each node's `/storage/db/casa/pak/dist_pak_files/`. See
+`2026-11-16-builtin-view-restore-sources.md`.)
