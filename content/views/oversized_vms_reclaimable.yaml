@@ -9,6 +9,9 @@ description: >
   upstream cluster-selector widget to scope the list to the selected cluster.
   Default sort is vCPUs to Remove descending (biggest reclaim first), set on
   the view itself, so every dashboard that embeds it opens in that order.
+  Also shows current vCPU and memory (GB), plus 30-day CPU Demand and Mem Usage
+  Avg / Max / P95 percent columns (view time window: 30 days) so the effect of a
+  resize can be judged from the list.
 subject:
   adapter_kind: VMWARE
   resource_kind: VirtualMachine
@@ -17,26 +20,68 @@ customgroup: "[VCF CF] VMs - Oversized Only"
 
 summary: false
 
+time_window:
+  unit: DAYS
+  count: 30
+
 columns:
-  # Parent cluster, summary|parentCluster is the standard relationship
-  # property the VMWARE adapter populates for every VM; used in the sibling
-  # vm_rightsizing_candidates.yaml (same form confirmed working).
+  # Parent cluster, standard relationship property (same form as sibling views).
   - attribute: summary|parentCluster
     display_name: "Cluster"
     unit: ""
 
-  # vCPUs the capacity engine recommends removing. Primary sort column.
+  # Current allocation, latest value (no transformation = CURRENT, ignores the 30-day window).
+  - attribute: cpu|corecount_provisioned
+    display_name: "vCPU"
+    unit: ""
+
+  # preferredUnitId="gb" makes the server convert KB to GB natively.
+  - attribute: config|hardware|memoryKB
+    display_name: "Memory (GB)"
+    unit: "gb"
+
+  # vCPUs the capacity engine recommends changing. Primary sort column.
   - attribute: summary|oversized|vcpus
     display_name: "vCPUs to Remove"
     sort: desc
 
-  # Memory to reclaim. Source unit is KB; unit: "gb" instructs the renderer
-  # to emit preferredUnitId="gb" so VCF Ops converts KB→GB natively.
-  # Same pattern as OnlineCapacityAnalytics|mem|demand|capacityRemaining in
-  # cluster_capacity_breakdown.yaml.
   - attribute: summary|oversized|memory
     display_name: "Memory to Remove (GB)"
     unit: "gb"
 
+  # 30-day CPU demand (view time_window), Avg / Max / P95.
+  - attribute: cpu|demandPct
+    display_name: "CPU Demand Avg %"
+    unit: percent
+    transformation: AVG
+
+  - attribute: cpu|demandPct
+    display_name: "CPU Demand Max %"
+    unit: percent
+    transformation: MAX
+
+  - attribute: cpu|demandPct
+    display_name: "CPU Demand P95 %"
+    unit: percent
+    transformation: PERCENTILE
+    percentile: 95
+
+  # 30-day memory usage (view time_window), Avg / Max / P95.
+  - attribute: mem|usage_average
+    display_name: "Mem Usage Avg %"
+    unit: percent
+    transformation: AVG
+
+  - attribute: mem|usage_average
+    display_name: "Mem Usage Max %"
+    unit: percent
+    transformation: MAX
+
+  - attribute: mem|usage_average
+    display_name: "Mem Usage P95 %"
+    unit: percent
+    transformation: PERCENTILE
+    percentile: 95
+
 released: false
-version: "1.0.0"
+version: "1.1.0"
