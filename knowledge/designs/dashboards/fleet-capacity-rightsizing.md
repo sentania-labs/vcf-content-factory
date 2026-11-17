@@ -108,3 +108,58 @@ self-provider fix"): `selfProvider: true` + vSphere World resource pin.
 Repo fix: add `self_provider: true` and
 `pin: {adapter_kind: VMWARE, resource_kind: vSphere World}` to the widget —
 the same pattern Band A `fleet_summary` already uses. Interactions unchanged.
+
+---
+
+## Change: 2026-11-17 (scoreboard height, usage columns, VM lists on their own rows)
+
+**Initial prompt (verbatim):**
+
+> This score board seems like it needs a bit of a height adjustment. Did we not validate it visually?
+>
+> Additionally, I'd liek the oversized VMs and undersized VMs dashboard to have:
+> CPU Demand Avg, CPU Demand Max. CPU Demand P95, Memory Usage avg, memory Usage Mx, Memory P95 utilizatio, along with how much memory and CPU they have - so we can gauge better the affect it.
+>
+> SO like vCPU, Allocated Mem, CPU Avg, CPU Max, CPU P95, Mem Av, Mem Max, P95 (30 day spans).
+>
+> It probably means widening the oversized/undersized widgets, and putting them on seperate lines.
+
+**Vision:** the two VM lists should let a reader judge a rightsizing
+recommendation without leaving the dashboard: what the VM has now, what the
+engine recommends, and how hard it was actually used over the last 30 days.
+The Fleet Summary tiles must show their labels, which the current height
+clips.
+
+### Wireframe (12-column grid, supersedes Bands A, D-1, D-2 and the y of every band below A)
+
+| Band | Widget | Type | x | y | w | h | Change |
+|---|---|---|---|---|---|---|---|
+| A | Fleet Summary | Scoreboard (vSphere World, same 7 metrics) | 1 | 1 | 12 | 3 | h 2 to 3 |
+| B | Cluster Capacity Breakdown | View | 1 | 4 | 12 | 4 | y only |
+| C-1 | CPU Capacity Pressure by Cluster | Heatmap | 1 | 8 | 4 | 4 | y only |
+| C-2 | Memory Capacity Pressure by Cluster | Heatmap | 5 | 8 | 4 | 4 | y only |
+| C-3 | Storage Capacity Pressure by Cluster | Heatmap | 9 | 8 | 4 | 4 | y only |
+| D-1 | Oversized VMs, Reclaimable | View | 1 | 12 | 12 | 5 | full width, own row |
+| D-2 | Undersized VMs, Add Resources | View | 1 | 17 | 12 | 5 | full width, own row |
+| E | Datastore Reclaimable Space | View | 1 | 22 | 12 | 4 | y only |
+
+Interactions unchanged: Band B selection drives D-1, D-2 and E.
+
+### Columns for D-1 and D-2 (VirtualMachine, 30-day window)
+
+| Column | Key | Transformation |
+|---|---|---|
+| Cluster | `summary|parentCluster` | current (latest value, ignores the window) |
+| vCPU | `cpu|corecount_provisioned` | current (latest value, ignores the window) |
+| Memory (GB) | `config|hardware|memoryKB` | current (latest value, ignores the window) |
+| vCPUs to Remove / to Add | `summary|oversized|vcpus` / `summary|undersized|vcpus` | current (latest value, ignores the window) |
+| Memory to Remove / to Add (GB) | `summary|oversized|memory` / `summary|undersized|memory` | current (latest value, ignores the window) |
+| CPU Demand Avg % | `cpu|demandPct` | average |
+| CPU Demand Max % | `cpu|demandPct` | maximum |
+| CPU Demand P95 % | `cpu|demandPct` | 95th percentile |
+| Mem Usage Avg % | `mem|usage_average` | average |
+| Mem Usage Max % | `mem|usage_average` | maximum |
+| Mem Usage P95 % | `mem|usage_average` | 95th percentile |
+
+Keys are the ones already in use in `content/views/vm_rightsizing_candidates.yaml`.
+Mock: `fleet-capacity-rightsizing.html`.

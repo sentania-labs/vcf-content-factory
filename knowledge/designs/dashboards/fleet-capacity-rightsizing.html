@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Mock: [VCF CF] Fleet Capacity &amp; Rightsizing</title>
+<style>
+  body { background:#1b2a32; color:#e9ecef; font:13px/1.4 "Segoe UI", Arial, sans-serif; margin:0; padding:16px; }
+  h1 { font-size:16px; margin:0 0 4px; font-weight:600; }
+  .note { color:#9fb3bf; margin-bottom:12px; }
+  .sim { display:inline-block; background:#7a4b00; color:#ffd88a; padding:1px 8px; border-radius:3px; font-size:11px; }
+  .grid { display:grid; grid-template-columns:repeat(12,1fr); grid-auto-rows:34px; gap:8px; }
+  .w { background:#22343c; border:1px solid #3b4f58; border-radius:3px; overflow:hidden; display:flex; flex-direction:column; }
+  .w > .t { padding:5px 10px; border-bottom:1px solid #3b4f58; font-weight:600; display:flex; justify-content:space-between; }
+  .w > .t span { font:11px ui-monospace, Consolas, monospace; color:#8ea3ad; font-weight:400; }
+  .chg { color:#7fd18b !important; }
+  .b { padding:8px 10px; flex:1; overflow:hidden; }
+  .tiles { display:grid; grid-template-columns:repeat(7,1fr); gap:6px; height:100%; }
+  .tile { background:#2c444e; border-radius:3px; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+  .tile b { font-size:22px; }
+  .tile i { font-style:normal; color:#b8c7cf; font-size:11px; }
+  .tile code, td code, .k { font:10px ui-monospace, Consolas, monospace; color:#7f96a1; }
+  table { border-collapse:collapse; width:100%; }
+  th, td { text-align:left; padding:3px 8px; border-bottom:1px solid #31454e; white-space:nowrap; }
+  th { color:#b8c7cf; font-weight:600; font-size:12px; }
+  th.new { color:#7fd18b; }
+  .heat { height:100%; display:grid; grid-template-columns:3fr 2fr 1fr; gap:3px; }
+  .heat div { border-radius:2px; }
+</style>
+</head>
+<body>
+<h1>[VCF CF] Fleet Capacity &amp; Rightsizing: proposed layout, 2026-11-17</h1>
+<div class="note"><span class="sim">SIMULATED VALUES</span> Nothing on this page was read from an instance. Green text marks what changes. Keys are shown for the widgets that change; the unchanged widgets are drawn schematically and their definitions are in the YAML they name.</div>
+
+<div class="grid">
+
+  <div class="w" style="grid-column:1 / span 12; grid-row:1 / span 3;">
+    <div class="t">Fleet Summary <span class="chg">Scoreboard · vSphere World · h 2 → 3 so the labels show</span></div>
+    <div class="b"><div class="tiles">
+      <div class="tile"><b>10</b><i>Clusters</i><code>summary|total_number_clusters</code></div>
+      <div class="tile"><b>109</b><i>Hosts</i><code>summary|total_number_hosts</code></div>
+      <div class="tile"><b>2,373</b><i>VMs</i><code>summary|total_number_vms</code></div>
+      <div class="tile"><b>18</b><i>Powered-off VMs</i><code>summary|number_poweredOff_vms</code></div>
+      <div class="tile"><b>71</b><i>Reclaimable vCPU</i><code>…oversized_vcpus_toberemoved</code></div>
+      <div class="tile"><b>4,583</b><i>Reclaimable Mem (GB)</i><code>…oversized_memory_toberemoved</code></div>
+      <div class="tile"><b>32.9</b><i>Potential $ Savings</i><code>cost|potential_savings|oversized_vms</code></div>
+    </div></div>
+  </div>
+
+  <div class="w" style="grid-column:1 / span 12; grid-row:4 / span 4;">
+    <div class="t">Cluster Capacity Breakdown <span>View · primary selector · unchanged · schematic, columns abbreviated (see cluster_capacity_breakdown.yaml)</span></div>
+    <div class="b"><table>
+      <tr><th>Name</th><th>CPU Remaining</th><th>CPU Usage %</th><th>Mem Usage %</th><th>Disk Used</th><th>Capacity Remaining %</th><th>Time Remaining</th></tr>
+      <tr><td>cluster-01</td><td>447,159 MHz</td><td>22.1 %</td><td>13.7 %</td><td>18,911 GB</td><td>92.4 %</td><td>&gt; 1 Year</td></tr>
+      <tr><td>cluster-02</td><td>447,159 MHz</td><td>22.2 %</td><td>13.7 %</td><td>18,911 GB</td><td>92.4 %</td><td>&gt; 1 Year</td></tr>
+    </table></div>
+  </div>
+
+  <div class="w" style="grid-column:1 / span 4; grid-row:8 / span 4;">
+    <div class="t">CPU Capacity Pressure by Cluster <span>Heatmap · unchanged · schematic</span></div>
+    <div class="b"><div class="heat"><div style="background:#c9c03c"></div><div style="background:#c9c03c"></div><div style="background:#f5a623"></div></div></div>
+  </div>
+  <div class="w" style="grid-column:5 / span 4; grid-row:8 / span 4;">
+    <div class="t">Memory Capacity Pressure by Cluster <span>Heatmap · unchanged · schematic</span></div>
+    <div class="b"><div class="heat"><div style="background:#c9c03c"></div><div style="background:#c9c03c"></div><div style="background:#74b43b"></div></div></div>
+  </div>
+  <div class="w" style="grid-column:9 / span 4; grid-row:8 / span 4;">
+    <div class="t">Storage Capacity Pressure by Cluster <span>Heatmap · unchanged · schematic</span></div>
+    <div class="b"><div class="heat"><div style="background:#f5a623"></div><div style="background:#f5a623"></div><div style="background:#c9c03c"></div></div></div>
+  </div>
+
+  <div class="w" style="grid-column:1 / span 12; grid-row:12 / span 5;">
+    <div class="t">Oversized VMs, Reclaimable <span class="chg">View · VirtualMachine · full width, own row · 30-day window · driven by the cluster selection</span></div>
+    <div class="b"><table>
+      <tr><th>Name</th><th>Cluster</th><th class="new">vCPU</th><th class="new">Memory (GB)</th><th>vCPUs to Remove</th><th>Memory to Remove (GB)</th>
+          <th class="new">CPU Demand Avg %</th><th class="new">CPU Demand Max %</th><th class="new">CPU Demand P95 %</th>
+          <th class="new">Mem Usage Avg %</th><th class="new">Mem Usage Max %</th><th class="new">Mem Usage P95 %</th></tr>
+      <tr><td></td><td><code>summary|parentCluster</code></td><td><code>cpu|corecount_provisioned</code></td><td><code>config|hardware|memoryKB</code></td><td><code>summary|oversized|vcpus</code></td><td><code>summary|oversized|memory</code></td>
+          <td><code>cpu|demandPct avg</code></td><td><code>cpu|demandPct max</code></td><td><code>cpu|demandPct p95</code></td>
+          <td><code>mem|usage_average avg</code></td><td><code>mem|usage_average max</code></td><td><code>mem|usage_average p95</code></td></tr>
+      <tr><td>app-db-01</td><td>cluster-03</td><td>16</td><td>128</td><td>8</td><td>64</td><td>6.2</td><td>41.0</td><td>18.5</td><td>22.4</td><td>38.1</td><td>31.0</td></tr>
+      <tr><td>web-12</td><td>cluster-01</td><td>8</td><td>32</td><td>4</td><td>16</td><td>3.1</td><td>22.7</td><td>9.8</td><td>18.0</td><td>27.5</td><td>24.2</td></tr>
+    </table></div>
+  </div>
+
+  <div class="w" style="grid-column:1 / span 12; grid-row:17 / span 5;">
+    <div class="t">Undersized VMs, Add Resources <span class="chg">View · VirtualMachine · full width, own row · 30-day window · driven by the cluster selection</span></div>
+    <div class="b"><table>
+      <tr><th>Name</th><th>Cluster</th><th class="new">vCPU</th><th class="new">Memory (GB)</th><th>vCPUs to Add</th><th>Memory to Add (GB)</th>
+          <th class="new">CPU Demand Avg %</th><th class="new">CPU Demand Max %</th><th class="new">CPU Demand P95 %</th>
+          <th class="new">Mem Usage Avg %</th><th class="new">Mem Usage Max %</th><th class="new">Mem Usage P95 %</th></tr>
+      <tr><td></td><td><code>summary|parentCluster</code></td><td><code>cpu|corecount_provisioned</code></td><td><code>config|hardware|memoryKB</code></td><td><code>summary|undersized|vcpus</code></td><td><code>summary|undersized|memory</code></td>
+          <td><code>cpu|demandPct avg</code></td><td><code>cpu|demandPct max</code></td><td><code>cpu|demandPct p95</code></td>
+          <td><code>mem|usage_average avg</code></td><td><code>mem|usage_average max</code></td><td><code>mem|usage_average p95</code></td></tr>
+      <tr><td>batch-07</td><td>cluster-05</td><td>2</td><td>8</td><td>2</td><td>4</td><td>71.3</td><td>100.0</td><td>96.4</td><td>88.2</td><td>97.9</td><td>95.1</td></tr>
+    </table></div>
+  </div>
+
+  <div class="w" style="grid-column:1 / span 12; grid-row:22 / span 4;">
+    <div class="t">Datastore Reclaimable Space <span>View · unchanged · schematic (see datastore_reclaimable_space.yaml)</span></div>
+    <div class="b"><table>
+      <tr><th>Name</th><th>Total (GB)</th><th>Used %</th><th>Free (GB)</th><th>Snapshot Space (GB)</th><th>Orphaned Disk (GB)</th></tr>
+      <tr><td>datastore-01</td><td>7,999</td><td>11.7 %</td><td>7,066</td><td>0</td><td>53.2</td></tr>
+    </table></div>
+  </div>
+
+</div>
+</body>
+</html>
