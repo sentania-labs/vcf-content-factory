@@ -428,11 +428,11 @@ class _UISession:
     status polling:     POST /ui/solution.action
                              mainAction=getLatestInstalledSolutionStatuses
     (NOTE: getLatestInstalledSolutionStatuses is advertised on /ui/solution.action
-    per the mainAction surface enumerated in knowledge/lessons/pak-isunremovable-vendor-bug.md
+    per the mainAction surface enumerated in knowledge/lessons/pak-isunremovable-not-enforced-server-side.md
     and verified live for the uninstall flow.  The install-side exercising of this
     endpoint via /ui/ is implicit from the shared wizard code that backs both
     /ui/ and /admin/ — it has NOT been independently exercised end-to-end for
-    install status from the /ui/ side.  Live verification is pending Scott's
+    install status from the /ui/ side.  Live verification is pending
     authorization.)
 
     UNINSTALL WIRE FORMAT

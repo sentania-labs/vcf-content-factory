@@ -2173,8 +2173,8 @@ class AlertVolumeConfig:
     ``IntSummaryAlertVolume``, palette name "Alert Volume").
 
     Source: knowledge/context/api-surface/dashboard_widgets_alertvolume_section_viewdetails.md
-    §1 (appliance widget + editor source, 9.1.1 and 9.2, Suite API export
-    samples under reference/docs/extracted/dashboard-widgets/).
+    §1 (appliance widget + editor source and a Suite API export on 9.1.1;
+    vendor dashboard templates under reference/docs/extracted/dashboard-widgets/).
 
     The stored config is ONLY ``title``, ``refreshContent``,
     ``refreshInterval``, ``selfProvider`` and, with self provider ON, a
@@ -2244,8 +2244,8 @@ class SectionConfig:
     widgets beneath it; the Ops UI renders a collapse/expand chevron on
     it and hides the member widgets when collapsed. Source of truth:
     knowledge/context/api-surface/dashboard_widgets_alertvolume_section_viewdetails.md
-    §3 (appliance ``widgets/Section.js`` + ``GridsterPanel.js``, 9.1.1 and
-    9.2 captures, Suite API export samples under
+    §3 (appliance ``widgets/Section.js`` + ``GridsterPanel.js`` and a Suite
+    API export on 9.1.1; vendor dashboard templates under
     reference/docs/extracted/dashboard-widgets/).
 
     Export (import-bundle) shape::
