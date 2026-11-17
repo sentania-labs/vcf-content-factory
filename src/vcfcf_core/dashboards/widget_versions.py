@@ -21,13 +21,13 @@ wire type ``IntSummaryAlertVolume``).  A value of ``None`` means no known
 floor: the wire type is in the 8.18.7 and 9.0.2 enums (the same 47 keys),
 8.18.7 being the oldest build whose enum has been read.  A tuple is the lowest build
 the type has been seen importing; ``Section`` is absent from the 9.0.2 enum
-and proven on 9.1.1 (devel, 2026-08) and 9.2 (qa); 9.1.0 has not been
+and proven on 9.1.1 (devel, 2026-08); 9.1.0 has not been
 checked, so the floor is the lowest proven build, not necessarily the exact
 one.
 
 Not gated: ``view_details`` is a widget config key (``config.viewDetails``),
 not a widget type, so ``WidgetType.fromKey`` never sees it; it is proven on
-9.1.1 and 9.2 only, and 9.0.x import behaviour for it is unverified.
+9.1.1 only, and 9.0.x import behaviour for it is unverified.
 
 This module is pure (no I/O); ``Dashboard.validate()`` calls it, and the
 sync paths call ``import_check`` with the version they read from the

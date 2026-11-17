@@ -143,7 +143,7 @@ _VIEW_PIN_CONTAINER: dict[tuple[str, str], tuple[str, str, str]] = {
 #
 #   key:   (adapter_kind, resource_kind)      value: display name
 #
-# "NSX World" is live-verified on 9.1.1 and 9.2; "Automation World" and
+# "NSX World" is live-verified on 9.1.1; "Automation World" and
 # "License Usage" come from the public VCF License Consumption Overview
 # export (entries.resource[].name) and the VCFAutomation reference
 # dashboard. An author can override any of these, or supply a name for an
@@ -1973,7 +1973,8 @@ def _section_widget(w: Widget, widget_id_by_local: dict[str, str]) -> dict:
     """Render a Section (collapsible full-width row header).
 
     Shape follows the Suite API export form verbatim (see ``SectionConfig``
-    in loader.py and reference/docs/extracted/dashboard-widgets/): the
+    in loader.py and the vendor dashboard templates under
+    reference/docs/extracted/dashboard-widgets/): the
     ``config`` block carries ``title`` / ``titleLocalized`` /
     ``description`` and the ``widgets[]`` membership list (member widget
     UUIDs), which the UI treats as authoritative at load.

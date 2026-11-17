@@ -1697,7 +1697,7 @@ class MetricSpec:
         red_bound:        Threshold value when color_method=0.
 
     Bound semantics (replayed against the product's own Scoreboard
-    ``.action`` calls on 9.2, 2026-08-25; lesson
+    ``.action`` calls on a lab instance, 2026-08-25; lesson
     ``scoreboard-partial-bounds-render-unknown``):
 
     - With ``color_method: 0`` the three bounds are all-or-nothing. The
@@ -1789,7 +1789,7 @@ class ScoreboardConfig:
     Gauge recipe (``visual_theme: 9``)
     ----------------------------------
     A gauge is a Scoreboard whose tiles render as dials; the editor's
-    Score/Gauge toggle is literally ``visualTheme == 9``. Surveyed on 9.2
+    Score/Gauge toggle is literally ``visualTheme == 9``. Surveyed on 9.1.1
     (15 gauge widgets, ``getWidgetConfigs`` captures, 2026-08-25; see
     knowledge/context/wire-formats/dashboard_section_gauge_viewdetails.md):
     ``mode.layoutMode`` is ``"fixedView"`` and ``showMetricName`` is true
