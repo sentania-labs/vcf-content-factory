@@ -184,7 +184,7 @@ had vCommunity) would be the cleaner source.
 - The only mechanism seen to restore them is the core upgrade re-applying
   built-in content (10-14). Running an upgrade or reinstall to get that is a
   platform operation with far more reach than 64 views. Reaching it by
-  removing the vSphere solution is ruled out: `pak-isunremovable-vendor-bug.md`.
+  removing the vSphere solution is ruled out: `knowledge/lessons/pak-isunremovable-not-enforced-server-side.md`.
 - A UI "Reset Default Content" was not checked in the browser on 9.0.2. If it
   exists, what it would overwrite is unknown (inferred: all of the solution's
   content, including any edits to stock views).
