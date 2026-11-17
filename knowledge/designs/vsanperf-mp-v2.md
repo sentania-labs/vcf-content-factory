@@ -76,7 +76,7 @@ Tier 2, Java SDK, as V1 §Tier decision. Same repo
 |---|---|
 | B1 | Build 1 keys and identity stay as released in `v1.0.0.9`: `vSAN Perf\|<group>[:<instance>]\|<metric><UnitSuffix>`, collector object identity (`vcenter`, `cluster_scope`), account identity (`vcenter_host`, `cluster_include`). Build 2 adds keys only. |
 | B2 | Key-tree alignment with the vsanhostmetrics 2.0.0 `cptvsan\|` grammar is open for the user. Tables here use the current grammar; §Key tree alignment makes a switch a table change. |
-| B3 | Tiers are settings: cluster, host (the remaining host types), disk, VM. Defaults recommended for a 70-cluster customer and justified from measured costs. |
+| B3 | Tiers are settings: cluster, host (the remaining host types), disk, VM. Defaults recommended for a 70-cluster deployment and justified from measured costs. |
 | B4 | Cluster-tier keys land on VMWARE `ClusterComputeResource`, keyed (MoRef, VCID), resolved like hosts (recommended; the built-in vSAN Cluster alternative is noted). |
 | B5 | VM-tier keys land on VMWARE `VirtualMachine`, keyed on `config.instanceUuid` (30/30 verified), resolved through the Suite API VirtualMachine list. `virtual-disk` and `vscsi` are instanced on the VM: instance = bus position for both (`scsi0:0`; for `virtual-disk` from the device read, §VirtualMachine), `deviceInfo.label` being the stated alternative (Q5). |
 | B6 | Disk tier: ESA disk types instanced on the host by disk uuid; host found by a per-host `QueryDisksForVsan` (7 to 10 ms, key on non-empty `vsanUuid`), cached per identity refresh. OSA `cache-disk` / `capacity-disk` stay as entity types that are empty on ESA and learned-skipped. |
@@ -1202,7 +1202,7 @@ sustained ceiling (MAP test 7, both transports), 240 s cycle deadline (V1).
   (PLAN §1 "a Build 2 question"); plus the device read (~56 MB wire / ~407
   MB decoded for a full read at 16,800 VMs, projection). Staggered N = 3
   averages ~338,000 series per cycle. Recommend enabling it only after the
-  default tiers have run a day on the customer's vCenter with
+  default tiers have run a day on the target vCenter with
   `perf_timing_logging` on, and on a cluster subset first (`cluster_include`
   on a second account).
 - **One instance, not sharded, to start.** Sharding through
@@ -1672,7 +1672,7 @@ Each has a recommendation; the design is written on it unless noted.
    depends on the built-in adapter). Identifiers and push to be confirmed in
    P2 and T5.
 3. **Q3 VM tier default.** Recommended: off; `vm_tier_every_n_cycles` = 3,
-   staggered, when on. Enable at the 70-cluster customer only after a day of
+   staggered, when on. Enable at the 70-cluster deployment only after a day of
    default tiers with timing logging, and on a cluster subset first.
 4. **Q4 Disk tier default and the built-in overlap.** Recommended: off by
    default; when on, emit all 31 keys (parity with the Python pack), not
@@ -1693,7 +1693,7 @@ Each has a recommendation; the design is written on it unless noted.
    re-learns at once; never for the 3 core types or `ioinsight`; re-probe at
    24 h plus a per-(cluster, type) offset.
 8. **Q8 Supported vCenter range (V1 Q7, still open).** Recommended: vCenter
-   8.0 U3 and later; needs the target customer's vCenter version.
+   8.0 U3 and later; needs the target vCenter version.
 9. **Q9 Unverified by the captures, to close before the scale release:**
    VM read scoped to a cluster and paged over JSON; ClusterComputeResource
    Ops identifiers (the cluster-tier Ops map is written on the assumed
@@ -1706,11 +1706,11 @@ Each has a recommendation; the design is written on it unless noted.
    "compute elsewhere, storage here" VM case (HCI Mesh or a non-vSAN
    cluster mounting the datastore); whether `deviceInfo.label` is localized
    or renumbered (alternative only); `NIOPS*` under an IOPS-limit policy. Recommended: P2 capture
-   round now (lab), T5 for the Ops side, and a capture request to the
-   customer for the feature types.
+   round now (lab), T5 for the Ops side, and a capture request to a
+   site that has the feature types.
 10. **Q10 Throughput ceiling (D9).** Still the deciding unknown for 70
-    clusters. Recommended: before promising the customer anything beyond
-    default tiers, get one multi-cluster measurement (their vCenter with
+    clusters. Recommended: before recommending anything beyond
+    default tiers, get one multi-cluster measurement (a multi-cluster vCenter with
     `perf_timing_logging` on for an hour, or the T3 simulator once it
     exists).
 

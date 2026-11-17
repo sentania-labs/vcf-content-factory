@@ -269,7 +269,7 @@ factory and the third-party packages listed below. The labs do hold those
 packages' content (vsanhostmetrics is installed on lab-a, b and c); the
 exclusions and the presence rule keep it out. One lab-c export is deliberately **not** a source: the B0 export
 taken before the 2026-11-12 e1 fix test, because it was taken after a
-migration tool had imported customer content into that lab (4 views, 5
+migration tool had imported outside content into that lab (4 views, 5
 super metrics, 1 dashboard). Dropping it leaves the id set unchanged
 (4282); it removes the 9.1.1 tag from one view
 (`f1aeaa58-ce9a-4456-878e-1d9582a66711`, stock in 8.18.7 and 9.0.2 on

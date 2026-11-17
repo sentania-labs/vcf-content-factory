@@ -60,7 +60,7 @@
 
 ## Baseline purity
 
-**(a) Names and customer content.** Every view, dashboard and report name in the
+**(a) Names and imported content.** Every view, dashboard and report name in the
 baseline was read. All read as product content, and every one that looked
 custom ("Custom - Text ...", "VMware Infra Custom - ...", "... cost", "(s)",
 "?") carries the product `localizationKey` on two or more labs. Symptom and
@@ -71,26 +71,26 @@ SupervisorAdapter, VsanSnapshotManagerAdapter, VrAdapter, DiagnosticsAdapter,
 APPLICATIONDISCOVERY: product or native only. No factory, third-party or lab
 marker is present.
 
-Customer material in the session scratchpad: the original export holds 9190
+Imported material in the session scratchpad: the original export holds 9190
 definitions, 2665 of them under ids in the baseline. That is expected: a
 scope-ALL export carries the product's own content under stock ids. The
 migrator outputs (`bundle_migrator/`, `bundle_new/`, `migrator/out058b/`, 10 to
-15 definitions each) are the customer-authored objects. Exactly one of their
+15 definitions each) are the user-authored objects. Exactly one of their
 ids is in the baseline, `f1aeaa58-ce9a-4456-878e-1d9582a66711`, and it is a
-stock view the customer export also carried: localized, present on lab-a and
+stock view the original export also carried: localized, present on lab-a and
 lab-b in exports that predate the migration, baseline name equal to the stock
-name. None of the customer-authored names appears in the baseline or anywhere
-in the diff. **No customer-authored id or name entered the repo.**
+name. None of the user-authored names appears in the baseline or anywhere
+in the diff. **No user-authored id or name entered the repo.**
 
 **(b) The contaminated 9.1.1 export.** The extra objects are in
 `devel_9_1-2026-11-12-vcommunity-e1-fix-test/B0` (exported 23:45Z), not in the
 `fix-test` B0: 4 views, 5 super metrics, 1 dashboard (custom groups are not
 scanned). They are exactly the migrator's output, so "unknown origin" is the
-customer migration. Of the ten, only `f1aeaa58-...` is in the baseline (see
+migration. Of the ten, only `f1aeaa58-...` is in the baseline (see
 (a)). The e1 B0 is a strict superset of the other 9.1.1 B0. Regenerating
 without it gives the **same 4282-id set**. Only two values change: that view's
 versions lose `9.1.1`, and one symptom's display name changes on a vote tie.
-So the id set is pure, but one version claim (`9.1.1`) comes from customer
+So the id set is pure, but one version claim (`9.1.1`) comes from imported
 content (W3).
 
 **(c) The stock-ness rules.** See W4. In short: yes, a third-party pak installed
@@ -164,11 +164,11 @@ Fix: collect skipped members (location and reason) on a result object.
 built-pak gate treat any skip as "cannot check" (exit 1 / refuse). Decode
 UTF-16/32 XML by BOM. Correct the comment. Add a test per skip class.
 
-**W3. [`src/vcfcf_core/stock_ids/stock_ids_baseline.json`, view `f1aeaa58-ce9a-4456-878e-1d9582a66711`; `knowledge/context/stock_id_guard.md:149`; `knowledge/lessons/pak-content-must-not-reuse-stock-ids.md:39`; `.github/release-notes-buildkit.md:10`] One source is not clean, and one version claim comes from customer-migrated content.**
+**W3. [`src/vcfcf_core/stock_ids/stock_ids_baseline.json`, view `f1aeaa58-ce9a-4456-878e-1d9582a66711`; `knowledge/context/stock_id_guard.md:149`; `knowledge/lessons/pak-content-must-not-reuse-stock-ids.md:39`; `.github/release-notes-buildkit.md:10`] One source is not clean, and one version claim comes from migrated content.**
 Authority: RULE-002 (no fabrication); the generator's own rule ("scope-ALL
 content exports taken on a clean instance"). The lab-c source
 `devel_9_1-2026-11-12-vcommunity-e1-fix-test/B0` was taken after a migration
-tool imported customer content. The id set is unaffected (proven above), but
+tool imported outside content. The id set is unaffected (proven above), but
 this view is tagged stock in `9.1.1` only because of that import (absent from
 the three other 9.1.1 exports). The error message for a hit on it says "stock
 in 8.18.7, 9.0.2, 9.1.1". The docs call all sources clean.

@@ -33,7 +33,7 @@ uninstall, `delete-view`, probe cleanups) played no part. Every
 
 ### The 64 ids
 
-Regenerated (the earlier `classified.json` holds the customer worklist, not
+Regenerated (the earlier `classified.json` holds a different worklist, not
 this list). There are 63 distinct view ids that devel's stock dashboards
 reference but devel lacks. 62 of them exist on both 8.18.7 and 9.1.1. Two more
 stock views are on both labs and missing from devel without any dashboard

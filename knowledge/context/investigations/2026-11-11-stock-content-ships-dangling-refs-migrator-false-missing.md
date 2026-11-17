@@ -12,11 +12,11 @@ pre-experiment snapshot.
 Tool under study: `sentania-labs/vcf-cf-migrator` at `7dead31`
 (`src/vcfcf_migrator/graph.py`, `navigation.py`). It refuses to build a bundle
 when a dashboard names a view, a navigation target dashboard, or a navigation
-widget id that is not in the export. On a customer's full export it flagged 50
+widget id that is not in the export. On a large full export it flagged 50
 views, 43 navigation targets and 32 navigation widget ids, mostly from
 pak-supplied dashboards. The ids below are content uuids. Some belong to
-product content; some are of customer-authored dashboards and views (classes
-D below). None is a name, owner or other customer-identifying string.
+product content; some are of user-authored dashboards and views (classes
+D below).
 
 ## Answer in one paragraph
 
@@ -33,13 +33,13 @@ dashboards on 8.18.7 and 9.1.1 target dashboard ids that do not exist, key
 View widget at a view that does not exist. The other 43 views come from stock
 dashboards whose ids are on no lab instance. That is inferred, with two
 candidate explanations: older-generation stock kept through upgrades, or stock
-views deleted on the customer's instance, as happened on `devel` (§Q1).
+views deleted on the source instance, as happened on `devel` (§Q1).
 Content-zip import of a dashboard with each dangling kind completed normally
 on 9.0.2 (verified, §Q4). The stock dashboards that do stay loading on 9.1.1
 wait on uninstalled adapter kinds or missing resources, not on their
 navigation targets (verified from importer logs, §Q4). A dangling view renders "The view does not exist.";
 a dangling navigation target is silently left out of the drill menu. On 8.18.7
-and 9.1.1 lab exports, with no customer content, the tool already reports 67
+and 9.1.1 lab exports, with no user-authored content, the tool already reports 67
 and 148 blocking "missing" edges from VMware-shipped content.
 
 ## Export completeness
@@ -128,20 +128,20 @@ referencing dashboard relates to live stock:
 | A. Ships dangling in the live stock dashboard | 2 | `42194e98` (from `abb3cadf` "(DEP) Provider \ Simplify it?", live on 8.18.7 and 9.1.1 with the same ref); `dd7bbb72` (from `559a9658` "VCF MP Capacity", same ref live on 8.18.7, gone from the 9.1.1 revision) | verified |
 | B. Referenced by a stock-named dashboard whose id is on no lab instance | 43 | all others with `source_adapterName` set; referencing dashboards `67ae00e5` VM Configuration, `9ddaaf3b` Capacity Allocation Overview, `30a902ab` second "(DEP) Provider \ Simplify it?", `aa7b4ca2` Capacity Overview, `259e0301` Cluster Configuration, `eeab8718` Datastore Capacity, `28df0923` Datastore Performance, `a23edd61` Troubleshoot a VM, `e1ebd69e` ESXi Configuration, `d01d7ba0` Heavy Hitter VMs, `b4862971` Network Configuration, `a7575481` Optimization History, `b29ed707` Optimize Performance, `ad52daa1` Troubleshoot a Host, `a165a8b4` VM Usage | inferred, two explanations below |
 | B2. Admin-owned, no `adapterName`, not on any lab | 2 | `1ce5ef41`, `bc76a1ca` (from `12e8f660` an admin-owned host compliance dashboard) | not explained |
-| D. Customer-authored dashboard only | 3 | `bd9798e9`, `e3af5015`, `6c4d07f7` (from `bdf18c02`) | not explained (customer content) |
+| D. User-authored dashboard only | 3 | `bd9798e9`, `e3af5015`, `6c4d07f7` (from `bdf18c02`) | not explained (user-authored content) |
 
 Two of the class B views (`0eb5e828`, `3017670b`) are also named by a
-customer-owned copy of the same stock dashboard. A user-owned copy of a stock
+user-owned copy of the same stock dashboard. A user-owned copy of a stock
 dashboard keeps `adapterName` (`1371103f` is user-owned and says
 `VMware vSphere`), so `adapterName` means "pak-supplied or copied from
 pak-supplied", not "admin-owned".
 
-Class B, two explanations, neither verified on the customer's instance:
+Class B, two explanations, neither verified on the source instance:
 
 - **Older-generation stock kept through upgrades.** The lab instances carry
   current stock dashboards with the same names under different ids (VM
-  Configuration `a4a25364` against the customer's `67ae00e5`; Datastore
-  Performance `bd1803ca`, which the customer also has as "Datastore
+  Configuration `a4a25364` against the export's `67ae00e5`; Datastore
+  Performance `bd1803ca`, which the export also has as "Datastore
   Performance New", against `28df0923`; ESXi Configuration `d3a307f9`; Cluster
   Configuration `92102441`; Network Configuration `98e47b7e`; Datastore
   Capacity `338e22d0`). `a23edd61` "Troubleshoot a VM" is still a navigation
@@ -151,10 +151,10 @@ Class B, two explanations, neither verified on the customer's instance:
   that 8.18.7 and 9.1.1 carry have been deleted, and the stock dashboards that
   use them are still in place, still `importComplete: true`, with a dangling
   `viewDefinitionId` (§Q5, 9.0.2 section). The same could have happened on the
-  customer's instance.
+  source instance.
 
 Either way, because the export carries every view, those dashboards already
-render "The view does not exist." in the affected widgets on the customer's
+render "The view does not exist." in the affected widgets on the source
 instance (inferred from the §Q4 render result).
 
 ## Q2. Missing navigation target dashboards
@@ -168,7 +168,7 @@ export is absent from the source.
 |---|---|---|
 | A. Live stock dashboard on 8.18.7 and/or 9.1.1 still targets it, and it is absent there too | 12 | `836cc887` (SD-WAN Gateway, Orchestrator), `90b3551f` (10 Cost/Chargeback/Showback and three vRA 8.x project dashboards), `a64a48ae`, `e5481902`, `d5a11c85` (Cluster Performance; also vSAN OSA/ESA Capacity), `a175a889`, `5909491f` (Live! vSphere VM Changes, vSphere VM Inventory, vSphere Daily Check), `5ddbfb63`, `69f2ed78` (vSphere Inventory (Compute), Daily Check), `fd5adf68` (Troubleshoot SD-WAN), `95fd15b2`, `0c181ab7` (vSphere Inventory (Storage)) |
 | B. Only referencing dashboard is pak content not installed on any lab | 2 | `8146b6de`, `f79ad44f` (both from `0706d3ca` "TAM Insights - Performance Insights", TAM pak) |
-| D. Customer-authored dashboards only | 29 | `562b38db` (from `ac3c8b7b`) and 28 targets of `806ae20c` |
+| D. User-authored dashboards only | 29 | `562b38db` (from `ac3c8b7b`) and 28 targets of `806ae20c` |
 
 Live 9.1.1 dashboards target more absent dashboards than the worklist shows
 (e.g. SD-WAN Gateway also targets `30a2564a`, `103d80ba`, `4b5c602a`).
@@ -182,7 +182,7 @@ lab (`8e424387` Kubernetes Application Performance x1, `0706d3ca` TAM Insights
 x4, `00ca92f0` an older vSAN OSA Performance id x1; the lab one is
 `90bdd1da`). `00ca92f0`'s record is the same `584b09f3` destination seen in
 five live dashboards, so it is the same pattern (inferred). 3 records are
-customer-only.
+user-authored only.
 
 What the shipped defects are:
 
@@ -294,7 +294,7 @@ On `devel_9_1` (9.1.1) `getDashboardList` shows four stock dashboards with
 `1844b814`, VM Cost vs. Price `2f8f4b00` and Data Services View `215259eb`.
 The same four are `isLoading: true` on `prod` (9.1.1), so the two instances do
 not differ on these. `prod` additionally has Rubrik Overview and Valkey
-Overview loading (MPB paks), and `devel_9_1` one customer-imported dashboard.
+Overview loading (MPB paks), and `devel_9_1` one imported third-party dashboard.
 
 What they wait on, from `vcops-bridge-<node>.log` on `devel_9_1` over SSH
 (logger `com.vmware.vcops.bridge.server.DashboardImporter`, method
@@ -336,7 +336,7 @@ adapter kind that is not installed, or a resource with no instance. This
 matches E1 and the mechanism in
 `2026-11-11-devel-9-1-ui-import-dashboard-skip-and-gemfire-503.md` §Q3.
 
-## Q5. False-positive baseline (migrator `tree --json`, no customer content)
+## Q5. False-positive baseline (migrator `tree --json`, lab content only)
 
 | Export | Missing edges, all blocking | From VMware-shipped content | Kinds (VMware-shipped) |
 |---|---|---|---|
@@ -380,13 +380,13 @@ Evidence available **in the zip alone**:
    dashboards (treat as a failed export) and hollow dashboards
    (`importComplete: false`; their widget references are missing, not extra).
 2. The referencing dashboard's `adapterName` non-null means pak-supplied (or a
-   copy of pak-supplied). `null` does **not** mean customer-built: besides
+   copy of pak-supplied). `null` does **not** mean user-built: besides
    content-zip imports and user dashboards, core product dashboards carry
    `null` ("vRealize Operations/Self Health" and the other Self dashboards,
    "vCenter Adapter Details", "vSphere Dashboards Library/Recommendations", and
    on 9.1.1 the "Summary Pages/..." set; 38 of 301 null on 9.1.1, 12 of 163 on
    8.18.7). That is probably why an admin-owned host compliance dashboard (`12e8f660`,
-   admin-owned, `null`) looks customer-ish while likely being an older built-in
+   admin-owned, `null`) looks user-built while likely being an older built-in
    (inferred).
 3. Navigation source key in the same document: present as a widget or not.
 
@@ -403,7 +403,7 @@ Rule:
   Carrying it would be a uuid-keyed replace of the target's own copy.
   **`adapterName` alone does not establish this.** A user-owned copy of a
   stock dashboard keeps the field (Q1: `1371103f` is such a copy with
-  `adapterName: VMware vSphere`), and a copy is customer content the pak
+  `adapterName: VMware vSphere`), and a copy is user content the pak
   cannot restore, so it must stay selectable and be migrated. Nothing in
   the export was shown to separate an original from a copy: a different id
   from the stock dashboard of the same name, and an owner other than the
@@ -416,10 +416,10 @@ Rule:
   view does not exist." on the target, as it already does on the source. The
   message is "already broken on the source", not "export it as well". That set
   includes a few core product dashboards, so the residue is "not pak-supplied",
-  not provably customer-built.
+  not provably user-built.
 
 Needs a live target: whether a stock dashboard id, view or navigation target
-named by customer content exists there (a pak version that has it, e.g.
+named by user-authored content exists there (a pak version that has it, e.g.
 `f79ad44f`). That is the only case where "absent from source, present on
 target" happens. For views, `getGroupedViewDefinitionThumbnails` on the
 target answers it (it matched the export exactly on all three versions).

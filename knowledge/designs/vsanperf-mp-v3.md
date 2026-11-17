@@ -611,7 +611,7 @@ None. `all` keys are for ad-hoc metric browsing and later content.
 10. **Ops-side cost per series** (disk, memory, node capacity) for
     550,900 series. Settled by ops-recon of devel's per-node metric load
     against the Ops sizing guidance before `all` is recommended to the
-    70-cluster customer.
+    70-cluster deployment.
 
 ---
 
