@@ -379,7 +379,7 @@ vSphere's pattern of shipping OOTBPolicies that toggle per-alert enable/disable 
 - **`<WorkloadAutomationSettings>` / `<WorkloadOptimizationSettings>`** — vSphere-only DRS-tuning. Deferred; ties into vCenter DRS integration that's out of scope for most adapter authors.
 - **`<CapacityBuffer>` / `<OverCommit>` nested content** — observed as empty (`<CapacityBuffer/>` / `<OverCommit/>`). Likely has nested per-percent or per-strategy attributes; not sampled.
 - **`<TimeSettings>` rich form** — only the simple `allHoursAndDays="true"` form observed. The schema likely permits per-day-of-week / per-hour-of-day overrides.
-- **`<CustomGroupMetrics>`** — declared in XSD (spec/02a) but absent from all in-corpus adapters. **Would need a custom-groups adapter sample from Navani to characterize.**
+- **`<CustomGroupMetrics>`** — declared in XSD (spec/02a) but absent from all in-corpus adapters. **Would need a custom-groups adapter sample from the lab to characterize.**
 
 ## Open follow-ups
 
@@ -388,4 +388,4 @@ vSphere's pattern of shipping OOTBPolicies that toggle per-alert enable/disable 
 3. **`<CapacityBuffer>` and `<OverCommit>` schemas** — observed empty; need an adapter that uses them.
 4. **`RiskLevelSettings` schema** — vSphere has 2; not sampled.
 5. **Workload Automation vs Workload Optimization** — the distinction between the two vSphere-only settings types.
-6. **CustomGroupMetrics** — Navani-gap (not in corpus).
+6. **CustomGroupMetrics** — lab gap (not in corpus).

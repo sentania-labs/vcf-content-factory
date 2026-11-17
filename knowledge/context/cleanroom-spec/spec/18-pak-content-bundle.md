@@ -794,7 +794,7 @@ future generator changes.
 
 ## Addendum — orchestrator-step gate `overview.packed` (Pass 29, 2026-05-28)
 
-**Provenance**: lab-admin log analysis of the v19 generator output
+**Provenance**: lab log analysis of the v19 generator output
 (`vcfcf_sdk_compliance.1.0.0.19.pak`) against the
 vcf-lab-operations-devel appliance. The v19 pak satisfied all four
 Pass 28 requirements (A1–A4 verified present pre-install) and the

@@ -434,4 +434,4 @@ Vsphere's Action expressions show heavy use of `getDescendantsAndCheckAttributes
 2. **`<Icon>` resourceKind base-name source** — where the icon's base name is declared; the suffix-building algorithm needs a starting point that we haven't found in describe.xml.
 3. **Action result handling** — what does `onAction()` return and how does the platform render that? `MethodResultType` exists in XSD (spec/02a) but not explored.
 4. **Method vs Recommendation.Action linkage** — recommendations can declare `<Action actionAdapterKey targetResourceKind actionKey>` (spec/08), referencing an Action by key. The cross-MP referencing model (an alert in one adapter's MP can invoke an action in another MP's) is powerful — confirm runtime semantics.
-5. **CustomGroupMetrics** — still Navani-gap (per Pass 18 § Open follow-ups).
+5. **CustomGroupMetrics** — still lab gap (per Pass 18 § Open follow-ups).

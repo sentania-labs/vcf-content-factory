@@ -258,7 +258,7 @@ field may be obfuscated, which limits future RE.
 2. **`vcops-vlsi-1.0.jar`** — VLSI is "VMware Local Services Interface" (legacy vCenter API). Likely cross-references with `vlsi-client-8.0.2.jar`. What does vcops add over vlsi-client?
 3. **What's `byte-buddy` doing in production lib?** Could be runtime mock injection for testing (unusual to ship) or actual runtime bytecode (e.g., dynamic proxy generation).
 4. **vim's 102-lib trim down**: how many of those 102 jars are *actually* used at runtime vs. transitive deps the build pulled in? Could be useful when generating a minimal-lib Tier 2 output.
-5. **Maven `groupId=com.vmware.adapter.management`** — is there a public Maven repo serving adapter SDK artifacts? Khriss research said no published Maven coordinates were found; confirm.
+5. **Maven `groupId=com.vmware.adapter.management`** — is there a public Maven repo serving adapter SDK artifacts? external research said no published Maven coordinates were found; confirm.
 6. **`adapter.properties` schema** — only seen `ENTRYCLASS` and `KINDKEY`. Are there other keys (e.g., `MIN_SDK_VERSION`, `REQUIRES_FEATURE`)?
 7. **Schema version 9 changes** — what's new in describe.xml v9 vs v8? Probably the `isSingleton` attribute is one of them.
 
