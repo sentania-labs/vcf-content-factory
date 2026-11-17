@@ -1,4 +1,4 @@
-# War Story: Pak Install Reliability — Five Failures Before Success
+# Pak Install Reliability — Five Failures Before Success
 
 **Campaign:** vSphere Storage Paths v2.0.0  
 **Date:** 2026-05-13 to 2026-05-14

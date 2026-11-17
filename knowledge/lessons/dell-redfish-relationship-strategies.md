@@ -1,4 +1,4 @@
-# War Story: Dell Redfish — Three Relationship Strategies, All Failed
+# Dell Redfish — Three Relationship Strategies, All Failed
 
 **Target:** Dell PowerEdge Redfish API  
 **Verdict:** Tier 2 (Java SDK). Do not attempt Tier 1 (MPB).  

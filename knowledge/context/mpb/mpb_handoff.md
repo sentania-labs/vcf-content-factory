@@ -564,7 +564,7 @@ VCF-CF options (in order of operational maturity):
 2. **Generate paks signed with a VCF-CF / customer-supplied cert.** Requires confirming the appliance accepts certs other than the VMware-pinned root.
 3. **Submit to the marketplace re-signing pipeline.** Requires understanding the marketplace ingestion process (likely internal-only to Broadcom).
 
-Whatever you pick, design the signing step as a **pluggable strategy** — Broadcom should modernize the format eventually (SHA-256, PSS or ECDSA, per-vendor identity, automated rotation) and VCF-CF should follow without architectural surgery.
+Whatever you pick, design the signing step as a **pluggable strategy**: the format may change in a later release (for example SHA-256, PSS or ECDSA, per-vendor identity, automated rotation), and VCF-CF should be able to follow without architectural surgery.
 
 ### iSDK template placeholder hygiene
 

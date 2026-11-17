@@ -128,7 +128,7 @@ Final summary:
 - Any WARNs the extractor emitted that need follow-up attention
 - Next steps:
   - To iterate: hand-edit the manifest or content YAMLs, then re-run `python3 -m vcfcf_packaging build bundles/third_party/<slug>.yaml`
-  - To distribute: copy the zip to `pka/workspaces/vcf-content-factory-bundles/` (Riker's pipeline work) and publish through whatever mechanism lives there
+  - To distribute: `/release` the item, then `/publish` to ship it to the distribution repo
   - To install the extracted content on a lab (sanity-check round-trip): `python3 install.py` from inside the unzipped bundle
 
 ## Safety
