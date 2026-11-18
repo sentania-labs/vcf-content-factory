@@ -45,7 +45,12 @@ from .client import (
 from .loader import DashboardValidationError, load_view, load_dashboard
 from .packager import build_import_zip
 from . import sm_columns
-from .ui_client import UIClientError, VCFOpsUIClient
+from .ui_client import (
+    SAME_ID_COPY_NOTE,
+    UIClientError,
+    VCFOpsUIClient,
+    dashboard_delete_blockers,
+)
 
 
 def _sm_resolver_or_fail(views, items, result: SyncResult):
@@ -466,29 +471,56 @@ class DashboardsHandler(ContentHandler):
             return result
 
         try:
-            all_dashboards = ui.list_dashboards()
-            by_name = {
-                d["name"]: d["id"]
-                for d in all_dashboards
-                if d.get("name") and d.get("id")
-            }
+            # Strict listing, name -> every id, and a verified delete: HTTP 200
+            # from deleteTab is not a delete (knowledge/lessons/
+            # ui-delete-200-is-not-a-delete.md).
+            all_dashboards = ui.list_dashboards_strict()
+            by_name: dict = {}
+            for d in all_dashboards:
+                if d.get("name") and d.get("id"):
+                    by_name.setdefault(d["name"], []).append(str(d["id"]))
 
             to_delete = []
             for name in names:
-                dash_id = by_name.get(name)
-                if not dash_id:
+                ids = by_name.get(name) or []
+                if not ids:
                     result.items.append(
                         ItemResult(name=name, status="skipped",
                                    message="not found on instance")
                     )
                     continue
-                to_delete.append((dash_id, name))
+                if len(ids) > 1:
+                    result.items.append(ItemResult(
+                        name=name, status="failed",
+                        message=(f"{len(ids)} dashboards carry this name "
+                                 f"({', '.join(ids)}); none deleted. Delete by id: "
+                                 f"python3 -m vcfcf_dashboards delete-dashboard <id>...")))
+                    continue
+                to_delete.append((ids[0], name))
 
             if to_delete:
                 try:
-                    ui.delete_dashboards(to_delete)
-                    for _, name in to_delete:
+                    session_user = current_user_name(get_current_user(session),
+                                                     default="") or None
+                except Exception:  # noqa: BLE001 - the owner is then not compared
+                    session_user = None
+                try:
+                    res = ui.delete_dashboards_verified(to_delete, before=all_dashboards)
+                    for _, name in res.deleted:
                         result.items.append(ItemResult(name=name, status="ok"))
+                    for e in res.remaining:
+                        why = dashboard_delete_blockers(e, session_user)
+                        result.items.append(ItemResult(
+                            name=str(e.get("name")), status="failed",
+                            message=("still listed after the delete (the server "
+                                     "answered 200)"
+                                     + (f"; likely cause: {'; '.join(why)}" if why else "")
+                                     + f"; {SAME_ID_COPY_NOTE}")))
+                    for _, name in res.unverifiable + res.unlisted:
+                        result.items.append(ItemResult(
+                            name=name, status="failed",
+                            message="delete not verified: "
+                                    + (res.note or "not listed before the delete")))
                 except (UIClientError, Exception) as exc:
                     for _, name in to_delete:
                         result.items.append(

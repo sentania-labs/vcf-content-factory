@@ -573,9 +573,10 @@ def test_plan_dashboard_needs_repo_id_on_the_twin_and_the_sync_owner():
     # Sync owner unknown: conflict.
     live = [_live("OLD9", OLD + "D", owner=me), _live("R1", NEW + "D", owner=me)]
     assert plan(live, owner=None) == [("dashboard", "conflict", "OLD9")]
-    # Leftover still carries the repo id: conflict, never deleted.
+    # Leftover still carries the repo id (what a sync leaves, the import being
+    # keyed by name): the two-copy state, both listed, never deleted here.
     live = [_live("R1", OLD + "D", owner=me), _live("N2", NEW + "D", owner=me)]
-    assert plan(live) == [("dashboard", "conflict", "R1")]
+    assert plan(live) == [("dashboard", "resync", "R1"), ("dashboard", "resync", "N2")]
     # Neither carries it: conflict.
     live = [_live("X", OLD + "D", owner=me), _live("Y", NEW + "D", owner=me)]
     assert plan(live) == [("dashboard", "conflict", "X")]
@@ -583,6 +584,210 @@ def test_plan_dashboard_needs_repo_id_on_the_twin_and_the_sync_owner():
     live = [_live("OLD9", "VCF Content Factory/" + OLD + "D", owner=me),
             _live("R1", "VCF Content Factory/" + NEW + "D", owner=me)]
     assert plan(live) == [("dashboard", "delete", "OLD9")]
+
+
+def test_plan_two_copy_dashboard_lists_every_copy_and_its_blockers():
+    """Measured on 8.18.7, 9.0.2, 9.1.1: the old-named dashboard keeps the
+    repo id and each sync of the new name adds a copy under a server id."""
+    from vcfcf_common.legacy_cleanup import plan_cleanup
+    item = _item("dashboard", "D", "R1")
+    me = "svc-factory"
+    # A failed delete plus a re-sync: two new-named copies.
+    live = [_live("R1", OLD + "D", owner="admin", locked=True),
+            _live("N2", NEW + "D", owner=me),
+            _live("N3", NEW + "D", owner=me)]
+    plan = plan_cleanup([item], {"dashboard": live}, dashboard_owner=me)
+    assert _verdicts(plan) == [("dashboard", "resync", i) for i in ("R1", "N2", "N3")]
+    (rs,) = plan.resyncs
+    assert rs.state == "two-copy"
+    assert [c[0] for c in rs.copies] == ["R1", "N2", "N3"]
+    assert rs.blockers == [("R1", "admin", "listed owner 'admin' differs from session "
+                            "user 'svc-factory'; on 9.1.1 only the owner's delete deletes "
+                            "(8.18.7 and 9.0.2 not measured)")]
+    assert "2 new-named copies" in plan.actions[1].reason
+    # Locked but owned by the session user: not a blocker by itself.
+    live = [_live("r1", OLD + "D", owner=me, locked=True), _live("N2", NEW + "D", owner=me)]
+    plan = plan_cleanup([item], {"dashboard": live}, dashboard_owner=me)
+    assert [a.verdict for a in plan.actions] == ["resync", "resync"]  # id case-insensitive
+    assert plan.resyncs[0].blockers == []
+
+
+def test_plan_old_only_and_new_only_dashboards_are_resync():
+    """Old-named under the repo id with no twin: a sync now would add a copy
+    (it was SKIP "sync first"). Only new-named copies, none under the repo
+    id: a sync updates one by name and the repo id never returns."""
+    from vcfcf_common.legacy_cleanup import plan_cleanup
+    item = _item("dashboard", "D", "R1")
+    me = "svc-factory"
+    plan = plan_cleanup([item], {"dashboard": [_live("R1", OLD + "D", owner=me)]},
+                        dashboard_owner=me)
+    assert _verdicts(plan) == [("dashboard", "resync", "R1")]
+    assert plan.resyncs[0].state == "old-only"
+    assert "a sync now adds a second dashboard" in plan.actions[0].reason
+    live = [_live("N2", NEW + "D", owner=me), _live("N3", NEW + "D", owner=me)]
+    plan = plan_cleanup([item], {"dashboard": live}, dashboard_owner=me)
+    assert _verdicts(plan) == [("dashboard", "resync", "N2"), ("dashboard", "resync", "N3")]
+    assert plan.resyncs[0].state == "new-only"
+    assert "only new-named copies remain, 2 of them, none under the repo id R1" in \
+        plan.actions[0].reason
+    # The settled state: the new name under the repo id, nothing else.
+    plan = plan_cleanup([item], {"dashboard": [_live("R1", NEW + "D", owner=me)]},
+                        dashboard_owner=me)
+    assert plan.actions == [] and plan.resyncs == []
+    # An old-named copy not under the repo id, before any sync, stays SKIP:
+    # the sync lands under the repo id because neither name nor id is taken.
+    plan = plan_cleanup([item], {"dashboard": [_live("X", OLD + "D", owner=me)]},
+                        dashboard_owner=me)
+    assert _verdicts(plan) == [("dashboard", "skip", "X")]
+
+
+def _two_resync_tree(root):
+    _write(root, "content/dashboards/a.yaml", f'id: RA\nname: "{NEW}A"\n')
+    _write(root, "content/dashboards/b.yaml", f'id: RB\nname: "{NEW}B"\n')
+    return {"dashboard": [_live("RA", OLD + "A", owner="svc-factory"),
+                          _live("NA", NEW + "A", owner="svc-factory"),
+                          _live("RB", OLD + "B", owner="svc-factory"),
+                          _live("NB", NEW + "B", owner="svc-factory"),
+                          _live("NB2", NEW + "B", owner="svc-factory")]}
+
+
+def test_resync_remedy_deletes_everything_before_any_sync(tmp_path, capsys):
+    """Review B3: per-dashboard delete-then-sync pairs let the first sync add
+    a copy of the second dashboard that its printed delete never covers."""
+    from vcfcf_common.legacy_cleanup import KINDS, run
+    inst = _FakeInstance(_two_resync_tree(tmp_path))
+    assert run(tmp_path, inst, KINDS, apply=False, target=_TARGET) == 1
+    lines = capsys.readouterr().out.splitlines()
+    deletes = [i for i, l in enumerate(lines) if "delete-dashboard" in l and "python3" in l]
+    syncs = [i for i, l in enumerate(lines) if "vcfcf_dashboards sync" in l]
+    rerun = [i for i, l in enumerate(lines) if "cleanup-legacy-prefix" in l and "--profile" in l
+             and "--apply" not in l and "profile=" not in l]
+    assert len(deletes) == 1 and len(syncs) == 1 and len(rerun) == 1
+    assert deletes[-1] < rerun[0] < syncs[0]
+    assert lines[deletes[0]].split("delete-dashboard ", 1)[1] == \
+        "RA NA RB NB NB2 --profile devel"
+    text = "\n".join(lines)
+    assert "re-imports the whole dashboards tree" in text
+    assert "confirm no RESYNC line remains" in text
+
+
+def test_run_prints_the_resync_remedy_and_exits_1(tmp_path, capsys):
+    from vcfcf_common.legacy_cleanup import KINDS, run
+    _write(tmp_path, "content/dashboards/d.yaml", f'id: R1\nname: "{NEW}D"\n')
+    _write(tmp_path, "third_party/p/dashboards/t.yaml", f'id: T1\nname: "{NEW}T"\n')
+    _write(tmp_path, "third_party/p/views/v.yaml", "id: V1\nname: Unprefixed\n")
+    live = {"dashboard": [_live("R1", OLD + "D", owner="admin", locked=True),
+                          _live("N2", NEW + "D", owner="svc-factory"),
+                          _live("T1", OLD + "T", owner="svc-factory"),
+                          _live("N5", NEW + "T", owner="svc-factory")]}
+    inst = _FakeInstance(live)
+    assert run(tmp_path, inst, KINDS, apply=False, target=_TARGET) == 1
+    out = capsys.readouterr().out
+    assert "RESYNC: 2 dashboard(s) not under their repo id" in out
+    assert "2 RESYNC dashboard(s) to fix by hand" in out
+    # This profile's copies in one command; the other owner's in its own.
+    assert "delete-dashboard N2 T1 N5 --profile devel" in out
+    assert "listed owner 'admin' differs from the session user of profile 'devel'" in out
+    assert "delete-dashboard R1 --profile <that profile>" in out
+    assert "python3 -m vcfcf_dashboards sync --profile devel" in out
+    assert ("--views-dir third_party/p/views --dashboards-dir third_party/p/dashboards "
+            "sync --profile devel") in out
+    assert "plan digest" not in out  # nothing for --apply to do
+    from vcfcf_common.legacy_cleanup import collect_repo_items, plan_cleanup, plan_digest
+    digest = plan_digest(plan_cleanup(collect_repo_items(tmp_path), live, "svc-factory"),
+                         "devel", "ops.example.invalid", tmp_path, KINDS)
+    assert run(tmp_path, inst, KINDS, apply=True, target=_TARGET, expected_digest=digest) == 1
+    assert inst.deleted == []
+
+
+def test_apply_runs_the_deletes_and_leaves_resync_copies(tmp_path, capsys):
+    """Review W5: a plan mixing delete and resync under --apply."""
+    from vcfcf_common.legacy_cleanup import KINDS, run
+    live = _cleanup_tree(tmp_path)
+    _write(tmp_path, "content/dashboards/e.yaml", f'id: RE\nname: "{NEW}E"\n')
+    live["dashboard"] += [_live("RE", OLD + "E", owner="svc-factory"),
+                          _live("NE", NEW + "E", owner="svc-factory")]
+    inst = _FakeInstance(live)
+    assert run(tmp_path, inst, KINDS, apply=False, target=_TARGET) == 1
+    digest = _digest_from(capsys.readouterr().out)
+    assert run(tmp_path, inst, KINDS, apply=True, target=_TARGET, expected_digest=digest) == 1
+    assert inst.deleted == [("dashboard", "d-old"), ("alert", "a-old"), ("symptom", "s-old")]
+
+
+def test_views_are_listed_by_view_definition_key():
+    """The view listing carries viewDefinitionKey and no id (8.18.7, 9.0.2,
+    9.1.1): before the fix every view was dropped and none reached a plan."""
+    from vcfcf_common import legacy_cleanup as lc
+    from vcfcf_common.legacy_cleanup import plan_cleanup
+
+    class _UI:
+        def list_views(self):
+            return {"LIST": {"VirtualMachine": [
+                {"viewDefinitionKey": "R1", "name": OLD + "V"},
+                {"viewDefinitionKey": "X9", "name": OLD + "W"},
+                {"id": "I1", "name": OLD + "Legacy shape"},
+                {"name": "no id at all"},
+            ]}}
+
+    inst = lc.Instance("devel", "devel")
+    inst._clients["ui"] = _UI()
+    listed = inst.list("view")
+    assert [(v["id"], v["name"]) for v in listed] == [
+        ("R1", OLD + "V"), ("X9", OLD + "W"), ("I1", OLD + "Legacy shape")]
+    plan = plan_cleanup([_item("view", "V", "R1"), _item("view", "W", "R2")], {"view": listed})
+    assert _verdicts(plan) == [("view", "skip", "R1"), ("view", "conflict", "X9")]
+
+
+class _FakeUI:
+    """A UI session whose deleteTab answers 200 and deletes only what *deletable* names."""
+
+    def __init__(self, dashboards, deletable):
+        self.dashboards = [dict(d) for d in dashboards]
+        self.deletable = set(deletable)
+        self.username = "login-name"
+
+    def list_dashboards_strict(self):
+        return [dict(d) for d in self.dashboards]
+
+    def delete_dashboards(self, targets):
+        self.dashboards = [d for d in self.dashboards
+                           if not (d["id"] in {t[0] for t in targets} and d["id"] in self.deletable)]
+        return {}
+
+    def delete_dashboards_verified(self, targets, before=None):
+        from vcfcf_dashboards.ui_client import VCFOpsUIClient
+        return VCFOpsUIClient.delete_dashboards_verified(self, targets, before=before)
+
+
+def test_cleanup_dashboard_delete_is_verified(monkeypatch):
+    """A 200 that deleted nothing fails the delete instead of passing it, and
+    the likely cause compares the owner with /api/auth/currentuser."""
+    from vcfcf_common import legacy_cleanup as lc
+    from vcfcf_common.legacy_cleanup import Action
+    fake = _FakeUI([{"id": "d-old", "name": OLD + "D", "owner": "admin", "locked": True},
+                    {"id": "other", "name": "Other", "owner": "admin"}], deletable=[])
+    inst = lc.Instance("devel", "devel")
+    inst._clients["ui"] = fake
+    monkeypatch.setattr(inst, "dashboard_owner", lambda: "svc-factory")
+    a = Action(kind="dashboard", verdict="delete", name=OLD + "D", id="d-old", reason="")
+    with pytest.raises(RuntimeError, match="still listed.*likely cause: listed owner "
+                                           "'admin' differs from session user 'svc-factory'"):
+        inst.delete(a)
+    fake.deletable.add("d-old")
+    inst.delete(a)
+    assert [d["id"] for d in fake.dashboards] == ["other"]
+
+
+def test_an_unreadable_listing_stops_the_run(tmp_path, capsys):
+    from vcfcf_common.legacy_cleanup import KINDS, run
+    inst = _FakeInstance(_cleanup_tree(tmp_path))
+
+    def boom(kind):
+        raise RuntimeError("getDashboardList answer has no 'dashboards' key")
+    inst.list = boom
+    assert run(tmp_path, inst, KINDS, apply=False, target=_TARGET) == 2
+    assert "could not list" in capsys.readouterr().err
+    assert inst.deleted == []
 
 
 class _FakeInstance:

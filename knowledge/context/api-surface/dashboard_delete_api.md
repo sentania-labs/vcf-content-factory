@@ -224,6 +224,67 @@ globalDate={"dateRange":"last6Hour"}
   the full dashboard config).
 - Success: HTTP 200, body is the full dashboard configuration JSON
   (same as `mainAction=getDashboardConfig`).
+- **HTTP 200 is not a delete; only the owner's `deleteTab` deletes**
+  (9.1.1, 2026-11-18). A non-owner's `deleteTab`, the built-in admin
+  account included, answers 200 with the full dashboard config and
+  deletes nothing. The lock does not decide it: an owner deletes a
+  dashboard every other account sees as locked (§deleteTab vs lock
+  state). The same request deleted dashboards on 8.18.7, 9.0.2 and 9.1.1
+  when the session was the listed owner; non-owner behaviour on 8.18.7
+  and 9.0.2 is not measured. `delete-dashboard`, `cleanup-legacy-prefix
+  --apply` and the dashboards bundle-uninstall handler re-list with a
+  strict listing (an unreadable answer raises, never reads as empty) and
+  check each id is gone (`VCFOpsUIClient.delete_dashboards_verified`); the
+  distribution installer template does not yet. Records:
+  `investigations/2026-11-18-dashboard-import-by-name-and-delete-noop.md`,
+  `investigations/dashboard_delete_non_owner_2026-11-18.md`. Lesson: `knowledge/lessons/ui-delete-200-is-not-a-delete.md`.
+- **Verification limit** (9.1.1, `investigations/dashboard_delete_non_owner_2026-11-18.md` Q5): when another owner
+  already holds a dashboard id, an import adds a second record with the
+  same id, one per owner, and each account's listing shows only the
+  other account's copy (listed `locked: true`). A delete by the session
+  account then removes its own copy while its listing looks unchanged, so
+  an id-based re-list reports the id as still present although something
+  was deleted. The error is in the safe direction (a surviving dashboard
+  is never reported deleted). A `DASHBOARDS` content export, which groups
+  records by owner, or a listing as the owner settles it.
+- **Error panel on a fresh account** (9.1.1): from an account that had
+  never opened the UI, the first `deleteTab` calls answered HTTP 200
+  `text/html` with the Struts error panel instead of JSON (with and
+  without `X-Requested-With`), so `delete_dashboards`' `resp.json()`
+  raises; later calls answered the JSON no-op. Cause not isolated.
+- Unverified: the factory's `deleteTab` request carries no
+  `X-Requested-With: XMLHttpRequest` header (the list call does) and sends
+  `currentComponentInfo=TODO`. Neither is known to matter: the owner-session
+  request works as is, the Manage page sends the same `deleteTab`, and the
+  header did not change the fresh-account error panel; not changed.
+
+### Non-owner removal: measured, not implemented
+
+Measured on 9.1.1 (`investigations/dashboard_delete_non_owner_2026-11-18.md` Q3, Q4); the factory does not use it.
+An Administrator-role session removes another account's dashboard with
+the Orphaned Content "Discard" action, which does not check that the
+dashboard is orphaned:
+
+```
+POST https://{host}/ui/dashboardShare.action
+Content-Type: application/x-www-form-urlencoded
+X-Requested-With: XMLHttpRequest
+
+mainAction=discardDashboards
+tabsToDelete={"<ownerId>":["<dashboard id>", ...]}
+secureToken=<csrfToken>
+```
+
+`<ownerId>` is the `getDashboardList` entry's `ownerId` (the owner's user
+UUID). The answer is HTTP 200 with an empty body whether or not anything
+was deleted (a wrong owner key deletes nothing), so only a re-list proves
+it. Not paths to a delete: unlocking (the owner sets the Everyone share to
+edit) leaves a non-owner's `deleteTab` a no-op; `changeOwner` by a
+non-owner answers `notOk`; Take Ownership (`reassignDashboards`) works
+but rebuilds the dashboard under a new id with ` 1` appended to the name.
+Not measured: 8.18.7 and 9.0.2, the privilege `discardDashboards` needs
+beyond an all-objects Administrator, batches across owners, and whether it
+clears home-page and favourite references.
 
 ## Dashboard list
 
@@ -289,6 +350,14 @@ columnIndex).
 
 - `deleteTab` on a **locked** dashboard is a **silent no-op**: HTTP 200,
   returns the full dashboard config, dashboard not deleted.
+  **Corrected 2026-11-18 (9.1.1, `investigations/dashboard_delete_non_owner_2026-11-18.md`):** wrong as stated. The
+  case behind it (§No delete path) was a session on dashboards another
+  account owned, and ownership is what decides: a non-owner's `deleteTab`
+  is the 200 no-op, an owner's deletes. `locked` is per-viewer and means
+  "another account owns this and shared it with you"; an owner never sees
+  its own dashboard as locked, and it deletes one every other account
+  sees as locked. Unlocking (the owner sets the Everyone share to edit)
+  does not let a non-owner delete. 8.18.7 and 9.0.2 not measured.
 - `deleteTab` on an **unlocked** dashboard owned by the calling user
   succeeds (confirmed with clone-created dashboards).
 - There is **no unlockTab, setDashboardLock, or equivalent
@@ -322,6 +391,15 @@ of the original's lock/owner state. The clone can be deleted via
 `deleteTab`. The original is unaffected.
 
 ### Content-zip import always assigns owner=admin
+
+**Explained 2026-11-18 (9.1.1, `investigations/dashboard_delete_non_owner_2026-11-18.md` Q1):** the factory zip writes
+the importing user's id into both the `<digits>L.v1` marker and the one
+`usermappings.json` entry, and when the marker content equals an owner's
+`userId` the importer maps that owner to the built-in admin account. So
+a factory sync is owned by the built-in admin from any account; with the
+marker changed to an unrelated UUID the owner maps by `userName` (path 1
+of `investigations/2026-11-11-owner-mapping-dashboard-skip-reproduction.md`,
+measured there on 9.0.2). The text below predates this.
 
 Tested: reimporting dashboards via `POST /api/content/operations/import`
 with `usermappings.json` mapping to `userName: "claude"` — the
@@ -357,11 +435,20 @@ applies as a safety baseline regardless of the observed lock state.
 
 Each dashboard entry includes:
 - `id`, `name`, `description`
-- `locked` (bool) — historically server-enforced true after content-zip
-  import, but see 2026-04-11 note above — may be false in newer builds
+- `locked` (bool) — per-viewer on 9.1.1 (2026-11-18): `true` means
+  another account owns the dashboard and shared it with you; an owner
+  never sees its own as locked. Not a delete blocker in itself
 - `owner` (string) — username of owner, typically "admin" after import
-- `editable` (bool) — false if caller is not the owner
-- `shared`, `sharedPublicly` (bools)
+  (see §Content-zip import always assigns owner=admin)
+- `ownerId` (string) — the owner's user UUID (9.1.1); the key
+  `discardDashboards` needs
+- `editable` (bool) — recorded here as "false if caller is not the
+  owner"; on 9.1.1 (2026-11-18) it was `false` for owner and non-owner
+  alike, so it does not show ownership there
+- `edit` (bool) — per-viewer on 9.1.1: `true` for the owner; for a
+  non-owner it follows the share (edit or read-only). Whether 8.18.7 and
+  9.0.2 carry `edit`, `editable` or both was not recorded
+- `shared`, `sharedPublicly` (bools) — `shared` is per-viewer on 9.1.1
 - `reportUsageCount` (int)
 - `autoswitchEnabled`, `autoswitchDelay` (scheduling)
 
@@ -374,11 +461,17 @@ Per-tab (dashboard) config includes `isLocked`, `isShared`,
 
 ### No delete path for admin-owned locked dashboards from non-admin user
 
+**Corrected 2026-11-18 (9.1.1, `investigations/dashboard_delete_non_owner_2026-11-18.md`):** not a dead end for an
+Administrator-role session: `discardDashboards` removes another
+account's dashboard (§Non-owner removal: measured, not implemented). The
+cause is ownership, not the lock. The original text follows.
+
 **Confirmed dead end.** A non-admin user (even with Administrator
 role) cannot delete dashboards that are `locked: true` and
 `owner: admin`. All attempted paths fail:
 
-1. `deleteTab` — silent no-op (lock blocks it)
+1. `deleteTab` — silent no-op (because the session is not the owner,
+   not because of the lock: corrected 2026-11-18, §deleteTab vs lock state)
 2. `saveDashboardConfig` / `saveTab` — cannot change lock state
 3. Content reimport with modified usermappings — ownership not reassigned
 4. No Ext.Direct unlock/delete controller exists
