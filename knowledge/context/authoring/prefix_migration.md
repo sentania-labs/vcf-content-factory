@@ -132,7 +132,7 @@ installed:
 |---|---|---|---|---|
 | Super metric | content zip | YAML UUID | in place | vcfops-content-model skill §Identity schemes; `api-surface/install_and_enable.md` (upsert by id); `investigations/2026-08-26-vcf-license-consumption-inventory.md` (an SM renamed under its UUID) |
 | View | content zip | YAML UUID (same name, new UUID duplicates with a numeric suffix) | in place, expected | `api-surface/content_import_skip_semantics.md` §Side finding |
-| Dashboard | content zip, pak content | **name** (same name, new UUID replaces and orphans the old UUID) | not observed for same UUID, new name; may leave the old one | vcfops-api skill gotcha 8; `content_import_skip_semantics.md` run F1 |
+| Dashboard | content zip, pak content | **name** (same name, new UUID replaces and orphans the old UUID) | content zip: **a second dashboard under a server-assigned id; the old-named one keeps the repo UUID** (measured 8.18.7, 9.0.2, 9.1.1; §The RESYNC dashboard states). Pak: not measured | vcfops-api skill gotcha 8; `content_import_skip_semantics.md` run F1; `investigations/2026-11-18-dashboard-import-by-name-and-delete-noop.md` |
 | Report | content zip | YAML UUID | in place, expected | vcfops-content-model skill |
 | Custom group | REST, matched by name | name (server id) | **new object, old one left** | vcfops-content-model skill; `vcfcf_customgroups` sync |
 | Symptom | REST, matched by name (factory, distribution installer); pak: `SymptomDefinition-<uuid>` | name; pak: YAML UUID | factory: **new object, old left**; pak: in place | `vcfcf_symptoms` sync; `alerts/render.py` `_symptom_id` |
@@ -177,12 +177,17 @@ An object is deleted only when all of these hold:
 4. super metrics, views, reports: never deleted. Their rename lands in place
    (same UUID), so a legacy-named one under another id is not a leftover of
    this migration (a pak's object, a user's clone): CONFLICT. One under the
-   repo id is the repo object not yet synced: SKIP;
+   repo id is the repo object not yet synced: SKIP. Views are listed by the
+   thumbnail's `viewDefinitionKey` (`id` as a fallback): the view listing
+   on 8.18.7, 9.0.2 and 9.1.1 carries no `id`, and before 2026-11-18 the
+   tool dropped every view, so no view appeared in any plan;
 5. dashboards: the new-named twin carries the repo UUID, the old-named one
    does not, and the old one's owner (`getDashboardList` `owner`) is the
    account the factory's dashboard sync imports as on this profile
-   (`/api/auth/currentuser`, the account `vcfcf_dashboards sync` stamps).
-   Anything else is CONFLICT. The listing shows each dashboard's owner and
+   (`/api/auth/currentuser`, the account `vcfcf_dashboards sync` stamps):
+   delete. The repo UUID is not on the new name and a copy holds one of the
+   names: RESYNC (§The RESYNC dashboard states). Anything else is CONFLICT.
+   The listing shows each dashboard's owner, `locked` when listed so, and
    the twin's id;
 6. custom groups, symptoms, alerts: the two are different objects.
 
@@ -207,10 +212,118 @@ widens the scope, and the apply is refused. Digests printed before the scope
 was added (16 hex characters, no dashes) no longer match: dry-run again.
 
 Deletes run dependents first (dashboards, alerts, symptoms, custom groups)
-and stop at the first failure, listing what was deleted and what was not.
+and stop at the first failure, listing what was deleted and what was not. A
+dashboard delete counts only when a re-list no longer shows the id (the UI
+delete answers HTTP 200 whether or not it deleted; §Deleting dashboards).
 Recommendations are not checked: their key does not change. Exit 0 clean,
-1 when a conflict was listed, 2 on a refused apply, a failed delete or bad
+1 when a conflict or a RESYNC dashboard was listed, 2 on a refused apply,
+a failed delete, a listing it could not read (no plan is made) or bad
 arguments.
+
+### The RESYNC dashboard states
+
+Measured on 8.18.7, 9.0.2 and 9.1.1
+(`investigations/2026-11-18-dashboard-import-by-name-and-delete-noop.md`):
+a content-zip dashboard import is keyed by name. Syncing `[VCF CF] <title>`
+while `[VCF Content Factory] <title>` is installed creates a second dashboard
+under a server-assigned id; the old-named one keeps the repo UUID. Deleting
+only the old-named one would delete the repo UUID and leave the new name
+under a server id. Each further sync on that state, for instance after a
+delete that did not take, adds another new-named copy.
+
+What works, proven on all three versions: delete **every** copy (the
+old-named one and each new-named one), then import the dashboard again.
+With no dashboard of that name or id present, the import lands under the
+repo UUID with the new name.
+
+The plan reports RESYNC, listing every same-named copy, for three states:
+
+| State | On the instance | Why it is not left alone |
+|---|---|---|
+| two-copy | old-named copy under the repo UUID, one or more new-named copies under server ids | what a normal sync leaves |
+| old-only | old-named copy under the repo UUID, no new-named copy | a sync now creates the two-copy state (before 2026-11-18 this was SKIP "sync first") |
+| new-only | new-named copies only, none under the repo UUID | a sync updates one of them by name and the repo UUID never returns (for instance after deleting only the old-named copy) |
+
+An old-named copy under another id with no new-named copy stays SKIP: a sync
+then lands under the repo UUID, because neither the name nor the id is taken.
+
+The printed remedy covers every RESYNC dashboard of the run at once, in this
+order:
+
+1. one `python3 -m vcfcf_dashboards delete-dashboard <ids> --profile P`
+   with every copy of every RESYNC dashboard (copies whose listed owner
+   differs from the profile's session user get their own command, to run on
+   a profile that signs in as that owner, §Deleting dashboards);
+2. the same dry run again, which must show no RESYNC line; if any remains,
+   repeat step 1 for the ids it lists;
+3. one import per dashboards tree: `python3 -m vcfcf_dashboards sync
+   --profile P` from the repo root (with `--views-dir` / `--dashboards-dir`
+   for a `third_party/` project); for a pak, re-install the pak (the
+   import-by-name behaviour was measured for content zips, not paks).
+
+Why not a delete-then-sync pair per dashboard: `vcfcf_dashboards sync`
+re-imports the whole dashboards tree, not one dashboard. With two RESYNC
+dashboards A and B, deleting A's copies and syncing adds a copy of B (still
+in its state) under an id none of the printed deletes covers; B's printed
+delete then passes, the next sync updates the surviving copy by name, and B
+stays off its repo UUID.
+
+`--apply` does not perform the remedy: it leaves no dashboard of that name
+until the re-import, which breaks rule 3 (nothing is deleted before its
+successor is installed), and the re-import is a separate step this tool
+does not run. RESYNC does not block `--apply` of the plan's other deletes.
+
+### Deleting dashboards: owner and lock
+
+Measured on 9.1.1 (`investigations/dashboard_delete_non_owner_2026-11-18.md`;
+the migration run in
+`investigations/2026-11-18-dashboard-import-by-name-and-delete-noop.md`):
+ownership decides whether the UI delete (`deleteTab`) deletes; the lock does
+not. A non-owner's delete, the built-in admin account included, answers HTTP
+200 and deletes nothing; the owner deletes, even a dashboard every other
+account sees as locked. `locked`, `edit` and `shared` are per-viewer:
+`locked: true` is how a non-owner sees a dashboard someone else owns and
+shared. 8.18.7 and 9.0.2 not measured for a non-owner.
+
+A factory sync is owned by the built-in admin account whichever account runs
+it: the zip writes the importing user's id into the `L.v1` marker and the
+`usermappings.json` entry, and 9.1.1 maps a marker match to the built-in
+admin. Delete as the account the listing names as owner:
+
+- run `delete-dashboard` on a profile whose session user
+  (`/api/auth/currentuser`) is the listed `owner`. The plan flags each copy
+  whose listed owner differs from that user; the lock is never reported as a
+  cause;
+- `delete-dashboard` compares the listed owner with the same
+  `/api/auth/currentuser` account the cleanup uses, and words a mismatch as
+  "listed owner X differs from session user Y" (a directory suffix shows as
+  what it is). It warns before the call, still sends it, then re-lists with
+  a strict listing (an unreadable answer is an error, never "empty") and
+  reports each id deleted, still listed (with the likely cause), or not
+  verified (not listed before the call; an after-listing that could not be
+  read or lost dashboards that were not targets). A name matching several
+  dashboards is refused with their ids unless `--all-copies`; the cleanup's
+  remedy passes ids. A UUID is matched case-insensitively. Exit 0 only when
+  every target was listed and is gone, 1 otherwise, 2 on a UI error;
+- the verification's limit: when another owner already holds the same id,
+  an import adds a second record under it, one per owner, and each account
+  lists only the other's copy. Deleting the session's own copy then leaves
+  its listing unchanged, and the id is reported still listed although
+  something was deleted. The "still listed" message says so; a `DASHBOARDS`
+  content export or a listing as the owner settles it. The error is in the
+  safe direction: a surviving dashboard is never reported deleted;
+- measured, not implemented: an Administrator-role session removes another
+  account's dashboard with `dashboardShare.action` `discardDashboards`
+  (`api-surface/dashboard_delete_api.md` §Non-owner removal). Unlocking does
+  not let a non-owner delete, `changeOwner` by a non-owner answers `notOk`,
+  and Take Ownership rebuilds the dashboard under a new id with ` 1`
+  appended, so none of those is a delete path;
+- unverified: the delete request carries no `X-Requested-With` header (the
+  list request does) and `currentComponentInfo=TODO`. The same request
+  works when the session owns the dashboards, so neither is known to matter.
+  From an account that had never opened the UI, the first deletes answered
+  the Struts error panel instead of JSON (cause not isolated), which the
+  client raises on.
 
 ## The core wheel and the external migrator
 

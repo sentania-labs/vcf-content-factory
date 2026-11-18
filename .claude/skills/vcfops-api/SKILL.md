@@ -129,6 +129,12 @@ Poll `GET /api/content/operations/import` until
    YAML while keeping the name breaks every deep link and summary-tab
    association pinned to the old UUID. Views behave differently: they
    duplicate with a numeric suffix.
+   The other direction does not rename either: importing a dashboard
+   under the same UUID with a new name adds a second dashboard under a
+   server-assigned id, and the old-named one keeps the UUID (8.18.7,
+   9.0.2, 9.1.1;
+   `knowledge/context/investigations/2026-11-18-dashboard-import-by-name-and-delete-noop.md`).
+   Remedy: delete every copy, then import once.
 
 ## API surface map
 

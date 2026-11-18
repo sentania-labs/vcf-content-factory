@@ -96,6 +96,10 @@ Portable Tier 2 SDK adapter build toolchain (jar-free).
   lists exact old-name twins and removes the ones it can prove are
   leftovers (dry run by default; see the factory's
   `knowledge/context/authoring/prefix_migration.md`).
+  For content-zip imports the old-named copy was measured to keep the
+  dashboard's id; `cleanup-legacy-prefix` reports that as RESYNC and prints a
+  delete-every-copy-then-import remedy for the operator to run, without
+  deleting it itself. Pak upgrades were not measured.
 - Kit contents: `naming.py` (the factory's `vcfcf_core/naming.py`, the one
   definition of the prefix).
 

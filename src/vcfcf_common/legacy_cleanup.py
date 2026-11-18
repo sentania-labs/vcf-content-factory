@@ -11,9 +11,10 @@ Per type (sources: ``knowledge/context/authoring/prefix_migration.md``):
 - custom groups, symptoms, alerts: the factory syncs them over REST and
   matches by name, so a rename always creates a new object and leaves the
   old one;
-- dashboards: import identity is the name (vcfops-api skill, gotcha 8), so a
-  rename may leave the old one; what a same-id, new-name import does to the
-  old dashboard has not been observed;
+- dashboards: a content-zip import is keyed by name (measured on 8.18.7,
+  9.0.2 and 9.1.1): syncing the renamed dashboard beside the old-named one
+  adds a second dashboard under a server-assigned id, and the old-named one
+  keeps the repo id (the two-copy state, rule 5);
 - super metrics, views, reports: content-zip import is keyed by the YAML
   UUID, so a rename is expected to land in place and leave nothing; they are
   checked anyway, and any legacy-named one is reported, never deleted;
@@ -40,8 +41,17 @@ Safety rules, all of which must hold before an object is deleted:
    user's clone) and is reported as a conflict.
 5. Dashboards: the new-named twin carries the repo id, the leftover does
    not, and the leftover's owner is the account the factory's dashboard
-   sync imports as on this profile (``/api/auth/currentuser``). Anything
-   else is a conflict.
+   sync imports as on this profile (``/api/auth/currentuser``): delete.
+   RESYNC, every same-named copy listed, never applied here (it leaves no
+   dashboard of that name until the re-import, rule 3): the old-named one
+   carries the repo id and no new-named copy does (what a normal sync
+   leaves, or what a sync would cause), or only new-named copies remain
+   and none carries it. The printed remedy is one delete of every copy of
+   every RESYNC dashboard, a re-run of the dry run that must show no
+   RESYNC, then one sync per dashboards tree (a sync re-imports the whole
+   tree, so syncing while any copy remains adds one). Anything else is a
+   conflict. A dashboard delete is verified by re-listing: HTTP 200 is not
+   a delete.
 6. Custom groups, symptoms, alerts (server-owned ids): the leftover is a
    different object from the twin (different id).
 
@@ -52,7 +62,7 @@ needs ``--plan-digest <digest>``: the plan is recomputed and nothing is
 deleted unless its scope (profile, ROOT, kinds), host and verdicts are the
 ones reviewed. Deletion runs dependents first
 (dashboards, alerts, symptoms, custom groups) and stops at the first
-failure.
+failure. Exit 1 when a conflict or a RESYNC dashboard was listed.
 """
 from __future__ import annotations
 
@@ -109,18 +119,41 @@ class RepoItem:
 @dataclass
 class Action:
     kind: str
-    verdict: str  # "delete" | "skip" | "conflict"
+    verdict: str  # "delete" | "skip" | "conflict" | "resync"
     name: str
     id: Optional[str]
     reason: str
     source: str = ""
     owner: str = ""
     twin_id: str = ""
+    locked: bool = False
+
+
+@dataclass
+class Resync:
+    """A dashboard not under the repo id, fixed by hand (rule 5): delete
+    every copy, then import once.
+
+    *state*: ``two-copy`` (old-named copy under the repo id beside new-named
+    copies), ``old-only`` (old-named copy under the repo id, no new-named
+    copy: a sync now would add one), ``new-only`` (new-named copies only,
+    none under the repo id: a sync updates one by name and the repo id never
+    returns). *copies*: every same-named dashboard (old and new name), as
+    ``(id, name, owner, locked)``. *blockers*: ``(id, owner, reason)`` per
+    copy whose listed owner differs from the session user.
+    """
+    name: str
+    repo_id: str
+    source: str
+    state: str = "two-copy"  # "two-copy" | "old-only" | "new-only"
+    copies: List[tuple] = field(default_factory=list)
+    blockers: List[tuple] = field(default_factory=list)
 
 
 @dataclass
 class CleanupPlan:
     actions: List[Action] = field(default_factory=list)
+    resyncs: List[Resync] = field(default_factory=list)
 
     def by_verdict(self, verdict: str) -> List[Action]:
         return [a for a in self.actions if a.verdict == verdict]
@@ -216,6 +249,60 @@ def _live_scope(item: RepoItem, entry: dict) -> Optional[tuple]:
     return None
 
 
+_RESYNC_STATE = {
+    "two-copy": ("old-named copy under the repo id {rid} beside {n} new-named copy(ies) "
+                 "under server-assigned ids: the import of \"{name}\" is keyed by name, "
+                 "so it added a dashboard instead of renaming this one"),
+    "old-only": ("old-named copy under the repo id {rid} and no new-named copy: a sync "
+                 "now adds a second dashboard beside it (the import is keyed by name) "
+                 "instead of renaming it"),
+    "new-only": ("only new-named copies remain, {n} of them, none under the repo id "
+                 "{rid}: a sync updates one by name and the repo id never returns"),
+}
+
+
+def _resync_dashboard(plan: CleanupPlan, item: RepoItem, olds: List[dict],
+                      twins: List[dict], dashboard_owner: Optional[str],
+                      state: str) -> None:
+    """Record a dashboard that is not under the repo id: every copy listed,
+    verdict resync, never deleted here.
+
+    A content-zip dashboard import is keyed by name (8.18.7, 9.0.2, 9.1.1,
+    ``investigations/2026-11-18-dashboard-import-by-name-and-delete-noop.md``).
+    The remedy, proven on all three: delete every copy, then import again;
+    with no dashboard of that name or id present the import lands under the
+    repo id with the new name. Not applied here: it leaves no dashboard of
+    that name until the re-import (rule 3).
+    """
+    from vcfcf_dashboards.ui_client import dashboard_delete_blockers, is_true
+    rs = Resync(name=item.name, repo_id=item.id or "", source=item.source, state=state)
+    summary = _RESYNC_STATE[state].format(rid=item.id, n=len(twins), name=item.name)
+    for e, is_old in [(o, True) for o in olds] + [(t, False) for t in twins]:
+        eid = str(e.get("id") or "")
+        owner = str(e.get("owner") or "")
+        locked = is_true(e.get("locked"))
+        if is_old and eid.lower() == (item.id or "").lower():
+            reason = summary
+        elif is_old:
+            reason = "another old-named copy (not under the repo id)"
+        elif state == "new-only":
+            reason = summary
+        else:
+            reason = (f"new-named copy under a server-assigned id, not the repo id "
+                      f"{item.id}")
+            if len(twins) > 1:
+                reason += (f" ({len(twins)} new-named copies: each sync on this state, "
+                           f"for instance after a delete that did not take, adds one)")
+        plan.actions.append(Action(
+            kind="dashboard", verdict="resync", name=str(e.get("name")), id=eid or None,
+            reason=reason, source=item.source, owner=owner, locked=locked))
+        rs.copies.append((eid, str(e.get("name")), owner, locked))
+        why = dashboard_delete_blockers(e, dashboard_owner)
+        if why:
+            rs.blockers.append((eid, owner, "; ".join(why)))
+    plan.resyncs.append(rs)
+
+
 def plan_cleanup(items: Iterable[RepoItem], live: Dict[str, List[dict]],
                  dashboard_owner: Optional[str] = None) -> CleanupPlan:
     """Decide, per legacy-named object on the instance, delete or leave.
@@ -246,6 +333,20 @@ def plan_cleanup(items: Iterable[RepoItem], live: Dict[str, List[dict]],
         twins = [e for e in entries if e.get("name") in new_names and _ours(e)]
         twin_ids = {str(t.get("id") or "") for t in twins}
         twin_label = ",".join(sorted(i for i in twin_ids if i)) or ""
+        repo_lc = (item.id or "").lower()
+        if item.kind == "dashboard" and repo_lc:
+            # Import is keyed by name: any state where the repo id is not on
+            # the new name, and the old name or a new-named copy holds the
+            # name, needs every copy deleted and one import (rule 5).
+            twin_has_repo = repo_lc in {t.lower() for t in twin_ids}
+            old_has_repo = any(str(e.get("id") or "").lower() == repo_lc for e in leftovers)
+            if old_has_repo and not twin_has_repo:
+                _resync_dashboard(plan, item, leftovers, twins, dashboard_owner,
+                                  "two-copy" if twins else "old-only")
+                continue
+            if not leftovers and twins and not twin_has_repo:
+                _resync_dashboard(plan, item, [], twins, dashboard_owner, "new-only")
+                continue
 
         for e in named_old:
             if _ours(e):
@@ -295,10 +396,13 @@ def plan_cleanup(items: Iterable[RepoItem], live: Dict[str, List[dict]],
                     act.verdict = "conflict"
                     act.reason = "the repo object has no id to compare"
                 elif lo_id.lower() == repo_id:
+                    # Guard only: an old-named copy under the repo id is RESYNC
+                    # above unless a new-named copy lists the same id, which
+                    # one id under two names cannot be. Never delete the repo id.
                     act.verdict = "conflict"
-                    act.reason = (f"the old-named object still carries the repo id "
-                                  f"{item.id}; deleting it would delete that id. "
-                                  f"Check the instance by hand")
+                    act.reason = (f"the old-named object carries the repo id "
+                                  f"{item.id} and a new-named one lists it too; "
+                                  f"deleting it would delete that id. Check by hand")
                 elif repo_id not in {t.lower() for t in twin_ids}:
                     act.verdict = "conflict"
                     act.reason = (f'"{item.name}" exists but not with the repo id '
@@ -309,9 +413,9 @@ def plan_cleanup(items: Iterable[RepoItem], live: Dict[str, List[dict]],
                                   "profile is unknown, so the owner cannot be checked")
                 elif act.owner.lower() != dashboard_owner.lower():
                     act.verdict = "conflict"
-                    act.reason = (f"owned by {act.owner or 'nobody listed'!r}, not "
-                                  f"{dashboard_owner!r} (the account the factory syncs "
-                                  f"dashboards as on this profile): someone else's. "
+                    act.reason = (f"listed owner {act.owner or 'none'!r} differs from "
+                                  f"session user {dashboard_owner!r} (the account the "
+                                  f"factory syncs dashboards as on this profile). "
                                   f"Check by hand")
                 else:
                     act.verdict = "delete"
@@ -371,6 +475,25 @@ def _digest_mismatch(expected: Optional[str], digest: str) -> str:
     return "changed since the dry run: " + "; ".join(changed)
 
 
+def dry_run_command(root: Path, profile: str, kinds: Sequence[str],
+                    types_given: bool = False) -> str:
+    """The shell command that repeats this dry run (same ROOT, kinds, profile)."""
+    return CLEANUP_COMMAND + " " + " ".join(
+        shlex.quote(a) for a in _scope_args(root, profile, kinds, types_given))
+
+
+def _scope_args(root: Path, profile: str, kinds: Sequence[str],
+                types_given: bool) -> List[str]:
+    args = []
+    resolved = Path(root).resolve()
+    if resolved != Path.cwd().resolve():
+        args.append(str(resolved))
+    chosen = canonical_kinds(kinds)
+    if types_given or chosen != list(KINDS):
+        args += ["--types", ",".join(chosen)]
+    return args + ["--profile", profile]
+
+
 def apply_command(root: Path, profile: str, kinds: Sequence[str], digest: str,
                   types_given: bool = False) -> str:
     """The shell command that applies exactly the plan a dry run printed.
@@ -380,14 +503,8 @@ def apply_command(root: Path, profile: str, kinds: Sequence[str], digest: str,
     narrows the default, and ``--profile`` always, so the apply does not
     depend on ``VCFOPS_PROFILE``. Each argument is shell-quoted.
     """
-    args = []
-    resolved = Path(root).resolve()
-    if resolved != Path.cwd().resolve():
-        args.append(str(resolved))
-    chosen = canonical_kinds(kinds)
-    if types_given or chosen != list(KINDS):
-        args += ["--types", ",".join(chosen)]
-    args += ["--profile", profile, "--apply", "--plan-digest", digest]
+    args = _scope_args(root, profile, kinds, types_given)
+    args += ["--apply", "--plan-digest", digest]
     return CLEANUP_COMMAND + " " + " ".join(shlex.quote(a) for a in args)
 
 
@@ -396,13 +513,21 @@ def apply_command(root: Path, profile: str, kinds: Sequence[str], digest: str,
 # ---------------------------------------------------------------------------
 
 def _pairs(objs: Iterable[dict], name_of: Callable[[dict], Optional[str]],
-           extra: Optional[Callable[[dict], dict]] = None) -> List[dict]:
+           extra: Optional[Callable[[dict], dict]] = None,
+           id_of: Callable[[dict], Optional[str]] = lambda o: o.get("id")) -> List[dict]:
     out = []
     for o in objs:
         n = name_of(o)
-        if o.get("id") and n:
-            out.append({"id": str(o["id"]), "name": n, **(extra(o) if extra else {})})
+        i = id_of(o)
+        if i and n:
+            out.append({"id": str(i), "name": n, **(extra(o) if extra else {})})
     return out
+
+
+def _view_id(o: dict) -> Optional[str]:
+    """A view thumbnail's id: ``viewDefinitionKey`` (the listing on 8.18.7,
+    9.0.2 and 9.1.1 carries no ``id``), ``id`` as a fallback for older shapes."""
+    return o.get("viewDefinitionKey") or o.get("id")
 
 
 def _kinds_of(o: dict) -> dict:
@@ -471,12 +596,15 @@ class Instance:
             from vcfcf_reports.client import list_reports
             return _pairs(list_reports(self._client("suite")), lambda o: o.get("name"))
         if kind == "dashboard":
-            return _pairs(self._client("ui").list_dashboards(), lambda o: o.get("name"),
-                          lambda o: {"owner": o.get("owner") or ""})
+            # Strict: an unreadable answer must not read as "nothing installed".
+            return _pairs(self._client("ui").list_dashboards_strict(), lambda o: o.get("name"),
+                          lambda o: {"owner": o.get("owner") or "",
+                                     "locked": o.get("locked"),
+                                     "edit": o.get("edit")})
         if kind == "view":
             from vcfcf_dashboards.cli import flatten_view_groups
             return _pairs(flatten_view_groups(self._client("ui").list_views()),
-                          lambda o: o.get("name"))
+                          lambda o: o.get("name"), id_of=_view_id)
         raise KeyError(kind)
 
     def dashboard_owner(self) -> Optional[str]:
@@ -500,7 +628,22 @@ class Instance:
         elif a.kind == "alert":
             self._client("alert").delete_alert(a.id)
         elif a.kind == "dashboard":
-            self._client("ui").delete_dashboards([(a.id, a.name)])
+            # HTTP 200 is not a delete (on 9.1.1 a non-owner's delete is a
+            # 200 no-op); re-list and check.
+            from vcfcf_dashboards.ui_client import SAME_ID_COPY_NOTE, dashboard_delete_blockers
+            res = self._client("ui").delete_dashboards_verified([(a.id, a.name)])
+            if res.remaining:
+                # Same identity source as the plan's owner check.
+                why = dashboard_delete_blockers(res.remaining[0], self.dashboard_owner())
+                raise RuntimeError(
+                    "still listed after the delete (the server answered 200)"
+                    + (f"; likely cause: {'; '.join(why)}" if why else "")
+                    + f"; {SAME_ID_COPY_NOTE}")
+            if res.unverifiable:
+                raise RuntimeError(f"delete not verified: {res.note}")
+            if res.unlisted:
+                raise RuntimeError("not listed before the delete, so the delete "
+                                   "cannot be verified")
         elif a.kind == "view":
             self._client("ui").delete_view(a.id, a.name)
         else:
@@ -511,7 +654,99 @@ class Instance:
 # CLI
 # ---------------------------------------------------------------------------
 
-_TAG = {"delete": "DELETE", "skip": "SKIP", "conflict": "CONFLICT"}
+_TAG = {"delete": "DELETE", "skip": "SKIP", "conflict": "CONFLICT", "resync": "RESYNC"}
+
+
+def _sync_step(root: Path, source: str, profile: str) -> str:
+    """How to import the dashboard at *source* again, from *root*."""
+    root = Path(root).resolve()
+    src = Path(source).resolve()
+    q = shlex.quote
+    if detect_layout(root) == "pak":
+        return ("re-install the pak built from this repo, which imports its "
+                "dashboards again (the import-by-name behaviour was measured for "
+                "content-zip imports, not for pak installs)")
+    cmd = "python3 -m vcfcf_dashboards"
+    # The dashboards tree the file belongs to: the nearest "dashboards" folder.
+    tree = next((p for p in src.parents if p.name == "dashboards"), src.parent)
+    if tree != root / "content" / "dashboards":
+        try:
+            dash_dir = tree.relative_to(root)
+        except ValueError:
+            dash_dir = tree
+        views = tree.parent / "views"
+        if views.is_dir():
+            try:
+                cmd += f" --views-dir {q(str(views.relative_to(root)))}"
+            except ValueError:
+                cmd += f" --views-dir {q(str(views))}"
+        cmd += f" --dashboards-dir {q(str(dash_dir))}"
+    cmd += f" sync --profile {q(profile)}"
+    where = "" if root == Path.cwd().resolve() else f"cd {q(str(root))} && "
+    return where + cmd
+
+
+def _resync_advice(plan: CleanupPlan, root: Path, profile: str, kinds: Sequence[str],
+                   types_given: bool = False) -> List[str]:
+    """The by-hand remedy for every RESYNC dashboard, in the only safe order.
+
+    One delete of every copy of every RESYNC dashboard, then a re-run of the
+    dry run that must show no RESYNC line, then one sync per dashboards
+    tree. Never a delete-then-sync pair per dashboard: ``vcfcf_dashboards
+    sync`` re-imports the whole tree, so a sync while another RESYNC
+    dashboard still has a copy adds a copy of it under an id no printed
+    delete covers.
+    """
+    q = shlex.quote
+    lines = [
+        f"  RESYNC: {len(plan.resyncs)} dashboard(s) not under their repo id. A dashboard",
+        "  import is keyed by name: delete every copy, then import once, and it lands",
+        "  under the repo id with the new name. Until the import the dashboard is not on",
+        "  the instance. This tool does not do it. Follow the steps in order: a sync",
+        "  re-imports the whole dashboards tree, not one dashboard, so syncing while any",
+        "  RESYNC dashboard still has a copy adds another copy of it, under an id none",
+        "  of the delete commands below covers.",
+    ]
+    for rs in plan.resyncs:
+        lines.append(f'    "{rs.name}" (repo id {rs.repo_id}, {len(rs.copies)} '
+                     f"cop{'y' if len(rs.copies) == 1 else 'ies'}, {rs.state})")
+    # Step 1: one command for the copies this profile can be expected to
+    # delete, one per other listed owner.
+    blocked = {}
+    for rs in plan.resyncs:
+        for eid, owner, _why in rs.blockers:
+            blocked[eid] = owner
+    mine = [c[0] for rs in plan.resyncs for c in rs.copies if c[0] and c[0] not in blocked]
+    others: Dict[str, List[str]] = {}
+    for rs in plan.resyncs:
+        for c in rs.copies:
+            if c[0] in blocked:
+                others.setdefault(blocked[c[0]], []).append(c[0])
+    lines.append("  1. Delete every copy of every RESYNC dashboard:")
+    if mine:
+        lines.append(f"       python3 -m vcfcf_dashboards delete-dashboard "
+                     f"{' '.join(q(i) for i in mine)} --profile {q(profile)}")
+    for owner, ids in others.items():
+        lines.append(f"     listed owner {owner!r} differs from the session user of profile "
+                     f"{profile!r}; on 9.1.1 only the owner's delete deletes (a "
+                     f"non-owner's answers 200 and deletes nothing), so run this on a "
+                     f"profile that signs in as {owner!r}:")
+        lines.append(f"       python3 -m vcfcf_dashboards delete-dashboard "
+                     f"{' '.join(q(i) for i in ids)} --profile <that profile>")
+    lines.append("     delete-dashboard re-lists afterwards and exits non-zero if any copy "
+                 "is still listed.")
+    lines.append("  2. Re-run this dry run and confirm no RESYNC line remains:")
+    lines.append(f"       {dry_run_command(root, profile, kinds, types_given)}")
+    lines.append("     If any remains, repeat step 1 for the ids it lists. Do not sync "
+                 "until none remains.")
+    lines.append("  3. Import once per dashboards tree:")
+    steps: List[str] = []
+    for rs in plan.resyncs:
+        step = _sync_step(root, rs.source, profile)
+        if step not in steps:
+            steps.append(step)
+    lines += [f"       {st}" for st in steps]
+    return lines
 
 
 def _backup_advice(plan: CleanupPlan, profile: str, host: str) -> List[str]:
@@ -542,7 +777,12 @@ def run(root: Path, instance, kinds: Sequence[str], apply: bool, out=None, *,
     wanted = [k for k in KINDS if k in kinds and any(i.kind == k for i in items)]
     live: Dict[str, List[dict]] = {}
     for k in wanted:
-        live[k] = instance.list(k)
+        try:
+            live[k] = instance.list(k)
+        except Exception as e:  # noqa: BLE001 - an unread listing is not "none installed"
+            print(f"  ERROR: could not list {k}s on the instance: {e}. No plan was made "
+                  f"and nothing was deleted.", file=sys.stderr)
+            return 2
     owner = None
     if "dashboard" in wanted and live.get("dashboard"):
         get_owner = getattr(instance, "dashboard_owner", None)
@@ -563,6 +803,8 @@ def run(root: Path, instance, kinds: Sequence[str], apply: bool, out=None, *,
         detail = []
         if a.kind == "dashboard":
             detail.append(f"owner={a.owner or '-'}")
+            if a.locked:
+                detail.append("locked")
         if a.twin_id:
             detail.append(f"new-named twin id={a.twin_id}")
         if detail:
@@ -570,9 +812,15 @@ def run(root: Path, instance, kinds: Sequence[str], apply: bool, out=None, *,
         print(f"               {a.reason}", file=out)
     deletes = plan.by_verdict("delete")
     conflicts = plan.by_verdict("conflict")
+    # Exit 1 when anything needs a person: a conflict, or a RESYNC dashboard.
+    attention = bool(conflicts or plan.resyncs)
+    if plan.resyncs:
+        for line in _resync_advice(plan, root, profile, kinds, types_given):
+            print(line, file=out)
 
     if not apply:
         print(f"  dry run: {len(deletes)} to delete, {len(conflicts)} conflict(s), "
+              f"{len(plan.resyncs)} RESYNC dashboard(s) to fix by hand, "
               f"{len(plan.by_verdict('skip'))} left alone", file=out)
         if deletes:
             for line in _backup_advice(plan, profile, host):
@@ -580,7 +828,7 @@ def run(root: Path, instance, kinds: Sequence[str], apply: bool, out=None, *,
             print(f"  plan digest: {digest}", file=out)
             cmd = apply_command(root, profile, kinds, digest, types_given=types_given)
             print(f"  to delete exactly this plan: {cmd}", file=out)
-        return 1 if conflicts else 0
+        return 1 if attention else 0
 
     if expected_digest != digest:
         print(f"  REFUSED: the plan is not the one reviewed (digest now {digest}, "
@@ -605,7 +853,7 @@ def run(root: Path, instance, kinds: Sequence[str], apply: bool, out=None, *,
         done.append(a)
         print(f"  deleted {a.kind} {a.id}  {a.name}", file=out)
     print(f"  deleted {len(done)} object(s)", file=out)
-    return 1 if conflicts else 0
+    return 1 if attention else 0
 
 
 def resolve_target(profile_arg: Optional[str]) -> Tuple[str, str, str]:

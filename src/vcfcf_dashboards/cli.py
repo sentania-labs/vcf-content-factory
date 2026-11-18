@@ -37,7 +37,13 @@ from .loader import (
 from .packager import build_import_zip
 from . import sm_columns
 from .summary_bind import WAIT_DEFAULT_S, WAIT_MAX_S, WAIT_POLL_S, bind_summary
-from .ui_client import UIClientError, VCFOpsUIClient
+from .ui_client import (
+    SAME_ID_COPY_NOTE,
+    DashboardDeleteResult,
+    UIClientError,
+    VCFOpsUIClient,
+    dashboard_delete_blockers,
+)
 
 DEFAULT_VIEWS = Path("content/views")
 DEFAULT_DASHBOARDS = Path("content/dashboards")
@@ -973,34 +979,59 @@ def _run_dep_walker(
 
 
 def _resolve_dashboard_ids(
-    ui: VCFOpsUIClient, targets: list[str]
+    ui: VCFOpsUIClient, targets: list[str], server_list: list[dict] | None = None,
+    all_copies: bool = False,
 ) -> list[tuple[str, str]]:
     """Resolve a mixed list of UUIDs and display names to (uuid, name) pairs.
 
-    For entries that look like UUIDs (contain hyphens), the name is looked
-    up from the server list. Entries that don't look like UUIDs are matched
-    by name. Raises SystemExit if any target cannot be resolved.
+    A UUID target is looked up case-insensitively and takes the listed id
+    and name; one not listed is kept as ``(uuid, uuid)`` (the delete then
+    reports it unverifiable). A name target matching several dashboards is
+    refused, listing the ids, unless *all_copies*, which resolves every one
+    (a name-keyed import leaves same-named copies, and deleting one of them
+    would let the next sync find the other). Duplicates are dropped.
+    Raises SystemExit if any target cannot be resolved.
+    *server_list*: a listing already taken (listed now when None).
     """
     import re
     uuid_pat = re.compile(
         r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I
     )
-    server_list = ui.list_dashboards()
-    by_id = {d["id"]: d["name"] for d in server_list}
-    by_name = {d["name"]: d["id"] for d in server_list}
+    if server_list is None:
+        server_list = ui.list_dashboards_strict()
+    by_id = {str(d.get("id") or "").lower(): d for d in server_list if d.get("id")}
+    by_name: dict[str, list[dict]] = {}
+    for d in server_list:
+        if d.get("id") and d.get("name"):
+            by_name.setdefault(d["name"], []).append(d)
 
     resolved: list[tuple[str, str]] = []
+    seen: set[str] = set()
     errors: list[str] = []
+
+    def _add(uid: str, name: str) -> None:
+        if uid.lower() not in seen:
+            seen.add(uid.lower())
+            resolved.append((uid, name))
+
     for t in targets:
         if uuid_pat.match(t):
-            name = by_id.get(t, t)  # if not found, use uuid as name (silent no-op)
-            resolved.append((t, name))
-        else:
-            uid = by_name.get(t)
-            if uid is None:
-                errors.append(f"  dashboard not found by name: {t!r}")
+            d = by_id.get(t.lower())
+            if d is None:
+                _add(t, t)  # not listed: reported as such
             else:
-                resolved.append((uid, t))
+                _add(str(d["id"]), str(d.get("name") or d["id"]))
+            continue
+        matches = by_name.get(t) or []
+        if not matches:
+            errors.append(f"  dashboard not found by name: {t!r}")
+        elif len(matches) > 1 and not all_copies:
+            ids = ", ".join(str(d["id"]) for d in matches)
+            errors.append(f"  {t!r} names {len(matches)} dashboards ({ids}): pass the "
+                          f"ids, or --all-copies to delete every one of them")
+        else:
+            for d in matches:
+                _add(str(d["id"]), t)
     if errors:
         print("ERROR: could not resolve the following targets:", file=sys.stderr)
         for e in errors:
@@ -1043,11 +1074,17 @@ def flatten_view_groups(groups) -> list[dict]:
                         break
                 else:
                     # If no known sub-key, treat item itself as a view entry
-                    if "id" in item:
+                    if view_id(item):
                         all_views.append(item)
             elif isinstance(item, list):
                 all_views.extend(item)
     return all_views
+
+
+def view_id(view: dict):
+    """A view thumbnail's id: ``viewDefinitionKey`` (the listing on 8.18.7,
+    9.0.2 and 9.1.1 carries no ``id``), else ``id`` (older shapes)."""
+    return view.get("viewDefinitionKey") or view.get("id")
 
 
 def _resolve_view_ids(
@@ -1065,8 +1102,8 @@ def _resolve_view_ids(
     )
 
     all_views = flatten_view_groups(ui.list_views())
-    by_id = {v["id"]: v.get("name", v["id"]) for v in all_views if "id" in v}
-    by_name = {v.get("name", ""): v["id"] for v in all_views if "id" in v and v.get("name")}
+    by_id = {view_id(v): v.get("name", view_id(v)) for v in all_views if view_id(v)}
+    by_name = {v["name"]: view_id(v) for v in all_views if view_id(v) and v.get("name")}
 
     resolved: list[tuple[str, str]] = []
     errors: list[str] = []
@@ -1088,12 +1125,70 @@ def _resolve_view_ids(
     return resolved
 
 
+def _session_user(profile, default) -> str | None:
+    """The ``/api/auth/currentuser`` account of the profile, the one identity
+    a listed dashboard ``owner`` is compared with (``cleanup-legacy-prefix``
+    uses the same call). None when it cannot be read."""
+    try:
+        client = VCFOpsClient.from_env(profile=profile, default_profile=default)
+        name = current_user_name(get_current_user(client), default="")
+        return name or None
+    except Exception:  # noqa: BLE001 - reported by the caller as unknown
+        return None
+
+
+def _report_dashboard_delete(result: DashboardDeleteResult, session_user: str | None) -> int:
+    """Print what a verified dashboard delete did, per id; 0 only when all went."""
+    if result.deleted:
+        print(f"deleted (gone from the listing): {len(result.deleted)}")
+        for uid, name in result.deleted:
+            print(f"  {uid}  {name}")
+    if result.remaining:
+        print(f"NOT DELETED (still listed after the delete, which answered 200): "
+              f"{len(result.remaining)}", file=sys.stderr)
+        for e in result.remaining:
+            print(f"  {e.get('id')}  {e.get('name')}  owner={e.get('owner') or '-'}  "
+                  f"locked={e.get('locked')}  edit={e.get('edit', '-')}", file=sys.stderr)
+            why = dashboard_delete_blockers(e, session_user)
+            if why:
+                print(f"    likely cause: {'; '.join(why)}. Run the delete on a "
+                      f"profile that signs in as {e.get('owner')!r}", file=sys.stderr)
+            elif session_user is None:
+                print("    cause unknown: the session user could not be read "
+                      "(/api/auth/currentuser), so the listed owner was not compared",
+                      file=sys.stderr)
+            else:
+                print(f"    cause unknown: the listed owner is the session user "
+                      f"{session_user!r}, whose delete deletes on 9.1.1", file=sys.stderr)
+        print(f"  Also: {SAME_ID_COPY_NOTE}.", file=sys.stderr)
+    if result.unverifiable:
+        print(f"NOT VERIFIED ({result.note}): {len(result.unverifiable)}", file=sys.stderr)
+        for uid, name in result.unverifiable:
+            print(f"  {uid}  {name}", file=sys.stderr)
+        print("    re-list the dashboards (delete-dashboard --dry-run with the same "
+              "targets) before acting on this", file=sys.stderr)
+    if result.unlisted:
+        print(f"NOT VERIFIED (not listed for this session before the delete: "
+              f"already gone, or not visible to this account): {len(result.unlisted)}",
+              file=sys.stderr)
+        for uid, name in result.unlisted:
+            print(f"  {uid}  {name}", file=sys.stderr)
+    return 0 if result.ok else 1
+
+
 def cmd_delete_dashboard(args) -> int:
     """Delete one or more dashboards by UUID or display name.
 
     Uses the unsupported VCF Ops UI session (Struts action layer), not the
     Suite API. Credentials come from the standard VCFOPS_* env vars.
-    Deleting a non-existent UUID is a silent no-op.
+
+    The server answers HTTP 200 whether or not it deleted anything (a
+    non-existent UUID; a session other than the listed owner), so the
+    dashboards are re-listed afterwards and each target is reported
+    deleted, still present, or not verified (not listed before the delete,
+    or an after-listing that cannot be read or trusted). Exit 0 only when
+    every target was listed and is gone; 1 otherwise (including a name
+    matching several dashboards without ``--all-copies``); 2 on a UI error.
     """
     try:
         profile, default = resolve_profile_from_args(args)
@@ -1103,19 +1198,43 @@ def cmd_delete_dashboard(args) -> int:
         print(f"FAILED (UI login): {e}", file=sys.stderr)
         return 2
     try:
-        targets = _resolve_dashboard_ids(ui, args.targets)
+        before = ui.list_dashboards_strict()
+        targets = _resolve_dashboard_ids(ui, args.targets, server_list=before,
+                                         all_copies=getattr(args, "all_copies", False))
         if not targets:
             print("nothing to delete", file=sys.stderr)
             return 1
+        session_user = _session_user(profile, default)
+        who = (repr(session_user) if session_user else
+               f"{ui.username!r} (session user unreadable from /api/auth/currentuser; "
+               f"listed owners are not compared)")
         print(f"{'Would delete' if args.dry_run else 'Deleting'} "
-              f"{len(targets)} dashboard(s):")
+              f"{len(targets)} dashboard(s) as {who}:")
         for uid, name in targets:
             print(f"  {uid}  {name}")
+        by_id = {str(d.get("id") or "").lower(): d for d in before if d.get("id")}
+        unlisted = [(uid, name) for uid, name in targets if uid.lower() not in by_id]
+        if unlisted:
+            print(f"WARNING: {len(unlisted)} target(s) are not listed for this session "
+                  f"(already gone, or not visible to this account); the delete cannot "
+                  f"be verified for them and the run will exit 1:", file=sys.stderr)
+            for uid, _ in unlisted:
+                print(f"  {uid}", file=sys.stderr)
+        risky = [(uid, name, dashboard_delete_blockers(by_id[uid.lower()], session_user))
+                 for uid, name in targets if uid.lower() in by_id]
+        risky = [r for r in risky if r[2]]
+        if risky:
+            # Warn, still attempt: 9.1.1 is the only version measured, and
+            # the re-list below reports what actually happened.
+            print(f"WARNING: {len(risky)} target(s) list an owner other than the session "
+                  f"user; on 9.1.1 a non-owner's delete answers 200 and deletes nothing:",
+                  file=sys.stderr)
+            for uid, name, why in risky:
+                print(f"  {uid}  {name}: {'; '.join(why)}", file=sys.stderr)
         if args.dry_run:
             return 0
-        ui.delete_dashboards(targets)
-        print("done")
-        return 0
+        result = ui.delete_dashboards_verified(targets, before=before)
+        return _report_dashboard_delete(result, session_user)
     except UIClientError as e:
         print(f"FAILED: {e}", file=sys.stderr)
         return 2
@@ -1351,6 +1470,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--dry-run",
         action="store_true",
         help="print what would be deleted without deleting",
+    )
+    pdd.add_argument(
+        "--all-copies",
+        action="store_true",
+        help="a name matching several dashboards deletes every one of them "
+             "(default: refuse and list their ids)",
     )
     add_profile_arg(pdd, default="devel")
     pdd.set_defaults(func=cmd_delete_dashboard)

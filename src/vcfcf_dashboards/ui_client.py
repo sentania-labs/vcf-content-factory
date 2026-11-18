@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import base64
 import json
+from dataclasses import dataclass, field
 
 import requests
 
@@ -76,6 +77,96 @@ def association_params(form: str, assigned: dict, reset: dict) -> dict:
         merged.update({k: f"{v}_::_null" for k, v in reset.items()})
         return {"dashboardAssociations": json.dumps(merged)}
     raise ValueError(f"unknown association form {form!r}")
+
+
+def is_true(value) -> bool:
+    """A listing flag as a bool (``True`` or the string ``"true"``)."""
+    return value is True or str(value).strip().lower() == "true"
+
+
+def listed_owner_differs(entry: dict, session_user: str | None) -> bool:
+    """True when the entry's listed ``owner`` is set and is not *session_user*
+    (case-insensitive). False when either is unknown."""
+    owner = str(entry.get("owner") or "").strip()
+    return bool(owner and session_user
+                and owner.lower() != session_user.strip().lower())
+
+
+#: Text added wherever a delete is reported "still listed": the verification
+#: limit measured on 9.1.1 (investigations/dashboard_delete_non_owner_2026-11-18.md Q5).
+SAME_ID_COPY_NOTE = (
+    "a copy under the same id owned by another account also produces this: when "
+    "two owners hold one id, each account lists only the other's copy, so deleting "
+    "the session's own copy leaves its listing unchanged. A DASHBOARDS content "
+    "export, or a listing as the owner, settles it")
+
+
+def dashboard_delete_blockers(entry: dict, session_user: str | None) -> list[str]:
+    """Why a ``deleteTab`` by *session_user* is expected to be ignored for this
+    ``getDashboardList`` entry, or ``[]``.
+
+    Measured on 9.1.1 (``investigations/dashboard_delete_non_owner_2026-11-18.md``):
+    ownership decides; only the owner's ``deleteTab`` deletes, and a
+    non-owner's (the built-in admin account included) is an HTTP 200 no-op.
+    The lock does not: ``locked``, ``edit`` and ``shared`` are per-viewer,
+    and ``locked: true`` is how a non-owner sees a dashboard shared with it;
+    an owner deletes a dashboard everyone else sees as locked. So only the
+    listed owner differing from the session user is reported. 8.18.7 and
+    9.0.2 not measured. *session_user* comes from ``/api/auth/currentuser``;
+    when it is unknown the owner cannot be compared and nothing is reported.
+    """
+    if not listed_owner_differs(entry, session_user):
+        return []
+    owner = str(entry.get("owner") or "").strip()
+    return [f"listed owner {owner!r} differs from session user {session_user!r}; on "
+            f"9.1.1 only the owner's delete deletes (8.18.7 and 9.0.2 not measured)"]
+
+
+def _dashboards_from_body(resp) -> list[dict]:
+    """The ``dashboards`` list of a ``getDashboardList`` answer, strictly.
+
+    Raises :class:`UIClientError` when the body is not JSON, is not an
+    object, has no ``dashboards`` key, or the key is not a list: a listing
+    used to verify a delete must never degrade to "empty".
+    """
+    try:
+        body = resp.json()
+    except ValueError as exc:
+        raise UIClientError(f"getDashboardList answered non-JSON: {exc}",
+                            status=getattr(resp, "status_code", None),
+                            body=(getattr(resp, "text", "") or "")[:500]) from None
+    if not isinstance(body, dict) or "dashboards" not in body:
+        raise UIClientError("getDashboardList answer has no 'dashboards' key",
+                            status=getattr(resp, "status_code", None),
+                            body=(getattr(resp, "text", "") or "")[:500])
+    if not isinstance(body["dashboards"], list):
+        raise UIClientError("getDashboardList 'dashboards' is not a list",
+                            status=getattr(resp, "status_code", None),
+                            body=(getattr(resp, "text", "") or "")[:500])
+    return body["dashboards"]
+
+
+@dataclass
+class DashboardDeleteResult:
+    """Outcome of :meth:`VCFOpsUIClient.delete_dashboards_verified`, per id.
+
+    ``deleted``: listed before the delete, absent after it, with the
+    after-listing trusted. ``remaining``: the after-listing entry of each
+    target still listed. ``unlisted``: not listed before the delete
+    (already gone, or not visible to the session account). ``unverifiable``:
+    listed before, but the after-listing could not be read or cannot be
+    trusted (*note* says why). Only ``deleted`` is success.
+    """
+
+    deleted: list = field(default_factory=list)       # [(id, name)]
+    remaining: list = field(default_factory=list)     # [listing entry]
+    unlisted: list = field(default_factory=list)      # [(id, name)]
+    unverifiable: list = field(default_factory=list)  # [(id, name)]
+    note: str = ""
+
+    @property
+    def ok(self) -> bool:
+        return not (self.remaining or self.unlisted or self.unverifiable)
 
 
 #: Marker of the generic Ext error panel Struts renders for an exception
@@ -264,10 +355,24 @@ class VCFOpsUIClient:
 
         Uses unsupported UI endpoint POST /ui/dashboard.action with
         mainAction=getDashboardList. Each entry has at minimum:
-          id, name, description, locked, owner, shared, editable.
+          id, name, description, locked, owner, shared, editable; 9.1.1
+          also carries ``ownerId`` (the owner's user UUID) and ``edit``.
+          On 9.1.1 ``locked``, ``edit`` and ``shared`` are per-viewer
+          (``locked: true``: another account owns it and shared it with
+          you) and ``editable`` was false for owner and non-owner alike.
+          Field names on 8.18.7 and 9.0.2 not recorded.
 
         WARNING: unsupported internal endpoint; may change between releases.
         """
+        return self._post_dashboard_list().json().get("dashboards") or []
+
+    def list_dashboards_strict(self) -> list[dict]:
+        """:meth:`list_dashboards`, but raises :class:`UIClientError` on an
+        answer it cannot read (non-JSON, no ``dashboards`` list) instead of
+        returning ``[]``. Use it wherever absence is evidence."""
+        return _dashboards_from_body(self._post_dashboard_list())
+
+    def _post_dashboard_list(self):
         s, csrf = self._require_auth()
         resp = s.post(
             f"https://{self._host}/ui/dashboard.action",
@@ -280,7 +385,7 @@ class VCFOpsUIClient:
             headers=_UI_XHR_HEADERS,
         )
         resp.raise_for_status()
-        return resp.json().get("dashboards") or []
+        return resp
 
     def delete_dashboards(self, dashboards: list[tuple[str, str]]) -> dict:
         """Delete one or more dashboards by (uuid, name) tuples.
@@ -288,6 +393,23 @@ class VCFOpsUIClient:
         Multiple dashboards can be deleted in a single call. Deleting a
         non-existent UUID is a silent no-op (returns HTTP 200 with the
         full dashboard config).
+
+        HTTP 200 is not a delete: on 9.1.1 only the owner's ``deleteTab``
+        deletes; a non-owner's (the built-in admin account included) answers
+        200 with the full config and deletes nothing. Use
+        :meth:`delete_dashboards_verified` wherever the outcome matters.
+        From an account that had never opened the UI, the first calls
+        answered 200 with the Struts error panel instead of JSON, so the
+        ``resp.json()`` below raises (cause not isolated). Measured but
+        not implemented: an administrator removes another account's
+        dashboard with ``dashboardShare.action`` ``discardDashboards``
+        (``investigations/dashboard_delete_non_owner_2026-11-18.md``).
+
+        Unverified request-shape differences from :meth:`list_dashboards`:
+        no ``X-Requested-With`` header, and ``currentComponentInfo`` is the
+        placeholder ``"TODO"``. The same request deleted dashboards the
+        session account owned on 8.18.7, 9.0.2 and 9.1.1, so neither is
+        known to matter.
 
         WARNING: unsupported internal endpoint; may change between releases.
 
@@ -311,6 +433,66 @@ class VCFOpsUIClient:
         )
         resp.raise_for_status()
         return resp.json()
+
+    @property
+    def username(self) -> str:
+        """The login name this UI session signed in with (the credential
+        profile's user). Not the identity to compare a listed ``owner``
+        with: use ``/api/auth/currentuser``."""
+        return self._username
+
+    def delete_dashboards_verified(
+        self, dashboards: list[tuple[str, str]], before: list[dict] | None = None,
+    ) -> DashboardDeleteResult:
+        """Delete *dashboards*, then re-list and say, per id, what happened.
+
+        *before* is a strict listing (:meth:`list_dashboards_strict`) taken
+        before the delete; listed now when None. Every target is sent. A
+        target absent from *before* is ``unlisted``: its absence afterwards
+        proves nothing. When the after-listing cannot be read, or has lost
+        a dashboard that was listed before and was not a target, it is not
+        trusted and every listed target is ``unverifiable``, never
+        ``deleted``. Ids compare case-insensitively.
+
+        Limit (9.1.1): when another owner holds a second record under the
+        same id, each account lists only the other's copy; deleting the
+        session's own copy leaves its listing unchanged, so the target is
+        reported ``remaining`` although something was deleted. The error
+        is in the safe direction: a surviving dashboard is never reported
+        deleted. A DASHBOARDS export or a listing as the owner settles it
+        (:data:`SAME_ID_COPY_NOTE`).
+        """
+        if not dashboards:
+            return DashboardDeleteResult()
+        if before is None:
+            before = self.list_dashboards_strict()
+        before_ids = {str(d.get("id") or "").lower() for d in before if d.get("id")}
+        target_ids = {str(uid).lower() for uid, _ in dashboards}
+        result = DashboardDeleteResult()
+        self.delete_dashboards(list(dashboards))
+        listed = [(uid, name) for uid, name in dashboards if str(uid).lower() in before_ids]
+        result.unlisted = [(uid, name) for uid, name in dashboards
+                           if str(uid).lower() not in before_ids]
+        try:
+            after_list = self.list_dashboards_strict()
+        except (UIClientError, requests.RequestException) as exc:
+            result.unverifiable = listed
+            result.note = f"the listing after the delete could not be read: {exc}"
+            return result
+        after = {str(d.get("id") or "").lower(): d for d in after_list if d.get("id")}
+        vanished = sorted(before_ids - target_ids - set(after))
+        if vanished:
+            result.unverifiable = listed
+            result.note = (f"the listing after the delete lost {len(vanished)} dashboard(s) "
+                           f"that were not targets, so it cannot be trusted")
+            return result
+        for uid, name in listed:
+            entry = after.get(str(uid).lower())
+            if entry is None:
+                result.deleted.append((uid, name))
+            else:
+                result.remaining.append(entry)
+        return result
 
     # ------------------------------------------------------------------
     # Summary-tab association (Manage Summary Dashboards)
