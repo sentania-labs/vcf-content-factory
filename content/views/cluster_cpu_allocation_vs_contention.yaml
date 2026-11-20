@@ -2,10 +2,12 @@ id: 2e9f8b41-2692-49d6-96a3-e29a387a5d48
 name: "[VCF CF] Cluster CPU Allocation vs Contention"
 description: >
   Per-cluster vCPU:pCore allocation beside the planned ratio from policy and
-  two contention signals (share of VMs facing CPU ready, average contention).
-  The ratio-while-contended super metrics are non-zero only when the cluster
-  is contended, so they highlight the allocation level at which contention
-  appears. Default sort: Ratio While Ready-Contended descending. 7-day window.
+  CPU contention signals. The ratio-while-contended super metrics are non-zero
+  only when the cluster is contended, so they highlight the allocation level at
+  which contention appears. "% VMs Facing Ready" and "CPU Contention %" are
+  current values, the same basis as the two highlight columns; "Worst VM Ready
+  %" and "Worst VM Co-stop %" are the 7-day worst case. Default sort: Ratio
+  While Ready-Contended descending.
 
 subject:
   adapter_kind: VMWARE
@@ -66,7 +68,7 @@ columns:
 
   - attribute: cpu|percentage_of_vms_facing_cpu_ready
     display_name: "% VMs Facing Ready"
-    transformation: AVG
+    transformation: CURRENT
     yellow_bound: 2.5
     orange_bound: 5.0
     red_bound: 10.0
@@ -89,8 +91,8 @@ columns:
     ascending_range: false
 
   - attribute: cpu|capacity_contentionPct
-    display_name: "Contention Avg %"
-    transformation: AVG
+    display_name: "CPU Contention %"
+    transformation: CURRENT
 
   - attribute: supermetric:"[VCF CF] Cluster - CPU Allocation Remaining %"
     display_name: "Alloc Remaining %"

@@ -67,11 +67,11 @@
         <th>Planned Ratio<code>System Properties|cpu|alloc|overcommitRatioSetting</code></th>
         <th class="new">Ratio While Ready-Contended<code>SM: ratio if % VMs facing ready &gt; 2.5, else 0</code></th>
         <th class="new">Ratio While Contention High<code>SM: ratio if avg contention &gt; 5 %, else 0</code></th>
-        <th>% VMs Facing Ready<code>cpu|percentage_of_vms_facing_cpu_ready · avg · 2.5/5/10</code></th>
+        <th>% VMs Facing Ready<code>cpu|percentage_of_vms_facing_cpu_ready · current · 2.5/5/10</code></th>
         <th>Worst VM Ready %<code>cpu|max_cpu_ready · max · 2.5/5/10</code></th>
         <th>Worst VM Co-stop %<code>cpu|max_cpu_costop · max · 2.5/5/10</code></th>
-        <th>Contention Avg %<code>cpu|capacity_contentionPct · avg</code></th>
-        <th>Alloc Remaining %<code>OnlineCapacityAnalytics|cpu|alloc|capacityRemainingPercentage</code></th>
+        <th>CPU Contention %<code>cpu|capacity_contentionPct · current</code></th>
+        <th class="new">Alloc Remaining %<code>SM: alloc remaining / usable vCPUs</code></th>
       </tr>
       <tr><td>cluster-02</td><td>12</td><td>288</td><td>264</td><td>2,056</td><td>7.14</td><td>7.79</td><td>3</td><td class="r">7.14</td><td class="g">0</td><td class="o">8.2</td><td class="o">9.1</td><td class="g">0.4</td><td>4.9</td><td class="r">0</td></tr>
       <tr><td>cluster-04</td><td>12</td><td>288</td><td>264</td><td>1,365</td><td>4.74</td><td>5.17</td><td>3</td><td class="o">4.74</td><td class="g">0</td><td class="y">3.1</td><td class="o">8.8</td><td class="g">0.2</td><td>2.2</td><td class="r">0</td></tr>

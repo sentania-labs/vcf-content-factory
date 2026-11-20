@@ -4,8 +4,9 @@ resource_kinds:
   - resource_kind_key: ClusterComputeResource
     adapter_kind_key: VMWARE
 description: >
-  CPU capacity remaining under the demand model, as a percentage of usable
-  capacity (after HA and buffer), on a cluster. The native per-resource
+  CPU capacity remaining under the demand model, as a percentage of the
+  engine's usable demand capacity (observed equal to cpu|haTotalCapacity_average
+  on one lab cluster, 159700 MHz), on a cluster. The native per-resource
   capacityRemainingPercentage keys never carry a value, so this divides the
   capacity engine's own remaining figure by its usable capacity (both in
   MHz); the engine's remaining figure floors at 0, so a full cluster reads 0.

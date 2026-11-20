@@ -48,6 +48,33 @@ Body sent (identical everywhere):
   exports are bulky and kept off the repo at
   `/mnt/holding/vcf-content-factory/2026-11-20-allocation-model-enable/`
   (`before-` / `after-<instance>-policy-export.zip`).
+  That path is a share on the lab's own network, not part of this repo
+  and not present in a clone; nothing here depends on it. The
+  `before-<instance>.json` files in this directory are the rollback
+  record.
+
+## What it changed in behaviour (not in definitions)
+
+The definitions diff above is clean, but the setting does what it is for:
+the capacity engine now applies the allocation model to every cluster
+under these policies. Observed within minutes on 2026-11-20:
+
+- The overall `OnlineCapacityAnalytics|capacityRemainingPercentage` and
+  `OnlineCapacityAnalytics|timeRemaining` follow allocation wherever it is
+  the tighter limit. `vcf-lab-wld01-cl01` went to 0 % and 0 days on prod
+  and devel_9_1 (it was demand-driven before, 1.1 % on devel_9_1 at
+  13:04). `vcf-lab-mgmt-cl01` on prod reads 17.19 %, which is its
+  allocation figure (33 of 192 vCPUs).
+- Expect the same on every cluster above 3:1 (on prod at recon time:
+  cluster-02 7.14, cluster-04 4.74, cluster-01 3.55, cluster-05 3.50,
+  wld01 and wld02 3.17).
+- Anything that reads those overall keys now reflects the 3:1 policy:
+  stock capacity dashboards, time-remaining badges, capacity alerts and
+  recommendations, and the factory's own capacity dashboards and views.
+  Whether any alert actually fired was not checked.
+
+The owner accepted this side effect when approving the change (it was
+stated in the approved plan). It lasts until the setting is removed.
 
 ## Rollback
 

@@ -51,18 +51,18 @@
         <th>CPU Actual<code>cpu|vcpus_to_cores_allocation_ratio</code></th>
         <th>Usable (vCPUs)<code>cpu|alloc|usableCapacity</code></th>
         <th>Remaining (vCPUs)<code>OnlineCapacityAnalytics|cpu|alloc|capacityRemaining</code></th>
-        <th>Remaining %<code>…|cpu|alloc|capacityRemainingPercentage · 40/30/20</code></th>
+        <th>Remaining %<code>SM: CPU alloc remaining / usable · 40/30/20</code></th>
         <th>Days Left<code>…|cpu|alloc|timeRemaining</code></th>
         <th>Recommended (cores)<code>…|cpu|alloc|recommendedSize</code></th>
         <th class="grp">Mem Planned<code>System Properties|mem|alloc|overcommitRatioSetting</code></th>
         <th>Mem Actual<code>mem|virtual_to_physical_memory_allocation_ratio</code></th>
-        <th>Remaining %<code>…|mem|alloc|capacityRemainingPercentage</code></th>
+        <th>Remaining %<code>SM: memory alloc remaining / usable · 40/30/20</code></th>
         <th>Days Left<code>…|mem|alloc|timeRemaining</code></th>
         <th class="grp">Disk Planned<code>System Properties|diskspace|alloc|overcommitRatioSetting</code></th>
         <th>Disk Actual<code>diskspace|diskspace_overcommit_ratio</code></th>
-        <th>Remaining %<code>…|diskspace|alloc|capacityRemainingPercentage</code></th>
+        <th>Remaining %<code>SM: disk alloc remaining / usable · 40/30/20</code></th>
         <th>Days Left<code>…|diskspace|alloc|timeRemaining</code></th>
-        <th class="grp">Demand Remaining %<code>OnlineCapacityAnalytics|cpu|demand|capacityRemaining (as %: see note)</code></th>
+        <th class="grp">CPU Demand Remaining %<code>SM: CPU demand remaining / usable</code></th>
         <th>Demand Days Left<code>OnlineCapacityAnalytics|cpu|demand|timeRemaining</code></th>
       </tr>
       <tr><td>cluster-02</td><td class="grp">4</td><td>7.14</td><td>1,056</td><td>0</td><td class="r">0</td><td class="r">0</td><td>514</td><td class="grp">1</td><td>0.82</td><td class="r">18</td><td>140</td><td class="grp">2</td><td>1.4</td><td class="y">30</td><td>210</td><td class="grp">41</td><td>365+</td></tr>
@@ -90,21 +90,21 @@
     <div class="b"><div class="heat">
       <div class="hr" style="flex-basis:30%">cluster-02</div><div class="hr" style="flex-basis:30%">cluster-04</div><div class="hr" style="flex-basis:30%">cluster-01</div><div class="hr" style="flex-basis:10%">wld01</div><div class="hg" style="flex-basis:20%">mgmt</div><div class="hg" style="flex-basis:30%">…</div>
     </div></div>
-    <div style="padding:0 10px 6px"><code>size_by cpu|corecount_provisioned · color_by OnlineCapacityAnalytics|cpu|alloc|capacityRemainingPercentage · 40/30/20</code></div>
+    <div style="padding:0 10px 6px"><code>size_by cpu|corecount_provisioned · color_by SM CPU Allocation Remaining % · 40/30/20</code></div>
   </div>
   <div class="w" style="grid-column:5 / span 4; grid-row:11 / span 5;">
     <div class="t">Memory Allocation Remaining <span>Heatmap · Cluster</span></div>
     <div class="b"><div class="heat">
       <div class="hr" style="flex-basis:30%">cluster-02</div><div class="ho" style="flex-basis:30%">cluster-04</div><div class="hg" style="flex-basis:30%">cluster-01</div><div class="hy" style="flex-basis:10%">wld01</div><div class="hg" style="flex-basis:20%">mgmt</div><div class="hg" style="flex-basis:30%">…</div>
     </div></div>
-    <div style="padding:0 10px 6px"><code>size_by mem|haTotalCapacity_average · color_by OnlineCapacityAnalytics|mem|alloc|capacityRemainingPercentage · 40/30/20</code></div>
+    <div style="padding:0 10px 6px"><code>size_by mem|haTotalCapacity_average · color_by SM Memory Allocation Remaining % · 40/30/20</code></div>
   </div>
   <div class="w" style="grid-column:9 / span 4; grid-row:11 / span 5;">
     <div class="t">Disk Allocation Remaining <span>Heatmap · Cluster</span></div>
     <div class="b"><div class="heat">
       <div class="hy" style="flex-basis:30%">cluster-02</div><div class="hg" style="flex-basis:30%">cluster-04</div><div class="hg" style="flex-basis:30%">cluster-01</div><div class="hg" style="flex-basis:10%">wld01</div><div class="hg" style="flex-basis:20%">mgmt</div><div class="hg" style="flex-basis:30%">…</div>
     </div></div>
-    <div style="padding:0 10px 6px"><code>size_by diskspace|total_capacity · color_by OnlineCapacityAnalytics|diskspace|alloc|capacityRemainingPercentage · 40/30/20</code></div>
+    <div style="padding:0 10px 6px"><code>size_by diskspace|total_capacity · color_by SM Disk Allocation Remaining % · 40/30/20</code></div>
   </div>
 
   <div class="w" style="grid-column:1 / span 12; grid-row:16 / span 4;">
@@ -113,6 +113,6 @@
   </div>
 
 </div>
-<div class="note" style="margin-top:12px">Notes. (1) The 40/30/20 remaining bands are the stock "VCF Cluster Capacity" view's. (2) The memory and disk alloc keys follow the CPU family recon listed from live statkeys; the view author confirms each exact key against the statkey listing before using it, and any that does not exist becomes a dropped column, not a guess. (3) Demand Remaining % is the one cell with an open source: the per-resource demand key is in MHz, so the column is either a view-side expression against <code>cpu|demand|usableCapacity</code> or the overall <code>OnlineCapacityAnalytics|capacityRemainingPercentage</code> (most constrained resource). Author picks whichever the view schema supports and says which.</div>
+<div class="note" style="margin-top:12px">Notes. (1) The 40/30/20 remaining bands are the stock "VCF Cluster Capacity" view's. (2) Updated after approval, 2026-11-20, keys only, layout unchanged: every "Remaining %" is a super metric (remaining / usable x 100), because the product's per-resource capacityRemainingPercentage keys exist but never carry a value. (3) Only CPU has a ratio set in the lab (3:1), so the Planned value shown as 4 here reads 3 there, and the memory and disk allocation cells and heatmaps are empty there.</div>
 </body>
 </html>

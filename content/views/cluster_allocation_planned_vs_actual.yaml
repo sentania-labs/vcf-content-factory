@@ -2,9 +2,9 @@ id: 8d945b7c-36b7-415d-bc64-c1b6548b6b86
 name: "[VCF CF] Cluster Allocation Planned vs Actual"
 description: >
   Per-cluster planned overcommit ratio (policy) beside the actual ratio, with
-  allocation-model usable capacity, remaining %, days left and recommended
-  size for CPU, memory and disk, then the demand model's remaining % and days
-  left for CPU as a contrast. Column prefixes (CPU, Mem, Disk) stand in for
+  allocation-model remaining % and days left for CPU, memory and disk, plus
+  usable capacity, remaining capacity and recommended size for CPU only, then
+  the demand model's remaining % and days left for CPU as a contrast. Column prefixes (CPU, Mem, Disk) stand in for
   column groups. Default sort: CPU Remaining % ascending (fullest first).
 
 subject:

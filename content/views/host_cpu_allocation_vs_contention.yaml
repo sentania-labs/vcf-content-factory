@@ -26,7 +26,7 @@ columns:
   - attribute: config|hyperThread|active
     display_name: "Hyperthreading"
     is_property: true
-    transformation: CURRENT
+    is_string_attribute: true
 
   - attribute: summary|number_running_vms
     display_name: "Running VMs"

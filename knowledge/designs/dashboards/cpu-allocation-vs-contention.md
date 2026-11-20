@@ -82,10 +82,10 @@ Summary scoreboard's). Author all three bounds or none (lesson
 | Planned Ratio | property `System Properties|cpu|alloc|overcommitRatioSetting` | current | |
 | Ratio While Ready-Contended | SM `[VCF CF] Cluster - vCPU-to-pCore Ratio While Ready-Contended` | current | 0.01 / 3 / 6, sort desc |
 | Ratio While Contention High | SM `[VCF CF] Cluster - vCPU-to-pCore Ratio While Contention High` | current | 0.01 / 3 / 6 |
-| % VMs Facing Ready | `cpu|percentage_of_vms_facing_cpu_ready` | avg | 2.5 / 5 / 10 |
+| % VMs Facing Ready | `cpu|percentage_of_vms_facing_cpu_ready` | current | 2.5 / 5 / 10 |
 | Worst VM Ready % | `cpu|max_cpu_ready` | max | 2.5 / 5 / 10 |
 | Worst VM Co-stop % | `cpu|max_cpu_costop` | max | 2.5 / 5 / 10 |
-| Contention Avg % | `cpu|capacity_contentionPct` | avg | none |
+| CPU Contention % | `cpu|capacity_contentionPct` | current | none |
 | Alloc Remaining % | SM `[VCF CF] Cluster - CPU Allocation Remaining %` (the native percentage key never carries a value; see `knowledge/context/api-surface/policy_capacity_allocation_model.md`) | current | 40 / 30 / 20 descending |
 
 ### Band C heatmaps
@@ -95,8 +95,10 @@ Summary scoreboard's). Author all three bounds or none (lesson
 - C-2: size `cpu|vcpus_allocated_on_all_powered_on_vms`, colour
   `cpu|percentage_of_vms_facing_cpu_ready`, thresholds 2.5 / 5 / 7.5,
   grouped by parent cluster.
-- Emit the 9-key self-grouping block where there is no grouping, never
-  `groupBy: {}` (lesson `heatmap-empty-groupby-crashes-renderer.md`).
+- Where there is no grouping the YAML writes `group_by: {}` and the
+  renderer expands it to the 9-key self-grouping block; the rendered JSON
+  must never carry an empty `groupBy` (lesson
+  `heatmap-empty-groupby-crashes-renderer.md`).
 
 ### Band D columns (view `[VCF CF] Host CPU Allocation vs Contention`, 7-day window)
 
@@ -112,6 +114,11 @@ SM `[VCF CF] Host - vCPU-to-pCore Ratio`,
 `config|hardware|num_Cpu`, `cpu|demandPct` (avg), `cpu|readyPct` (avg),
 `cpu|readyPct` (P95, 2.5/5/10, sort desc), `cpu|20_sec_peak_readyPct`
 (max), `cpu|costopPct` (P95), `cpu|capacity_contentionPct` (avg).
+
+Changed after approval, 2026-11-20 (transform only, pre-PR review): the two
+trigger metrics are shown as current values, not 7-day averages, so each
+row agrees with its own highlight columns, which are current. The two
+Worst VM columns stay 7-day maximums and carry the history.
 
 ## Known constraints
 

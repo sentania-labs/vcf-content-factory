@@ -93,7 +93,9 @@ scoreboard. All three bounds or none per tile.
 | C-2 | `mem|haTotalCapacity_average` | SM `[VCF CF] Cluster - Memory Allocation Remaining %` | 40/30/20 |
 | C-3 | `diskspace|total_capacity` | SM `[VCF CF] Cluster - Disk Allocation Remaining %` | 40/30/20 |
 
-Never `groupBy: {}` (lesson `heatmap-empty-groupby-crashes-renderer.md`).
+The YAML writes `group_by: {}` and the renderer expands it to the
+self-grouping block; the rendered JSON must never carry an empty `groupBy`
+(lesson `heatmap-empty-groupby-crashes-renderer.md`).
 
 ## Known constraints
 
