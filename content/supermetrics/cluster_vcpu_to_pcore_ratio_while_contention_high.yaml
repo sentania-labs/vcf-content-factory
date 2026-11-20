@@ -1,0 +1,15 @@
+id: 9d57ce57-58a0-4c59-9058-d8c9992afe4d
+name: "[VCF CF] Cluster - vCPU-to-pCore Ratio While Contention High"
+resource_kinds:
+  - resource_kind_key: ClusterComputeResource
+    adapter_kind_key: VMWARE
+description: >
+  The cluster's native vCPU-to-core allocation ratio
+  (cpu|vcpus_to_cores_allocation_ratio), emitted only while the average CPU
+  contention of its VMs (cpu|capacity_contentionPct) is above 5 %, the
+  factory's own band (the product defines none for this key). Returns 0
+  otherwise, so a clean cluster reads a real value and a list-view column
+  sorts and colours on every row. A cluster with no contention data also
+  reads 0. Unit: ratio (vCPUs per core).
+formula: |
+  ${this, metric=cpu|capacity_contentionPct} as contention > 5 ? ${this, metric=cpu|vcpus_to_cores_allocation_ratio} : 0

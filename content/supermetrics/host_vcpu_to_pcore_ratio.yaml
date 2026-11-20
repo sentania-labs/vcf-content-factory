@@ -1,0 +1,13 @@
+id: c9a6b09a-50d2-4560-8eda-4737e8524be6
+name: "[VCF CF] Host - vCPU-to-pCore Ratio"
+resource_kinds:
+  - resource_kind_key: HostSystem
+    adapter_kind_key: VMWARE
+description: >
+  Powered-on vCPUs allocated on a host divided by the host's physical cores
+  (cpu|corecount_provisioned, no hyperthreads). Host-level counterpart of the
+  native cluster cpu|vcpus_to_cores_allocation_ratio, which has no host
+  equivalent. Returns 0 when the core count is 0 or absent, so the value never
+  divides by zero. Unit: ratio (vCPUs per core).
+formula: |
+  ${this, metric=cpu|corecount_provisioned} as cores > 0 ? ${this, metric=cpu|vcpus_allocated_on_all_powered_on_vms} / cores : 0

@@ -1,0 +1,15 @@
+id: c2ad2e3d-7d59-4db9-b54b-a7be6f7da168
+name: "[VCF CF] Cluster - vCPU-to-pCore Ratio While Ready-Contended"
+resource_kinds:
+  - resource_kind_key: ClusterComputeResource
+    adapter_kind_key: VMWARE
+description: >
+  The cluster's native vCPU-to-core allocation ratio
+  (cpu|vcpus_to_cores_allocation_ratio), emitted only while more than 2.5 %
+  of its VMs are facing CPU ready (cpu|percentage_of_vms_facing_cpu_ready,
+  the green limit of the stock Cluster Performance scoreboard). Returns 0
+  otherwise, so a clean cluster reads a real value and a list-view column
+  sorts and colours on every row. A cluster with no ready-percentage data
+  also reads 0. Unit: ratio (vCPUs per core).
+formula: |
+  ${this, metric=cpu|percentage_of_vms_facing_cpu_ready} as ready > 2.5 ? ${this, metric=cpu|vcpus_to_cores_allocation_ratio} : 0

@@ -1,0 +1,101 @@
+id: 2e9f8b41-2692-49d6-96a3-e29a387a5d48
+name: "[VCF CF] Cluster CPU Allocation vs Contention"
+description: >
+  Per-cluster vCPU:pCore allocation beside the planned ratio from policy and
+  two contention signals (share of VMs facing CPU ready, average contention).
+  The ratio-while-contended super metrics are non-zero only when the cluster
+  is contended, so they highlight the allocation level at which contention
+  appears. Default sort: Ratio While Ready-Contended descending. 7-day window.
+
+subject:
+  adapter_kind: VMWARE
+  resource_kind: ClusterComputeResource
+
+summary: false
+
+time_window:
+  unit: DAYS
+  count: 7
+
+columns:
+  - attribute: summary|number_running_hosts
+    display_name: "Hosts"
+    transformation: CURRENT
+
+  - attribute: cpu|corecount_provisioned
+    display_name: "Cores"
+    transformation: CURRENT
+
+  - attribute: cpu|haCorecount_provisioned
+    display_name: "Cores After HA"
+    transformation: CURRENT
+
+  - attribute: cpu|vcpus_allocated_on_all_powered_on_vms
+    display_name: "vCPUs On"
+    transformation: CURRENT
+
+  - attribute: cpu|vcpus_to_cores_allocation_ratio
+    display_name: "vCPU:pCore"
+    transformation: CURRENT
+
+  - attribute: supermetric:"[VCF CF] Cluster - vCPU-to-pCore Ratio After HA"
+    display_name: "vCPU:pCore After HA"
+    transformation: CURRENT
+
+  - attribute: "System Properties|cpu|alloc|overcommitRatioSetting"
+    display_name: "Planned Ratio"
+    is_property: true
+    transformation: CURRENT
+
+  - attribute: supermetric:"[VCF CF] Cluster - vCPU-to-pCore Ratio While Ready-Contended"
+    display_name: "Ratio While Ready-Contended"
+    transformation: CURRENT
+    yellow_bound: 0.01
+    orange_bound: 3.0
+    red_bound: 6.0
+    ascending_range: false
+    sort: desc
+
+  - attribute: supermetric:"[VCF CF] Cluster - vCPU-to-pCore Ratio While Contention High"
+    display_name: "Ratio While Contention High"
+    transformation: CURRENT
+    yellow_bound: 0.01
+    orange_bound: 3.0
+    red_bound: 6.0
+    ascending_range: false
+
+  - attribute: cpu|percentage_of_vms_facing_cpu_ready
+    display_name: "% VMs Facing Ready"
+    transformation: AVG
+    yellow_bound: 2.5
+    orange_bound: 5.0
+    red_bound: 10.0
+    ascending_range: false
+
+  - attribute: cpu|max_cpu_ready
+    display_name: "Worst VM Ready %"
+    transformation: MAX
+    yellow_bound: 2.5
+    orange_bound: 5.0
+    red_bound: 10.0
+    ascending_range: false
+
+  - attribute: cpu|max_cpu_costop
+    display_name: "Worst VM Co-stop %"
+    transformation: MAX
+    yellow_bound: 2.5
+    orange_bound: 5.0
+    red_bound: 10.0
+    ascending_range: false
+
+  - attribute: cpu|capacity_contentionPct
+    display_name: "Contention Avg %"
+    transformation: AVG
+
+  - attribute: supermetric:"[VCF CF] Cluster - CPU Allocation Remaining %"
+    display_name: "Alloc Remaining %"
+    transformation: CURRENT
+    yellow_bound: 40.0
+    orange_bound: 30.0
+    red_bound: 20.0
+    ascending_range: true

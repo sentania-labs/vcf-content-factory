@@ -1,0 +1,18 @@
+id: ce85eb90-4c0d-47bc-815c-64ee7b1fd759
+name: "[VCF CF] Cluster - Memory Allocation Remaining %"
+resource_kinds:
+  - resource_kind_key: ClusterComputeResource
+    adapter_kind_key: VMWARE
+description: >
+  Memory capacity remaining under the memory allocation model, as a percentage
+  of usable capacity (after HA and buffer), on a cluster. The native
+  per-resource capacityRemainingPercentage keys never carry a value, so this
+  divides the engine's own remaining figure by its usable capacity (both in
+  KB); the engine's remaining figure floors at 0, so a full cluster reads 0.
+  The division is deliberately unguarded: when the allocation model is not
+  configured, usable capacity is absent or 0 and the metric yields no value
+  instead of 0, because 0 means "full". No memory allocation ratio is set in
+  the lab, so both keys carry no value there and this metric shows no data
+  until one is set. Unit: percent.
+formula: |
+  ${this, metric=OnlineCapacityAnalytics|mem|alloc|capacityRemaining} / ${this, metric=mem|alloc|usableCapacity} * 100

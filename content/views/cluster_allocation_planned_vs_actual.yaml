@@ -1,0 +1,103 @@
+id: 8d945b7c-36b7-415d-bc64-c1b6548b6b86
+name: "[VCF CF] Cluster Allocation Planned vs Actual"
+description: >
+  Per-cluster planned overcommit ratio (policy) beside the actual ratio, with
+  allocation-model usable capacity, remaining %, days left and recommended
+  size for CPU, memory and disk, then the demand model's remaining % and days
+  left for CPU as a contrast. Column prefixes (CPU, Mem, Disk) stand in for
+  column groups. Default sort: CPU Remaining % ascending (fullest first).
+
+subject:
+  adapter_kind: VMWARE
+  resource_kind: ClusterComputeResource
+
+summary: false
+
+time_window:
+  unit: DAYS
+  count: 7
+
+columns:
+  - attribute: "System Properties|cpu|alloc|overcommitRatioSetting"
+    display_name: "CPU Planned"
+    is_property: true
+    transformation: CURRENT
+
+  - attribute: cpu|vcpus_to_cores_allocation_ratio
+    display_name: "CPU Actual"
+    transformation: CURRENT
+
+  - attribute: cpu|alloc|usableCapacity
+    display_name: "CPU Usable (vCPUs)"
+    transformation: CURRENT
+
+  - attribute: OnlineCapacityAnalytics|cpu|alloc|capacityRemaining
+    display_name: "CPU Remaining (vCPUs)"
+    transformation: CURRENT
+
+  - attribute: supermetric:"[VCF CF] Cluster - CPU Allocation Remaining %"
+    display_name: "CPU Remaining %"
+    transformation: CURRENT
+    yellow_bound: 40.0
+    orange_bound: 30.0
+    red_bound: 20.0
+    ascending_range: true
+    sort: asc
+
+  - attribute: OnlineCapacityAnalytics|cpu|alloc|timeRemaining
+    display_name: "CPU Days Left"
+    transformation: CURRENT
+
+  - attribute: OnlineCapacityAnalytics|cpu|alloc|recommendedSize
+    display_name: "CPU Recommended (cores)"
+    transformation: CURRENT
+
+  - attribute: "System Properties|mem|alloc|overcommitRatioSetting"
+    display_name: "Mem Planned"
+    is_property: true
+    transformation: CURRENT
+
+  - attribute: mem|virtual_to_physical_memory_allocation_ratio
+    display_name: "Mem Actual"
+    transformation: CURRENT
+
+  - attribute: supermetric:"[VCF CF] Cluster - Memory Allocation Remaining %"
+    display_name: "Mem Remaining %"
+    transformation: CURRENT
+    yellow_bound: 40.0
+    orange_bound: 30.0
+    red_bound: 20.0
+    ascending_range: true
+
+  - attribute: OnlineCapacityAnalytics|mem|alloc|timeRemaining
+    display_name: "Mem Days Left"
+    transformation: CURRENT
+
+  - attribute: "System Properties|diskspace|alloc|overcommitRatioSetting"
+    display_name: "Disk Planned"
+    is_property: true
+    transformation: CURRENT
+
+  - attribute: diskspace|diskspace_overcommit_ratio
+    display_name: "Disk Actual"
+    transformation: CURRENT
+
+  - attribute: supermetric:"[VCF CF] Cluster - Disk Allocation Remaining %"
+    display_name: "Disk Remaining %"
+    transformation: CURRENT
+    yellow_bound: 40.0
+    orange_bound: 30.0
+    red_bound: 20.0
+    ascending_range: true
+
+  - attribute: OnlineCapacityAnalytics|diskspace|alloc|timeRemaining
+    display_name: "Disk Days Left"
+    transformation: CURRENT
+
+  - attribute: supermetric:"[VCF CF] Cluster - CPU Demand Remaining %"
+    display_name: "CPU Demand Remaining %"
+    transformation: CURRENT
+
+  - attribute: OnlineCapacityAnalytics|cpu|demand|timeRemaining
+    display_name: "CPU Demand Days Left"
+    transformation: CURRENT

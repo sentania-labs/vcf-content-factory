@@ -1,0 +1,180 @@
+id: eb613c84-cee6-498b-9e19-fd0f68e4cf2a
+name: "[VCF CF] Allocation Capacity by Cluster"
+description: >
+  Allocation-model capacity per cluster for customers who plan by overcommit
+  ratio. A per-cluster list (the primary selector) sets the planned ratio from
+  policy beside the ratio the cluster actually runs at, with allocation
+  capacity remaining, days left and the demand model's answer for contrast.
+  A scoreboard shows the selected cluster's ratios, three fleet heatmaps
+  (size = capacity, colour = allocation remaining %, lower is worse) cover CPU,
+  memory and disk, and the stock allocation trend follows the selected cluster.
+  Remaining % is computed by factory super metrics, not native keys.
+released: false
+version: "1.0.0"
+
+widgets:
+  - id: cluster_alloc_view
+    type: View
+    title: "Cluster Allocation: Planned vs Actual"
+    coords: {x: 1, y: 1, w: 12, h: 7}
+    self_provider: true
+    pin:
+      adapter_kind: VMWARE
+      resource_kind: vSphere World
+    view: "[VCF CF] Cluster Allocation Planned vs Actual"
+
+  - id: selected_ratios
+    type: Scoreboard
+    title: "Selected Cluster: Overcommit Ratios"
+    coords: {x: 1, y: 8, w: 12, h: 3}
+    box_columns: 5
+    metrics:
+      - adapter_kind: VMWARE
+        resource_kind: ClusterComputeResource
+        metric_key: cpu|vcpus_to_cores_allocation_ratio
+        metric_name: "vCPU:pCore Ratio"
+        label: "vCPU:pCore Ratio"
+        color_method: 0
+        yellow_bound: 3
+        orange_bound: 6
+        red_bound: 9
+      - adapter_kind: VMWARE
+        resource_kind: ClusterComputeResource
+        metric_key: mem|virtual_to_physical_memory_allocation_ratio
+        metric_name: "Memory Ratio"
+        label: "Memory Ratio"
+        color_method: 0
+        yellow_bound: 1
+        orange_bound: 2
+        red_bound: 3
+      - adapter_kind: VMWARE
+        resource_kind: ClusterComputeResource
+        metric_key: diskspace|diskspace_overcommit_ratio
+        metric_name: "Disk Overcommit Ratio"
+        label: "Disk Overcommit Ratio"
+        color_method: 0
+        yellow_bound: 2
+        orange_bound: 3
+        red_bound: 4
+      - adapter_kind: VMWARE
+        resource_kind: ClusterComputeResource
+        metric_key: cpu|vcpus_allocated_on_all_powered_on_vms
+        metric_name: "vCPUs Allocated (powered on)"
+        label: "vCPUs Allocated (powered on)"
+        color_method: 1
+      - adapter_kind: VMWARE
+        resource_kind: ClusterComputeResource
+        metric_key: cpu|haCorecount_provisioned
+        metric_name: "HA Cores Provisioned"
+        label: "HA Cores Provisioned"
+        color_method: 1
+
+  - id: cpu_remaining_heatmap
+    type: Heatmap
+    title: "CPU Allocation Remaining"
+    coords: {x: 1, y: 11, w: 4, h: 5}
+    self_provider: true
+    pin:
+      adapter_kind: VMWARE
+      resource_kind: vSphere World
+    mode: all
+    depth: 10
+    configs:
+      - name: "CPU Allocation Remaining"
+        adapter_kind: VMWARE
+        resource_kind: ClusterComputeResource
+        size_by:
+          metric_key: cpu|corecount_provisioned
+          label: "Physical Cores"
+        color_by:
+          # [VCF CF] Cluster - CPU Allocation Remaining %
+          metric_key: Super Metric|sm_2e1fd028-c21f-4324-bc07-a83b8b86a124
+          label: "CPU Allocation Remaining %"
+        group_by: {}
+        color:
+          min_value: 0
+          max_value: 100
+          # Lower is worse: ascending values, colours run red to green.
+          thresholds:
+            values: [0, 20, 30, 40]
+            colors: ["#DE3F30", "#F5A623", "#ECC33E", "#74B43B"]
+        solid_coloring: false
+        focus_on_groups: false
+
+  - id: mem_remaining_heatmap
+    type: Heatmap
+    title: "Memory Allocation Remaining"
+    coords: {x: 5, y: 11, w: 4, h: 5}
+    self_provider: true
+    pin:
+      adapter_kind: VMWARE
+      resource_kind: vSphere World
+    mode: all
+    depth: 10
+    configs:
+      - name: "Memory Allocation Remaining"
+        adapter_kind: VMWARE
+        resource_kind: ClusterComputeResource
+        size_by:
+          metric_key: mem|haTotalCapacity_average
+          label: "Memory Capacity After HA"
+        color_by:
+          # [VCF CF] Cluster - Memory Allocation Remaining %
+          metric_key: Super Metric|sm_ce85eb90-4c0d-47bc-815c-64ee7b1fd759
+          label: "Memory Allocation Remaining %"
+        group_by: {}
+        color:
+          min_value: 0
+          max_value: 100
+          # Lower is worse: ascending values, colours run red to green.
+          thresholds:
+            values: [0, 20, 30, 40]
+            colors: ["#DE3F30", "#F5A623", "#ECC33E", "#74B43B"]
+        solid_coloring: false
+        focus_on_groups: false
+
+  - id: disk_remaining_heatmap
+    type: Heatmap
+    title: "Disk Allocation Remaining"
+    coords: {x: 9, y: 11, w: 4, h: 5}
+    self_provider: true
+    pin:
+      adapter_kind: VMWARE
+      resource_kind: vSphere World
+    mode: all
+    depth: 10
+    configs:
+      - name: "Disk Allocation Remaining"
+        adapter_kind: VMWARE
+        resource_kind: ClusterComputeResource
+        size_by:
+          metric_key: diskspace|total_capacity
+          label: "Total Disk Capacity"
+        color_by:
+          # [VCF CF] Cluster - Disk Allocation Remaining %
+          metric_key: Super Metric|sm_043de024-4723-467b-aafc-b35df31e21f3
+          label: "Disk Allocation Remaining %"
+        group_by: {}
+        color:
+          min_value: 0
+          max_value: 100
+          # Lower is worse: ascending values, colours run red to green.
+          thresholds:
+            values: [0, 20, 30, 40]
+            colors: ["#DE3F30", "#F5A623", "#ECC33E", "#74B43B"]
+        solid_coloring: false
+        focus_on_groups: false
+
+  - id: ratio_trend_view
+    type: View
+    title: "Overcommit Ratio Trend, Selected Cluster"
+    coords: {x: 1, y: 16, w: 12, h: 4}
+    view: "3b7bba92-680c-42ba-b8a9-aa9202f0cc71"
+
+interactions:
+  - from: cluster_alloc_view
+    to: selected_ratios
+    type: resourceId
+  - from: cluster_alloc_view
+    to: ratio_trend_view
+    type: resourceId

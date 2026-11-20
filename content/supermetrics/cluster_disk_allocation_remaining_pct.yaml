@@ -1,0 +1,18 @@
+id: 043de024-4723-467b-aafc-b35df31e21f3
+name: "[VCF CF] Cluster - Disk Allocation Remaining %"
+resource_kinds:
+  - resource_kind_key: ClusterComputeResource
+    adapter_kind_key: VMWARE
+description: >
+  Disk space capacity remaining under the disk space allocation model, as a
+  percentage of usable capacity (after HA and buffer), on a cluster. The native
+  per-resource capacityRemainingPercentage keys never carry a value, so this
+  divides the engine's own remaining figure by its usable capacity (both in
+  GB); the engine's remaining figure floors at 0, so a full cluster reads 0.
+  The division is deliberately unguarded: when the allocation model is not
+  configured, usable capacity is absent or 0 and the metric yields no value
+  instead of 0, because 0 means "full". No disk space allocation ratio is set
+  in the lab, so both keys carry no value there and this metric shows no data
+  until one is set. Unit: percent.
+formula: |
+  ${this, metric=OnlineCapacityAnalytics|diskspace|alloc|capacityRemaining} / ${this, metric=diskspace|alloc|usableCapacity} * 100

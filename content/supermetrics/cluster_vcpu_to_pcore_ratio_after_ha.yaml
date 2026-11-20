@@ -1,0 +1,13 @@
+id: 829303a2-7299-496c-b0c2-2c406f5880e0
+name: "[VCF CF] Cluster - vCPU-to-pCore Ratio After HA"
+resource_kinds:
+  - resource_kind_key: ClusterComputeResource
+    adapter_kind_key: VMWARE
+description: >
+  Powered-on vCPUs divided by the physical cores left after the vSphere HA
+  reservation, on a cluster. The native cpu|vcpus_to_cores_allocation_ratio
+  divides by all cores and so understates the ratio the cluster runs at once
+  a host fails. Returns 0 when cores after HA is 0 or absent, so the value
+  never divides by zero. Unit: ratio (vCPUs per core).
+formula: |
+  ${this, metric=cpu|haCorecount_provisioned} as cores > 0 ? ${this, metric=cpu|vcpus_allocated_on_all_powered_on_vms} / cores : 0

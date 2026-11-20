@@ -1,0 +1,66 @@
+id: 03e51d62-1185-40d2-b52c-b7296512cb20
+name: "[VCF CF] Host CPU Allocation vs Contention"
+description: >
+  Per-host vCPU:pCore allocation with core count, hyperthreading state, running
+  VMs and vCPUs placed, beside contention evidence (share of VMs facing CPU
+  ready, worst-VM ready and co-stop, average contention). Subject is HostSystem;
+  intended to receive a ClusterComputeResource resourceId interaction from an
+  upstream cluster list so rows are scoped to the selected cluster's hosts.
+  Default sort: % VMs Facing Ready descending. 7-day window.
+
+subject:
+  adapter_kind: VMWARE
+  resource_kind: HostSystem
+
+summary: false
+
+time_window:
+  unit: DAYS
+  count: 7
+
+columns:
+  - attribute: cpu|corecount_provisioned
+    display_name: "Cores"
+    transformation: CURRENT
+
+  - attribute: config|hyperThread|active
+    display_name: "Hyperthreading"
+    is_property: true
+    transformation: CURRENT
+
+  - attribute: summary|number_running_vms
+    display_name: "Running VMs"
+    transformation: CURRENT
+
+  - attribute: cpu|vcpus_allocated_on_all_powered_on_vms
+    display_name: "vCPUs On"
+    transformation: CURRENT
+
+  - attribute: supermetric:"[VCF CF] Host - vCPU-to-pCore Ratio"
+    display_name: "vCPU:pCore"
+    transformation: CURRENT
+
+  - attribute: cpu|percentage_of_vms_facing_cpu_ready
+    display_name: "% VMs Facing Ready"
+    transformation: AVG
+    yellow_bound: 2.5
+    orange_bound: 5.0
+    red_bound: 7.5
+    ascending_range: false
+    sort: desc
+
+  - attribute: cpu|max_cpu_ready
+    display_name: "Worst VM Ready %"
+    transformation: MAX
+    yellow_bound: 2.5
+    orange_bound: 5.0
+    red_bound: 7.5
+    ascending_range: false
+
+  - attribute: cpu|max_cpu_costop
+    display_name: "Worst VM Co-stop %"
+    transformation: MAX
+
+  - attribute: cpu|capacity_contentionPct
+    display_name: "Contention Avg %"
+    transformation: AVG

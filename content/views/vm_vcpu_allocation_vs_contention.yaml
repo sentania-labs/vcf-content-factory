@@ -1,0 +1,63 @@
+id: 815b9d9c-037e-4da5-8b6e-ea3288efdd82
+name: "[VCF CF] VM vCPU Allocation vs Contention"
+description: >
+  Per-VM vCPU count beside CPU demand, ready, peak ready, co-stop and
+  contention, worst CPU Ready P95 first, so the reader can see which VMs of a
+  cluster carry the contention and how large they are. Subject is
+  VirtualMachine; intended to receive a ClusterComputeResource resourceId
+  interaction from an upstream cluster list so rows are scoped to the selected
+  cluster's VMs. Built-in VMWARE adapter metrics only. Default sort: CPU Ready
+  P95 descending. 7-day window.
+
+subject:
+  adapter_kind: VMWARE
+  resource_kind: VirtualMachine
+
+summary: false
+
+time_window:
+  unit: DAYS
+  count: 7
+
+columns:
+  - attribute: config|hardware|num_Cpu
+    display_name: "vCPUs"
+    transformation: CURRENT
+
+  - attribute: cpu|demandPct
+    display_name: "CPU Demand Avg %"
+    unit: percent
+    transformation: AVG
+
+  - attribute: cpu|readyPct
+    display_name: "CPU Ready Avg %"
+    unit: percent
+    transformation: AVG
+
+  # Primary sort column: worst-first. Bounds 2.5/5/10 per the parent design.
+  - attribute: cpu|readyPct
+    display_name: "CPU Ready P95 %"
+    unit: percent
+    transformation: PERCENTILE
+    percentile: 95
+    yellow_bound: 2.5
+    orange_bound: 5.0
+    red_bound: 10.0
+    ascending_range: false
+    sort: desc
+
+  - attribute: cpu|20_sec_peak_readyPct
+    display_name: "Peak 20s Ready %"
+    unit: percent
+    transformation: MAX
+
+  - attribute: cpu|costopPct
+    display_name: "Co-stop P95 %"
+    unit: percent
+    transformation: PERCENTILE
+    percentile: 95
+
+  - attribute: cpu|capacity_contentionPct
+    display_name: "Contention Avg %"
+    unit: percent
+    transformation: AVG
