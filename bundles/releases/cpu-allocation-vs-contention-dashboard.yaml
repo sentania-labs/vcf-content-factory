@@ -1,0 +1,15 @@
+artifacts:
+- headline: true
+  source: content/dashboards/cpu_allocation_vs_contention.yaml
+deprecates: []
+description: 'Allocation-first CPU capacity view for customers who plan by vCPU:pCore
+  ratio. Fleet scoreboard, a per-cluster list (the primary selector) that puts the
+  ratio beside contention evidence, two heatmaps (size = allocation, colour = share
+  of VMs facing CPU ready), host and VM drill-downs for the selected cluster, and
+  the stock allocation trend for that cluster. Ratios are against physical cores,
+  powered-on VMs only. No fixed ratio is right: start conservative and let contention
+  decide how far the ratio can grow.'
+name: cpu-allocation-vs-contention-dashboard
+release_date: '2026-11-20'
+release_notes: ''
+version: '1.0'
