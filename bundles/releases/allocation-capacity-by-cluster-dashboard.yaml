@@ -1,0 +1,16 @@
+artifacts:
+- headline: true
+  source: content/dashboards/allocation_capacity_by_cluster.yaml
+deprecates: []
+description: Allocation-model capacity per cluster for customers who plan by overcommit
+  ratio. A per-cluster list (the primary selector) sets the planned ratio from policy
+  beside the ratio the cluster actually runs at, with allocation capacity remaining,
+  days left and the demand model's answer for contrast. A scoreboard shows the selected
+  cluster's ratios, three fleet heatmaps (size = capacity, colour = allocation remaining
+  %, lower is worse) cover CPU, memory and disk, and the stock allocation trend follows
+  the selected cluster. Remaining % is computed by factory super metrics, not native
+  keys.
+name: allocation-capacity-by-cluster-dashboard
+release_date: '2026-11-20'
+release_notes: ''
+version: '1.0'
