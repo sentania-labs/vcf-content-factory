@@ -86,7 +86,7 @@ Summary scoreboard's). Author all three bounds or none (lesson
 | Worst VM Ready % | `cpu|max_cpu_ready` | max | 2.5 / 5 / 10 |
 | Worst VM Co-stop % | `cpu|max_cpu_costop` | max | 2.5 / 5 / 10 |
 | Contention Avg % | `cpu|capacity_contentionPct` | avg | none |
-| Alloc Remaining % | `OnlineCapacityAnalytics|cpu|alloc|capacityRemainingPercentage` | current | 40 / 30 / 20 descending |
+| Alloc Remaining % | SM `[VCF CF] Cluster - CPU Allocation Remaining %` (the native percentage key never carries a value; see `knowledge/context/api-surface/policy_capacity_allocation_model.md`) | current | 40 / 30 / 20 descending |
 
 ### Band C heatmaps
 

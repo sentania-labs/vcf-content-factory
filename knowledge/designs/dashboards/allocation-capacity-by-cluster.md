@@ -60,18 +60,18 @@ is its twin.
 | CPU | Actual | `cpu|vcpus_to_cores_allocation_ratio` | |
 | CPU | Usable (vCPUs) | `cpu|alloc|usableCapacity` | |
 | CPU | Remaining (vCPUs) | `OnlineCapacityAnalytics|cpu|alloc|capacityRemaining` | |
-| CPU | Remaining % | `OnlineCapacityAnalytics|cpu|alloc|capacityRemainingPercentage` | 40/30/20 descending, sort asc |
+| CPU | Remaining % | SM `[VCF CF] Cluster - CPU Allocation Remaining %` | 40/30/20 descending, sort asc |
 | CPU | Days Left | `OnlineCapacityAnalytics|cpu|alloc|timeRemaining` | |
 | CPU | Recommended (cores) | `OnlineCapacityAnalytics|cpu|alloc|recommendedSize` | |
 | Memory | Planned | property `System Properties|mem|alloc|overcommitRatioSetting` | |
 | Memory | Actual | `mem|virtual_to_physical_memory_allocation_ratio` | |
-| Memory | Remaining % | `OnlineCapacityAnalytics|mem|alloc|capacityRemainingPercentage` (confirm) | 40/30/20 descending |
-| Memory | Days Left | `OnlineCapacityAnalytics|mem|alloc|timeRemaining` (confirm) | |
+| Memory | Remaining % | SM `[VCF CF] Cluster - Memory Allocation Remaining %` | 40/30/20 descending |
+| Memory | Days Left | `OnlineCapacityAnalytics|mem|alloc|timeRemaining` | |
 | Disk | Planned | property `System Properties|diskspace|alloc|overcommitRatioSetting` | |
 | Disk | Actual | `diskspace|diskspace_overcommit_ratio` | |
-| Disk | Remaining % | `OnlineCapacityAnalytics|diskspace|alloc|capacityRemainingPercentage` (confirm) | 40/30/20 descending |
-| Disk | Days Left | `OnlineCapacityAnalytics|diskspace|alloc|timeRemaining` (confirm) | |
-| Demand | Remaining % | see constraint below | |
+| Disk | Remaining % | SM `[VCF CF] Cluster - Disk Allocation Remaining %` | 40/30/20 descending |
+| Disk | Days Left | `OnlineCapacityAnalytics|diskspace|alloc|timeRemaining` | |
+| Demand | CPU Remaining % | SM `[VCF CF] Cluster - CPU Demand Remaining %` | |
 | Demand | Days Left | `OnlineCapacityAnalytics|cpu|demand|timeRemaining` | |
 
 All columns current value.
@@ -89,9 +89,9 @@ scoreboard. All three bounds or none per tile.
 
 | Heatmap | size_by | color_by | Thresholds |
 |---|---|---|---|
-| C-1 | `cpu|corecount_provisioned` | `OnlineCapacityAnalytics|cpu|alloc|capacityRemainingPercentage` | 40/30/20 |
-| C-2 | `mem|haTotalCapacity_average` | `OnlineCapacityAnalytics|mem|alloc|capacityRemainingPercentage` (confirm) | 40/30/20 |
-| C-3 | `diskspace|total_capacity` | `OnlineCapacityAnalytics|diskspace|alloc|capacityRemainingPercentage` (confirm) | 40/30/20 |
+| C-1 | `cpu|corecount_provisioned` | SM `[VCF CF] Cluster - CPU Allocation Remaining %` | 40/30/20 |
+| C-2 | `mem|haTotalCapacity_average` | SM `[VCF CF] Cluster - Memory Allocation Remaining %` | 40/30/20 |
+| C-3 | `diskspace|total_capacity` | SM `[VCF CF] Cluster - Disk Allocation Remaining %` | 40/30/20 |
 
 Never `groupBy: {}` (lesson `heatmap-empty-groupby-crashes-renderer.md`).
 
@@ -103,17 +103,19 @@ Never `groupBy: {}` (lesson `heatmap-empty-groupby-crashes-renderer.md`).
   all monitor the same hosts", applied as CPU 3:1 only. So the memory and
   disk Planned and Alloc cells stay empty in the lab; the CPU ones
   populate after an analytics cycle.
-- **Keys marked (confirm)**: recon listed the CPU alloc family key by key
-  from live statkeys and reported that memory and disk have "the same
-  shape". The view author confirms each memory and disk key against the
-  live statkey listing; a key that does not exist is a dropped column
-  reported back, never a guess (RULE-002).
-- **Demand Remaining %**: the per-resource demand key
-  (`OnlineCapacityAnalytics|cpu|demand|capacityRemaining`) is in MHz. The
-  column is either a view expression against `cpu|demand|usableCapacity`
-  or the overall `OnlineCapacityAnalytics|capacityRemainingPercentage`
-  (most constrained resource). Author picks what the view schema supports
-  and says which.
+- **Remaining % is computed, not native** (change after approval,
+  2026-11-20; metric swap only, no layout change). api-explorer found the
+  per-resource `capacityRemainingPercentage` keys exist but never carry a
+  value, for allocation or demand, even with the model on. Four super
+  metrics compute remaining / usable x 100 from keys verified on 8.18.7,
+  9.0.2 and 9.1.1: see
+  `knowledge/context/api-surface/policy_capacity_allocation_model.md`.
+  The memory and disk keys named in this note were confirmed in the same
+  pass.
+- **The overall `OnlineCapacityAnalytics|capacityRemainingPercentage` now
+  follows allocation** wherever allocation is the tighter limit, so it
+  cannot serve as the demand contrast column; the CPU demand super metric
+  does.
 - The Planned properties exist only on some clusters (absent on the
   synthetic `cluster-0x` ones) and read -1.0 when unset.
 - Datacenter, vSphere World and HostSystem carry no alloc capacity keys, so
