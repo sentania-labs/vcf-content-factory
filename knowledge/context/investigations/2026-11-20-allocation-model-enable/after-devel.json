@@ -1,0 +1,260 @@
+{
+  "byType": {
+    "CAPACITY_ALLOCATION_MODEL|includeInherited=false": {
+      "body": {
+        "capacitySettings": {
+          "capacity": {
+            "capacityAllocationSettings": [
+              {
+                "capacityAllocation": {
+                  "cpu": 3.0,
+                  "poweredOffVmsConsidered": false
+                },
+                "resourceKindKey": {
+                  "adapterKind": "VMWARE",
+                  "resourceKind": "ClusterComputeResource"
+                }
+              }
+            ],
+            "capacityBufferSettings": [],
+            "customProfileSettings": []
+          }
+        }
+      },
+      "http": 200
+    },
+    "CAPACITY_ALLOCATION_MODEL|includeInherited=true": {
+      "body": {
+        "capacitySettings": {
+          "capacity": {
+            "capacityAllocationSettings": [
+              {
+                "capacityAllocation": {
+                  "cpu": 3.0,
+                  "poweredOffVmsConsidered": false
+                },
+                "inherited": false,
+                "resourceKindKey": {
+                  "adapterKind": "VMWARE",
+                  "resourceKind": "ClusterComputeResource"
+                }
+              }
+            ],
+            "capacityBufferSettings": [],
+            "customProfileSettings": []
+          }
+        }
+      },
+      "http": 200
+    },
+    "CAPACITY_BUFFER|includeInherited=false": {
+      "body": {
+        "capacitySettings": {
+          "capacity": {
+            "capacityAllocationSettings": [],
+            "capacityBufferSettings": [],
+            "customProfileSettings": []
+          }
+        }
+      },
+      "http": 200
+    },
+    "CAPACITY_BUFFER|includeInherited=true": {
+      "body": {
+        "capacitySettings": {
+          "capacity": {
+            "capacityAllocationSettings": [],
+            "capacityBufferSettings": [
+              {
+                "capacityBuffer": {
+                  "cpu": {
+                    "allocation": 0.0,
+                    "demand": 0.0
+                  },
+                  "diskspace": {
+                    "allocation": 0.0,
+                    "demand": 0.0
+                  },
+                  "memory": {
+                    "allocation": 0.0,
+                    "demand": 0.0
+                  }
+                },
+                "inherited": true,
+                "resourceKindKey": {
+                  "adapterKind": "VMWARE",
+                  "resourceKind": "ClusterComputeResource"
+                }
+              }
+            ],
+            "customProfileSettings": []
+          }
+        }
+      },
+      "http": 200
+    },
+    "CAPACITY_CUSTOM_PROFILE|includeInherited=false": {
+      "body": {
+        "capacitySettings": {
+          "capacity": {
+            "capacityAllocationSettings": [],
+            "capacityBufferSettings": [],
+            "customProfileSettings": []
+          }
+        }
+      },
+      "http": 200
+    },
+    "CAPACITY_CUSTOM_PROFILE|includeInherited=true": {
+      "body": {
+        "capacitySettings": {
+          "capacity": {
+            "capacityAllocationSettings": [],
+            "capacityBufferSettings": [],
+            "customProfileSettings": [
+              {
+                "capacityCustomProfile": {
+                  "customProfileIds": []
+                },
+                "inherited": true,
+                "resourceKindKey": {
+                  "adapterKind": "VMWARE",
+                  "resourceKind": "ClusterComputeResource"
+                }
+              }
+            ]
+          }
+        }
+      },
+      "http": 200
+    },
+    "CAPACITY_REMAINING|includeInherited=false": {
+      "body": {
+        "capacitySettings": {
+          "criticalityThresholds": {
+            "capacityRemainingSettings": [],
+            "timeRemainingSettings": [],
+            "workloadSettings": []
+          }
+        }
+      },
+      "http": 200
+    },
+    "CAPACITY_REMAINING|includeInherited=true": {
+      "body": {
+        "capacitySettings": {
+          "criticalityThresholds": {
+            "capacityRemainingSettings": [
+              {
+                "criticalityThresholdsConfig": {
+                  "critical": 0.0,
+                  "immediate": 5.0,
+                  "warning": 10.0
+                },
+                "inherited": true,
+                "resourceKindKey": {
+                  "adapterKind": "VMWARE",
+                  "resourceKind": "ClusterComputeResource"
+                }
+              }
+            ],
+            "timeRemainingSettings": [],
+            "workloadSettings": []
+          }
+        }
+      },
+      "http": 200
+    },
+    "TIME_REMAINING|includeInherited=false": {
+      "body": {
+        "capacitySettings": {
+          "criticalityThresholds": {
+            "capacityRemainingSettings": [],
+            "timeRemainingSettings": [],
+            "workloadSettings": []
+          }
+        }
+      },
+      "http": 200
+    },
+    "TIME_REMAINING|includeInherited=true": {
+      "body": {
+        "capacitySettings": {
+          "criticalityThresholds": {
+            "capacityRemainingSettings": [],
+            "timeRemainingSettings": [
+              {
+                "criticalityThresholdsConfig": {
+                  "critical": 90.0,
+                  "warning": 120.0
+                },
+                "inherited": true,
+                "resourceKindKey": {
+                  "adapterKind": "VMWARE",
+                  "resourceKind": "ClusterComputeResource"
+                }
+              }
+            ],
+            "workloadSettings": []
+          }
+        }
+      },
+      "http": 200
+    },
+    "WORKLOAD|includeInherited=false": {
+      "body": {
+        "capacitySettings": {
+          "criticalityThresholds": {
+            "capacityRemainingSettings": [],
+            "timeRemainingSettings": [],
+            "workloadSettings": []
+          }
+        }
+      },
+      "http": 200
+    },
+    "WORKLOAD|includeInherited=true": {
+      "body": {
+        "capacitySettings": {
+          "criticalityThresholds": {
+            "capacityRemainingSettings": [],
+            "timeRemainingSettings": [],
+            "workloadSettings": [
+              {
+                "criticalityThresholdsConfig": {
+                  "critical": 95.0,
+                  "immediate": 90.0,
+                  "warning": 80.0
+                },
+                "inherited": true,
+                "resourceKindKey": {
+                  "adapterKind": "VMWARE",
+                  "resourceKind": "ClusterComputeResource"
+                }
+              }
+            ]
+          }
+        }
+      },
+      "http": 200
+    }
+  },
+  "capturedAt": "2026-11-20T13:06:44-06:00",
+  "instance": "devel",
+  "policy": {
+    "defaultPolicy": true,
+    "id": "9c1d42be-09b7-4149-92fc-2224e3d778bd",
+    "name": "vSphere Solution's Default Policy (Apr 17, 2026 3:50:38 PM)"
+  },
+  "policyId": "9c1d42be-09b7-4149-92fc-2224e3d778bd",
+  "unfiltered": {
+    "body": {
+      "apiErrorCode": 1509,
+      "httpStatusCode": 400,
+      "message": "Query Parameter \"type\" is required.",
+      "type": "Error"
+    },
+    "http": 400,
+    "request": "GET /api/policies/9c1d42be-09b7-4149-92fc-2224e3d778bd/settings (no query)"
+  }
+}

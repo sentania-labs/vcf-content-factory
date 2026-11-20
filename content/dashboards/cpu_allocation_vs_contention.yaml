@@ -1,0 +1,202 @@
+description: 'Allocation-first CPU capacity view for customers who plan by vCPU:pCore
+  ratio. Fleet scoreboard, a per-cluster list (the primary selector) that puts the
+  ratio beside contention evidence, two heatmaps (size = allocation, colour = share
+  of VMs facing CPU ready), host and VM drill-downs for the selected cluster, and
+  the stock allocation trend for that cluster. Ratios are against physical cores,
+  powered-on VMs only. No fixed ratio is right: start conservative and let contention
+  decide how far the ratio can grow.
+
+  '
+id: 4eef8953-278f-4f81-9d57-81264406d155
+interactions:
+- from: cluster_alloc_view
+  to: host_alloc_view
+  type: resourceId
+- from: cluster_alloc_view
+  to: vm_alloc_view
+  type: resourceId
+- from: cluster_alloc_view
+  to: ratio_trend_view
+  type: resourceId
+name: '[VCF CF] CPU Allocation vs Contention'
+released: true
+version: 1.0.0
+widgets:
+- box_columns: 6
+  coords:
+    h: 3
+    w: 12
+    x: 1
+    y: 1
+  id: fleet_allocation
+  metrics:
+  - adapter_kind: VMWARE
+    color_method: 1
+    label: Clusters
+    metric_key: summary|total_number_clusters
+    metric_name: Clusters
+    resource_kind: vSphere World
+  - adapter_kind: VMWARE
+    color_method: 1
+    label: Hosts
+    metric_key: summary|total_number_hosts
+    metric_name: Hosts
+    resource_kind: vSphere World
+  - adapter_kind: VMWARE
+    color_method: 1
+    label: VMs
+    metric_key: summary|total_number_vms
+    metric_name: VMs
+    resource_kind: vSphere World
+  - adapter_kind: VMWARE
+    color_method: 1
+    label: Physical Cores
+    metric_key: cpu|corecount_provisioned
+    metric_name: Physical Cores
+    resource_kind: vSphere World
+  - adapter_kind: VMWARE
+    color_method: 1
+    label: vCPUs Allocated (powered on)
+    metric_key: cpu|vcpus_allocated_on_all_powered_on_vms
+    metric_name: vCPUs Allocated (powered on)
+    resource_kind: vSphere World
+  - adapter_kind: VMWARE
+    color_method: 0
+    label: vCPU:pCore Ratio
+    metric_key: cpu|vcpus_to_cores_allocation_ratio
+    metric_name: vCPU:pCore Ratio
+    orange_bound: 4
+    red_bound: 8
+    resource_kind: vSphere World
+    yellow_bound: 2
+  pin:
+    adapter_kind: VMWARE
+    resource_kind: vSphere World
+  self_provider: true
+  title: Fleet Allocation
+  type: Scoreboard
+- coords:
+    h: 7
+    w: 12
+    x: 1
+    y: 4
+  id: cluster_alloc_view
+  pin:
+    adapter_kind: VMWARE
+    resource_kind: vSphere World
+  self_provider: true
+  title: Cluster CPU Allocation vs Contention
+  type: View
+  view: '[VCF CF] Cluster CPU Allocation vs Contention'
+- configs:
+  - adapter_kind: VMWARE
+    color:
+      max_value: 5
+      min_value: 0
+      thresholds:
+        colors:
+        - '#74B43B'
+        - '#ECC33E'
+        - '#F5A623'
+        - '#DE3F30'
+        values:
+        - 0
+        - 1.67
+        - 3.33
+        - 5
+    color_by:
+      label: '% VMs Facing CPU Ready'
+      metric_key: cpu|percentage_of_vms_facing_cpu_ready
+    focus_on_groups: false
+    group_by: {}
+    name: Cluster ratio vs contention
+    resource_kind: ClusterComputeResource
+    size_by:
+      label: vCPU:pCore Ratio
+      metric_key: cpu|vcpus_to_cores_allocation_ratio
+    solid_coloring: false
+  coords:
+    h: 5
+    w: 6
+    x: 1
+    y: 11
+  depth: 10
+  id: cluster_heatmap
+  mode: all
+  pin:
+    adapter_kind: VMWARE
+    resource_kind: vSphere World
+  self_provider: true
+  title: 'Clusters: size = ratio, colour = contention'
+  type: Heatmap
+- configs:
+  - adapter_kind: VMWARE
+    color:
+      max_value: 3.75
+      min_value: 0
+      thresholds:
+        colors:
+        - '#74B43B'
+        - '#ECC33E'
+        - '#F5A623'
+        - '#DE3F30'
+        values:
+        - 0
+        - 1.25
+        - 2.5
+        - 3.75
+    color_by:
+      label: '% VMs Facing CPU Ready'
+      metric_key: cpu|percentage_of_vms_facing_cpu_ready
+    focus_on_groups: true
+    group_by:
+      adapter_kind: VMWARE
+      resource_kind: ClusterComputeResource
+      text: Cluster Compute Resource
+    name: Host vCPUs vs contention
+    resource_kind: HostSystem
+    size_by:
+      label: vCPUs Allocated (powered on)
+      metric_key: cpu|vcpus_allocated_on_all_powered_on_vms
+    solid_coloring: false
+  coords:
+    h: 5
+    w: 6
+    x: 7
+    y: 11
+  depth: 10
+  id: host_heatmap
+  mode: all
+  pin:
+    adapter_kind: VMWARE
+    resource_kind: vSphere World
+  self_provider: true
+  title: 'Hosts: size = vCPUs placed, colour = contention'
+  type: Heatmap
+- coords:
+    h: 5
+    w: 12
+    x: 1
+    y: 16
+  id: host_alloc_view
+  title: Hosts in Selected Cluster
+  type: View
+  view: '[VCF CF] Host CPU Allocation vs Contention'
+- coords:
+    h: 5
+    w: 12
+    x: 1
+    y: 21
+  id: vm_alloc_view
+  title: VMs in Selected Cluster
+  type: View
+  view: '[VCF CF] VM vCPU Allocation vs Contention'
+- coords:
+    h: 4
+    w: 12
+    x: 1
+    y: 26
+  id: ratio_trend_view
+  title: Overcommit Ratio Trend, Selected Cluster
+  type: View
+  view: 3b7bba92-680c-42ba-b8a9-aa9202f0cc71

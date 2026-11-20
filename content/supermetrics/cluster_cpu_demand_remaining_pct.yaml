@@ -1,0 +1,20 @@
+id: d6cd561a-d199-417f-b336-65bc0751480a
+name: "[VCF CF] Cluster - CPU Demand Remaining %"
+resource_kinds:
+  - resource_kind_key: ClusterComputeResource
+    adapter_kind_key: VMWARE
+description: >
+  CPU capacity remaining under the demand model, as a percentage of the
+  engine's usable demand capacity (observed equal to cpu|haTotalCapacity_average
+  on one lab cluster, 159700 MHz), on a cluster. The native per-resource
+  capacityRemainingPercentage keys never carry a value, so this divides the
+  capacity engine's own remaining figure by its usable capacity (both in
+  MHz); the engine's remaining figure floors at 0, so a full cluster reads 0.
+  The division is deliberately unguarded: when usable capacity is absent or 0
+  the metric yields no value instead of 0, because 0 means "full".
+  Not the same as "[VCF CF] Cluster - CPU Free % After HA": that one is
+  current-usage headroom (HA total capacity minus current usage), while this
+  is the capacity engine's demand-model remaining (time-aware, buffered
+  demand projection). Do not merge them. Unit: percent.
+formula: |
+  ${this, metric=OnlineCapacityAnalytics|cpu|demand|capacityRemaining} / ${this, metric=cpu|demand|usableCapacity} * 100
