@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Mock: [VCF CF] Allocation Capacity by Cluster</title>
+<style>
+  body { background:#1b2a32; color:#e9ecef; font:13px/1.4 "Segoe UI", Arial, sans-serif; margin:0; padding:16px; }
+  h1 { font-size:16px; margin:0 0 4px; font-weight:600; }
+  .note { color:#9fb3bf; margin-bottom:12px; max-width:1300px; }
+  .sim { display:inline-block; background:#7a4b00; color:#ffd88a; padding:1px 8px; border-radius:3px; font-size:11px; }
+  .grid { display:grid; grid-template-columns:repeat(12,1fr); grid-auto-rows:34px; gap:8px; }
+  .w { background:#22343c; border:1px solid #3b4f58; border-radius:3px; overflow:hidden; display:flex; flex-direction:column; }
+  .w > .t { padding:5px 10px; border-bottom:1px solid #3b4f58; font-weight:600; display:flex; justify-content:space-between; gap:12px; }
+  .w > .t span { font:11px ui-monospace, Consolas, monospace; color:#8ea3ad; font-weight:400; text-align:right; }
+  .b { padding:8px 10px; flex:1; overflow:auto; }
+  .tiles { display:grid; grid-template-columns:repeat(5,1fr); gap:6px; height:100%; }
+  .tile { background:#2c444e; border-radius:3px; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+  .tile.y { background:#7a6a00; } .tile.g { background:#2f6b47; }
+  .tile b { font-size:22px; }
+  .tile i { font-style:normal; color:#d5dee3; font-size:11px; }
+  code { font:10px ui-monospace, Consolas, monospace; color:#7f96a1; }
+  .tile code { color:#c5d2d8; }
+  table { border-collapse:collapse; width:100%; }
+  th, td { text-align:left; padding:3px 8px; border-bottom:1px solid #31454e; white-space:nowrap; vertical-align:top; }
+  th { color:#b8c7cf; font-weight:600; font-size:12px; }
+  th code { display:block; font-weight:400; }
+  th.grp { border-left:2px solid #4c626c; }
+  td.grp { border-left:2px solid #4c626c; }
+  td.y { background:#7a6a00; color:#fff3b0; }
+  td.o { background:#8a4a00; color:#ffd9a8; }
+  td.r { background:#7d1f1f; color:#ffc9c9; }
+  td.gap { color:#6d838d; font-style:italic; }
+  .heat { height:100%; display:flex; gap:3px; flex-wrap:wrap; }
+  .heat div { border-radius:2px; padding:4px 6px; font-size:11px; color:#fff; flex-grow:1; }
+  .hg { background:#2f7d4f; } .hy { background:#9a8500; } .ho { background:#b05f00; } .hr { background:#a12b2b; }
+  .chart { height:100%; background:linear-gradient(180deg,#263b44,#22343c); border:1px dashed #3b4f58; display:flex; align-items:center; justify-content:center; color:#8ea3ad; }
+</style>
+</head>
+<body>
+<h1>[VCF CF] Allocation Capacity by Cluster: proposed layout, 2026-11-20</h1>
+<div class="note"><span class="sim">SIMULATED VALUES</span> Nothing on this page is a live render. Every number is made up. This is the customer's own lens: the overcommit ratios their policy sets, what each cluster actually runs at, and how much allocation capacity and time is left by that policy, with the demand model's answer alongside for contrast. <b>Every "Planned" and "Alloc" cell is empty on all four lab instances today</b>: the allocation model is not enabled in any lab policy, so this page cannot be seen working until a ratio is set in one.</div>
+
+<div class="grid">
+
+  <div class="w" style="grid-column:1 / span 12; grid-row:1 / span 7;">
+    <div class="t">Cluster Allocation: Planned vs Actual <span>View (new) · ClusterComputeResource · self-provider · PRIMARY SELECTOR · sorted by CPU Alloc Remaining % asc</span></div>
+    <div class="b"><table>
+      <tr>
+        <th>Cluster</th>
+        <th class="grp">CPU Planned<code>System Properties|cpu|alloc|overcommitRatioSetting</code></th>
+        <th>CPU Actual<code>cpu|vcpus_to_cores_allocation_ratio</code></th>
+        <th>Usable (vCPUs)<code>cpu|alloc|usableCapacity</code></th>
+        <th>Remaining (vCPUs)<code>OnlineCapacityAnalytics|cpu|alloc|capacityRemaining</code></th>
+        <th>Remaining %<code>…|cpu|alloc|capacityRemainingPercentage · 40/30/20</code></th>
+        <th>Days Left<code>…|cpu|alloc|timeRemaining</code></th>
+        <th>Recommended (cores)<code>…|cpu|alloc|recommendedSize</code></th>
+        <th class="grp">Mem Planned<code>System Properties|mem|alloc|overcommitRatioSetting</code></th>
+        <th>Mem Actual<code>mem|virtual_to_physical_memory_allocation_ratio</code></th>
+        <th>Remaining %<code>…|mem|alloc|capacityRemainingPercentage</code></th>
+        <th>Days Left<code>…|mem|alloc|timeRemaining</code></th>
+        <th class="grp">Disk Planned<code>System Properties|diskspace|alloc|overcommitRatioSetting</code></th>
+        <th>Disk Actual<code>diskspace|diskspace_overcommit_ratio</code></th>
+        <th>Remaining %<code>…|diskspace|alloc|capacityRemainingPercentage</code></th>
+        <th>Days Left<code>…|diskspace|alloc|timeRemaining</code></th>
+        <th class="grp">Demand Remaining %<code>OnlineCapacityAnalytics|cpu|demand|capacityRemaining (as %: see note)</code></th>
+        <th>Demand Days Left<code>OnlineCapacityAnalytics|cpu|demand|timeRemaining</code></th>
+      </tr>
+      <tr><td>cluster-02</td><td class="grp">4</td><td>7.14</td><td>1,056</td><td>0</td><td class="r">0</td><td class="r">0</td><td>514</td><td class="grp">1</td><td>0.82</td><td class="r">18</td><td>140</td><td class="grp">2</td><td>1.4</td><td class="y">30</td><td>210</td><td class="grp">41</td><td>365+</td></tr>
+      <tr><td>cluster-04</td><td class="grp">4</td><td>4.74</td><td>1,056</td><td>0</td><td class="r">0</td><td class="r">0</td><td>342</td><td class="grp">1</td><td>0.71</td><td class="o">29</td><td>220</td><td class="grp">2</td><td>1.1</td><td>45</td><td>365+</td><td class="grp">52</td><td>365+</td></tr>
+      <tr><td>vcf-lab-wld01-cl01</td><td class="grp">4</td><td>3.17</td><td>64</td><td>0</td><td class="r">0</td><td class="r">0</td><td>19</td><td class="grp">1</td><td>0.64</td><td class="y">36</td><td>300</td><td class="grp">2</td><td>0.9</td><td>55</td><td>365+</td><td class="grp">12</td><td>28</td></tr>
+      <tr><td>cluster-01</td><td class="grp">4</td><td>3.55</td><td>1,056</td><td>34</td><td class="r">3</td><td class="r">12</td><td>256</td><td class="grp">1</td><td>0.60</td><td>40</td><td>365+</td><td class="grp">2</td><td>0.8</td><td>60</td><td>365+</td><td class="grp">63</td><td>365+</td></tr>
+      <tr><td>vcf-lab-mgmt-cl01</td><td class="grp">4</td><td>1.98</td><td>256</td><td>98</td><td>38</td><td>365+</td><td>40</td><td class="grp">1</td><td>0.39</td><td>61</td><td>365+</td><td class="grp">2</td><td>0.7</td><td>65</td><td>365+</td><td class="grp">12</td><td>28</td></tr>
+      <tr><td colspan="18" class="gap">Talking point the two right-hand columns exist for: allocation says cluster-02 is full; demand says it has 41 % left. And wld01 is the reverse risk: fine on memory and disk allocation, 28 days left on demand.</td></tr>
+    </table></div>
+  </div>
+
+  <div class="w" style="grid-column:1 / span 12; grid-row:8 / span 3;">
+    <div class="t">Selected Cluster: Overcommit Ratios <span>Scoreboard · ClusterComputeResource · driven by cluster selection · bounds are the stock Cluster Capacity dashboard's</span></div>
+    <div class="b"><div class="tiles">
+      <div class="tile y"><b>7.14</b><i>CPU vCPU:pCore</i><code>cpu|vcpus_to_cores_allocation_ratio · 3/6/9</code></div>
+      <div class="tile g"><b>0.82</b><i>Memory</i><code>mem|virtual_to_physical_memory_allocation_ratio · 1/2/3</code></div>
+      <div class="tile g"><b>1.4</b><i>Disk</i><code>diskspace|diskspace_overcommit_ratio · 2/3/4</code></div>
+      <div class="tile"><b>2,056</b><i>vCPUs (powered on)</i><code>cpu|vcpus_allocated_on_all_powered_on_vms</code></div>
+      <div class="tile"><b>264</b><i>Cores After HA</i><code>cpu|haCorecount_provisioned</code></div>
+    </div></div>
+  </div>
+
+  <div class="w" style="grid-column:1 / span 4; grid-row:11 / span 5;">
+    <div class="t">CPU Allocation Remaining <span>Heatmap · Cluster</span></div>
+    <div class="b"><div class="heat">
+      <div class="hr" style="flex-basis:30%">cluster-02</div><div class="hr" style="flex-basis:30%">cluster-04</div><div class="hr" style="flex-basis:30%">cluster-01</div><div class="hr" style="flex-basis:10%">wld01</div><div class="hg" style="flex-basis:20%">mgmt</div><div class="hg" style="flex-basis:30%">…</div>
+    </div></div>
+    <div style="padding:0 10px 6px"><code>size_by cpu|corecount_provisioned · color_by OnlineCapacityAnalytics|cpu|alloc|capacityRemainingPercentage · 40/30/20</code></div>
+  </div>
+  <div class="w" style="grid-column:5 / span 4; grid-row:11 / span 5;">
+    <div class="t">Memory Allocation Remaining <span>Heatmap · Cluster</span></div>
+    <div class="b"><div class="heat">
+      <div class="hr" style="flex-basis:30%">cluster-02</div><div class="ho" style="flex-basis:30%">cluster-04</div><div class="hg" style="flex-basis:30%">cluster-01</div><div class="hy" style="flex-basis:10%">wld01</div><div class="hg" style="flex-basis:20%">mgmt</div><div class="hg" style="flex-basis:30%">…</div>
+    </div></div>
+    <div style="padding:0 10px 6px"><code>size_by mem|haTotalCapacity_average · color_by OnlineCapacityAnalytics|mem|alloc|capacityRemainingPercentage · 40/30/20</code></div>
+  </div>
+  <div class="w" style="grid-column:9 / span 4; grid-row:11 / span 5;">
+    <div class="t">Disk Allocation Remaining <span>Heatmap · Cluster</span></div>
+    <div class="b"><div class="heat">
+      <div class="hy" style="flex-basis:30%">cluster-02</div><div class="hg" style="flex-basis:30%">cluster-04</div><div class="hg" style="flex-basis:30%">cluster-01</div><div class="hg" style="flex-basis:10%">wld01</div><div class="hg" style="flex-basis:20%">mgmt</div><div class="hg" style="flex-basis:30%">…</div>
+    </div></div>
+    <div style="padding:0 10px 6px"><code>size_by diskspace|total_capacity · color_by OnlineCapacityAnalytics|diskspace|alloc|capacityRemainingPercentage · 40/30/20</code></div>
+  </div>
+
+  <div class="w" style="grid-column:1 / span 12; grid-row:16 / span 4;">
+    <div class="t">Overcommit Ratio Trend, Selected Cluster <span>View (STOCK, reused by id 3b7bba92-680c-42ba-b8a9-aa9202f0cc71 "Capacity | Cluster Allocation") · driven by cluster selection</span></div>
+    <div class="b"><div class="chart">line chart: CPU, memory and disk overcommit ratios over time</div></div>
+  </div>
+
+</div>
+<div class="note" style="margin-top:12px">Notes. (1) The 40/30/20 remaining bands are the stock "VCF Cluster Capacity" view's. (2) The memory and disk alloc keys follow the CPU family recon listed from live statkeys; the view author confirms each exact key against the statkey listing before using it, and any that does not exist becomes a dropped column, not a guess. (3) Demand Remaining % is the one cell with an open source: the per-resource demand key is in MHz, so the column is either a view-side expression against <code>cpu|demand|usableCapacity</code> or the overall <code>OnlineCapacityAnalytics|capacityRemainingPercentage</code> (most constrained resource). Author picks whichever the view schema supports and says which.</div>
+</body>
+</html>

@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Mock: [VCF CF] CPU Allocation vs Contention</title>
+<style>
+  body { background:#1b2a32; color:#e9ecef; font:13px/1.4 "Segoe UI", Arial, sans-serif; margin:0; padding:16px; }
+  h1 { font-size:16px; margin:0 0 4px; font-weight:600; }
+  .note { color:#9fb3bf; margin-bottom:12px; max-width:1300px; }
+  .sim { display:inline-block; background:#7a4b00; color:#ffd88a; padding:1px 8px; border-radius:3px; font-size:11px; }
+  .grid { display:grid; grid-template-columns:repeat(12,1fr); grid-auto-rows:34px; gap:8px; }
+  .w { background:#22343c; border:1px solid #3b4f58; border-radius:3px; overflow:hidden; display:flex; flex-direction:column; }
+  .w > .t { padding:5px 10px; border-bottom:1px solid #3b4f58; font-weight:600; display:flex; justify-content:space-between; gap:12px; }
+  .w > .t span { font:11px ui-monospace, Consolas, monospace; color:#8ea3ad; font-weight:400; text-align:right; }
+  .b { padding:8px 10px; flex:1; overflow:auto; }
+  .tiles { display:grid; grid-template-columns:repeat(6,1fr); gap:6px; height:100%; }
+  .tile { background:#2c444e; border-radius:3px; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+  .tile b { font-size:22px; }
+  .tile i { font-style:normal; color:#b8c7cf; font-size:11px; }
+  code, .k { font:10px ui-monospace, Consolas, monospace; color:#7f96a1; }
+  table { border-collapse:collapse; width:100%; }
+  th, td { text-align:left; padding:3px 8px; border-bottom:1px solid #31454e; white-space:nowrap; vertical-align:top; }
+  th { color:#b8c7cf; font-weight:600; font-size:12px; }
+  th code { display:block; font-weight:400; }
+  th.new { color:#7fd18b; }
+  td.y { background:#7a6a00; color:#fff3b0; }
+  td.o { background:#8a4a00; color:#ffd9a8; }
+  td.r { background:#7d1f1f; color:#ffc9c9; }
+  td.g { color:#8ea3ad; }
+  td.gap { color:#6d838d; font-style:italic; }
+  .heat { height:100%; display:flex; gap:3px; flex-wrap:wrap; align-content:stretch; }
+  .heat div { border-radius:2px; padding:4px 6px; font-size:11px; color:#fff; flex-grow:1; }
+  .hg { background:#2f7d4f; } .hy { background:#9a8500; } .ho { background:#b05f00; } .hr { background:#a12b2b; }
+  .legend { margin-top:10px; color:#9fb3bf; }
+  .chart { height:100%; background:linear-gradient(180deg,#263b44,#22343c); border:1px dashed #3b4f58; display:flex; align-items:center; justify-content:center; color:#8ea3ad; }
+</style>
+</head>
+<body>
+<h1>[VCF CF] CPU Allocation vs Contention: proposed layout, 2026-11-20</h1>
+<div class="note"><span class="sim">SIMULATED VALUES</span> Nothing on this page is a live render. The vCPU:pCore ratios in the cluster table copy what recon read on prod (9.1.1) on 2026-11-20, and the wld01 contention figures are from the same read; every other number is made up to show the shape. Green column headers are new super metrics. The message of the page: the ratio is the customer's number, contention is the evidence, and the ratio only lights up when the evidence says it should.</div>
+
+<div class="grid">
+
+  <div class="w" style="grid-column:1 / span 12; grid-row:1 / span 3;">
+    <div class="t">Fleet Allocation <span>Scoreboard · vSphere World · self-provider, pinned</span></div>
+    <div class="b"><div class="tiles">
+      <div class="tile"><b>9</b><i>Clusters</i><code>summary|total_number_clusters</code></div>
+      <div class="tile"><b>106</b><i>Hosts</i><code>summary|total_number_hosts</code></div>
+      <div class="tile"><b>2,399</b><i>VMs</i><code>summary|total_number_vms</code></div>
+      <div class="tile"><b>2,912</b><i>Physical Cores</i><code>cpu|corecount_provisioned</code></div>
+      <div class="tile"><b>4,921</b><i>vCPUs (powered on)</i><code>cpu|vcpus_allocated_on_all_powered_on_vms</code></div>
+      <div class="tile"><b>1.69</b><i>vCPU:pCore</i><code>cpu|vcpus_to_cores_allocation_ratio · bounds 2/4/8 (stock Capacity Summary)</code></div>
+    </div></div>
+  </div>
+
+  <div class="w" style="grid-column:1 / span 12; grid-row:4 / span 7;">
+    <div class="t">Cluster CPU Allocation vs Contention <span>View (new) · ClusterComputeResource · self-provider · PRIMARY SELECTOR · 7-day window · sorted by "Ratio While Ready-Contended" desc</span></div>
+    <div class="b"><table>
+      <tr>
+        <th>Cluster</th>
+        <th>Hosts<code>summary|number_running_hosts</code></th>
+        <th>Cores<code>cpu|corecount_provisioned</code></th>
+        <th>Cores After HA<code>cpu|haCorecount_provisioned</code></th>
+        <th>vCPUs On<code>cpu|vcpus_allocated_on_all_powered_on_vms</code></th>
+        <th>vCPU:pCore<code>cpu|vcpus_to_cores_allocation_ratio</code></th>
+        <th class="new">vCPU:pCore After HA<code>SM: vCPUs on / cores after HA</code></th>
+        <th>Planned Ratio<code>System Properties|cpu|alloc|overcommitRatioSetting</code></th>
+        <th class="new">Ratio While Ready-Contended<code>SM: ratio if % VMs facing ready &gt; 2.5, else 0</code></th>
+        <th class="new">Ratio While Contention High<code>SM: ratio if avg contention &gt; 5 %, else 0</code></th>
+        <th>% VMs Facing Ready<code>cpu|percentage_of_vms_facing_cpu_ready · avg · 2.5/5/10</code></th>
+        <th>Worst VM Ready %<code>cpu|max_cpu_ready · max · 2.5/5/10</code></th>
+        <th>Worst VM Co-stop %<code>cpu|max_cpu_costop · max · 2.5/5/10</code></th>
+        <th>Contention Avg %<code>cpu|capacity_contentionPct · avg</code></th>
+        <th>Alloc Remaining %<code>OnlineCapacityAnalytics|cpu|alloc|capacityRemainingPercentage</code></th>
+      </tr>
+      <tr><td>cluster-02</td><td>12</td><td>288</td><td>264</td><td>2,056</td><td>7.14</td><td>7.79</td><td>3</td><td class="r">7.14</td><td class="g">0</td><td class="o">8.2</td><td class="o">9.1</td><td class="g">0.4</td><td>4.9</td><td class="r">0</td></tr>
+      <tr><td>cluster-04</td><td>12</td><td>288</td><td>264</td><td>1,365</td><td>4.74</td><td>5.17</td><td>3</td><td class="o">4.74</td><td class="g">0</td><td class="y">3.1</td><td class="o">8.8</td><td class="g">0.2</td><td>2.2</td><td class="r">0</td></tr>
+      <tr><td>vcf-lab-wld01-cl01</td><td>3</td><td>24</td><td>16</td><td>76</td><td>3.17</td><td>4.75</td><td>3</td><td class="o">3.17</td><td class="o">3.17</td><td class="r">46.5</td><td class="r">13.97</td><td class="g">0.13</td><td>6.24</td><td class="y">21</td></tr>
+      <tr><td>cluster-01</td><td>12</td><td>288</td><td>264</td><td>1,022</td><td>3.55</td><td>3.87</td><td>3</td><td class="g">0</td><td class="g">0</td><td class="g">1.1</td><td class="y">3.0</td><td class="g">0.1</td><td>0.9</td><td>11</td></tr>
+      <tr><td>cluster-05</td><td>12</td><td>288</td><td>264</td><td>1,008</td><td>3.50</td><td>3.82</td><td>3</td><td class="g">0</td><td class="g">0</td><td class="g">0.6</td><td class="g">1.9</td><td class="g">0.0</td><td>0.5</td><td>13</td></tr>
+      <tr><td>vcf-lab-mgmt-cl01</td><td>5</td><td>80</td><td>64</td><td>158</td><td>1.98</td><td>2.47</td><td>3</td><td class="g">0</td><td class="g">0</td><td class="g">0.0</td><td class="g">1.2</td><td class="g">0.0</td><td>1.0</td><td>51</td></tr>
+      <tr><td colspan="15" class="gap">3 more rows · the Planned Ratio and Alloc Remaining columns read -1 / blank on every lab instance today because the allocation model is not enabled in any lab policy</td></tr>
+    </table>
+    <div class="legend"><b>How the highlight works.</b> A list-view cell can only be coloured by its own value, never by another column. So the plain vCPU:pCore column stays uncoloured, and two super metrics republish the ratio only while the cluster is contended, one per definition of "contended": more than 2.5 % of the cluster's VMs facing CPU ready (the green limit on the stock Cluster Performance scoreboard), and average cluster CPU contention above 5 % (the factory's band). Each is 0 (uncoloured) on a clean cluster, yellow as soon as it fires at any ratio, orange from 3:1 and red from 6:1 (the stock Cluster Capacity ratio bands). cluster-01 at 3.55 stays quiet on both; wld01 at 3.17 lights up on both; cluster-02 fires on ready only. Planned Ratio shows the 3:1 being set in the lab policies today.</div>
+    </div>
+  </div>
+
+  <div class="w" style="grid-column:1 / span 6; grid-row:11 / span 5;">
+    <div class="t">Clusters: size = ratio, colour = contention <span>Heatmap · ClusterComputeResource · fleet-wide</span></div>
+    <div class="b"><div class="heat">
+      <div class="ho" style="flex-basis:38%">cluster-02 · 7.14</div>
+      <div class="hy" style="flex-basis:26%">cluster-04 · 4.74</div>
+      <div class="hg" style="flex-basis:19%">cluster-01 · 3.55</div>
+      <div class="hg" style="flex-basis:19%">cluster-05 · 3.50</div>
+      <div class="hr" style="flex-basis:17%">wld01 · 3.17</div>
+      <div class="hg" style="flex-basis:17%">wld02 · 3.17</div>
+      <div class="hg" style="flex-basis:15%">cluster-06 · 2.92</div>
+      <div class="hg" style="flex-basis:12%">cluster-03 · 2.37</div>
+      <div class="hg" style="flex-basis:10%">mgmt · 1.98</div>
+    </div></div>
+    <div style="padding:0 10px 6px"><code>size_by cpu|vcpus_to_cores_allocation_ratio · color_by cpu|percentage_of_vms_facing_cpu_ready · thresholds 2.5 / 5 / 10</code></div>
+  </div>
+
+  <div class="w" style="grid-column:7 / span 6; grid-row:11 / span 5;">
+    <div class="t">Hosts: size = vCPUs placed, colour = contention <span>Heatmap · HostSystem · grouped by cluster · fleet-wide</span></div>
+    <div class="b"><div class="heat">
+      <div class="ho" style="flex-basis:22%">esx-021</div><div class="ho" style="flex-basis:20%">esx-022</div><div class="hy" style="flex-basis:20%">esx-023</div><div class="hy" style="flex-basis:18%">esx-041</div>
+      <div class="hr" style="flex-basis:12%">wld01-esx01</div><div class="hg" style="flex-basis:16%">esx-011</div><div class="hg" style="flex-basis:16%">esx-012</div><div class="hg" style="flex-basis:14%">esx-051</div>
+      <div class="hg" style="flex-basis:10%">mgmt-esx01</div><div class="hg" style="flex-basis:10%">mgmt-esx02</div><div class="hg" style="flex-basis:10%">…</div>
+    </div></div>
+    <div style="padding:0 10px 6px"><code>size_by cpu|vcpus_allocated_on_all_powered_on_vms · color_by cpu|percentage_of_vms_facing_cpu_ready · thresholds 2.5 / 5 / 7.5 (stock ESXi contention view)</code></div>
+  </div>
+
+  <div class="w" style="grid-column:1 / span 12; grid-row:16 / span 5;">
+    <div class="t">Hosts in Selected Cluster <span>View (new) · HostSystem · driven by cluster selection · 7-day window</span></div>
+    <div class="b"><table>
+      <tr>
+        <th>Host</th>
+        <th>Cores<code>cpu|corecount_provisioned</code></th>
+        <th>Hyperthreading<code>config|hyperThread|active</code></th>
+        <th>Running VMs<code>summary|number_running_vms</code></th>
+        <th>vCPUs On<code>cpu|vcpus_allocated_on_all_powered_on_vms</code></th>
+        <th class="new">vCPU:pCore<code>SM: vCPUs on / cores</code></th>
+        <th>% VMs Facing Ready<code>cpu|percentage_of_vms_facing_cpu_ready · avg · 2.5/5/7.5</code></th>
+        <th>Worst VM Ready %<code>cpu|max_cpu_ready · max · 2.5/5/7.5</code></th>
+        <th>Worst VM Co-stop %<code>cpu|max_cpu_costop · max</code></th>
+        <th>Contention Avg %<code>cpu|capacity_contentionPct · avg</code></th>
+      </tr>
+      <tr><td>vcf-lab-wld01-esx01</td><td>12</td><td>false</td><td>8</td><td>18</td><td>1.50</td><td class="r">37.5</td><td class="y">4.73</td><td class="g">0.07</td><td>9.43</td></tr>
+      <tr><td>vcf-lab-wld01-esx02</td><td>12</td><td>false</td><td>7</td><td>30</td><td>2.50</td><td class="r">57.1</td><td class="r">13.97</td><td class="g">0.13</td><td>7.1</td></tr>
+      <tr><td>vcf-lab-wld01-esx03</td><td>12</td><td>false</td><td>6</td><td>28</td><td>2.33</td><td class="r">50.0</td><td class="r">9.8</td><td class="g">0.10</td><td>4.6</td></tr>
+    </table></div>
+  </div>
+
+  <div class="w" style="grid-column:1 / span 12; grid-row:21 / span 5;">
+    <div class="t">VMs in Selected Cluster <span>View (new) · VirtualMachine · driven by cluster selection · 7-day window · sorted by CPU Ready P95 desc</span></div>
+    <div class="b"><table>
+      <tr>
+        <th>VM</th>
+        <th>vCPUs<code>config|hardware|num_Cpu</code></th>
+        <th>CPU Demand Avg %<code>cpu|demandPct · avg</code></th>
+        <th>CPU Ready Avg %<code>cpu|readyPct · avg</code></th>
+        <th>CPU Ready P95 %<code>cpu|readyPct · p95 · 2.5/5/10</code></th>
+        <th>Peak 20s Ready %<code>cpu|20_sec_peak_readyPct · max</code></th>
+        <th>Co-stop P95 %<code>cpu|costopPct · p95</code></th>
+        <th>Contention Avg %<code>cpu|capacity_contentionPct · avg</code></th>
+      </tr>
+      <tr><td>vcf_Avi-se-wqajs</td><td>1</td><td>44.0</td><td>3.24</td><td class="y">4.5</td><td>4.54</td><td class="g">0</td><td>3.31</td></tr>
+      <tr><td>app-db-07</td><td>16</td><td>22.1</td><td>6.9</td><td class="r">13.9</td><td>18.2</td><td class="g">0.13</td><td>7.4</td></tr>
+      <tr><td>app-web-12</td><td>8</td><td>9.8</td><td>2.2</td><td class="y">4.1</td><td>6.0</td><td class="g">0.02</td><td>2.5</td></tr>
+    </table></div>
+  </div>
+
+  <div class="w" style="grid-column:1 / span 12; grid-row:26 / span 4;">
+    <div class="t">Overcommit Ratio Trend, Selected Cluster <span>View (STOCK, reused by id 3b7bba92-680c-42ba-b8a9-aa9202f0cc71 "Capacity | Cluster Allocation") · driven by cluster selection</span></div>
+    <div class="b"><div class="chart">line chart: CPU, memory and disk overcommit ratios over time</div></div>
+  </div>
+
+</div>
+</body>
+</html>
