@@ -97,6 +97,16 @@ The YAML writes `group_by: {}` and the renderer expands it to the
 self-grouping block; the rendered JSON must never carry an empty `groupBy`
 (lesson `heatmap-empty-groupby-crashes-renderer.md`).
 
+### Heatmap colour scaling (found in the browser pass, 2026-11-20)
+
+Heatmap colour is a continuous gradient spread evenly from `min_value` to
+`max_value` (or to the observed maximum when `max_value` is unset);
+`thresholds.values` do not act as band edges. To make the top threshold
+the end colour, `max_value` is set equal to it: CPU contention cluster 0
+to 10, CPU contention host 0 to 7.5, allocation remaining 0 to 40 (red to
+green). So the bands in this note are approximate on the heatmaps: the
+colour ramps between the end points instead of stepping at each bound.
+
 ## Known constraints
 
 - **The allocation model was enabled on no lab instance at recon time**

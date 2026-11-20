@@ -93,10 +93,10 @@ widgets:
         group_by: {}
         color:
           min_value: 0
-          max_value: 100
-          # Lower is worse: ascending values, colours run red to green.
+          max_value: 40
+          # Lower is worse: red at 0, green at 40 and above (gradient ends at max_value).
           thresholds:
-            values: [0, 20, 30, 40]
+            values: [0, 13.3, 26.7, 40]
             colors: ["#DE3F30", "#F5A623", "#ECC33E", "#74B43B"]
         solid_coloring: false
         focus_on_groups: false
@@ -125,10 +125,10 @@ widgets:
         group_by: {}
         color:
           min_value: 0
-          max_value: 100
-          # Lower is worse: ascending values, colours run red to green.
+          max_value: 40
+          # Lower is worse: red at 0, green at 40 and above (gradient ends at max_value).
           thresholds:
-            values: [0, 20, 30, 40]
+            values: [0, 13.3, 26.7, 40]
             colors: ["#DE3F30", "#F5A623", "#ECC33E", "#74B43B"]
         solid_coloring: false
         focus_on_groups: false
@@ -157,10 +157,10 @@ widgets:
         group_by: {}
         color:
           min_value: 0
-          max_value: 100
-          # Lower is worse: ascending values, colours run red to green.
+          max_value: 40
+          # Lower is worse: red at 0, green at 40 and above (gradient ends at max_value).
           thresholds:
-            values: [0, 20, 30, 40]
+            values: [0, 13.3, 26.7, 40]
             colors: ["#DE3F30", "#F5A623", "#ECC33E", "#74B43B"]
         solid_coloring: false
         focus_on_groups: false

@@ -32,7 +32,7 @@ columns:
     transformation: CURRENT
 
   - attribute: OnlineCapacityAnalytics|cpu|alloc|capacityRemaining
-    display_name: "CPU Remaining (vCPUs)"
+    display_name: "CPU Left (vCPUs)"
     transformation: CURRENT
 
   - attribute: supermetric:"[VCF CF] Cluster - CPU Allocation Remaining %"
@@ -49,7 +49,7 @@ columns:
     transformation: CURRENT
 
   - attribute: OnlineCapacityAnalytics|cpu|alloc|recommendedSize
-    display_name: "CPU Recommended (cores)"
+    display_name: "CPU Rec. Cores"
     transformation: CURRENT
 
   - attribute: "System Properties|mem|alloc|overcommitRatioSetting"
@@ -95,9 +95,9 @@ columns:
     transformation: CURRENT
 
   - attribute: supermetric:"[VCF CF] Cluster - CPU Demand Remaining %"
-    display_name: "CPU Demand Remaining %"
+    display_name: "Demand CPU Left %"
     transformation: CURRENT
 
   - attribute: OnlineCapacityAnalytics|cpu|demand|timeRemaining
-    display_name: "CPU Demand Days Left"
+    display_name: "Demand Days Left"
     transformation: CURRENT

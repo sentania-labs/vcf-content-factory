@@ -80,8 +80,8 @@ Summary scoreboard's). Author all three bounds or none (lesson
 | vCPU:pCore | `cpu|vcpus_to_cores_allocation_ratio` | current | none |
 | vCPU:pCore After HA | SM `[VCF CF] Cluster - vCPU-to-pCore Ratio After HA` | current | none |
 | Planned Ratio | property `System Properties|cpu|alloc|overcommitRatioSetting` | current | |
-| Ratio While Ready-Contended | SM `[VCF CF] Cluster - vCPU-to-pCore Ratio While Ready-Contended` | current | 0.01 / 3 / 6, sort desc |
-| Ratio While Contention High | SM `[VCF CF] Cluster - vCPU-to-pCore Ratio While Contention High` | current | 0.01 / 3 / 6 |
+| Ratio if VMs Ready (was "Ratio While Ready-Contended") | SM `[VCF CF] Cluster - vCPU-to-pCore Ratio While Ready-Contended` | current | 0.01 / 3 / 6, sort desc |
+| Ratio if Contention (was "Ratio While Contention High") | SM `[VCF CF] Cluster - vCPU-to-pCore Ratio While Contention High` | current | 0.01 / 3 / 6 |
 | % VMs Facing Ready | `cpu|percentage_of_vms_facing_cpu_ready` | current | 2.5 / 5 / 10 |
 | Worst VM Ready % | `cpu|max_cpu_ready` | max | 2.5 / 5 / 10 |
 | Worst VM Co-stop % | `cpu|max_cpu_costop` | max | 2.5 / 5 / 10 |
@@ -119,6 +119,16 @@ Changed after approval, 2026-11-20 (transform only, pre-PR review): the two
 trigger metrics are shown as current values, not 7-day averages, so each
 row agrees with its own highlight columns, which are current. The two
 Worst VM columns stay 7-day maximums and carry the history.
+
+### Heatmap colour scaling (found in the browser pass, 2026-11-20)
+
+Heatmap colour is a continuous gradient spread evenly from `min_value` to
+`max_value` (or to the observed maximum when `max_value` is unset);
+`thresholds.values` do not act as band edges. To make the top threshold
+the end colour, `max_value` is set equal to it: CPU contention cluster 0
+to 10, CPU contention host 0 to 7.5, allocation remaining 0 to 40 (red to
+green). So the bands in this note are approximate on the heatmaps: the
+colour ramps between the end points instead of stepping at each bound.
 
 ## Known constraints
 

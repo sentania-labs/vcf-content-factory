@@ -2,12 +2,14 @@ id: 2e9f8b41-2692-49d6-96a3-e29a387a5d48
 name: "[VCF CF] Cluster CPU Allocation vs Contention"
 description: >
   Per-cluster vCPU:pCore allocation beside the planned ratio from policy and
-  CPU contention signals. The ratio-while-contended super metrics are non-zero
-  only when the cluster is contended, so they highlight the allocation level at
-  which contention appears. "% VMs Facing Ready" and "CPU Contention %" are
-  current values, the same basis as the two highlight columns; "Worst VM Ready
-  %" and "Worst VM Co-stop %" are the 7-day worst case. Default sort: Ratio
-  While Ready-Contended descending.
+  CPU contention signals. The two highlight columns are non-zero only when the
+  cluster is contended, so they show the allocation level at which contention
+  appears. "Ratio if VMs Ready" shows the vCPU:pCore ratio only when more than
+  2.5 % of the cluster's VMs face CPU ready. "Ratio if Contention" shows the
+  ratio only when cluster CPU contention is above 5 %. "% VMs Facing Ready" and
+  "CPU Contention %" are current values, the same basis as the two highlight
+  columns; "Worst VM Ready %" and "Worst VM Co-stop %" are the 7-day worst
+  case. Default sort: Ratio if VMs Ready descending.
 
 subject:
   adapter_kind: VMWARE
@@ -41,7 +43,7 @@ columns:
     transformation: CURRENT
 
   - attribute: supermetric:"[VCF CF] Cluster - vCPU-to-pCore Ratio After HA"
-    display_name: "vCPU:pCore After HA"
+    display_name: "Ratio After HA"
     transformation: CURRENT
 
   - attribute: "System Properties|cpu|alloc|overcommitRatioSetting"
@@ -50,7 +52,7 @@ columns:
     transformation: CURRENT
 
   - attribute: supermetric:"[VCF CF] Cluster - vCPU-to-pCore Ratio While Ready-Contended"
-    display_name: "Ratio While Ready-Contended"
+    display_name: "Ratio if VMs Ready"
     transformation: CURRENT
     yellow_bound: 0.01
     orange_bound: 3.0
@@ -59,7 +61,7 @@ columns:
     sort: desc
 
   - attribute: supermetric:"[VCF CF] Cluster - vCPU-to-pCore Ratio While Contention High"
-    display_name: "Ratio While Contention High"
+    display_name: "Ratio if Contention"
     transformation: CURRENT
     yellow_bound: 0.01
     orange_bound: 3.0
@@ -95,7 +97,7 @@ columns:
     transformation: CURRENT
 
   - attribute: supermetric:"[VCF CF] Cluster - CPU Allocation Remaining %"
-    display_name: "Alloc Remaining %"
+    display_name: "Alloc Left %"
     transformation: CURRENT
     yellow_bound: 40.0
     orange_bound: 30.0
