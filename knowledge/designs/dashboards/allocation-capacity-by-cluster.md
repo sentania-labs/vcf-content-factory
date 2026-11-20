@@ -97,15 +97,24 @@ The YAML writes `group_by: {}` and the renderer expands it to the
 self-grouping block; the rendered JSON must never carry an empty `groupBy`
 (lesson `heatmap-empty-groupby-crashes-renderer.md`).
 
-### Heatmap colour scaling (found in the browser pass, 2026-11-20)
+### Heatmap colour scaling (found in the browser passes, 2026-11-20)
 
-Heatmap colour is a continuous gradient spread evenly from `min_value` to
-`max_value` (or to the observed maximum when `max_value` is unset);
-`thresholds.values` do not act as band edges. To make the top threshold
-the end colour, `max_value` is set equal to it: CPU contention cluster 0
-to 10, CPU contention host 0 to 7.5, allocation remaining 0 to 40 (red to
-green). So the bands in this note are approximate on the heatmaps: the
-colour ramps between the end points instead of stepping at each bound.
+Observed on prod 9.1.1 across five renders, cause not established: the
+value equal to `max_value` renders mid-palette, so the end colour is
+reached at about 2 x `max_value`; `thresholds.values` did not change the
+colouring in an A/B test (absolute stops versus 0..100 positions); with no
+`max_value` the scale runs to twice the observed maximum; beyond 2 x
+`max_value` a red-to-green scale overshoots toward cyan instead of
+clamping, while a green-to-red scale just stays red. So thresholds are not
+band edges on a heatmap, and the bounds in this note hold exactly only on
+the list columns.
+
+Settings chosen from that: CPU contention cluster `max_value` 5 (red from
+about 10), host 3.75 (red from about 7.5); allocation remaining
+`max_value` 50, a plain red-to-green gradient over 0 to 100 percent with
+nothing to overshoot. Existing factory heatmaps were authored assuming
+band edges and are probably off the same way; that audit and the wire
+format question are open (TOOLSET GAP recorded in the PR).
 
 ## Known constraints
 

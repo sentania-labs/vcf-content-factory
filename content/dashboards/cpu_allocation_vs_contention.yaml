@@ -94,10 +94,11 @@ widgets:
           label: "% VMs Facing CPU Ready"
         group_by: {}
         color:
+          # Observed on 9.1.1, 2026-11-20 (cause not established): the value equal to max_value renders mid-palette, so the end colour is reached at about 2 x max_value; thresholds.values did not change the colouring in an A/B test; beyond 2 x max_value a red-to-green scale overshoots toward cyan instead of clamping.
           min_value: 0
-          max_value: 10
+          max_value: 5
           thresholds:
-            values: [0, 3.3, 6.7, 10]
+            values: [0, 1.67, 3.33, 5]
             colors: ["#74B43B", "#ECC33E", "#F5A623", "#DE3F30"]
         solid_coloring: false
         focus_on_groups: false
@@ -127,10 +128,11 @@ widgets:
           resource_kind: ClusterComputeResource
           text: Cluster Compute Resource
         color:
+          # Observed on 9.1.1, 2026-11-20 (cause not established): the value equal to max_value renders mid-palette, so the end colour is reached at about 2 x max_value; thresholds.values did not change the colouring in an A/B test; beyond 2 x max_value a red-to-green scale overshoots toward cyan instead of clamping.
           min_value: 0
-          max_value: 7.5
+          max_value: 3.75
           thresholds:
-            values: [0, 2.5, 5, 7.5]
+            values: [0, 1.25, 2.5, 3.75]
             colors: ["#74B43B", "#ECC33E", "#F5A623", "#DE3F30"]
         solid_coloring: false
         focus_on_groups: true

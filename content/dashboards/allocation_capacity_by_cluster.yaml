@@ -92,11 +92,11 @@ widgets:
           label: "CPU Allocation Remaining %"
         group_by: {}
         color:
+          # Observed on 9.1.1, 2026-11-20 (cause not established): the value equal to max_value renders mid-palette, so the end colour is reached at about 2 x max_value; thresholds.values did not change the colouring in an A/B test; beyond 2 x max_value a red-to-green scale overshoots toward cyan instead of clamping.
           min_value: 0
-          max_value: 40
-          # Lower is worse: red at 0, green at 40 and above (gradient ends at max_value).
+          max_value: 50
           thresholds:
-            values: [0, 13.3, 26.7, 40]
+            values: [0, 16.7, 33.3, 50]
             colors: ["#DE3F30", "#F5A623", "#ECC33E", "#74B43B"]
         solid_coloring: false
         focus_on_groups: false
@@ -124,11 +124,11 @@ widgets:
           label: "Memory Allocation Remaining %"
         group_by: {}
         color:
+          # Observed on 9.1.1, 2026-11-20 (cause not established): the value equal to max_value renders mid-palette, so the end colour is reached at about 2 x max_value; thresholds.values did not change the colouring in an A/B test; beyond 2 x max_value a red-to-green scale overshoots toward cyan instead of clamping.
           min_value: 0
-          max_value: 40
-          # Lower is worse: red at 0, green at 40 and above (gradient ends at max_value).
+          max_value: 50
           thresholds:
-            values: [0, 13.3, 26.7, 40]
+            values: [0, 16.7, 33.3, 50]
             colors: ["#DE3F30", "#F5A623", "#ECC33E", "#74B43B"]
         solid_coloring: false
         focus_on_groups: false
@@ -156,11 +156,11 @@ widgets:
           label: "Disk Allocation Remaining %"
         group_by: {}
         color:
+          # Observed on 9.1.1, 2026-11-20 (cause not established): the value equal to max_value renders mid-palette, so the end colour is reached at about 2 x max_value; thresholds.values did not change the colouring in an A/B test; beyond 2 x max_value a red-to-green scale overshoots toward cyan instead of clamping.
           min_value: 0
-          max_value: 40
-          # Lower is worse: red at 0, green at 40 and above (gradient ends at max_value).
+          max_value: 50
           thresholds:
-            values: [0, 13.3, 26.7, 40]
+            values: [0, 16.7, 33.3, 50]
             colors: ["#DE3F30", "#F5A623", "#ECC33E", "#74B43B"]
         solid_coloring: false
         focus_on_groups: false
